@@ -25,6 +25,12 @@
 // When Family Plus ends (040), a vault above its free limit has 30 days to
 // renew or delete documents; then the newest documents above it are removed.
 //
+// Business vaults (051) have a third plan, Business — 25 GB, 25 members,
+// given by hand — and can be on Plus too, which they call Plus. Nothing is
+// ever removed from a business: when a paid plan ends it keeps every record
+// and adds nothing until it is renewed ("closed"); a trial that ends puts it
+// back on Free.
+//
 // The limits live in the database (public.plan_limits), and the server keeps
 // them: the documents bucket refuses a new file once a family's files reach
 // its plan's limit. The numbers here are only the words used when the
@@ -32,7 +38,7 @@
 // is the payment company's plan.
 // ────────────────────────────────────────────────────────────────
 
-export type PlanName = 'free' | 'plus';
+export type PlanName = 'free' | 'plus' | 'business';
 
 /** A vault's plan and its room, as family_storage_status() reports them. */
 export interface StorageRoom {
@@ -41,6 +47,10 @@ export interface StorageRoom {
   usedBytes: number;
   /** A personal vault (046), which the words call "your personal vault"; a family otherwise. */
   personal?: boolean;
+  /** A business (051), which the words call "your business". */
+  business?: boolean;
+  /** A business whose paid plan ended: it keeps every record and adds nothing until renewed (051). */
+  closed?: boolean;
 }
 
 export interface PlanLimits {
@@ -50,10 +60,12 @@ export interface PlanLimits {
   freePersonal: number;
   /** What a vault may keep on Family Plus, either kind. */
   plus: number;
+  /** What a business may keep on the Business plan (051). */
+  business: number;
   /** Days a family keeps what is above the free limit after Plus ends (040). */
   graceDays: number;
-  /** Members — people who sign in — a family may have, per plan (041). The family tree has no limit. */
-  members: { free: number; plus: number };
+  /** Members — people who sign in — a family may have, per plan (041; Business 051). The family tree has no limit. */
+  members: { free: number; plus: number; business: number };
   /** Voice chats each person gets, per plan; null: no limit (041; per person since 043). */
   voiceAnswers: { free: number | null; plus: number | null };
   /** Questions each person may ask a month, per plan; null: no monthly limit (049). */
@@ -66,25 +78,32 @@ export interface PlanLimits {
   uploadsPerDay: { free: number | null; plus: number | null };
   /** Families one person may create on Free, besides their personal vault (050); null: no limit. */
   familiesPerPerson: number | null;
+  /** Businesses one person may create on Free (051), apart from families; null: no limit. */
+  businessesPerPerson: number | null;
+  /** Invitations a vault may send in a day, per plan (050, 051). */
+  invitesPerDay: { free: number; plus: number; business: number };
 }
 
 const GB = 1024 ** 3;
 
 const MB = 1024 ** 2;
 
-/** What 039–050 set; plan_limits is the truth. */
+/** What 039–051 set; plan_limits is the truth. */
 export const DEFAULT_PLAN_LIMITS: PlanLimits = {
   free: 200 * MB,
   freePersonal: 100 * MB,
   plus: 10 * GB,
+  business: 25 * GB,
   graceDays: 30,
-  members: { free: 4, plus: 8 },
+  members: { free: 4, plus: 8, business: 25 },
   voiceAnswers: { free: 10, plus: null },
   questions: { free: 20, plus: null },
   questionsFairUse: 500,
   questionTriesPerDay: { free: 10, plus: 100 },
   uploadsPerDay: { free: 50, plus: 500 },
   familiesPerPerson: 1,
+  businessesPerPerson: 1,
+  invitesPerDay: { free: 20, plus: 20, business: 50 },
 };
 
 /** What Family Plus costs, by the month or by the year (one month free). */
@@ -171,9 +190,25 @@ export function formatBytes(bytes: number): string {
   return `${+(bytes / GB).toFixed(2)} GB`;
 }
 
-export function planLabel(plan: PlanName): string {
-  return plan === 'free' ? 'the free plan' : 'Family Plus';
+/** What Plus is called in a vault: "Family Plus", or "Plus" in a business (051). */
+export function plusName(business?: boolean): string {
+  return business ? 'Plus' : 'Family Plus';
 }
+
+export function planLabel(plan: PlanName, business?: boolean): string {
+  if (plan === 'free') return 'the free plan';
+  return plan === 'business' ? 'the Business plan' : plusName(business);
+}
+
+/** "your personal vault", "your business" or "your family": how the words name a vault. */
+function yours(room: StorageRoom): string {
+  return room.personal ? 'your personal vault' : room.business ? 'your business' : 'your family';
+}
+
+const capital = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
+/** For a business whose paid plan ended (051). */
+export const CLOSED_MESSAGE = "Your business's plan has ended. Your records stay. To add new ones, renew the plan.";
 
 /** Whether a file of this size fits in what the family has left. */
 export function fits(room: StorageRoom, fileBytes: number): boolean {
@@ -193,20 +228,22 @@ export interface StorageMessageOptions {
 /** Why a file does not fit, and what the vault's people can do about it. */
 export function storageFullMessage(room: StorageRoom, fileBytes = 0, options: StorageMessageOptions = {}): string {
   const { limits = DEFAULT_PLAN_LIMITS, price, removalOn, forSale = PLUS_FOR_SALE } = options;
+  if (room.closed) return CLOSED_MESSAGE;
   const left = Math.max(0, room.limitBytes - room.usedBytes);
   const head = left === 0 || fileBytes === 0
-    ? `${room.personal ? 'Your personal vault' : "Your family's storage"} is full, with ${formatBytes(room.usedBytes)} of ${formatBytes(room.limitBytes)} used.`
-    : `This file is ${formatBytes(fileBytes)}, but ${room.personal ? 'your personal vault' : 'your family'} has only ${formatBytes(left)} left.`;
+    ? `${room.personal ? 'Your personal vault' : room.business ? "Your business's storage" : "Your family's storage"} is full, with ${formatBytes(room.usedBytes)} of ${formatBytes(room.limitBytes)} used.`
+    : `This file is ${formatBytes(fileBytes)}, but ${yours(room)} has only ${formatBytes(left)} left.`;
 
   const free = "Delete documents you don't need";
   const plus = `${formatBytes(limits.plus)}${price ? ` for ${price}` : ''}`;
+  const name = plusName(room.business);
   let more: string;
   if (room.plan === 'free' && removalOn) {
     more = `Family Plus has ended. On ${removalOn}, the newest documents over ${formatBytes(room.limitBytes)} will be removed. Renew, or delete documents to get under ${formatBytes(room.limitBytes)}.`;
   } else if (room.plan === 'free') {
     more = forSale
-      ? `${free}, or move to Family Plus and get ${plus}.`
-      : `${free}. Family Plus is coming soon, with ${plus}.`;
+      ? `${free}, or move to ${name} and get ${plus}.`
+      : `${free}. ${name} is coming soon, with ${plus}.`;
   } else {
     more = `${free} to make room.`;
   }
@@ -219,10 +256,11 @@ export function storageFullMessage(room: StorageRoom, fileBytes = 0, options: St
  */
 export function chatStorageFullMessage(room: StorageRoom, options: Omit<StorageMessageOptions, 'removalOn'> = {}): string {
   const { limits = DEFAULT_PLAN_LIMITS, price, forSale = PLUS_FOR_SALE } = options;
-  const head = `There's no room to save this chat. ${room.personal ? 'Your personal vault' : 'Your family'} has used ${formatBytes(room.usedBytes)} of ${formatBytes(room.limitBytes)}.`;
+  const head = `There's no room to save this chat. ${capital(yours(room))} has used ${formatBytes(room.usedBytes)} of ${formatBytes(room.limitBytes)}.`;
   if (room.plan !== 'free') return `${head} Delete documents or saved chats you don't need to make room.`;
   const plus = `${formatBytes(limits.plus)}${price ? ` for ${price}` : ''}`;
+  const name = plusName(room.business);
   return forSale
-    ? `${head} To save more, move to Family Plus and get ${plus}. Or delete documents you don't need.`
-    : `${head} Family Plus is coming soon, with ${plus}. Until then, delete documents you don't need.`;
+    ? `${head} To save more, move to ${name} and get ${plus}. Or delete documents you don't need.`
+    : `${head} ${name} is coming soon, with ${plus}. Until then, delete documents you don't need.`;
 }

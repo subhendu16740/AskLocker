@@ -1307,9 +1307,11 @@ export async function fetchStorageStatus(familyId: string): Promise<FamilyPlanSt
 // Each set of columns arrived with a migration (040: grace_days; 041:
 // max_members and voice_answers; 048: personal_storage_bytes; 049:
 // questions_per_month and questions_fair_use; 050: question_tries_per_day,
-// uploads_per_day and families_per_person). A column that is not there yet
+// uploads_per_day and families_per_person; 051: invites_per_day and
+// businesses_per_person, and a business row). A column that is not there yet
 // fails the whole select, so each one missing asks again with the set before it.
 const PLAN_LIMIT_COLUMNS = [
+  'plan, storage_bytes, grace_days, max_members, voice_answers, personal_storage_bytes, questions_per_month, questions_fair_use, question_tries_per_day, uploads_per_day, families_per_person, invites_per_day, businesses_per_person',
   'plan, storage_bytes, grace_days, max_members, voice_answers, personal_storage_bytes, questions_per_month, questions_fair_use, question_tries_per_day, uploads_per_day, families_per_person',
   'plan, storage_bytes, grace_days, max_members, voice_answers, personal_storage_bytes, questions_per_month, questions_fair_use',
   'plan, storage_bytes, grace_days, max_members, voice_answers, personal_storage_bytes',
@@ -1326,11 +1328,12 @@ export async function fetchPlanLimits(): Promise<PlanLimits> {
     personal_storage_bytes?: number | null;
     questions_per_month?: number | null; questions_fair_use?: number | null;
     question_tries_per_day?: number | null; uploads_per_day?: number | null; families_per_person?: number | null;
+    invites_per_day?: number | null; businesses_per_person?: number | null;
   };
   let answer: { data: unknown; error: { message?: string } | null } = { data: null, error: null };
   for (const columns of PLAN_LIMIT_COLUMNS) {
     answer = await supabase.from('plan_limits').select(columns);
-    if (!answer.error || !/grace_days|max_members|voice_answers|personal_storage_bytes|questions_per_month|questions_fair_use|question_tries_per_day|uploads_per_day|families_per_person/.test(answer.error.message ?? '')) break;
+    if (!answer.error || !/grace_days|max_members|voice_answers|personal_storage_bytes|questions_per_month|questions_fair_use|question_tries_per_day|uploads_per_day|families_per_person|invites_per_day|businesses_per_person/.test(answer.error.message ?? '')) break;
   }
   const rows = (answer.data ?? []) as Row[];
   if (answer.error || !rows.length) return DEFAULT_PLAN_LIMITS;
@@ -1340,7 +1343,7 @@ export async function fetchPlanLimits(): Promise<PlanLimits> {
     return sizes.length ? Math.max(...sizes) : fallback;
   };
   const grace = rows.find((r) => r.plan === 'plus')?.grace_days;
-  const members = (plan: 'free' | 'plus') => {
+  const members = (plan: 'free' | 'plus' | 'business') => {
     const n = rows.find((r) => r.plan === plan)?.max_members;
     return n ? Number(n) : DEFAULT_PLAN_LIMITS.members[plan];
   };
@@ -1366,6 +1369,11 @@ export async function fetchPlanLimits(): Promise<PlanLimits> {
     if (!row || !(column in row)) return null;
     return row[column] == null ? null : Number(row[column]);
   };
+  // Invitations a day (051); before it, 20 for every vault (050).
+  const invites = (plan: 'free' | 'plus' | 'business') => {
+    const n = rows.find((r) => r.plan === plan)?.invites_per_day;
+    return n ? Number(n) : DEFAULT_PLAN_LIMITS.invitesPerDay[plan];
+  };
   const free = of('free', DEFAULT_PLAN_LIMITS.free);
   // A personal vault's own number (048), where the plan has one; before 048
   // the server keeps one limit for every vault, so that one.
@@ -1375,8 +1383,9 @@ export async function fetchPlanLimits(): Promise<PlanLimits> {
     free,
     freePersonal,
     plus: of('plus', DEFAULT_PLAN_LIMITS.plus),
+    business: of('business', DEFAULT_PLAN_LIMITS.business),
     graceDays: grace ? Number(grace) : DEFAULT_PLAN_LIMITS.graceDays,
-    members: { free: members('free'), plus: members('plus') },
+    members: { free: members('free'), plus: members('plus'), business: members('business') },
     voiceAnswers: { free: voice('free'), plus: voice('plus') },
     questions: { free: questions('free'), plus: questions('plus') },
     questionsFairUse: fairUse ? Number(fairUse) : DEFAULT_PLAN_LIMITS.questionsFairUse,
@@ -1385,6 +1394,11 @@ export async function fetchPlanLimits(): Promise<PlanLimits> {
     familiesPerPerson: freeRow && 'families_per_person' in freeRow
       ? (freeRow.families_per_person == null ? null : Number(freeRow.families_per_person))
       : null,
+    // Before 051 a business counts with the families.
+    businessesPerPerson: freeRow && 'businesses_per_person' in freeRow
+      ? (freeRow.businesses_per_person == null ? null : Number(freeRow.businesses_per_person))
+      : 0,
+    invitesPerDay: { free: invites('free'), plus: invites('plus'), business: invites('business') },
   };
 }
 
