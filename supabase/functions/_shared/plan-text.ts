@@ -210,9 +210,9 @@ const capital = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 /** For a business whose paid plan ended (051). */
 export const CLOSED_MESSAGE = "Your business's plan has ended. Your records stay. To add new ones, renew the plan.";
 
-/** Whether a file of this size fits in what the family has left. */
+/** Whether a file of this size fits in what the family has left. Nothing fits in a closed business (051). */
 export function fits(room: StorageRoom, fileBytes: number): boolean {
-  return room.usedBytes + fileBytes <= room.limitBytes;
+  return !room.closed && room.usedBytes + fileBytes <= room.limitBytes;
 }
 
 export interface StorageMessageOptions {
