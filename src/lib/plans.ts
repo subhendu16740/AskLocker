@@ -41,8 +41,8 @@ export {
 } from '../../supabase/functions/_shared/limits';
 
 export {
-  DEFAULT_PLAN_LIMITS, PLUS_FOR_SALE, PLUS_PRICE, chatStorageFullMessage, fits, formatBytes, planLabel, plusAmount, plusPrice, plusPrices,
-  plusTwelveMonths, plusYearlyOffer, plusYearlySaving, storageFullMessage,
+  CLOSED_MESSAGE, DEFAULT_PLAN_LIMITS, PLUS_FOR_SALE, PLUS_PRICE, chatStorageFullMessage, fits, formatBytes, planLabel, plusAmount, plusName,
+  plusPrice, plusPrices, plusTwelveMonths, plusYearlyOffer, plusYearlySaving, storageFullMessage,
   type PlanLimits, type PlanName, type PriceCurrency, type PricePeriod, type StorageRoom,
 } from '../../supabase/functions/_shared/plan-text';
 

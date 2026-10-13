@@ -15,7 +15,7 @@ export interface VaultChoice {
   name: string;
   subtitle?: string;
   /** lock: the personal vault; users: a family; layers: every vault at once. */
-  icon: 'lock' | 'users' | 'layers';
+  icon: 'lock' | 'users' | 'briefcase' | 'layers';
 }
 
 /** The choices as a list of rows, one ticked. */

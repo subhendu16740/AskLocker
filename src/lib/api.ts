@@ -895,7 +895,7 @@ export async function uploadDocument(params: UploadDocumentParams): Promise<stri
     // The bucket's policy refuses a family at its limit (038): say so in words.
     if (/row-level security|policy/i.test(storageErr.message)) {
       const now = await fetchStorageStatus(familyId).catch(() => null);
-      if (now && now.usedBytes >= now.limitBytes) {
+      if (now && (now.closed || now.usedBytes >= now.limitBytes)) {
         await fetchPaymentsStatus();
         throw new StorageFullError(now, fileSizeBytes);
       }

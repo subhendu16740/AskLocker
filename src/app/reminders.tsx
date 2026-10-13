@@ -12,7 +12,8 @@ import { Feather } from '@expo/vector-icons';
 import { Redirect, router, useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFamily } from '../lib/family-context';
-import { vaultName } from '../lib/vaults';
+import { isBusinessVault, vaultName } from '../lib/vaults';
+import { plusName } from '../lib/plans';
 import { fetchExpiringDocuments, type ExpiringDocument } from '../lib/api';
 import { plusPage, useFamilyPlan } from '../lib/family-plan';
 import { expiryPhrase, longDate } from '../lib/dates';
@@ -44,7 +45,7 @@ export default function RemindersScreen() {
 
       <ScrollView contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
         <View style={styles.plusCard}>
-          <Text style={styles.plusCardTag}>★ Family Plus</Text>
+          <Text style={styles.plusCardTag}>★ {plusName(isBusinessVault(currentFamily))}</Text>
           <Text style={styles.plusCardText}>
             Your family gets a reminder 90, 30 and 7 days before a document expires, and on the day.
           </Text>

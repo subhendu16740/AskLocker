@@ -10,6 +10,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../lib/auth';
 import { isProduction, environmentDescription } from '../../lib/environment';
 import { useFamily } from '../../lib/family-context';
+import { isBusinessVault } from '../../lib/vaults';
 import { usePreferences } from '../../lib/preferences';
 import { fetchPlanLimits, fetchVoiceStatus, indexStatus, type IndexStatus, type VoiceStatus } from '../../lib/api';
 import { useFamilyPlan, useOnPlus } from '../../lib/family-plan';
@@ -130,9 +131,11 @@ export default function SettingsScreen() {
     },
   ];
   const vaultItems: LinkItem[] = [
-    { icon: 'users', label: 'Manage Families', sub: 'View and switch families', route: '/family' },
+    isBusinessVault(currentFamily)
+      ? { icon: 'briefcase', label: 'Manage team', sub: 'People in this business, and your other vaults', route: '/family' }
+      : { icon: 'users', label: 'Manage Families', sub: 'View and switch families', route: '/family' },
     { icon: 'hard-drive', label: 'Storage', sub: 'Your plan and space used', route: '/settings/storage' },
-    { icon: 'star', label: 'Family Plus', sub: 'Compare Free and Plus', route: '/plus' },
+    { icon: 'star', label: isBusinessVault(currentFamily) ? 'Plus' : 'Family Plus', sub: 'Compare Free and Plus', route: '/plus' },
     { icon: 'lock', label: 'Privacy', sub: 'Who can see your documents', route: '/settings/privacy' },
   ];
   const helpItems: LinkItem[] = [

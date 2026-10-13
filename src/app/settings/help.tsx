@@ -44,7 +44,7 @@ function faq(payments: PaymentsStatus | null): { q: string; a: string }[] {
     },
     {
       q: 'Are there other limits?',
-      a: `Files can be up to ${MAX_FILE_BYTES / (1024 * 1024)} MB. On Free, you can add ${DEFAULT_PLAN_LIMITS.uploadsPerDay.free} documents a day (${DEFAULT_PLAN_LIMITS.uploadsPerDay.plus} with ★ Family Plus) and create one family besides your personal vault. Saved chats, the family tree, share links and invitations have caps too, and AskLocker tells you if you reach one.`,
+      a: `Files can be up to ${MAX_FILE_BYTES / (1024 * 1024)} MB. On Free, you can add ${DEFAULT_PLAN_LIMITS.uploadsPerDay.free} documents a day (${DEFAULT_PLAN_LIMITS.uploadsPerDay.plus} with ★ Family Plus) and create one family and one business besides your personal vault. Saved chats, the family tree, share links and invitations have caps too, and AskLocker tells you if you reach one.`,
     },
     {
       q: 'Can I ask by speaking?',
@@ -69,6 +69,10 @@ function faq(payments: PaymentsStatus | null): { q: string; a: string }[] {
     {
       q: 'How do I add someone to my family?',
       a: `If you're an admin, open Manage Family, tap Add and type the Google email they sign in with. They must have signed in to AskLocker once, and they join when they accept. A family can have ${DEFAULT_PLAN_LIMITS.members.free} members on Free and ${DEFAULT_PLAN_LIMITS.members.plus} with ★ Family Plus, counting pending invitations.`,
+    },
+    {
+      q: 'Can I use AskLocker for my business?',
+      a: `Yes. In Manage Family, tap Create a business, then invite your team. Admins can delete any record, and records stay even if a paid plan ends. The Business plan, with ${formatBytes(DEFAULT_PLAN_LIMITS.business)} and ${DEFAULT_PLAN_LIMITS.members.business} people, is set up by us: ask in Settings › Feedback.`,
     },
     {
       q: 'I\'ve been invited to a family. What now?',

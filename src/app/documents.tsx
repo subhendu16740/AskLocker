@@ -17,7 +17,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../lib/auth';
 import { useFamily } from '../lib/family-context';
 import { deleteDocument, fetchAllDocuments } from '../lib/api';
-import { isPersonalVault, vaultName } from '../lib/vaults';
+import { canDeleteDocument, isPersonalVault, vaultIcon, vaultName } from '../lib/vaults';
 import type { FamilyDocumentRow } from '../lib/database.types';
 import { HeaderButton, ScreenHeader } from '../components/screen-header';
 import { VaultDropdown, type VaultChoice } from '../components/vault-sheet';
@@ -28,6 +28,8 @@ interface ListedDoc extends FamilyDocumentRow {
   familyId: string;
   vault: string;
   personalVault: boolean;
+  /** The vault's icon: a lock, a briefcase (051) or people. */
+  vaultIcon: 'lock' | 'briefcase' | 'users';
   canDelete: boolean;
 }
 
@@ -101,8 +103,9 @@ export default function DocumentsScreen() {
             familyId: families[i].family_id,
             vault: vaultName(families[i].families),
             personalVault: isPersonalVault(families[i].families),
-            // Only whoever added it, admins included (047).
-            canDelete: d.uploaded_by === user.id,
+            vaultIcon: vaultIcon(families[i].families),
+            // Only whoever added it, admins included (047); any admin in a business (051).
+            canDelete: canDeleteDocument(families[i], d.uploaded_by, user.id),
           })))
           .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()),
       );
@@ -132,7 +135,7 @@ export default function DocumentsScreen() {
       key: v.family_id,
       name: vaultName(v.families),
       subtitle: plural(counts[v.family_id] ?? 0, 'document', 'documents'),
-      icon: (isPersonalVault(v.families) ? 'lock' : 'users') as VaultChoice['icon'],
+      icon: vaultIcon(v.families) as VaultChoice['icon'],
     })),
   ];
   const chosenVault = vaultFilter === ALL ? null : choices.find((c) => c.key === vaultFilter)?.name ?? null;
@@ -274,7 +277,7 @@ export default function DocumentsScreen() {
               )}
               {vaultFilter === ALL && families.length > 1 && (
                 <View style={styles.vaultTag}>
-                  <Feather name={d.personalVault ? 'lock' : 'users'} size={12} color={color.primary} />
+                  <Feather name={d.vaultIcon} size={12} color={color.primary} />
                   <Text style={styles.vaultTagText} numberOfLines={1}>{d.vault}</Text>
                 </View>
               )}
