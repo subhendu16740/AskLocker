@@ -113,17 +113,21 @@ Deno.serve(async (req) => {
     //    policy keeps for uploads from the app; the service role passes no
     //    policy, so both are checked here. Before 038 there is nothing to
     //    ask, and nothing is checked, as before.
+    //    A business (051) on Plus or the Business plan imports too.
     const { data: rooms } = await supabase.rpc('family_storage_status', { p_family_id: family_id });
-    const r = (rooms as Array<{ plan: string; limit_bytes: number; used_bytes: number; personal?: boolean }> | null)?.[0];
+    const r = (rooms as Array<{ plan: string; limit_bytes: number; used_bytes: number; personal?: boolean; business?: boolean }> | null)?.[0];
     if (r) {
-      if (r.plan !== 'plus') {
-        throw new ImportProblem('Import from Gmail comes with Family Plus. See Settings › Family Plus.');
+      if (r.plan === 'free') {
+        throw new ImportProblem(r.business
+          ? 'Import from Gmail comes with Plus or the Business plan.'
+          : 'Import from Gmail comes with Family Plus. See Settings › Family Plus.');
       }
       const room: StorageRoom = {
-        plan: 'plus',
+        plan: r.plan === 'business' ? 'business' : 'plus',
         limitBytes: Number(r.limit_bytes),
         usedBytes: Number(r.used_bytes),
         personal: r.personal === true,    // 048; absent before it
+        business: r.business === true,    // 051; absent before it
       };
       if (!fits(room, bytes.length)) throw new ImportProblem(storageFullMessage(room, bytes.length));
     }
