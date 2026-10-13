@@ -75,10 +75,10 @@ export function HeaderButton({ icon, label, onPress }: { icon?: string; label: s
  * the Family Plus page (Free and Plus side by side); without, it is only a
  * mark, for a tag inside something that is already tappable.
  */
-export function PlusTag({ link = false }: { link?: boolean }) {
-  // In a business (051) it is called Plus.
+export function PlusTag({ link = false, name: fixedName }: { link?: boolean; name?: string }) {
+  // In a business (051) it is called Plus, unless the screen speaks of every vault.
   const { currentFamily } = useFamily();
-  const name = plusName(isBusinessVault(currentFamily));
+  const name = fixedName ?? plusName(isBusinessVault(currentFamily));
   const tag = (
     <View style={styles.plusTag} accessibilityLabel={`Part of ${name}, the paid plan`}>
       <Text style={styles.plusStar}>★</Text>

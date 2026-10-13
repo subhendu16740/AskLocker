@@ -122,7 +122,9 @@ export default function UploadScreen() {
     const a = (c as { audience?: string | null }).audience ?? 'family';
     return a === audience || a === 'both';
   };
-  const ownCategories = categories.filter(inList);
+  // "Other", which both lists share, last.
+  const ownCategories = categories.filter(inList).sort((x, y) =>
+    Number((x as { audience?: string | null }).audience === 'both') - Number((y as { audience?: string | null }).audience === 'both'));
   const shownCategories = allCategories ? [...ownCategories, ...categories.filter((c) => !inList(c))] : ownCategories.slice(0, 12);
   const hiddenCount = categories.length - shownCategories.length;
 

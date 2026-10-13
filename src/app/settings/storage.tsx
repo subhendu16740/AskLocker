@@ -116,7 +116,7 @@ export default function StorageScreen() {
               </View>
               {payments && !payments.available && (
                 <View style={styles.plusRow}>
-                  <PlusTag link />
+                  <PlusTag link name="Family Plus" />
                   <Text style={styles.plusText}>Family Plus is coming soon.</Text>
                 </View>
               )}
