@@ -7,6 +7,10 @@
 // else manages is deleted with the account, and the screen says who else
 // loses it. Confirmation is on screen, never Alert.alert, which does nothing
 // on the web.
+//
+// A business never goes with an account (051). While someone is a
+// business's last admin, the button stays off and the screen says what to
+// do: make someone else an admin, or delete the business.
 
 import { useCallback, useState } from 'react';
 import { ScrollView, View, Text, ActivityIndicator, StyleSheet } from 'react-native';
@@ -59,7 +63,8 @@ export default function DeleteAccountScreen() {
     return load();
   }, [load, done]));
 
-  const confirmed = typed.trim().toUpperCase() === 'DELETE';
+  const blocked = (plan ?? []).filter((f) => f.blocked);
+  const confirmed = typed.trim().toUpperCase() === 'DELETE' && blocked.length === 0;
 
   const remove = async () => {
     if (!confirmed) return;
@@ -95,7 +100,8 @@ export default function DeleteAccountScreen() {
   }
 
   const going = (plan ?? []).filter((f) => f.deleted);
-  const leaving = (plan ?? []).filter((f) => !f.deleted);
+  const leaving = (plan ?? []).filter((f) => !f.deleted && f.kind !== 'business');
+  const leavingBusinesses = (plan ?? []).filter((f) => !f.deleted && !f.blocked && f.kind === 'business');
   const othersLoseAFamily = going.some((f) => f.otherMembers > 0);
 
   return (
@@ -123,6 +129,23 @@ export default function DeleteAccountScreen() {
                 Your profile, saved chats, notifications and any Gmail connection go too.
               </Muted>
             </Card>
+
+            {blocked.length > 0 && (
+              <Card>
+                <CardTitle icon="briefcase">First, hand on {blocked.length === 1 ? 'your business' : 'your businesses'}</CardTitle>
+                <Muted>
+                  A business is never deleted with an account. You're the only admin of:
+                </Muted>
+                {blocked.map((f) => (
+                  <View key={f.familyId} style={styles.family}>
+                    <Text style={styles.familyName}>{f.name}</Text>
+                    <Text style={styles.familyLine}>{documents(f.documentCount)}</Text>
+                  </View>
+                ))}
+                <Body>Make someone else an admin, or delete the business. Then come back here.</Body>
+                <SecondaryButton label="Manage team" icon="briefcase" onPress={() => router.push('/family' as any)} />
+              </Card>
+            )}
 
             {going.length > 0 && (
               <Card>
@@ -169,6 +192,21 @@ export default function DeleteAccountScreen() {
                 {leaving.some((f) => f.yourDocuments > 0) && (
                   <Body>Delete any documents you want gone first. Once you leave, nobody can delete them.</Body>
                 )}
+              </Card>
+            )}
+
+            {leavingBusinesses.length > 0 && (
+              <Card>
+                <CardTitle icon="log-out">Businesses you leave</CardTitle>
+                <Muted>These keep their records. Their admins can delete the ones you added.</Muted>
+                {leavingBusinesses.map((f) => (
+                  <View key={f.familyId} style={styles.family}>
+                    <Text style={styles.familyName}>{f.name}</Text>
+                    <Text style={styles.familyLine}>
+                      {f.yourDocuments > 0 ? `Keeps ${documents(f.yourDocuments)} you added` : 'You added no records here'}
+                    </Text>
+                  </View>
+                ))}
               </Card>
             )}
 

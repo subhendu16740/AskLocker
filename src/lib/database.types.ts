@@ -67,6 +67,7 @@ export type Database = {
       }
       document_categories: {
         Row: {
+          audience: string
           created_by: string | null
           has_expiry: boolean | null
           icon: string | null
@@ -75,6 +76,7 @@ export type Database = {
           name: string
         }
         Insert: {
+          audience?: string
           created_by?: string | null
           has_expiry?: boolean | null
           icon?: string | null
@@ -83,6 +85,7 @@ export type Database = {
           name: string
         }
         Update: {
+          audience?: string
           created_by?: string | null
           has_expiry?: boolean | null
           icon?: string | null
@@ -203,6 +206,7 @@ export type Database = {
           family_icon: string | null
           id: string
           is_personal: boolean
+          kind: string
           name: string
           storage_namespace: string
           vector_namespace: string
@@ -215,6 +219,7 @@ export type Database = {
           family_icon?: string | null
           id?: string
           is_personal?: boolean
+          kind?: string
           name: string
           storage_namespace: string
           vector_namespace: string
@@ -227,6 +232,7 @@ export type Database = {
           family_icon?: string | null
           id?: string
           is_personal?: boolean
+          kind?: string
           name?: string
           storage_namespace?: string
           vector_namespace?: string
@@ -945,8 +951,10 @@ export type Database = {
       }
       plan_limits: {
         Row: {
+          businesses_per_person: number | null
           families_per_person: number | null
           grace_days: number | null
+          invites_per_day: number
           max_members: number
           personal_storage_bytes: number | null
           plan: string
@@ -958,8 +966,10 @@ export type Database = {
           voice_answers: number | null
         }
         Insert: {
+          businesses_per_person?: number | null
           families_per_person?: number | null
           grace_days?: number | null
+          invites_per_day?: number
           max_members?: number
           personal_storage_bytes?: number | null
           plan: string
@@ -971,8 +981,10 @@ export type Database = {
           voice_answers?: number | null
         }
         Update: {
+          businesses_per_person?: number | null
           families_per_person?: number | null
           grace_days?: number | null
+          invites_per_day?: number
           max_members?: number
           personal_storage_bytes?: number | null
           plan?: string
@@ -1222,6 +1234,7 @@ export type Database = {
           last_login: string | null
           notifications_enabled: boolean
           phone: string | null
+          use_for: string | null
           voice_language: string
           voice_mode_enabled: boolean
         }
@@ -1240,6 +1253,7 @@ export type Database = {
           last_login?: string | null
           notifications_enabled?: boolean
           phone?: string | null
+          use_for?: string | null
           voice_language?: string
           voice_mode_enabled?: boolean
         }
@@ -1258,6 +1272,7 @@ export type Database = {
           last_login?: string | null
           notifications_enabled?: boolean
           phone?: string | null
+          use_for?: string | null
           voice_language?: string
           voice_mode_enabled?: boolean
         }
@@ -1272,10 +1287,12 @@ export type Database = {
       account_deletion_plan: {
         Args: { p_user_id: string }
         Returns: {
+          blocked: boolean
           delete_family: boolean
           document_count: number
           family_id: string
           family_name: string
+          kind: string
           other_admins: number
           other_members: number
           role: string
@@ -1356,9 +1373,20 @@ export type Database = {
           p_family_icon?: string
           p_family_name: string
           p_is_personal?: boolean
+          p_kind?: string
           p_user_id: string
         }
         Returns: string
+      }
+      business_deletion_plan: {
+        Args: { p_family_id: string; p_user_id: string }
+        Returns: {
+          document_count: number
+          family_id: string
+          family_name: string
+          other_members: string[]
+          storage_namespace: string
+        }[]
       }
       decline_family_invite: { Args: { p_invite_id: string }; Returns: undefined }
       delete_account_data: { Args: { p_user_id: string }; Returns: Json }
@@ -1380,12 +1408,15 @@ export type Database = {
       family_storage_status: {
         Args: { p_family_id: string }
         Returns: {
+          business: boolean
           chats_bytes: number
+          closed: boolean
           limit_bytes: number
           paid_until: string
           personal: boolean
           plan: string
           removal_at: string
+          trial: boolean
           used_bytes: number
         }[]
       }
@@ -1451,6 +1482,7 @@ export type Database = {
         Returns: {
           created_at: string
           family_id: string
+          family_kind: string
           family_name: string
           id: string
           invited_by_name: string
@@ -1552,7 +1584,13 @@ export type Database = {
         Returns: undefined
       }
       person_daily_limit: { Args: { p_user_id: string; p_what: string }; Returns: number }
+      is_business_vault: { Args: { p_family_id: string }; Returns: boolean }
       person_on_plus: { Args: { p_user_id: string }; Returns: boolean }
+      person_plan: { Args: { p_user_id: string }; Returns: string }
+      purge_business: {
+        Args: { p_confirm_name: string; p_family_id: string; p_user_id: string }
+        Returns: string
+      }
       purge_family: { Args: { p_family_id: string }; Returns: string }
       rag_chunk_total: { Args: { p_schema: string }; Returns: number }
       open_document_share: {
@@ -1779,6 +1817,7 @@ export type Database = {
         Args: {
           p_family_id: string
           p_paid_until: string
+          p_plan?: string
           p_source?: string
           p_source_ref?: string
         }

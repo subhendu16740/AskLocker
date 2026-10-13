@@ -25,12 +25,14 @@ import { deviceKey, storageGet, storageRemove, storageSet } from './storage';
 /** What each event may carry. Nothing outside this list is sent. */
 export interface AnalyticsEvents {
   screen_viewed: { screen: string };
-  document_added: { category: string; file_type: string; vault: 'personal' | 'family' };
+  document_added: { category: string; file_type: string; vault: 'personal' | 'family' | 'business' };
   question_asked: { voice: boolean; scope: 'all' | 'one' };
   chat_saved: Record<string, never>;
   share_link_made: { days: number };
   member_invited: Record<string, never>;
-  family_created: Record<string, never>;
+  family_created: { kind: 'family' | 'business' };
+  use_for_chosen: { choice: 'family' | 'business' | 'both' | 'skipped' };
+  business_deleted: Record<string, never>;
   plus_viewed: { feature: string };
   pay_started: { period: 'monthly' | 'yearly'; currency: 'INR' | 'USD' };
   payment_done: { period: 'monthly' | 'yearly'; currency: 'INR' | 'USD' };
@@ -169,6 +171,9 @@ const SYSTEM_CATEGORIES = new Set([
   'Property Documents', 'Tax Returns', 'Bank Statements', 'Medical Records', 'Prescriptions',
   'Educational Certificates', 'Employment Letters', 'Legal Documents', 'Utility Bills', 'Visa / Travel Docs',
   'Warranty Cards', 'Other',
+  // A business's list (051)
+  'Sales Invoices', 'Purchase Bills', 'GST Returns', 'Contracts & Agreements', 'Licences & Registrations',
+  'Bank & Loans', 'Business Insurance', 'Employee Records', 'Payroll', 'Lease & Property', 'Tax (ITR/TDS)',
 ]);
 
 /** A category's name only when it is one of the built-in ones. */

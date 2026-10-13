@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { accountKey, storageGet, storageSet } from './storage';
 import { longDate, parseDocumentDate } from './dates';
 import { isSaveable, mimeTypeFor, unsupportedFileMessage } from './file-types';
 import type { Gender, KinLink, KinPerson } from '../../supabase/functions/_shared/kinship';
@@ -56,21 +57,59 @@ export async function fetchUserFamilies(userId: string): Promise<FamilyWithMembe
     })) as unknown as FamilyWithMembership[];
 }
 
+/**
+ * A new family, or (051) a business. A family is made with the four
+ * arguments that have always existed, so it works on any database; a
+ * business names p_kind, which a database before 051 does not know — that
+ * says so, rather than quietly making a family.
+ */
 export async function createNewFamily(
   userId: string,
   name: string,
   description?: string,
   icon?: string,
+  kind: 'family' | 'business' = 'family',
 ): Promise<string> {
   const { data, error } = await supabase.rpc('create_family', {
     p_user_id: userId,
     p_family_name: name,
     p_description: description ?? undefined,
     p_family_icon: icon ?? undefined,
+    ...(kind === 'business' ? { p_kind: 'business' } : {}),
   });
 
-  if (error) throw error;
+  if (error) {
+    if (kind === 'business' && (error.code === 'PGRST202' || /could not find the function/i.test(error.message))) {
+      throw new Error("Business vaults aren't switched on yet.");
+    }
+    throw error;
+  }
   return data as string;
+}
+
+export type UseFor = 'family' | 'business' | 'both';
+
+const USE_FOR = new Set<UseFor>(['family', 'business', 'both']);
+
+/**
+ * What this person said they would use AskLocker for (051): on their own
+ * users row, so a new device knows; on the device before 051. Null: not
+ * answered. 'skipped' on this device: they tapped Not now.
+ */
+export async function fetchUseFor(userId: string): Promise<UseFor | 'skipped' | null> {
+  const { data, error } = await supabase.from('users').select('use_for').eq('id', userId).maybeSingle();
+  const saved = !error ? (data as { use_for?: string | null } | null)?.use_for : null;
+  if (saved && USE_FOR.has(saved as UseFor)) return saved as UseFor;
+  const here = await storageGet(accountKey.useFor(userId));
+  return here === 'skipped' || USE_FOR.has(here as UseFor) ? (here as UseFor | 'skipped') : null;
+}
+
+/** Keeps the answer: on the users row where 051 is applied, and on this device either way. */
+export async function saveUseFor(userId: string, choice: UseFor | 'skipped'): Promise<void> {
+  await storageSet(accountKey.useFor(userId), choice);
+  if (choice === 'skipped') return;
+  const { error } = await supabase.from('users').update({ use_for: choice }).eq('id', userId);
+  if (error) console.warn('[use-for] kept on this device only (is 051 applied?):', error.message);
 }
 
 /**
@@ -539,6 +578,8 @@ export interface Invitation {
   id: string;
   familyId: string;
   familyName: string;
+  /** 'business' for a business (051); 'family' otherwise, and before 051. */
+  familyKind: 'family' | 'business';
   invitedByName: string | null;
   /** The tree entry they would be, when the invitation came from a link. */
   personName: string | null;
@@ -557,6 +598,7 @@ export async function fetchMyInvitations(): Promise<Invitation[]> {
     id: row.id,
     familyId: row.family_id,
     familyName: row.family_name,
+    familyKind: (row as { family_kind?: string | null }).family_kind === 'business' ? 'business' : 'family',
     invitedByName: row.invited_by_name ?? null,
     personName: row.person_name ?? null,
     role: row.role,
@@ -1280,6 +1322,8 @@ export interface FamilyPlanStatus extends StorageRoom {
   removalAt: string | null;
   /** How much of usedBytes is saved chats (042); 0 before. */
   chatsBytes: number;
+  /** The plan running now was switched on for a demo (051). */
+  trial: boolean;
 }
 
 /** A family's plan, its limit and what its files (and, since 042, saved chats) add up to; null before 038. */
@@ -1301,6 +1345,10 @@ export async function fetchStorageStatus(familyId: string): Promise<FamilyPlanSt
     removalAt: (row as { removal_at?: string | null }).removal_at ?? null,
     chatsBytes: Number((row as { chats_bytes?: number | null }).chats_bytes ?? 0),
     personal: (row as { personal?: boolean | null }).personal === true,
+    // 051: a business, whether its adding is closed, whether this is a trial.
+    business: (row as { business?: boolean | null }).business === true,
+    closed: (row as { closed?: boolean | null }).closed === true,
+    trial: (row as { trial?: boolean | null }).trial === true,
   };
 }
 
@@ -1833,15 +1881,20 @@ export interface AccountDeletionFamily {
   yourDocuments: number;
   /** Deleted with the account, rather than left. */
   deleted: boolean;
+  /** 'business' for a business (051). */
+  kind: 'family' | 'business';
+  /** A business whose last admin this person is: the account cannot go until it has another admin, or is deleted (051). */
+  blocked: boolean;
 }
 
 /**
- * `unavailable` (the function or migration 029 is not on this server yet) or
- * `error`, with a sentence for the person.
+ * `unavailable` (the function or migration 029 is not on this server yet),
+ * `blocked` (the last admin of a business, 051) or `error`, with a sentence
+ * for the person.
  */
 export class AccountDeletionError extends Error {
-  status: 'unavailable' | 'error';
-  constructor(status: 'unavailable' | 'error', message: string) {
+  status: 'unavailable' | 'blocked' | 'error';
+  constructor(status: 'unavailable' | 'blocked' | 'error', message: string) {
     super(message);
     this.status = status;
   }
@@ -1854,7 +1907,10 @@ async function deleteAccountInvoke<T>(body: Record<string, unknown>): Promise<T>
   const payload = (await readFunctionError(error)) as { status?: string; error?: string } | null;
   // The gateway's own 404 (not deployed here), or the database update missing.
   if ((httpStatus === 404 && !payload?.status) || payload?.status === 'needs_migration') {
-    throw new AccountDeletionError('unavailable', "Deleting your account in the app isn't available yet.");
+    throw new AccountDeletionError('unavailable', payload?.error ?? "Deleting your account in the app isn't available yet.");
+  }
+  if (payload?.status === 'business_admin') {
+    throw new AccountDeletionError('blocked', payload.error ?? "You're the last admin of a business. Make someone else an admin, or delete the business, first.");
   }
   throw new AccountDeletionError('error', payload?.error ?? error.message);
 }
@@ -1865,6 +1921,7 @@ export async function previewAccountDeletion(): Promise<AccountDeletionFamily[]>
     families: Array<{
       family_id: string; name: string; role: string; other_members: number;
       document_count: number; your_documents: number; deleted: boolean;
+      kind?: string; blocked?: boolean;
     }>;
   }>({ action: 'preview' });
   return (families ?? []).map((f) => ({
@@ -1875,7 +1932,39 @@ export async function previewAccountDeletion(): Promise<AccountDeletionFamily[]>
     documentCount: f.document_count,
     yourDocuments: f.your_documents,
     deleted: f.deleted,
+    kind: f.kind === 'business' ? 'business' : 'family',
+    blocked: f.blocked === true,
   }));
+}
+
+/** What deleting a business would take (051): its records, and who loses it. Admins only. */
+export interface BusinessDeletion {
+  familyId: string;
+  name: string;
+  otherMembers: string[];
+  documentCount: number;
+}
+
+export async function previewBusinessDeletion(familyId: string): Promise<BusinessDeletion> {
+  const { business } = await deleteAccountInvoke<{
+    business: { family_id: string; name: string; other_members: string[]; document_count: number };
+  }>({ action: 'business_preview', family_id: familyId });
+  return {
+    familyId: business.family_id,
+    name: business.name,
+    otherMembers: business.other_members ?? [],
+    documentCount: business.document_count ?? 0,
+  };
+}
+
+/** Delete a business, its records and files, for everyone. The name must be typed. There is no undo. */
+export async function deleteBusiness(familyId: string, typedName: string): Promise<{ filesDeleted: number }> {
+  const result = await deleteAccountInvoke<{ files_deleted: number }>({
+    action: 'delete_business',
+    family_id: familyId,
+    confirm_name: typedName,
+  });
+  return { filesDeleted: result.files_deleted ?? 0 };
 }
 
 /** Delete the signed-in account, as the preview described. There is no undo. */

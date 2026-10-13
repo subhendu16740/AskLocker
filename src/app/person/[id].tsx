@@ -14,6 +14,7 @@ import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../lib/auth';
 import { useFamily } from '../../lib/family-context';
+import { useFamilyOnly } from '../../lib/family-only';
 import {
   fetchFamilyTree, fetchPersonDocuments, fetchExpiringDocuments, fetchEmergencyCard, removeFamilyPerson, linkPersonToAccount,
   fetchFamilyInvites, cancelInvitation, isMissingMigration, type FamilyTree, type ExpiringDocument, type PendingInvite,
@@ -36,6 +37,7 @@ import { color, radius, size, space, type } from '../../constants/design';
 const first = shortName;
 
 export default function PersonScreen() {
+  useFamilyOnly();
   // `joined` is set when this page was opened after two entries became one.
   const { id, joined } = useLocalSearchParams<{ id: string; joined?: string }>();
   const { user } = useAuth();
