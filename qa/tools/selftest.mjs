@@ -1041,6 +1041,8 @@ await test('business plan words: "your business", Plus by name, and a closed bus
     assert.doesNotMatch(text, /family/i, 'a business is not called a family');
   }
   // A paid plan that ended: every record stays, adding waits for the plan.
+  assert.ok(!fits({ ...shop, usedBytes: 5 * MB, closed: true }, 1), 'nothing fits in a closed business');
+  assert.ok(fits({ ...shop, usedBytes: 5 * MB }, 1));
   assert.equal(storageFullMessage({ ...shop, usedBytes: 5 * MB, closed: true }, 3 * MB), CLOSED_MESSAGE);
   assert.equal(CLOSED_MESSAGE, "Your business's plan has ended. Your records stay. To add new ones, renew the plan.");
   assert.equal(storageFullMessage({ plan: 'business', limitBytes: 25 * GB, usedBytes: 25 * GB, business: true }),

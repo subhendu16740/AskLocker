@@ -1,0 +1,372 @@
+// ─── Business vaults (051): a business's rules, and a family's kept ─
+//
+// QA account A has a business beside its family: QA Business A, on Free,
+// made on the first run after 051 is on DEV and reused after that (a person
+// on Free creates one family and one business). Everything here is skipped,
+// saying so, until 051 is applied to DEV.
+//
+//   Strangers (B outside it, a logged-out visitor) read nothing of it; no
+//   client changes a vault's kind, gives a plan, or calls the functions only
+//   the server may; B cannot delete it through delete-account; A cannot make
+//   a second free business.
+//   B is invited and accepts, as a viewer. In the business an admin deletes
+//   anyone's document and file, and a viewer nobody's but their own; the
+//   last admin can neither leave nor step down; delete-account's preview
+//   says the business holds A's account. B leaves at the end.
+//   In the database (DEV, with SUPABASE_ACCESS_TOKEN), inside one DO block
+//   that always ends by raising, so every write rolls back even when a guard
+//   fails: deleting A's account is refused; a trial ends back on Free; a
+//   paid plan ends closed, with one notice, nothing removed, never a clean-up
+//   candidate; Plus on QA Vault A ends exactly as before; the Business plan
+//   is refused for a family, and kind 'business' for a personal vault.
+//
+// No questions: no Groq budget.
+// ────────────────────────────────────────────────────────────────
+
+import { invokeFunction } from '../supabase.mjs';
+import { DEV_REF } from '../config.mjs';
+import { refusedByAuth, short } from './access.mjs';
+
+export const BUSINESS_A = 'QA Business A';
+const DESCRIPTION = 'Automated QA: a business vault with synthetic SPECIMEN records only. Managed by qa/run.mjs.';
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+const missingFunction = (error) =>
+  !!error && (error.code === 'PGRST202' || /could not find the function/i.test(error.message ?? ''));
+const missingColumn = (error) =>
+  !!error && (error.code === '42703' || /column .*kind.* does not exist|kind/i.test(error.message ?? ''));
+
+/** A's business, made the first time. Null (with why) where 051 is not on DEV. */
+async function ensureBusiness(a) {
+  const { data: rows, error } = await a.client.from('family_members').select('family_id').eq('user_id', a.user.id);
+  if (error) throw new Error(`A could not read its memberships: ${error.message}`);
+  const ids = (rows ?? []).map((r) => r.family_id);
+  if (ids.length) {
+    const { data: fams, error: famErr } = await a.client.from('families').select('id, name, storage_namespace, kind').in('id', ids);
+    if (famErr) {
+      if (missingColumn(famErr)) return { why: 'migration 051 is not applied to DEV yet (no families.kind)' };
+      throw new Error(`A could not read its vaults: ${famErr.message}`);
+    }
+    const found = (fams ?? []).find((f) => f.name === BUSINESS_A);
+    if (found) {
+      if (found.kind !== 'business') throw new Error(`${BUSINESS_A} exists but is a ${found.kind} vault`);
+      return { vault: { id: found.id, name: found.name, namespace: found.storage_namespace }, created: false };
+    }
+  }
+  const { data: id, error: mkErr } = await a.client.rpc('create_family', {
+    p_user_id: a.user.id, p_family_name: BUSINESS_A, p_description: DESCRIPTION, p_family_icon: '🧪', p_kind: 'business',
+  });
+  if (mkErr) {
+    if (missingFunction(mkErr)) return { why: 'migration 051 is not applied to DEV yet (create_family has no p_kind)' };
+    throw new Error(`A could not create ${BUSINESS_A}: ${mkErr.message}`);
+  }
+  const { data: fam, error: readErr } = await a.client.from('families').select('id, name, storage_namespace').eq('id', id).single();
+  if (readErr) throw new Error(`created ${BUSINESS_A} but cannot read it back: ${readErr.message}`);
+  return { vault: { id: fam.id, name: fam.name, namespace: fam.storage_namespace }, created: true };
+}
+
+async function managementQuery(cfg, sql) {
+  const res = await fetch(`https://api.supabase.com/v1/projects/${DEV_REF}/database/query`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${cfg.managementToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query: sql }),
+  });
+  return { ok: res.ok, status: res.status, text: await res.text() };
+}
+
+/**
+ * The database checks, as one DO block that always ends by raising
+ * QA-RESULT, so everything it does rolls back. Exported so it can be tried on
+ * a local Postgres before it ever reaches DEV.
+ */
+export function businessDbSql({ bizId, userA, familyA }) {
+  return `do $qa$
+declare
+  v_out text := '';
+  v_ns  text;
+  v_biz text := (select name from public.families where id = '${bizId}');
+  v_fam text := (select name from public.families where id = '${familyA}');
+  s     record;
+  v_service text := '{"role":"service_role"}';
+  v_as_a    text := '{"role":"authenticated","sub":"${userA}"}';
+begin
+  perform set_config('request.jwt.claims', v_service, true);
+  perform set_config('request.jwt.claim.role', 'service_role', true);
+
+  begin
+    perform public.delete_account_data('${userA}');
+    v_out := v_out || 'account=DELETED;';
+  exception when others then
+    v_out := v_out || 'account=' || CASE WHEN SQLERRM ILIKE '%last admin%' THEN 'refused' ELSE 'other:' || left(SQLERRM, 60) END || ';';
+  end;
+
+  perform public.set_family_plan('${bizId}', now() + interval '1 day', 'trial', null, 'business');
+  perform public.end_family_plan('${bizId}');
+  perform public.queue_plan_notices();
+  select * into s from public.family_storage_status('${bizId}');
+  v_out := v_out || 'trial_notice=' || exists (select 1 from public.notifications n where n.family_id = '${bizId}' and n.type = 'plan'
+             and n.user_id = '${userA}' and n.title = 'Your trial has ended for ' || v_biz)
+        || ';trial_plan=' || s.plan || ';trial_closed=' || s.closed || ';';
+
+  perform public.set_family_plan('${bizId}', now() + interval '1 day', 'manual', null, 'business');
+  perform public.end_family_plan('${bizId}');
+  perform public.queue_plan_notices();
+  select * into s from public.family_storage_status('${bizId}');
+  v_out := v_out || 'paid_notice=' || exists (select 1 from public.notifications n where n.family_id = '${bizId}' and n.type = 'plan'
+             and n.user_id = '${userA}' and n.title = 'The Business plan has ended for ' || v_biz)
+        || ';paid_closed=' || s.closed
+        || ';candidate=' || exists (select 1 from public.plan_cleanup_candidates() c where c.family_id = '${bizId}')
+        || ';removal=' || coalesce(public.plan_removal_at('${bizId}')::text, 'none') || ';';
+  update public.family_plans set cleanup_until = now() + interval '10 minutes' where family_id = '${bizId}';
+  begin
+    perform * from public.plan_take_excess('${bizId}');
+    v_out := v_out || 'take=ALLOWED;';
+  exception when others then
+    v_out := v_out || 'take=refused;';
+  end;
+  select storage_namespace into v_ns from public.families where id = '${bizId}';
+  perform set_config('request.jwt.claims', v_as_a, true);
+  perform set_config('request.jwt.claim.role', 'authenticated', true);
+  perform set_config('request.jwt.claim.sub', '${userA}', true);
+  v_out := v_out || 'room=' || public.family_storage_has_room(v_ns) || ';';
+  perform set_config('request.jwt.claims', v_service, true);
+  perform set_config('request.jwt.claim.role', 'service_role', true);
+
+  perform public.set_family_plan('${familyA}', now() + interval '1 day');
+  v_out := v_out || 'family_given=' || exists (select 1 from public.notifications n where n.family_id = '${familyA}' and n.type = 'plan'
+             and n.user_id = '${userA}' and n.title = v_fam || ' has Family Plus' and n.message like 'Room for % GB of documents, until %') || ';';
+  perform public.end_family_plan('${familyA}');
+  perform public.queue_plan_notices();
+  v_out := v_out || 'family_ended=' || exists (select 1 from public.notifications n where n.family_id = '${familyA}' and n.type = 'plan'
+             and n.user_id = '${userA}' and n.title = 'Family Plus has ended for ' || v_fam) || ';';
+
+  begin
+    perform public.set_family_plan('${familyA}', now() + interval '1 day', 'manual', null, 'business');
+    v_out := v_out || 'family_business=ALLOWED;';
+  exception when others then
+    v_out := v_out || 'family_business=refused;';
+  end;
+  begin
+    update public.families set kind = 'business' where created_by = '${userA}' and is_personal;
+    v_out := v_out || 'personal_business=' || CASE WHEN FOUND THEN 'ALLOWED' ELSE 'none' END || ';';
+  exception when others then
+    v_out := v_out || 'personal_business=refused;';
+  end;
+
+  raise exception 'QA-RESULT %', v_out;
+end
+$qa$;`;
+}
+
+export async function runBusinessChecks(cfg, { a, b, anon, vaultA, vaultB }, results) {
+  const check = (id, title, ok, why) => results.add('business', id, title, ok ? 'pass' : 'fail', { why });
+  const refused = (id, title, error, extra = '') =>
+    check(id, title, refusedByAuth(error), error ? short(error) : `was ALLOWED${extra}`);
+
+  const made = await ensureBusiness(a);
+  if (!made.vault) {
+    results.add('business', 'business', 'Business vaults (051)', 'skipped', { why: made.why });
+    return;
+  }
+  const biz = made.vault;
+  if (made.created) results.note('business', `created ${BUSINESS_A} (${biz.namespace})`);
+  const docThere = async (id) => !!(await a.client.rpc('get_document_detail', { p_family_id: biz.id, p_document_id: id })).data?.length;
+  const fileThere = async (path) => !(await a.client.storage.from('documents').download(path)).error;
+  const memberRole = async (userId) => {
+    const { data } = await a.client.from('family_members').select('role').eq('family_id', biz.id).eq('user_id', userId).maybeSingle();
+    return data?.role ?? null;
+  };
+
+  // A run that died: B is taken out, and anything waiting for B withdrawn.
+  if (await memberRole(b.user.id)) {
+    await a.client.from('family_members').delete().eq('family_id', biz.id).eq('user_id', b.user.id);
+  }
+  {
+    const { data } = await a.client.from('family_invites').select('id, email').eq('family_id', biz.id);
+    for (const i of data ?? []) await a.client.rpc('cancel_family_invite', { p_invite_id: i.id });
+  }
+
+  // ── Strangers ──────────────────────────────────────────────────
+  {
+    const { data, error } = await b.client.rpc('get_family_documents', { p_family_id: biz.id, p_limit: 5, p_offset: 0 });
+    check('stranger-documents', "A stranger cannot list a business's records",
+      (error && refusedByAuth(error)) || (!error && (data ?? []).length === 0), error ? short(error) : `${(data ?? []).length} rows`);
+    const { error: stErr } = await b.client.rpc('family_storage_status', { p_family_id: biz.id });
+    refused('stranger-storage', "A stranger cannot read a business's storage or plan", stErr);
+    const { data: files } = await b.client.storage.from('documents').list(biz.namespace);
+    check('stranger-files', "A stranger sees no file in a business's folder", (files ?? []).length === 0, `${(files ?? []).length} files listed`);
+    const { error: anonErr } = await anon.client.rpc('create_family', {
+      p_user_id: a.user.id, p_family_name: 'QA anon business', p_kind: 'business',
+    });
+    refused('anon-create-business', 'A logged-out visitor cannot create a business', anonErr);
+  }
+  {
+    const { error } = await b.client.from('families').update({ kind: 'business' }).eq('id', vaultB.id);
+    const { data: back } = await b.client.from('families').select('kind').eq('id', vaultB.id).single();
+    check('kind-locked', "No client changes a vault's kind, not even its admin",
+      !!error && refusedByAuth(error) && back?.kind === 'family',
+      error ? short(error) : `ALLOWED — QA Vault B is now ${back?.kind}`);
+    if (!error && back?.kind !== 'family') results.note('business', 'QA Vault B was made a business by a client: put it back by hand (kind = family)');
+  }
+  {
+    const until = new Date(Date.now() + 86_400_000).toISOString();
+    const { error } = await b.client.rpc('set_family_plan', {
+      p_family_id: vaultB.id, p_paid_until: until, p_source: 'manual', p_source_ref: null, p_plan: 'business',
+    });
+    refused('client-gives-plan', 'No client gives itself the Business plan', error);
+    const { error: insErr } = await b.client.from('family_plans').insert({ family_id: vaultB.id, plan: 'business', paid_until: until });
+    refused('client-writes-plan', 'No client writes family_plans', insErr);
+    for (const [fn, args] of [
+      ['person_plan', { p_user_id: b.user.id }],
+      ['is_business_vault', { p_family_id: biz.id }],
+      ['business_deletion_plan', { p_user_id: a.user.id, p_family_id: biz.id }],
+      ['purge_business', { p_user_id: a.user.id, p_family_id: biz.id, p_confirm_name: BUSINESS_A }],
+    ]) {
+      const { error: fnErr } = await b.client.rpc(fn, args);
+      refused(`client-${fn}`, `Only the server calls ${fn}`, fnErr);
+    }
+  }
+  {
+    const r = await invokeFunction(cfg, b, 'delete-account', { action: 'delete_business', family_id: biz.id, confirm_name: BUSINESS_A }, { timeoutMs: 30_000 });
+    check('stranger-delete-business', 'A stranger cannot delete a business through delete-account', r.status === 403,
+      `HTTP ${r.status}: ${JSON.stringify(r.data).slice(0, 120)}`);
+  }
+  {
+    const { data: id, error } = await a.client.rpc('create_family', {
+      p_user_id: a.user.id, p_family_name: 'QA Business Two', p_kind: 'business',
+    });
+    check('one-free-business', 'On Free, a person creates one business (a second is refused)',
+      !!error && (error.hint === 'family_limit' || /one business/i.test(error.message)), error ? short(error) : 'a SECOND business was made');
+    if (id) results.note('business', `a second business, ${id}, was made by A: delete it by hand`);
+  }
+
+  // ── B joins as a viewer ────────────────────────────────────────
+  const invite = await invokeFunction(cfg, a, 'add-member', { family_id: biz.id, email: cfg.b.email }, { timeoutMs: 30_000 });
+  if (invite.data?.status !== 'invited') {
+    results.add('business', 'join', 'B is invited to the business', 'fail', { why: `HTTP ${invite.status}: ${JSON.stringify(invite.data).slice(0, 140)}` });
+    return;
+  }
+  const { data: waiting } = await b.client.rpc('get_my_invitations');
+  const mine = (waiting ?? []).find((i) => i.family_id === biz.id);
+  check('invite-kind', "B's invitation says it is a business", mine?.family_kind === 'business', `family_kind: ${mine?.family_kind}`);
+  const { data: joined, error: joinErr } = mine
+    ? await b.client.rpc('accept_family_invite', { p_invite_id: mine.id })
+    : { data: null, error: { message: 'no invitation found' } };
+  if (joinErr || joined?.status !== 'joined') {
+    results.add('business', 'join', 'B accepts and joins the business', 'fail', { why: joinErr ? short(joinErr) : JSON.stringify(joined) });
+    return;
+  }
+
+  const added = [];   // [id, path], deleted again however the checks end
+  try {
+    // One document each, the way the app adds them.
+    const addDoc = async (actor, tag) => {
+      const name = `qa_sacrificial_biz_${tag}_${cfg.runId}.pdf`;
+      const path = `${biz.namespace}/${name}`;
+      const bytes = Buffer.from(`%PDF-1.4\n% AskLocker QA: a SPECIMEN record added by ${tag}\n`);
+      const { error: upErr } = await actor.client.storage.from('documents').upload(path, bytes, { contentType: 'application/pdf' });
+      if (upErr) throw new Error(`${actor.label} could not upload to ${BUSINESS_A}: ${upErr.message}`);
+      const { data: id, error } = await actor.client.rpc('insert_family_document', {
+        p_family_id: biz.id, p_uploaded_by: actor.user.id, p_file_name: name, p_file_type: 'pdf',
+        p_file_size_bytes: bytes.length, p_storage_path: path,
+      });
+      if (error) throw new Error(`${actor.label} could not add a record to ${BUSINESS_A}: ${error.message}`);
+      added.push([id, path]);
+      return [id, path];
+    };
+    const [aDoc, aPath] = await addDoc(a, 'admin');
+    const [bDoc, bPath] = await addDoc(b, 'viewer');
+
+    const { error: viewerErr } = await b.client.rpc('delete_family_document', { p_family_id: biz.id, p_document_id: aDoc, p_user_id: b.user.id });
+    check('viewer-cannot-delete-admins', "In a business, a viewer cannot delete an admin's record",
+      refusedByAuth(viewerErr) && (await docThere(aDoc)), viewerErr ? short(viewerErr) : 'the record is GONE');
+    await b.client.storage.from('documents').remove([aPath]);
+    check('viewer-cannot-delete-admins-file', "Nor its file, through Storage", await fileThere(aPath), 'the file is still there');
+
+    const { error: adminErr } = await a.client.rpc('delete_family_document', { p_family_id: biz.id, p_document_id: bDoc, p_user_id: a.user.id });
+    await a.client.storage.from('documents').remove([bPath]);
+    const rowGone = !(await docThere(bDoc));
+    const fileGone = !(await fileThere(bPath));
+    check('admin-deletes-any', "In a business, an admin deletes anyone's record, file and all",
+      !adminErr && rowGone && fileGone,
+      adminErr ? short(adminErr) : !rowGone ? 'the record is still there' : !fileGone ? 'the record went, its FILE stayed' : 'gone, file and all');
+
+    // The last admin stays.
+    const { error: leaveErr } = await a.client.from('family_members').delete().eq('family_id', biz.id).eq('user_id', a.user.id);
+    const stillIn = (await memberRole(a.user.id)) === 'admin';
+    check('last-admin-cannot-leave', "A business's last admin cannot leave",
+      stillIn && (!!leaveErr && (leaveErr.hint === 'last_admin' || /last admin/i.test(leaveErr.message))),
+      leaveErr ? short(leaveErr) : stillIn ? 'no error, but still in' : 'A LEFT the business');
+    if (!stillIn) results.note('business', `A left ${BUSINESS_A}: make A its admin again by hand`);
+    const { error: stepErr } = await a.client.from('family_members').update({ role: 'viewer' }).eq('family_id', biz.id).eq('user_id', a.user.id);
+    const stillAdmin = (await memberRole(a.user.id)) === 'admin';
+    check('last-admin-cannot-step-down', "Nor make themselves a viewer",
+      stillAdmin && !!stepErr && (stepErr.hint === 'last_admin' || /last admin/i.test(stepErr.message)),
+      stepErr ? short(stepErr) : stillAdmin ? 'no error, but still an admin' : 'A is a VIEWER now');
+
+    const preview = await invokeFunction(cfg, a, 'delete-account', { action: 'preview' }, { timeoutMs: 30_000 });
+    const row = (preview.data?.families ?? []).find((f) => f.family_id === biz.id);
+    if (preview.status === 200 && row && 'blocked' in row) {
+      check('account-blocked', "Deleting the last admin's account is held by the business (preview)",
+        row.blocked === true && row.deleted === false, JSON.stringify({ blocked: row.blocked, deleted: row.deleted }));
+    } else {
+      results.add('business', 'account-blocked', "Deleting the last admin's account is held by the business (preview)", 'skipped',
+        { why: preview.status === 200 ? 'the delete-account deployed on DEV is older than 051' : `HTTP ${preview.status}` });
+    }
+  } finally {
+    for (const [id, path] of added) {
+      if (await docThere(id)) await a.client.rpc('delete_family_document', { p_family_id: biz.id, p_document_id: id, p_user_id: a.user.id });
+      await a.client.storage.from('documents').remove([path]);
+    }
+    const { error: outErr } = await b.client.from('family_members').delete().eq('family_id', biz.id).eq('user_id', b.user.id);
+    const out = !(await memberRole(b.user.id));
+    check('viewer-leaves', 'A viewer leaves a business', !outErr && out, outErr ? short(outErr) : out ? 'left' : 'B is STILL in it');
+  }
+
+  // ── In the database, rolled back ───────────────────────────────
+  if (!cfg.managementToken) {
+    results.add('business', 'db', "A business's plan ending, and account deletion, in the database", 'skipped', { why: 'SUPABASE_ACCESS_TOKEN is not set' });
+    return;
+  }
+  const ids = [biz.id, a.user.id, vaultA.id];
+  if (!ids.every((id) => UUID.test(String(id)))) {
+    results.add('business', 'db', 'Database checks', 'skipped', { why: 'an id is missing' });
+    return;
+  }
+  const [bizId, userA, familyA] = ids;
+  const sql = businessDbSql({ bizId, userA, familyA });
+
+  let result;
+  try {
+    const r = await managementQuery(cfg, sql);
+    const m = /QA-RESULT ([^"\\]*)/.exec(r.text);
+    if (!m) {
+      results.add('business', 'db', "A business's plan ending, in the database", 'inconclusive',
+        { why: r.ok ? 'the block did not raise its result' : `HTTP ${r.status}: ${r.text.slice(0, 160)}` });
+      return;
+    }
+    result = Object.fromEntries(m[1].split(';').filter(Boolean).map((kv) => {
+      const at = kv.indexOf('=');
+      return [kv.slice(0, at), kv.slice(at + 1)];
+    }));
+  } catch (err) {
+    results.add('business', 'db', "A business's plan ending, in the database", 'inconclusive', { why: String(err?.message ?? err) });
+    return;
+  }
+  const said = (k) => `${k}: ${result[k] ?? '—'}`;
+  check('db-account', "Deleting the account of a business's last admin is refused", result.account === 'refused', said('account'));
+  check('db-trial', 'A trial that ends puts a business back on Free: a notice, not closed',
+    result.trial_notice === 'true' && result.trial_plan === 'free' && result.trial_closed === 'false',
+    `${said('trial_notice')}, ${said('trial_plan')}, ${said('trial_closed')}`);
+  check('db-paid-ends', 'A paid plan that ends: a notice, adding closed, no room',
+    result.paid_notice === 'true' && result.paid_closed === 'true' && result.room === 'false',
+    `${said('paid_notice')}, ${said('paid_closed')}, ${said('room')}`);
+  check('db-nothing-removed', 'Nothing is ever removed from a business: never a clean-up candidate, no removal date, plan_take_excess refuses',
+    result.candidate === 'false' && result.removal === 'none' && result.take === 'refused',
+    `${said('candidate')}, ${said('removal')}, ${said('take')}`);
+  check('db-family-unchanged', "A family's Family Plus starts and ends exactly as before",
+    result.family_given === 'true' && result.family_ended === 'true',
+    `${said('family_given')}, ${said('family_ended')}`);
+  check('db-business-plan-family', 'The Business plan is refused for a family', result.family_business === 'refused', said('family_business'));
+  check('db-personal-business', 'A personal vault cannot be a business', result.personal_business !== 'ALLOWED', said('personal_business'));
+}
