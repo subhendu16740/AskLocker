@@ -1985,6 +1985,12 @@ so storage policies live only in `019`.
   once on Home of someone whose only vault is their personal vault
   (`UseForOffer`), sent to usage counts (`use_for_chosen`). It decides which
   Create comes first in Manage Family, and nothing else.
+- **An account made before 051 finds it too.** Someone in a family and no
+  business (or the other way round) who never answered is offered the other
+  kind once on Home, "Have a business too?", with Create and Not now;
+  creating one saves "both". Create a family and Create a business sit
+  under Manage Family's "Your vaults", where they move between vaults, not
+  at the foot of the member list.
 - **Business papers**: business categories (`document_categories.audience`:
   Sales Invoices, Purchase Bills, GST Returns, Contracts & Agreements,
   Licences & Registrations, Bank & Loans, Business Insurance, Employee
@@ -2559,7 +2565,7 @@ rule again once pinned chunks are mixed in.
   feature must do the same, through `useFamilyPlan().routeFor()` and a
   redirect in its own screen, and get a row on that page. Each shows the tag
   where you find it, and Help's FAQ names them all. A person on Plus (any
-  vault they are in, 049's `person_on_plus()`) has a ★ before their own name
+  vault they are in, 049's `person_on_plus()`) has a ★ after their own name
   — the drawer, Home, Settings, Manage Family (`useOnPlus()` from
   `question_status()`, `<PlusStar />`) — and in Manage Family every member
   of a family on Plus has one; never another member's Plus through some

@@ -133,7 +133,7 @@ export default function SettingsScreen() {
   const vaultItems: LinkItem[] = [
     isBusinessVault(currentFamily)
       ? { icon: 'briefcase', label: 'Manage team', sub: 'People in this business, and your other vaults', route: '/family' }
-      : { icon: 'users', label: 'Manage Families', sub: 'View and switch families', route: '/family' },
+      : { icon: 'users', label: 'Manage Families', sub: 'Switch vaults, or create a family or business', route: '/family' },
     { icon: 'hard-drive', label: 'Storage', sub: 'Your plan and space used', route: '/settings/storage' },
     isBusinessVault(currentFamily)
       ? { icon: 'star', label: 'Plans', sub: 'Plus, Pro and Enterprise', route: '/plus' }
@@ -270,7 +270,7 @@ export default function SettingsScreen() {
           </View>
           <View style={styles.profileInfo}>
             <Text style={styles.profileName} accessibilityLabel={onPlus ? `${displayName}, Family Plus` : undefined}>
-              {onPlus && <PlusStar onDark />}{displayName}
+              {displayName}{onPlus && <PlusStar onDark />}
             </Text>
             <Text style={styles.profileEmail}>{email}</Text>
             <View style={styles.adminBadge}>

@@ -177,7 +177,7 @@ export default function HomeScreen() {
                     style={styles.headerTitle}
                     accessibilityLabel={onPlus ? `${displayName}, Family Plus` : undefined}
                   >
-                    {onPlus && <PlusStar onDark />}{displayName}
+                    {displayName}{onPlus && <PlusStar onDark />}
                   </Text>
                 </View>
               </View>

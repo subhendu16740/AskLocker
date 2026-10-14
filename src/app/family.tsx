@@ -213,8 +213,36 @@ export default function FamilyScreen() {
     }
   };
 
+  // A family or a business (051) is how documents are shared; anyone can
+  // make one, at any time. What the person said they use AskLocker for
+  // decides which comes first, nothing more.
+  const createLink = (kind: 'family' | 'business', inList: boolean) => (
+    <TouchableOpacity
+      key={kind}
+      onPress={() => router.push(`/setup-family?kind=${kind}` as any)}
+      style={[styles.treeLink, inList && styles.treeLinkInList]}
+      activeOpacity={0.8}
+      accessibilityRole="button"
+    >
+      <View style={styles.treeIcon}>
+        <Feather name={kind === 'business' ? 'briefcase' : 'plus'} size={16} color={color.primary} />
+      </View>
+      <View style={styles.memberInfo}>
+        <Text style={styles.treeTitle}>{kind === 'business' ? 'Create a business' : 'Create a family'}</Text>
+        <Text style={styles.treeSub}>{kind === 'business' ? 'Keep records with your team' : 'Share documents with your family'}</Text>
+      </View>
+      <Feather name="chevron-right" size={16} color="#9CA3AF" />
+    </TouchableOpacity>
+  );
+  const createLinks = (inList: boolean) => useFor === 'business'
+    ? <>{createLink('business', inList)}{createLink('family', inList)}</>
+    : <>{createLink('family', inList)}{createLink('business', inList)}</>;
+  const createFamily = createLinks(false);
+
   // Every vault this person is in (046): their personal vault and each
   // family. Tapping one opens it everywhere — Home, the family tree, Storage.
+  // Creating a family or a business sits under the list, where someone
+  // already in a family looks for another vault (051).
   const vaultList = families.length > 1 && currentFamily && (
     <View style={styles.section}>
       <Text style={styles.sectionLabel}>Your vaults</Text>
@@ -244,33 +272,10 @@ export default function FamilyScreen() {
           );
         })}
       </View>
+      {createLinks(true)}
     </View>
   );
 
-  // A family or a business (051) is how documents are shared; anyone can
-  // make one, at any time. What the person said they use AskLocker for
-  // decides which comes first, nothing more.
-  const createLink = (kind: 'family' | 'business') => (
-    <TouchableOpacity
-      key={kind}
-      onPress={() => router.push(`/setup-family?kind=${kind}` as any)}
-      style={styles.treeLink}
-      activeOpacity={0.8}
-      accessibilityRole="button"
-    >
-      <View style={styles.treeIcon}>
-        <Feather name={kind === 'business' ? 'briefcase' : 'plus'} size={16} color={color.primary} />
-      </View>
-      <View style={styles.memberInfo}>
-        <Text style={styles.treeTitle}>{kind === 'business' ? 'Create a business' : 'Create a family'}</Text>
-        <Text style={styles.treeSub}>{kind === 'business' ? 'Keep records with your team' : 'Share documents with your family'}</Text>
-      </View>
-      <Feather name="chevron-right" size={16} color="#9CA3AF" />
-    </TouchableOpacity>
-  );
-  const createFamily = useFor === 'business'
-    ? <>{createLink('business')}{createLink('family')}</>
-    : <>{createLink('family')}{createLink('business')}</>;
 
   if (!currentFamily) {
     return (
@@ -333,7 +338,7 @@ export default function FamilyScreen() {
             </View>
           </View>
           {vaultList}
-          {createFamily}
+          {!vaultList && createFamily}
           <View style={{ height: 24 }} />
         </ScrollView>
       </SafeAreaView>
@@ -430,7 +435,7 @@ export default function FamilyScreen() {
                     <View style={styles.memberInfo}>
                       <View style={styles.memberNameRow}>
                         <Text style={styles.memberName} accessibilityLabel={starred ? `${name}, Family Plus` : undefined}>
-                          {starred && <PlusStar />}{name}
+                          {name}{starred && <PlusStar />}
                         </Text>
                         {isCurrentUser && (
                           <View style={styles.youBadge}>
@@ -530,7 +535,7 @@ export default function FamilyScreen() {
           </View>
         )}
 
-        {createFamily}
+        {!vaultList && createFamily}
 
         {canLeave && (
           <TouchableOpacity onPress={handleLeave} style={styles.leaveBtn} activeOpacity={0.8}>
@@ -1010,6 +1015,7 @@ const styles = StyleSheet.create({
     backgroundColor: color.surface,
     ...shadow.card,
   },
+  treeLinkInList: { marginHorizontal: 0, marginTop: space.sm },
   treeIcon: { width: size.iconBox, height: size.iconBox, borderRadius: 8, backgroundColor: color.tint, alignItems: 'center', justifyContent: 'center' },
   treeTitle: type.label,
   treeSub: type.caption,
