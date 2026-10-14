@@ -138,7 +138,7 @@ export default function ProfileDrawer() {
               numberOfLines={1}
               accessibilityLabel={onPlus ? `${displayName}, Family Plus` : undefined}
             >
-              {onPlus && <PlusStar onDark />}{displayName}
+              {displayName}{onPlus && <PlusStar onDark />}
             </Text>
             {!!email && <Text style={styles.profileSub} numberOfLines={1}>{email}</Text>}
             {!!familyLine && <Text style={styles.profileSub} numberOfLines={1}>{familyLine}</Text>}

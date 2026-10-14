@@ -100,11 +100,11 @@ export function PlusTag({ link = false, name: fixedName }: { link?: boolean; nam
 }
 
 /**
- * "★ " before the name of someone on Family Plus, inside the name's own Text.
+ * " ★" after the name of someone on Family Plus, inside the name's own Text.
  * Hidden from screen readers: the name's Text says "Family Plus" instead.
  */
 export function PlusStar({ onDark = false }: { onDark?: boolean }) {
-  return <Text style={[styles.nameStar, onDark && styles.nameStarOnDark]} aria-hidden>★ </Text>;
+  return <Text style={[styles.nameStar, onDark && styles.nameStarOnDark]} aria-hidden> ★</Text>;
 }
 
 const styles = StyleSheet.create({

@@ -6,6 +6,11 @@
 // account; someone who joined by invitation is in a family already — and
 // only until they answer or tap Not now. The answer is kept on their users
 // row (051), so another device does not ask again; Not now is this device's.
+//
+// Someone already in a family and in no business, or the other way round,
+// who has never answered, is offered the other kind of vault once instead
+// ("Have a business too?"), so an account made before 051 finds it too.
+// Creating one counts as "both".
 
 import { useEffect, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
@@ -14,7 +19,7 @@ import { router } from 'expo-router';
 import { useAuth } from '../lib/auth';
 import { useFamily } from '../lib/family-context';
 import { fetchUseFor, saveUseFor, type UseFor } from '../lib/api';
-import { isPersonalVault } from '../lib/vaults';
+import { isBusinessVault, isPersonalVault } from '../lib/vaults';
 import { track } from '../lib/analytics';
 import { color, radius, shadow, size, space, type } from '../constants/design';
 
@@ -32,15 +37,21 @@ export function UseForOffer({ style }: { style?: StyleProp<ViewStyle> }) {
   const [picked, setPicked] = useState<UseFor | null>(null);
 
   const onlyPersonal = families.length > 0 && families.every((f) => isPersonalVault(f.families));
+  const inBusiness = families.some((f) => isBusinessVault(f.families));
+  const inFamily = families.some((f) => !isPersonalVault(f.families) && !isBusinessVault(f.families));
+  // The kind of vault to offer someone who already has the other one.
+  const other: 'business' | 'family' | null =
+    inFamily && !inBusiness ? 'business' : inBusiness && !inFamily ? 'family' : null;
+  const ask = onlyPersonal || other !== null;
 
   useEffect(() => {
-    if (!user || !onlyPersonal) return;
+    if (!user || !ask) return;
     let cancelled = false;
     fetchUseFor(user.id).then((v) => { if (!cancelled) setAnswered(v !== null); }).catch(() => {});
     return () => { cancelled = true; };
-  }, [user?.id, onlyPersonal]);
+  }, [user?.id, ask]);
 
-  if (!user || (!onlyPersonal && !picked) || (answered !== false && !picked)) return null;
+  if (!user || (!ask && !picked) || (answered !== false && !picked)) return null;
 
   const choose = (choice: UseFor) => {
     setPicked(choice);
@@ -53,6 +64,38 @@ export function UseForOffer({ style }: { style?: StyleProp<ViewStyle> }) {
     track('use_for_chosen', { choice: 'skipped' });
     saveUseFor(user.id, 'skipped').catch(() => {});
   };
+
+  if (!onlyPersonal && other && !picked) {
+    return (
+      <View style={style}>
+        <View style={styles.card}>
+          <Text style={styles.title}>{other === 'business' ? 'Have a business too?' : 'Share with your family too?'}</Text>
+          <Text style={styles.sub}>
+            {other === 'business'
+              ? 'Keep business records in a vault of their own, apart from your family.'
+              : 'Keep family papers in a vault of their own, apart from work.'}
+          </Text>
+          <View style={styles.buttons}>
+            <TouchableOpacity
+              style={styles.primary}
+              onPress={() => {
+                setAnswered(true);
+                track('use_for_chosen', { choice: 'both' });
+                saveUseFor(user.id, 'both').catch(() => {});
+                router.push(`/setup-family?kind=${other}` as any);
+              }}
+              accessibilityRole="button"
+            >
+              <Text style={styles.primaryText}>Create a {other}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.secondary} onPress={notNow} accessibilityRole="button">
+              <Text style={styles.secondaryText}>Not now</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    );
+  }
 
   if (picked) {
     const kind = picked === 'business' ? 'business' : 'family';
