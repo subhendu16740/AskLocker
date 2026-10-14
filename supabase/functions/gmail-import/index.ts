@@ -23,7 +23,7 @@ import { requireFamilyMember } from '../_shared/auth.ts';
 import { ingestDocument } from '../_shared/ingest.ts';
 import { sha256Hex } from '../_shared/gmail-crypto.ts';
 import { MAX_IMPORT_BYTES, attachmentParts, sniffType, storageFileName } from '../_shared/gmail-rules.ts';
-import { fits, storageFullMessage, type StorageRoom } from '../_shared/plan-text.ts';
+import { fits, isBusinessPlan, storageFullMessage, type StorageRoom } from '../_shared/plan-text.ts';
 import { MAX_FILE_BYTES, fileTooLargeMessage } from '../_shared/limits.ts';
 import { GmailError, accessTokenFor, getAttachment, getMessage } from '../_shared/gmail.ts';
 
@@ -113,17 +113,17 @@ Deno.serve(async (req) => {
     //    policy keeps for uploads from the app; the service role passes no
     //    policy, so both are checked here. Before 038 there is nothing to
     //    ask, and nothing is checked, as before.
-    //    A business (051) on Plus or the Business plan imports too.
+    //    A business (051) on Plus or Pro imports too.
     const { data: rooms } = await supabase.rpc('family_storage_status', { p_family_id: family_id });
     const r = (rooms as Array<{ plan: string; limit_bytes: number; used_bytes: number; personal?: boolean; business?: boolean }> | null)?.[0];
     if (r) {
       if (r.plan === 'free') {
         throw new ImportProblem(r.business
-          ? 'Import from Gmail comes with Plus or the Business plan.'
+          ? 'Import from Gmail comes with Plus or Pro.'
           : 'Import from Gmail comes with Family Plus. See Settings › Family Plus.');
       }
       const room: StorageRoom = {
-        plan: r.plan === 'business' ? 'business' : 'plus',
+        plan: isBusinessPlan(r.plan) ? r.plan : 'plus',
         limitBytes: Number(r.limit_bytes),
         usedBytes: Number(r.used_bytes),
         personal: r.personal === true,    // 048; absent before it

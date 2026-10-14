@@ -26,27 +26,36 @@
 --      rag-search does not read relations ("Nani") in a business vault.
 --      031's trigger still makes a family_people row per member.
 --
--- Plans:
---   • plan_limits gains a 'business' row (25 GB, 25 members, no monthly
---     question limit with fair use 500, no voice limit, 500 uploads and 100
---     question tries a day each, 50 invitations a day), and two columns:
---     invites_per_day (20 on Free and Plus) and businesses_per_person (1 on
---     Free: a person on Free creates one family AND one business, besides
---     their personal vault). Numbers to change in the Table editor.
---   • A business can be on Plus (bought in the app, or given by hand) or on
---     Business (given by hand only). set_family_plan() takes the plan name
---     as a new last parameter; 'business' only for a business vault. A
---     payment for Plus while Business is running adds time to Business.
---   • person_plan(user): the best plan among the vaults a person is in. 049's
---     person_on_plus(), question_allowance() and 050's person_daily_limit()
---     read it, so a person in a business on a paid plan has its question
---     and daily numbers everywhere. Voice still follows the vault asked in.
+-- Plans — a business has its own two, and never Family Plus:
+--   • Business Plus (plan_limits 'business_plus'): 25 GB, 10 members, no
+--     monthly question limit with fair use 80 each, no voice limit, 200
+--     uploads and 20 question tries a day each, 20 invitations a day.
+--   • Business Pro ('business_pro'): limits a small business does not meet —
+--     100 GB, 50 members, fair use 300 questions each, 500 uploads and 100
+--     tries a day each, 50 invitations a day. Set so that a business that
+--     met every one would still cost less than Pro's price, at about ₹0.20
+--     a question.
+--     Both are rows to change in the Table editor; the prices are
+--     BUSINESS_PRICE in supabase/functions/_shared/plan-text.ts.
+--   • plan_limits gains invites_per_day (20 on Free and Plus) and
+--     businesses_per_person (1 on Free: a person on Free creates one family
+--     AND one business, besides their personal vault).
+--   • set_family_plan() takes the plan name as a new last parameter. A
+--     business must be given one of its two by name; Family Plus is refused
+--     for a business, and the business plans for a family. So a Razorpay
+--     payment (apply_plan_payment(), which names no plan) can only ever make
+--     a family Plus — the payments function refuses a business before that.
+--   • person_plans(user): the plans of the vaults a person is in, and Free.
+--     049's person_on_plus(), question_allowance() and 050's
+--     person_daily_limit() take the best of them, number by number, so
+--     joining a business never lowers what a Family Plus member had. Voice
+--     still follows the vault asked in.
 --   • Expiry reminders and 30-day links are for any paid plan, not just Plus.
 --
 --   Given by hand, from the SQL editor — on PROD only once the Supabase
 --   organisation is on Pro, and Groq and HuggingFace are paid:
---     select set_family_plan('<vault id>', now() + interval '14 days', 'trial', null, 'business');
---     select set_family_plan('<vault id>', now() + interval '3 months', 'manual', null, 'business');
+--     select set_family_plan('<vault id>', now() + interval '14 days', 'trial', null, 'business_pro');
+--     select set_family_plan('<vault id>', now() + interval '1 month', 'manual', null, 'business_plus');
 --
 -- Also: document_categories.audience ('family', 'business', 'both') and the
 -- business categories; users.use_for (what the person said they would use
@@ -95,7 +104,7 @@ AS $fn$
 $fn$;
 
 
--- ─── 2. The Business plan ──────────────────────────────────────────────────
+-- ─── 2. Business Plus and Business Pro ─────────────────────────────────────
 -- 038's CHECKs on the plan names, and on family_plans.source, are replaced
 -- (found by what they say: their names are Postgres's own).
 DO $do$
@@ -112,7 +121,7 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_constraint
                   WHERE conname = 'plan_limits_plan_known' AND conrelid = 'public.plan_limits'::regclass) THEN
     ALTER TABLE public.plan_limits ADD CONSTRAINT plan_limits_plan_known
-      CHECK (plan IN ('free', 'plus', 'business'));
+      CHECK (plan IN ('free', 'plus', 'business_plus', 'business_pro'));
   END IF;
 
   FOR c IN SELECT conname FROM pg_constraint
@@ -125,7 +134,7 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_constraint
                   WHERE conname = 'family_plans_plan_paid' AND conrelid = 'public.family_plans'::regclass) THEN
     ALTER TABLE public.family_plans ADD CONSTRAINT family_plans_plan_paid
-      CHECK (plan IN ('plus', 'business'));
+      CHECK (plan IN ('plus', 'business_plus', 'business_pro'));
   END IF;
   -- 'trial': a plan switched on by hand for a demo. When it ends, a business
   -- is back on Free rather than closed.
@@ -156,29 +165,31 @@ COMMENT ON COLUMN public.plan_limits.businesses_per_person IS
 
 INSERT INTO public.plan_limits (plan, storage_bytes, max_members, voice_answers, questions_per_month,
                                 questions_fair_use, uploads_per_day, question_tries_per_day, invites_per_day)
-VALUES ('business', 25::bigint * 1024 * 1024 * 1024, 25, NULL, NULL, 500, 500, 100, 50)
+VALUES ('business_plus', 25::bigint  * 1024 * 1024 * 1024, 10, NULL, NULL,  80, 200,  20, 20),
+       ('business_pro',  100::bigint * 1024 * 1024 * 1024, 50, NULL, NULL, 300, 500, 100, 50)
 ON CONFLICT (plan) DO NOTHING;
 
 
--- ─── 3. Which plan a person is on ──────────────────────────────────────────
--- The best plan among the vaults a person is in: Business, then Plus, then
--- Free. Takes a user id, so it is the server's alone.
-CREATE OR REPLACE FUNCTION public.person_plan(p_user_id uuid)
-RETURNS text
+-- ─── 3. Which plans a person is on ─────────────────────────────────────────
+-- The plans of the vaults a person is in, and Free. No plan is best at
+-- everything (Family Plus has more questions each than Business Plus), so
+-- each number is the best any of them gives. Take a user id, so they are
+-- the server's alone.
+CREATE OR REPLACE FUNCTION public.person_plans(p_user_id uuid)
+RETURNS SETOF text
 LANGUAGE sql
 STABLE
 SECURITY DEFINER
 SET search_path = public
 AS $fn$
-  SELECT CASE WHEN bool_or(x.p = 'business') THEN 'business'
-              WHEN bool_or(x.p = 'plus')     THEN 'plus'
-              ELSE 'free' END
-    FROM (SELECT public.family_plan_now(m.family_id) AS p
-            FROM public.family_members m
-           WHERE m.user_id = p_user_id) x;
+  SELECT 'free'
+  UNION
+  SELECT public.family_plan_now(m.family_id)
+    FROM public.family_members m
+   WHERE m.user_id = p_user_id;
 $fn$;
 
--- 049's, on any paid plan: Plus or Business.
+-- 049's, on any paid plan.
 CREATE OR REPLACE FUNCTION public.person_on_plus(p_user_id uuid)
 RETURNS boolean
 LANGUAGE sql
@@ -186,10 +197,10 @@ STABLE
 SECURITY DEFINER
 SET search_path = public
 AS $fn$
-  SELECT public.person_plan(p_user_id) <> 'free';
+  SELECT EXISTS (SELECT 1 FROM public.person_plans(p_user_id) p WHERE p <> 'free');
 $fn$;
 
--- 049's, with the numbers of the person's best plan.
+-- 049's, from whichever of the person's plans allows the most questions.
 CREATE OR REPLACE FUNCTION public.question_allowance(p_user_id uuid)
 RETURNS TABLE (plus boolean, monthly integer, ceiling integer)
 LANGUAGE plpgsql
@@ -197,17 +208,19 @@ STABLE
 SECURITY DEFINER
 SET search_path = public
 AS $fn$
-DECLARE
-  v_plan text := public.person_plan(p_user_id);
 BEGIN
   RETURN QUERY
-  SELECT v_plan <> 'free', pl.questions_per_month, coalesce(pl.questions_per_month, pl.questions_fair_use)
+  SELECT public.person_on_plus(p_user_id), pl.questions_per_month,
+         coalesce(pl.questions_per_month, pl.questions_fair_use)
     FROM public.plan_limits pl
-   WHERE pl.plan = v_plan;
+   WHERE pl.plan IN (SELECT public.person_plans(p_user_id))
+   ORDER BY coalesce(pl.questions_per_month, pl.questions_fair_use) DESC,
+            (pl.questions_per_month IS NULL) DESC
+   LIMIT 1;
 END;
 $fn$;
 
--- 050's, likewise.
+-- 050's, the most any of the person's plans allows; NULL (no limit) wins.
 CREATE OR REPLACE FUNCTION public.person_daily_limit(p_user_id uuid, p_what text)
 RETURNS integer
 LANGUAGE plpgsql
@@ -216,17 +229,19 @@ SECURITY DEFINER
 SET search_path = public
 AS $fn$
 DECLARE
-  v_n integer;
+  v_n        integer;
+  v_no_limit boolean;
 BEGIN
-  SELECT CASE p_what
-           WHEN 'uploads'        THEN pl.uploads_per_day
-           WHEN 'reads'          THEN pl.uploads_per_day * 2
-           WHEN 'question_tries' THEN pl.question_tries_per_day
-         END
-    INTO v_n
-    FROM public.plan_limits pl
-   WHERE pl.plan = public.person_plan(p_user_id);
-  RETURN v_n;
+  SELECT max(x.n), bool_or(x.n IS NULL)
+    INTO v_n, v_no_limit
+    FROM (SELECT CASE p_what
+                   WHEN 'uploads'        THEN pl.uploads_per_day
+                   WHEN 'reads'          THEN pl.uploads_per_day * 2
+                   WHEN 'question_tries' THEN pl.question_tries_per_day
+                 END AS n
+            FROM public.plan_limits pl
+           WHERE pl.plan IN (SELECT public.person_plans(p_user_id))) x;
+  RETURN CASE WHEN v_no_limit THEN NULL ELSE v_n END;
 END;
 $fn$;
 
@@ -471,10 +486,12 @@ $fn$;
 -- ─── 6. Giving a plan, by hand or from a payment ───────────────────────────
 -- 040's set_family_plan, with p_plan last. The four-argument version goes
 -- first, for the reason in section 4; apply_plan_payment()'s four arguments
--- resolve to this, as 'plus'.
---   'business'  only for a business vault
---   'plus'      for any vault; while Business is running, a Plus payment
---               adds its time to Business instead of replacing it
+-- resolve to this, with no plan named.
+--   'plus'                           family vaults only (their default)
+--   'business_plus', 'business_pro'  business vaults only, always by name:
+--                                    a business has no default, so a
+--                                    payment for Family Plus can never
+--                                    turn into a business plan
 --   p_source 'trial'  a plan switched on for a demo
 DROP FUNCTION IF EXISTS public.set_family_plan(uuid, timestamptz, text, text);
 CREATE OR REPLACE FUNCTION public.set_family_plan(
@@ -482,7 +499,7 @@ CREATE OR REPLACE FUNCTION public.set_family_plan(
   p_paid_until timestamptz,
   p_source     text DEFAULT 'manual',
   p_source_ref text DEFAULT NULL,
-  p_plan       text DEFAULT 'plus'
+  p_plan       text DEFAULT NULL
 )
 RETURNS void
 LANGUAGE plpgsql
@@ -490,7 +507,7 @@ SECURITY DEFINER
 SET search_path = public
 AS $fn$
 DECLARE
-  v_plan     text := coalesce(nullif(btrim(p_plan), ''), 'plus');
+  v_plan     text := nullif(btrim(p_plan), '');
   v_source   text := coalesce(p_source, 'manual');
   v_family   text;
   v_kind     text;
@@ -498,9 +515,6 @@ DECLARE
   v_was_plan text;
   v_limit    bigint;
 BEGIN
-  IF v_plan NOT IN ('plus', 'business') THEN
-    RAISE EXCEPTION 'A paid plan is plus or business.' USING ERRCODE = '22023';
-  END IF;
   IF p_paid_until IS NULL OR p_paid_until <= now() THEN
     RAISE EXCEPTION 'paid_until must be in the future.' USING ERRCODE = '22023';
   END IF;
@@ -508,15 +522,20 @@ BEGIN
   IF v_family IS NULL THEN
     RAISE EXCEPTION 'No such family.' USING ERRCODE = '22023';
   END IF;
-  IF v_plan = 'business' AND v_kind <> 'business' THEN
-    RAISE EXCEPTION 'The Business plan is for business vaults.' USING ERRCODE = '22023';
+  IF v_kind = 'business' THEN
+    IF v_plan IS NULL OR v_plan NOT IN ('business_plus', 'business_pro') THEN
+      RAISE EXCEPTION 'A business is on business_plus or business_pro, named as the last argument. Family Plus is for family vaults.'
+        USING ERRCODE = '22023';
+    END IF;
+  ELSE
+    v_plan := coalesce(v_plan, 'plus');
+    IF v_plan <> 'plus' THEN
+      RAISE EXCEPTION 'A family is on plus. business_plus and business_pro are for business vaults.' USING ERRCODE = '22023';
+    END IF;
   END IF;
 
   SELECT fp.paid_until, fp.plan INTO v_was, v_was_plan
     FROM public.family_plans fp WHERE fp.family_id = p_family_id FOR UPDATE;
-  IF v_plan = 'plus' AND v_was_plan = 'business' AND v_was > now() THEN
-    v_plan := 'business';
-  END IF;
 
   INSERT INTO public.family_plans (family_id, plan, paid_until, source, source_ref, updated_at)
   VALUES (p_family_id, v_plan, p_paid_until, v_source, p_source_ref, now())
@@ -530,9 +549,9 @@ BEGIN
     v_limit := public.vault_storage_bytes(p_family_id, v_plan);
     INSERT INTO public.notifications (user_id, family_id, type, title, message)
     SELECT fm.user_id, p_family_id, 'plan',
-           left(format(CASE WHEN v_plan = 'business' THEN '%s has the Business plan'
-                            WHEN v_kind = 'business' THEN '%s has Plus'
-                            ELSE '%s has Family Plus' END, v_family), 200),
+           left(format(CASE v_plan WHEN 'business_pro'  THEN '%s has Pro'
+                                   WHEN 'business_plus' THEN '%s has Plus'
+                                   ELSE '%s has Family Plus' END, v_family), 200),
            CASE WHEN v_kind = 'business' AND v_source = 'trial'
                 THEN format('A trial until %s, with room for %s GB of records.',
                             public.ist_day(p_paid_until), trim_scale(round(v_limit / 1073741824.0, 1))::text)
@@ -592,7 +611,7 @@ BEGIN
         v_msg   := format('Your records stay. You''re on Free, with room for %s.', public.size_text(v_free));
       ELSE
         v_title := format('%s has ended for %s',
-                          CASE WHEN r.plan = 'business' THEN 'The Business plan' ELSE 'Plus' END, r.family_name);
+                          CASE WHEN r.plan = 'business_pro' THEN 'Pro' ELSE 'Plus' END, r.family_name);
         v_msg   := 'Your records stay. To add new ones, renew the plan.';
       END IF;
       UPDATE public.family_plans
@@ -1715,7 +1734,7 @@ GRANT UPDATE (use_for) ON public.users TO authenticated;
 -- Take a user id, are helpers or triggers, or hand out what only the server
 -- may: the server's alone.
 REVOKE ALL ON FUNCTION public.is_business_vault(uuid)                            FROM PUBLIC, anon, authenticated;
-REVOKE ALL ON FUNCTION public.person_plan(uuid)                                  FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.person_plans(uuid)                                 FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.person_on_plus(uuid)                               FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.question_allowance(uuid)                           FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.person_daily_limit(uuid, text)                     FROM PUBLIC, anon, authenticated;
@@ -1731,7 +1750,7 @@ REVOKE ALL ON FUNCTION public.account_deletion_plan(uuid)                       
 REVOKE ALL ON FUNCTION public.delete_account_data(uuid)                          FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.business_deletion_plan(uuid, uuid)                 FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.purge_business(uuid, uuid, text)                   FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.is_business_vault(uuid), public.person_plan(uuid), public.person_on_plus(uuid),
+GRANT EXECUTE ON FUNCTION public.is_business_vault(uuid), public.person_plans(uuid), public.person_on_plus(uuid),
   public.question_allowance(uuid), public.person_daily_limit(uuid, text),
   public.set_family_plan(uuid, timestamptz, text, text, text), public.queue_plan_notices(),
   public.plan_removal_at(uuid), public.plan_cleanup_candidates(), public.plan_take_excess(uuid, integer),
