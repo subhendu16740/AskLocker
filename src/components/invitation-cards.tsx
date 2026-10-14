@@ -91,11 +91,15 @@ export function InvitationCards({ style }: { style?: StyleProp<ViewStyle> }) {
                 <Feather name="mail" size={16} color={color.primary} />
               </View>
               <View style={styles.text}>
-                <Text style={styles.who}>{invite.invitedByName || 'A family admin'} invited you to join</Text>
-                <Text style={styles.family}>{invite.familyName}</Text>
-                {!!invite.personName && <Text style={styles.sub}>as {invite.personName} in the family tree</Text>}
+                <Text style={styles.who}>
+                  {invite.invitedByName || (invite.familyKind === 'business' ? 'An admin' : 'A family admin')} invited you to join
+                </Text>
+                <Text style={styles.family}>
+                  {invite.familyName}{invite.familyKind === 'business' ? ' (business)' : ''}
+                </Text>
+                {!!invite.personName && invite.familyKind !== 'business' && <Text style={styles.sub}>as {invite.personName} in the family tree</Text>}
                 <Text style={styles.sub}>
-                  Accept to see its documents, as {invite.role === 'admin' ? 'an admin' : 'a viewer'}. You can leave any
+                  Accept to see its {invite.familyKind === 'business' ? 'records' : 'documents'}, as {invite.role === 'admin' ? 'an admin' : 'a viewer'}. You can leave any
                   time.
                 </Text>
               </View>

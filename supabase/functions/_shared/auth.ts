@@ -83,14 +83,33 @@ export async function requireFamilyMember(
   return { ok: true, member };
 }
 
-/** One vault the caller is in: a family, or their personal vault (046). */
+/** One vault the caller is in: a family, their personal vault (046), or a business (051). */
 export interface Vault {
   familyId: string;
   role: string;
   name: string;
   schema: string;
   isPersonal: boolean;
+  /** 'business' for a business vault (051); 'family' otherwise, and before 051. */
+  kind: 'family' | 'business';
 }
+
+type FamilyRow = { id: string; name: string; storage_namespace: string; is_personal: boolean | null; kind?: string | null };
+
+/**
+ * Vault rows with their kind. Before 051 there is no kind column, and naming
+ * it fails the whole select: ask again without it, and every vault is a family.
+ */
+export async function selectVaultRows(supabase: SupabaseClient, ids: string[]): Promise<{ rows: FamilyRow[]; error: string | null }> {
+  const withKind = await supabase.from('families').select('id, name, storage_namespace, is_personal, kind').in('id', ids);
+  const answer = withKind.error && (withKind.error.code === '42703' || /kind/.test(withKind.error.message))
+    ? await supabase.from('families').select('id, name, storage_namespace, is_personal').in('id', ids)
+    : withKind;
+  return { rows: (answer.data ?? []) as FamilyRow[], error: answer.error?.message ?? null };
+}
+
+export const vaultKind = (row: { kind?: string | null }): 'family' | 'business' =>
+  row.kind === 'business' ? 'business' : 'family';
 
 export type VaultsResult =
   | { ok: true; userId: string; vaults: Vault[] }
@@ -134,20 +153,18 @@ export async function requireVaults(
   const ids = wanted === 'all' ? memberships.map((m) => m.family_id) : [...new Set(wanted)];
   if (ids.length === 0) return { ok: true, userId, vaults: [] };
 
-  const { data: families, error: famErr } = await supabase
-    .from('families')
-    .select('id, name, storage_namespace, is_personal')
-    .in('id', ids);
+  const { rows: families, error: famErr } = await selectVaultRows(supabase, ids);
   if (famErr) {
-    console.error('[auth] family lookup failed:', famErr.message);
+    console.error('[auth] family lookup failed:', famErr);
     return deny(500, 'Could not verify access');
   }
-  const byId = new Map(((families ?? []) as Array<{ id: string; name: string; storage_namespace: string; is_personal: boolean | null }>)
-    .map((f) => [f.id, f]));
-  const vaults = ids.flatMap((id) => {
+  const byId = new Map(families.map((f) => [f.id, f]));
+  const vaults = ids.flatMap((id): Vault[] => {
     const f = byId.get(id);
     const m = memberships.find((x) => x.family_id === id);
-    return f && m ? [{ familyId: id, role: m.role, name: f.name, schema: f.storage_namespace, isPersonal: f.is_personal === true }] : [];
+    return f && m
+      ? [{ familyId: id, role: m.role, name: f.name, schema: f.storage_namespace, isPersonal: f.is_personal === true, kind: vaultKind(f) }]
+      : [];
   });
   return { ok: true, userId, vaults };
 }

@@ -25,6 +25,20 @@
 // When Family Plus ends (040), a vault above its free limit has 30 days to
 // renew or delete documents; then the newest documents above it are removed.
 //
+// Business vaults (051) have plans of their own, never Family Plus, given by
+// hand for now (billed by us, GST on top):
+//
+//   Plus         5 people,  25 GB — ₹999 a month
+//   Pro         15 people, 100 GB — ₹1,999 a month
+//   Enterprise  50 people, 200 GB — ₹4,499 a month
+//
+// Each with 100 questions a person a month. Even a business that used every
+// limit at once would cost less than its plan's price, at about ₹0.20 a
+// question: every plan keeps more than half its price even then.
+// Nothing is ever removed from a business: when a paid plan ends it keeps
+// every record and adds nothing until it is renewed ("closed"); a trial that
+// ends puts it back on Free.
+//
 // The limits live in the database (public.plan_limits), and the server keeps
 // them: the documents bucket refuses a new file once a family's files reach
 // its plan's limit. The numbers here are only the words used when the
@@ -32,7 +46,14 @@
 // is the payment company's plan.
 // ────────────────────────────────────────────────────────────────
 
-export type PlanName = 'free' | 'plus';
+export type BusinessPlan = 'business_plus' | 'business_pro' | 'business_enterprise';
+export type PlanName = 'free' | 'plus' | BusinessPlan;
+
+export const BUSINESS_PLANS: readonly BusinessPlan[] = ['business_plus', 'business_pro', 'business_enterprise'];
+
+export function isBusinessPlan(plan: string | null | undefined): plan is BusinessPlan {
+  return (BUSINESS_PLANS as readonly string[]).includes(plan ?? '');
+}
 
 /** A vault's plan and its room, as family_storage_status() reports them. */
 export interface StorageRoom {
@@ -41,6 +62,20 @@ export interface StorageRoom {
   usedBytes: number;
   /** A personal vault (046), which the words call "your personal vault"; a family otherwise. */
   personal?: boolean;
+  /** A business (051), which the words call "your business". */
+  business?: boolean;
+  /** A business whose paid plan ended: it keeps every record and adds nothing until renewed (051). */
+  closed?: boolean;
+}
+
+/** A business plan's numbers (051). Neither has a monthly question limit, so questionsFairUse is the most. */
+export interface BusinessPlanLimits {
+  storage: number;
+  members: number;
+  questionsFairUse: number;
+  questionTriesPerDay: number | null;
+  uploadsPerDay: number | null;
+  invitesPerDay: number;
 }
 
 export interface PlanLimits {
@@ -66,13 +101,19 @@ export interface PlanLimits {
   uploadsPerDay: { free: number | null; plus: number | null };
   /** Families one person may create on Free, besides their personal vault (050); null: no limit. */
   familiesPerPerson: number | null;
+  /** Businesses one person may create on Free (051), apart from families; null: no limit. */
+  businessesPerPerson: number | null;
+  /** Invitations a vault may send in a day, per plan (050, 051). */
+  invitesPerDay: { free: number; plus: number };
+  /** A business's plans: Plus, Pro and Enterprise (051). */
+  business: Record<BusinessPlan, BusinessPlanLimits>;
 }
 
 const GB = 1024 ** 3;
 
 const MB = 1024 ** 2;
 
-/** What 039–050 set; plan_limits is the truth. */
+/** What 039–051 set; plan_limits is the truth. */
 export const DEFAULT_PLAN_LIMITS: PlanLimits = {
   free: 200 * MB,
   freePersonal: 100 * MB,
@@ -85,6 +126,13 @@ export const DEFAULT_PLAN_LIMITS: PlanLimits = {
   questionTriesPerDay: { free: 10, plus: 100 },
   uploadsPerDay: { free: 50, plus: 500 },
   familiesPerPerson: 1,
+  businessesPerPerson: 1,
+  invitesPerDay: { free: 20, plus: 20 },
+  business: {
+    business_plus: { storage: 25 * GB, members: 5, questionsFairUse: 100, questionTriesPerDay: 30, uploadsPerDay: 300, invitesPerDay: 20 },
+    business_pro: { storage: 100 * GB, members: 15, questionsFairUse: 100, questionTriesPerDay: 30, uploadsPerDay: 300, invitesPerDay: 20 },
+    business_enterprise: { storage: 200 * GB, members: 50, questionsFairUse: 100, questionTriesPerDay: 30, uploadsPerDay: 300, invitesPerDay: 50 },
+  },
 };
 
 /** What Family Plus costs, by the month or by the year (one month free). */
@@ -171,13 +219,67 @@ export function formatBytes(bytes: number): string {
   return `${+(bytes / GB).toFixed(2)} GB`;
 }
 
-export function planLabel(plan: PlanName): string {
-  return plan === 'free' ? 'the free plan' : 'Family Plus';
+/** What the first paid plan is called in a vault: "Family Plus", or "Plus" in a business (051). */
+export function plusName(business?: boolean): string {
+  return business ? 'Plus' : 'Family Plus';
 }
 
-/** Whether a file of this size fits in what the family has left. */
+/** "Plus", "Pro" or "Enterprise": a business plan's name (051). */
+export function businessPlanName(plan: BusinessPlan): string {
+  return plan === 'business_enterprise' ? 'Enterprise' : plan === 'business_pro' ? 'Pro' : 'Plus';
+}
+
+export function planLabel(plan: PlanName, business?: boolean): string {
+  if (plan === 'free') return 'the free plan';
+  return isBusinessPlan(plan) ? businessPlanName(plan) : plusName(business);
+}
+
+/**
+ * What a business pays a month for each plan, in rupees, before GST (051).
+ * Billed by hand for now, so shown, never charged by the app. A year costs
+ * eleven months.
+ */
+export const BUSINESS_PRICE: Record<BusinessPlan, number> = {
+  business_plus: 999,
+  business_pro: 1999,
+  business_enterprise: 4499,
+};
+
+/** The amount alone, "₹1,999", for a narrow column. */
+export function businessAmount(plan: BusinessPlan): string {
+  return formatMoney('inr', BUSINESS_PRICE[plan]);
+}
+
+/** "₹1,999 a month + GST". */
+export function businessPrice(plan: BusinessPlan): string {
+  return `${businessAmount(plan)} a month + GST`;
+}
+
+/** "₹10,989 a year + GST": eleven months. */
+export function businessYearPrice(plan: BusinessPlan): string {
+  return `${formatMoney('inr', 11 * BUSINESS_PRICE[plan])} a year + GST`;
+}
+
+/** The business plan above this one, if any: Free → Plus → Pro → Enterprise. */
+export function nextBusinessPlan(plan: PlanName): BusinessPlan | null {
+  if (plan === 'business_enterprise') return null;
+  if (plan === 'business_pro') return 'business_enterprise';
+  return plan === 'business_plus' ? 'business_pro' : 'business_plus';
+}
+
+/** "your personal vault", "your business" or "your family": how the words name a vault. */
+function yours(room: StorageRoom): string {
+  return room.personal ? 'your personal vault' : room.business ? 'your business' : 'your family';
+}
+
+const capital = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
+/** For a business whose paid plan ended (051). */
+export const CLOSED_MESSAGE = "Your business's plan has ended. Your records stay. To add new ones, renew the plan.";
+
+/** Whether a file of this size fits in what the family has left. Nothing fits in a closed business (051). */
 export function fits(room: StorageRoom, fileBytes: number): boolean {
-  return room.usedBytes + fileBytes <= room.limitBytes;
+  return !room.closed && room.usedBytes + fileBytes <= room.limitBytes;
 }
 
 export interface StorageMessageOptions {
@@ -193,20 +295,28 @@ export interface StorageMessageOptions {
 /** Why a file does not fit, and what the vault's people can do about it. */
 export function storageFullMessage(room: StorageRoom, fileBytes = 0, options: StorageMessageOptions = {}): string {
   const { limits = DEFAULT_PLAN_LIMITS, price, removalOn, forSale = PLUS_FOR_SALE } = options;
+  if (room.closed) return CLOSED_MESSAGE;
   const left = Math.max(0, room.limitBytes - room.usedBytes);
   const head = left === 0 || fileBytes === 0
-    ? `${room.personal ? 'Your personal vault' : "Your family's storage"} is full, with ${formatBytes(room.usedBytes)} of ${formatBytes(room.limitBytes)} used.`
-    : `This file is ${formatBytes(fileBytes)}, but ${room.personal ? 'your personal vault' : 'your family'} has only ${formatBytes(left)} left.`;
+    ? `${room.personal ? 'Your personal vault' : room.business ? "Your business's storage" : "Your family's storage"} is full, with ${formatBytes(room.usedBytes)} of ${formatBytes(room.limitBytes)} used.`
+    : `This file is ${formatBytes(fileBytes)}, but ${yours(room)} has only ${formatBytes(left)} left.`;
 
   const free = "Delete documents you don't need";
   const plus = `${formatBytes(limits.plus)}${price ? ` for ${price}` : ''}`;
+  const name = plusName(room.business);
   let more: string;
-  if (room.plan === 'free' && removalOn) {
+  if (room.business) {
+    // A business moves up a plan with us, not in the app (051).
+    const next = nextBusinessPlan(room.plan);
+    more = next
+      ? `Delete records you don't need, or move to ${businessPlanName(next)} for ${formatBytes(limits.business[next].storage)}.`
+      : "Delete records you don't need to make room.";
+  } else if (room.plan === 'free' && removalOn) {
     more = `Family Plus has ended. On ${removalOn}, the newest documents over ${formatBytes(room.limitBytes)} will be removed. Renew, or delete documents to get under ${formatBytes(room.limitBytes)}.`;
   } else if (room.plan === 'free') {
     more = forSale
-      ? `${free}, or move to Family Plus and get ${plus}.`
-      : `${free}. Family Plus is coming soon, with ${plus}.`;
+      ? `${free}, or move to ${name} and get ${plus}.`
+      : `${free}. ${name} is coming soon, with ${plus}.`;
   } else {
     more = `${free} to make room.`;
   }
@@ -219,10 +329,17 @@ export function storageFullMessage(room: StorageRoom, fileBytes = 0, options: St
  */
 export function chatStorageFullMessage(room: StorageRoom, options: Omit<StorageMessageOptions, 'removalOn'> = {}): string {
   const { limits = DEFAULT_PLAN_LIMITS, price, forSale = PLUS_FOR_SALE } = options;
-  const head = `There's no room to save this chat. ${room.personal ? 'Your personal vault' : 'Your family'} has used ${formatBytes(room.usedBytes)} of ${formatBytes(room.limitBytes)}.`;
+  const head = `There's no room to save this chat. ${capital(yours(room))} has used ${formatBytes(room.usedBytes)} of ${formatBytes(room.limitBytes)}.`;
+  if (room.business) {
+    const next = nextBusinessPlan(room.plan);
+    return next
+      ? `${head} To save more, move to ${businessPlanName(next)} for ${formatBytes(limits.business[next].storage)}. Or delete records you don't need.`
+      : `${head} Delete records or saved chats you don't need to make room.`;
+  }
   if (room.plan !== 'free') return `${head} Delete documents or saved chats you don't need to make room.`;
   const plus = `${formatBytes(limits.plus)}${price ? ` for ${price}` : ''}`;
+  const name = plusName(room.business);
   return forSale
-    ? `${head} To save more, move to Family Plus and get ${plus}. Or delete documents you don't need.`
-    : `${head} Family Plus is coming soon, with ${plus}. Until then, delete documents you don't need.`;
+    ? `${head} To save more, move to ${name} and get ${plus}. Or delete documents you don't need.`
+    : `${head} ${name} is coming soon, with ${plus}. Until then, delete documents you don't need.`;
 }

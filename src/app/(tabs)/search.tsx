@@ -10,14 +10,14 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useFamily } from '../../lib/family-context';
 import { useAuth } from '../../lib/auth';
 import { accountKey, storageGet, storageSet } from '../../lib/storage';
-import { isPersonalVault, vaultName } from '../../lib/vaults';
+import { isBusinessVault, isPersonalVault, vaultIcon, vaultName } from '../../lib/vaults';
 import {
   fetchCategories, ragSearch, indexStatus, saveChat, getSavedChat, isMissingMigration, claimVoiceAnswer,
   fetchVoiceStatus, ChatStorageFullError, fetchQuestionStatus,
   type RagSearchResult, type RagHistoryTurn, type IndexStatus, type SavedChatMessage,
 } from '../../lib/api';
 import { plusPage } from '../../lib/family-plan';
-import { QUESTION_INPUT_MAX, limitHint, parseAllowance, questionsLeftText, resetDay, type QuestionAllowance } from '../../lib/plans';
+import { QUESTION_INPUT_MAX, limitHint, parseAllowance, plusName, questionsLeftText, resetDay, type QuestionAllowance } from '../../lib/plans';
 import type { Database } from '../../lib/database.types';
 import { usePreferences } from '../../lib/preferences';
 import { phrase } from '../../lib/voice-languages';
@@ -77,8 +77,8 @@ export default function SearchScreen() {
     ...families.map((f): VaultChoice => ({
       key: f.family_id,
       name: vaultName(f.families),
-      subtitle: isPersonalVault(f.families) ? 'Only you' : 'Family',
-      icon: isPersonalVault(f.families) ? 'lock' : 'users',
+      subtitle: isPersonalVault(f.families) ? 'Only you' : isBusinessVault(f.families) ? 'Business' : 'Family',
+      icon: vaultIcon(f.families),
     })),
   ];
   /** A source's vault, by the name every screen uses for it. */
@@ -548,7 +548,7 @@ export default function SearchScreen() {
             <VaultPill
               label="Search in"
               value={pickedVault ? vaultName(pickedVault.families) : 'All my vaults'}
-              icon={pickedVault ? (isPersonalVault(pickedVault.families) ? 'lock' : 'users') : 'layers'}
+              icon={pickedVault ? vaultIcon(pickedVault.families) : 'layers'}
               onPress={() => setSearchInOpen(true)}
             />
           </View>
@@ -762,7 +762,7 @@ export default function SearchScreen() {
                 : `${voiceQuota.left} of ${voiceQuota.limit} free voice chats left.`}
             </Text>
             <TouchableOpacity onPress={() => router.push(plusPage('voice') as any)} accessibilityRole="link" hitSlop={8}>
-              <Text style={styles.voiceStripLink}>Family Plus ›</Text>
+              <Text style={styles.voiceStripLink}>{plusName(isBusinessVault(currentFamily))} ›</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -780,7 +780,7 @@ export default function SearchScreen() {
             </Text>
             {!questions.plus && (
               <TouchableOpacity onPress={() => router.push(plusPage('questions') as any)} accessibilityRole="link" hitSlop={8}>
-                <Text style={styles.voiceStripLink}>Family Plus ›</Text>
+                <Text style={styles.voiceStripLink}>{plusName(isBusinessVault(currentFamily))} ›</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -793,7 +793,7 @@ export default function SearchScreen() {
             <Text style={[styles.indexStripText, styles.indexStripErrorText]}>{chatFull.text}</Text>
             {chatFull.plusLink && (
               <TouchableOpacity onPress={() => router.push(plusPage('storage') as any)} accessibilityRole="link" hitSlop={8}>
-                <Text style={styles.voiceStripLink}>Family Plus ›</Text>
+                <Text style={styles.voiceStripLink}>{plusName(isBusinessVault(currentFamily))} ›</Text>
               </TouchableOpacity>
             )}
           </View>

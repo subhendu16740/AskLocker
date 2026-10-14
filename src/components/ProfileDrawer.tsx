@@ -4,7 +4,8 @@
 // stays visible behind it, and it closes with the ✕, a tap outside it, or the
 // back button. Layout from the v4 design (who you are on top, then Home,
 // Family tree, Emergency cards, Manage Family, Reminders and Settings, Sign Out
-// at the bottom), in the app's own colours.
+// at the bottom), in the app's own colours. In a business (051) there is no
+// family tree and no emergency cards, and Manage Family is Manage team.
 // ────────────────────────────────────────────────────────────────
 
 import { useEffect, useRef, useState } from 'react';
@@ -17,19 +18,19 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { useAuth } from '../lib/auth';
 import { useFamily } from '../lib/family-context';
-import { isPersonalVault, vaultName } from '../lib/vaults';
+import { isBusinessVault, isPersonalVault, vaultName } from '../lib/vaults';
 import { useDrawer } from '../lib/drawer-context';
 import { useFamilyPlan, useOnPlus, type PlusFeature } from '../lib/family-plan';
 import { appVersion } from '../lib/app-info';
 import { PlusStar, PlusTag } from './screen-header';
 import { color, radius, size, space, type } from '../constants/design';
 
-type MenuItem = { icon: string; label: string; route: string; plus?: PlusFeature };
+type MenuItem = { icon: string; label: string; route: string; plus?: PlusFeature; familyOnly?: boolean };
 
 const menuItems: MenuItem[] = [
   { icon: 'home', label: 'Home', route: '/home' },
-  { icon: 'git-branch', label: 'Family tree', route: '/family-tree' },
-  { icon: 'plus-square', label: 'Emergency cards', route: '/emergency' },
+  { icon: 'git-branch', label: 'Family tree', route: '/family-tree', familyOnly: true },
+  { icon: 'plus-square', label: 'Emergency cards', route: '/emergency', familyOnly: true },
   { icon: 'users', label: 'Manage Family', route: '/family' },
   // ★: part of Family Plus. A free family is shown the Family Plus page instead.
   { icon: 'clock', label: 'Reminders', route: '/reminders', plus: 'reminders' },
@@ -76,6 +77,11 @@ export default function ProfileDrawer() {
   const familyLine = isPersonalVault(currentFamily)
     ? `${vaultName(currentFamily)} · yours alone`
     : [currentFamily?.name, role].filter(Boolean).join(' · ');
+
+  const business = isBusinessVault(currentFamily);
+  const items = menuItems
+    .filter((item) => !(business && item.familyOnly))
+    .map((item) => (business && item.route === '/family' ? { ...item, icon: 'briefcase', label: 'Manage team' } : item));
 
   const handleNavigate = async (item: MenuItem) => {
     closeDrawer();
@@ -139,7 +145,7 @@ export default function ProfileDrawer() {
           </LinearGradient>
 
           <View style={styles.menuList}>
-            {menuItems.map((item) => (
+            {items.map((item) => (
               <TouchableOpacity
                 key={item.route}
                 style={styles.menuItem}

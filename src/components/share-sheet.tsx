@@ -18,6 +18,8 @@ import {
   type ShareDays, type ShareLink,
 } from '../lib/api';
 import { plusPage } from '../lib/family-plan';
+import { plusName } from '../lib/plans';
+import { isBusinessVault } from '../lib/vaults';
 import type { FamilyMemberWithUser } from '../lib/database.types';
 import { longDate } from '../lib/dates';
 import { Field, Muted, PrimaryButton, SecondaryButton, Status } from './settings-ui';
@@ -229,7 +231,7 @@ export function ShareSheet({ visible, onClose, familyId, documentId, fileName }:
               {!!problem && <Status kind="error">{problem}</Status>}
               {plusLink && (
                 <TouchableOpacity onPress={openPlus} accessibilityRole="link" hitSlop={8}>
-                  <Text style={styles.plusLink}>See Family Plus ›</Text>
+                  <Text style={styles.plusLink}>See {plusName(isBusinessVault(families.find((f) => f.family_id === familyId)?.families))} ›</Text>
                 </TouchableOpacity>
               )}
 

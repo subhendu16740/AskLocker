@@ -8,8 +8,10 @@
 //            choice from the connection's country and the device's time
 //            zone ({ time_zone }), payerCurrency().
 //   order    a member, for their own family: { family_id, period, currency,
-//            time_zone }. Refuses a currency other than the server's choice
-//            (409 wrong_currency, with the right one). Makes a Razorpay order
+//            time_zone }. Refuses a business (409 business_plan: a business
+//            has its own plans, set up with us, never Family Plus — 051), and
+//            a currency other than the server's choice (409 wrong_currency,
+//            with the right one). Makes a Razorpay order
 //            for PLUS_PRICE's amount (never the client's), keeps it in
 //            plan_payments, and answers what the checkout needs.
 //   verify   a member, after the checkout: { order_id, payment_id, signature }.
@@ -27,12 +29,12 @@
 //
 // Answers: 200   400 bad_request | bad_signature | currency   401/403 not
 // signed in / not a member   402 not_paid   404 no_order   409 wrong_currency
-// 502 razorpay (Razorpay said no)   503 not_configured | needs_migration
+// | business_plan   502 razorpay (Razorpay said no)   503 not_configured | needs_migration
 // ────────────────────────────────────────────────────────────────
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { corsHeaders } from '../_shared/cors.ts';
-import { requireFamilyMember } from '../_shared/auth.ts';
+import { requireFamilyMember, selectVaultRows, vaultKind } from '../_shared/auth.ts';
 import {
   ORDER_ID, PAYMENT_ID, acceptedCurrencies, connectionCountry, payerCurrency, payerCurrencyMessage,
   paymentSignatureOk, plusOrderAmount, plusOrderDescription, type RazorpayCurrency,
@@ -96,6 +98,12 @@ Deno.serve(async (req) => {
       }
       const auth = await requireFamilyMember(req, supabase, familyId);
       if (!auth.ok) return auth.response;
+      // Family Plus is for families. A business's plans are set up with us
+      // (051), and set_family_plan would refuse this payment after it was taken.
+      const { rows: vaults } = await selectVaultRows(supabase, [familyId]);
+      if (vaults[0] && vaultKind(vaults[0]) === 'business') {
+        return json(409, { status: 'business_plan', error: 'A business pays for its plan with us. Ask in Settings › Feedback.' });
+      }
       if (!KEY_ID || !KEY_SECRET) return json(503, NOT_CONFIGURED);
       const cur = (typeof currency === 'string' ? currency.toUpperCase() : payIn ?? 'INR') as RazorpayCurrency;
       if (payIn && cur !== payIn) {

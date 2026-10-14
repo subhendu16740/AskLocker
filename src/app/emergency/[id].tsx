@@ -11,6 +11,7 @@ import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../lib/auth';
 import { useFamily } from '../../lib/family-context';
+import { useFamilyOnly } from '../../lib/family-only';
 import { fetchFamilyTree, fetchEmergencyCard, isMissingMigration, type FamilyTree } from '../../lib/api';
 import type { EmergencyCard } from '../../lib/emergency';
 import { longDate, ageInYears } from '../../lib/dates';
@@ -21,6 +22,7 @@ import { Card, Muted, PrimaryButton, Status, screenStyles } from '../../componen
 import { color, radius, space, type } from '../../constants/design';
 
 export default function EmergencyCardScreen() {
+  useFamilyOnly();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { user } = useAuth();
   const { currentFamily, membership } = useFamily();

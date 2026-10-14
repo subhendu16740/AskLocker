@@ -23,6 +23,7 @@ import { router, useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../lib/auth';
 import { useFamily } from '../lib/family-context';
+import { useFamilyOnly } from '../lib/family-only';
 import { vaultName } from '../lib/vaults';
 import {
   fetchFamilyTree, fetchExpiringDocuments, isMissingMigration,
@@ -39,6 +40,7 @@ import { Card, CardTitle, Body, PrimaryButton, Status, screenStyles } from '../c
 import { color, radius, shadow, size, space, type } from '../constants/design';
 
 export default function FamilyTreeScreen() {
+  useFamilyOnly();
   const { user } = useAuth();
   const { currentFamily, membership } = useFamily();
   const isAdmin = membership?.role === 'admin';
