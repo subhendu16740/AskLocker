@@ -1912,7 +1912,7 @@ so storage policies live only in `019`.
 
   | | Free | Plus (`business_plus`) | Pro (`business_pro`) | Enterprise (`business_enterprise`) |
   |---|---|---|---|---|
-  | Price a month, + GST | — | ₹999 | ₹1,999 | ₹10,999 |
+  | Price a month, + GST | — | ₹999 | ₹1,999 | ₹4,499 |
   | People who sign in | 4 | 5 | 15 | 50 |
   | Space | 200 MB | 25 GB | 100 GB | 200 GB |
   | Questions each a month | 20 | 100 (fair use) | 100 | 100 |
@@ -1935,18 +1935,20 @@ so storage policies live only in `019`.
   |---|---|---|---|
   | Plus, ₹999 | ₹73, 93% | ₹136, 86% | ₹233, 77% |
   | Pro, ₹1,999 | ₹189, 91% | ₹401, 80% | ₹726, 64% |
-  | Enterprise, ₹10,999 | ₹671, 94% | ₹1,231, 89% | ₹2,106, 81% |
+  | Enterprise, ₹4,499 | ₹490, 89% | ₹1,050, 77% | ₹1,925, 57% |
 
   Normal is about half the people asking 30 questions a month, with a fifth
-  of the space used. No plan loses money even at every limit, and
-  Enterprise keeps 80% even then: at ₹4,999 it kept 61%, so its price is
-  set from its maximum (about ₹1,800 of cost, plus Razorpay, needs at
-  least ₹10,456). That makes it dearer per person (₹220) than Pro (₹133):
-  it is sold on room, not on a bulk discount. Cost follows
+  of the space used. Every plan keeps more than half its price even at
+  every limit: the owner's floor is 50–60% at the maximum, and Enterprise's
+  price comes from it (about ₹1,800 of cost at its maximum, plus Razorpay:
+  ₹3,999 keeps 52%, ₹4,499 57%, ₹4,999 61%). ₹10,999, to keep 80% there,
+  was too much to ask. Per person it is ₹90, against Pro's ₹133 and Plus's
+  ₹200, so a bigger team pays less a head. These are each business's own
+  costs; the fixed bills below come out of the total. Cost follows
   people × questions, so those are the numbers to watch; storage is cheap.
   The fixed bills — Supabase Pro $25, Vercel Pro $20, HuggingFace PRO $9,
   about ₹5,200 a month — are covered by 6 businesses on Plus, 3 on Pro or
-  1 on Enterprise.
+  2 on Enterprise.
 - **Given by hand only**, from the SQL editor, by name:
   `select set_family_plan('<vault id>', now() + interval '1 month', 'manual', null, 'business_plus');`
   (or `'business_pro'`, `'business_enterprise'`), or a demo, back to Free if they don't pay:

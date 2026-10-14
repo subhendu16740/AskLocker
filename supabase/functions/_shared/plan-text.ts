@@ -30,11 +30,11 @@
 //
 //   Plus         5 people,  25 GB — ₹999 a month
 //   Pro         15 people, 100 GB — ₹1,999 a month
-//   Enterprise  50 people, 200 GB — ₹10,999 a month
+//   Enterprise  50 people, 200 GB — ₹4,499 a month
 //
 // Each with 100 questions a person a month. Even a business that used every
 // limit at once would cost less than its plan's price, at about ₹0.20 a
-// question, and Enterprise keeps 80% of its price even then.
+// question: every plan keeps more than half its price even then.
 // Nothing is ever removed from a business: when a paid plan ends it keeps
 // every record and adds nothing until it is renewed ("closed"); a trial that
 // ends puts it back on Free.
@@ -242,7 +242,7 @@ export function planLabel(plan: PlanName, business?: boolean): string {
 export const BUSINESS_PRICE: Record<BusinessPlan, number> = {
   business_plus: 999,
   business_pro: 1999,
-  business_enterprise: 10999,
+  business_enterprise: 4499,
 };
 
 /** The amount alone, "₹1,999", for a narrow column. */
