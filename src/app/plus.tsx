@@ -402,7 +402,7 @@ function businessRows(limits: PlanLimits): BusinessRow[] {
   return [
     { label: '★ People', cells: each((p) => String(limits.business[p].members)), feature: 'members' },
     { label: 'Space', cells: each((p) => formatBytes(limits.business[p].storage)), feature: 'storage' },
-    { label: '★ Questions each', cells: each((p) => `${limits.business[p].questionsFairUse} a month`), feature: 'questions' },
+    { label: '★ Each person\'s questions', cells: each((p) => `${limits.business[p].questionsFairUse} a month`), feature: 'questions' },
     { label: '★ Voice chats', cells: each(() => true), feature: 'voice' },
     { label: '★ 30-day share links', cells: each(() => true), feature: 'links' },
     { label: '★ Expiry reminders', cells: each(() => true), feature: 'reminders' },
