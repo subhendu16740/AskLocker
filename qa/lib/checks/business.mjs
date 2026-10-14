@@ -17,8 +17,11 @@
 //   that always ends by raising, so every write rolls back even when a guard
 //   fails: deleting A's account is refused; a trial ends back on Free; a
 //   paid plan ends closed, with one notice, nothing removed, never a clean-up
-//   candidate; Plus on QA Vault A ends exactly as before; the Business plan
-//   is refused for a family, and kind 'business' for a personal vault.
+//   candidate; on Pro, A asks with Pro's numbers; Family Plus on QA Vault A
+//   ends exactly as before; Business Plus is refused for a family, Family
+//   Plus (and a payment naming no plan) for a business, and kind 'business'
+//   for a personal vault. The payments function refuses to start Family Plus
+//   for a business.
 //
 // No questions: no Groq budget.
 // ────────────────────────────────────────────────────────────────
@@ -100,7 +103,9 @@ begin
     v_out := v_out || 'account=' || CASE WHEN SQLERRM ILIKE '%last admin%' THEN 'refused' ELSE 'other:' || left(SQLERRM, 60) END || ';';
   end;
 
-  perform public.set_family_plan('${bizId}', now() + interval '1 day', 'trial', null, 'business');
+  perform public.set_family_plan('${bizId}', now() + interval '1 day', 'trial', null, 'business_pro');
+  v_out := v_out || 'pro_questions=' || ((select ceiling from public.question_allowance('${userA}'))
+             >= (select questions_fair_use from public.plan_limits where plan = 'business_pro')) || ';';
   perform public.end_family_plan('${bizId}');
   perform public.queue_plan_notices();
   select * into s from public.family_storage_status('${bizId}');
@@ -108,12 +113,12 @@ begin
              and n.user_id = '${userA}' and n.title = 'Your trial has ended for ' || v_biz)
         || ';trial_plan=' || s.plan || ';trial_closed=' || s.closed || ';';
 
-  perform public.set_family_plan('${bizId}', now() + interval '1 day', 'manual', null, 'business');
+  perform public.set_family_plan('${bizId}', now() + interval '1 day', 'manual', null, 'business_plus');
   perform public.end_family_plan('${bizId}');
   perform public.queue_plan_notices();
   select * into s from public.family_storage_status('${bizId}');
   v_out := v_out || 'paid_notice=' || exists (select 1 from public.notifications n where n.family_id = '${bizId}' and n.type = 'plan'
-             and n.user_id = '${userA}' and n.title = 'The Business plan has ended for ' || v_biz)
+             and n.user_id = '${userA}' and n.title = 'Plus has ended for ' || v_biz)
         || ';paid_closed=' || s.closed
         || ';candidate=' || exists (select 1 from public.plan_cleanup_candidates() c where c.family_id = '${bizId}')
         || ';removal=' || coalesce(public.plan_removal_at('${bizId}')::text, 'none') || ';';
@@ -141,10 +146,16 @@ begin
              and n.user_id = '${userA}' and n.title = 'Family Plus has ended for ' || v_fam) || ';';
 
   begin
-    perform public.set_family_plan('${familyA}', now() + interval '1 day', 'manual', null, 'business');
+    perform public.set_family_plan('${familyA}', now() + interval '1 day', 'manual', null, 'business_plus');
     v_out := v_out || 'family_business=ALLOWED;';
   exception when others then
     v_out := v_out || 'family_business=refused;';
+  end;
+  begin
+    perform public.set_family_plan('${bizId}', now() + interval '1 day', 'razorpay', 'pay_QAQAQAQAQAQAQA');
+    v_out := v_out || 'business_family_plus=ALLOWED;';
+  exception when others then
+    v_out := v_out || 'business_family_plus=refused;';
   end;
   begin
     update public.families set kind = 'business' where created_by = '${userA}' and is_personal;
@@ -211,13 +222,13 @@ export async function runBusinessChecks(cfg, { a, b, anon, vaultA, vaultB }, res
   {
     const until = new Date(Date.now() + 86_400_000).toISOString();
     const { error } = await b.client.rpc('set_family_plan', {
-      p_family_id: vaultB.id, p_paid_until: until, p_source: 'manual', p_source_ref: null, p_plan: 'business',
+      p_family_id: vaultB.id, p_paid_until: until, p_source: 'manual', p_source_ref: null, p_plan: 'business_pro',
     });
-    refused('client-gives-plan', 'No client gives itself the Business plan', error);
-    const { error: insErr } = await b.client.from('family_plans').insert({ family_id: vaultB.id, plan: 'business', paid_until: until });
+    refused('client-gives-plan', 'No client gives itself Business Pro', error);
+    const { error: insErr } = await b.client.from('family_plans').insert({ family_id: vaultB.id, plan: 'business_pro', paid_until: until });
     refused('client-writes-plan', 'No client writes family_plans', insErr);
     for (const [fn, args] of [
-      ['person_plan', { p_user_id: b.user.id }],
+      ['person_plans', { p_user_id: b.user.id }],
       ['is_business_vault', { p_family_id: biz.id }],
       ['business_deletion_plan', { p_user_id: a.user.id, p_family_id: biz.id }],
       ['purge_business', { p_user_id: a.user.id, p_family_id: biz.id, p_confirm_name: BUSINESS_A }],
@@ -238,6 +249,14 @@ export async function runBusinessChecks(cfg, { a, b, anon, vaultA, vaultB }, res
     check('one-free-business', 'On Free, a person creates one business (a second is refused)',
       !!error && (error.hint === 'family_limit' || /one business/i.test(error.message)), error ? short(error) : 'a SECOND business was made');
     if (id) results.note('business', `a second business, ${id}, was made by A: delete it by hand`);
+  }
+  {
+    // A business is never sold Family Plus: payments refuses before any order is made.
+    const r = await invokeFunction(cfg, a, 'payments', { action: 'order', family_id: biz.id, period: 'monthly', time_zone: 'Asia/Kolkata' }, { timeoutMs: 30_000 });
+    check('no-family-plus-order', 'The payments function refuses to start Family Plus for a business',
+      r.status === 409 && r.data?.status === 'business_plan',
+      r.status === 200 ? 'a Family Plus order WAS made for the business (is DEV running an older payments function?)'
+        : `HTTP ${r.status}: ${JSON.stringify(r.data).slice(0, 120)}`);
   }
 
   // ── B joins as a viewer ────────────────────────────────────────
@@ -367,6 +386,9 @@ export async function runBusinessChecks(cfg, { a, b, anon, vaultA, vaultB }, res
   check('db-family-unchanged', "A family's Family Plus starts and ends exactly as before",
     result.family_given === 'true' && result.family_ended === 'true',
     `${said('family_given')}, ${said('family_ended')}`);
-  check('db-business-plan-family', 'The Business plan is refused for a family', result.family_business === 'refused', said('family_business'));
+  check('db-pro-questions', 'On Pro, a member asks with Pro\'s fair use', result.pro_questions === 'true', said('pro_questions'));
+  check('db-business-plan-family', 'Business Plus is refused for a family', result.family_business === 'refused', said('family_business'));
+  check('db-family-plus-business', 'Family Plus, and a payment naming no plan, is refused for a business',
+    result.business_family_plus === 'refused', said('business_family_plus'));
   check('db-personal-business', 'A personal vault cannot be a business', result.personal_business !== 'ALLOWED', said('personal_business'));
 }

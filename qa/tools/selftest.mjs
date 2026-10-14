@@ -37,7 +37,7 @@ import { phoneLooksRight, cardProblem, cardIsEmpty, emptyCard, bloodGroupLabel, 
 import { allowanceJson, givenBack, parseAllowance, questionLimitMessage, questionsLeftText, resetDay } from '../../supabase/functions/_shared/questions.ts';
 import { MAX_DOCUMENT_TEXT, MAX_FILE_BYTES, QUESTION_INPUT_MAX, MAX_QUESTION_CHARS, fileTooLargeMessage, inVaultFolder, limitHint, providedTextLimit } from '../../supabase/functions/_shared/limits.ts';
 import { MAX_IMPORT_BYTES } from '../../supabase/functions/_shared/gmail-rules.ts';
-import { CLOSED_MESSAGE, DEFAULT_PLAN_LIMITS, PLUS_FOR_SALE, PLUS_PRICE, chatStorageFullMessage, fits, formatBytes, planLabel, plusName, plusAmount, plusPrice, plusPrices, plusTwelveMonths, plusYearlyOffer, plusYearlySaving, storageFullMessage } from '../../supabase/functions/_shared/plan-text.ts';
+import { BUSINESS_PLANS, BUSINESS_PRICE, CLOSED_MESSAGE, DEFAULT_PLAN_LIMITS, PLUS_FOR_SALE, PLUS_PRICE, businessAmount, businessPrice, businessYearPrice, chatStorageFullMessage, fits, formatBytes, isBusinessPlan, nextBusinessPlan, planLabel, plusName, plusAmount, plusPrice, plusPrices, plusTwelveMonths, plusYearlyOffer, plusYearlySaving, storageFullMessage } from '../../supabase/functions/_shared/plan-text.ts';
 import { mentionsDate, mentionsAmount, mentionsPhone, mentionsText, refuses, devanagariShare, scriptShare, hasMarkdown } from '../lib/match.mjs';
 import { judgeAnswer } from '../lib/checks/ask.mjs';
 import { vehicleInsurance } from '../lib/tiny-pdf.mjs';
@@ -672,11 +672,11 @@ await test('plans: every limit is finite, and a full vault says why and what to 
   // 30 days after Plus ends before anything above Free goes, 4 members on
   // Free and 8 on Plus (049), 10 voice chats for each person on Free (043),
   // and 20 questions a month for each person on Free, none on Plus up to
-  // fair use (049). Business (051): 25 GB, 25 members, 50 invitations a
-  // day, and one free business a person beside one free family.
+  // fair use (049). A business (051): one free business a person beside one
+  // free family, and its own Plus and Pro.
   assert.deepEqual(DEFAULT_PLAN_LIMITS, {
-    free: 200 * MB, freePersonal: 100 * MB, plus: 10 * GB, business: 25 * GB, graceDays: 30,
-    members: { free: 4, plus: 8, business: 25 },
+    free: 200 * MB, freePersonal: 100 * MB, plus: 10 * GB, graceDays: 30,
+    members: { free: 4, plus: 8 },
     voiceAnswers: { free: 10, plus: null },
     questions: { free: 20, plus: null },
     questionsFairUse: 500,
@@ -684,7 +684,11 @@ await test('plans: every limit is finite, and a full vault says why and what to 
     uploadsPerDay: { free: 50, plus: 500 },
     familiesPerPerson: 1,
     businessesPerPerson: 1,
-    invitesPerDay: { free: 20, plus: 20, business: 50 },
+    invitesPerDay: { free: 20, plus: 20 },
+    business: {
+      business_plus: { storage: 25 * GB, members: 10, questionsFairUse: 80, questionTriesPerDay: 20, uploadsPerDay: 200, invitesPerDay: 20 },
+      business_pro: { storage: 100 * GB, members: 50, questionsFairUse: 300, questionTriesPerDay: 100, uploadsPerDay: 500, invitesPerDay: 50 },
+    },
   });
   assert.deepEqual(PLUS_PRICE, { monthly: { inr: 100, usd: 10 }, yearly: { inr: 1100, usd: 110 } });
   // The Plus page says what a year saves in months ("1 month free"): a year
@@ -1022,21 +1026,34 @@ await test('a category suggested from the file\'s name and text, from the vault\
   assert.equal(SUGGESTED_CATEGORIES.business.length, 11, 'every business category but Other can be suggested');
 });
 
-await test('business plan words: "your business", Plus by name, and a closed business (051)', () => {
+await test('business plans: Plus and Pro, their prices and words, and a closed business (051)', () => {
   const GB = 1024 ** 3, MB = 1024 ** 2;
-  assert.equal(DEFAULT_PLAN_LIMITS.business, 25 * GB);
-  assert.equal(DEFAULT_PLAN_LIMITS.members.business, 25);
-  assert.deepEqual(DEFAULT_PLAN_LIMITS.invitesPerDay, { free: 20, plus: 20, business: 50 });
   assert.equal(DEFAULT_PLAN_LIMITS.businessesPerPerson, 1);
-  assert.equal(planLabel('business'), 'the Business plan');
+  assert.deepEqual(BUSINESS_PLANS, ['business_plus', 'business_pro']);
+  assert.ok(isBusinessPlan('business_pro') && isBusinessPlan('business_plus') && !isBusinessPlan('plus') && !isBusinessPlan('business'));
+  // Pro is above Plus on every number.
+  const { business_plus: bplus, business_pro: bpro } = DEFAULT_PLAN_LIMITS.business;
+  for (const k of Object.keys(bplus)) assert.ok(bpro[k] > bplus[k], `Pro's ${k} is above Plus's`);
+  assert.deepEqual(BUSINESS_PRICE, { business_plus: 1999, business_pro: 4999 });
+  assert.equal(businessAmount('business_plus'), '₹1,999');
+  assert.equal(businessPrice('business_pro'), '₹4,999 a month + GST');
+  assert.equal(businessYearPrice('business_plus'), '₹21,989 a year + GST', 'a year is eleven months');
+  assert.equal(businessYearPrice('business_pro'), '₹54,989 a year + GST');
+  assert.equal(planLabel('business_plus'), 'Plus');
+  assert.equal(planLabel('business_pro'), 'Pro');
   assert.equal(planLabel('plus'), 'Family Plus');
-  assert.equal(planLabel('plus', true), 'Plus');
   assert.equal(plusName(true), 'Plus');
+  assert.equal(nextBusinessPlan('free'), 'business_plus');
+  assert.equal(nextBusinessPlan('business_plus'), 'business_pro');
+  assert.equal(nextBusinessPlan('business_pro'), null);
   const shop = { plan: 'free', limitBytes: 200 * MB, usedBytes: 199 * MB, business: true };
   assert.match(storageFullMessage(shop, 3 * MB), /^This file is 3 MB, but your business has only 1 MB left\./);
+  // Never Family Plus, nor its price, for a business.
   const shopFull = storageFullMessage({ ...shop, usedBytes: 200 * MB }, 0, { forSale: true, price: plusPrice('inr') });
-  assert.equal(shopFull, "Your business's storage is full, with 200 MB of 200 MB used. Delete documents you don't need, or move to Plus and get 10 GB for ₹100 a month.");
-  assert.match(chatStorageFullMessage({ ...shop, usedBytes: 200 * MB }), /^There's no room to save this chat\. Your business has used 200 MB of 200 MB\./);
+  assert.equal(shopFull, "Your business's storage is full, with 200 MB of 200 MB used. Delete records you don't need, or move to Plus for 25 GB.");
+  assert.equal(storageFullMessage({ plan: 'business_plus', limitBytes: 25 * GB, usedBytes: 25 * GB, business: true }),
+    "Your business's storage is full, with 25 GB of 25 GB used. Delete records you don't need, or move to Pro for 100 GB.");
+  assert.match(chatStorageFullMessage({ ...shop, usedBytes: 200 * MB }), /^There's no room to save this chat\. Your business has used 200 MB of 200 MB\. To save more, move to Plus for 25 GB\./);
   for (const text of [storageFullMessage(shop, 3 * MB), shopFull, chatStorageFullMessage(shop)]) {
     assert.doesNotMatch(text, /family/i, 'a business is not called a family');
   }
@@ -1045,8 +1062,13 @@ await test('business plan words: "your business", Plus by name, and a closed bus
   assert.ok(fits({ ...shop, usedBytes: 5 * MB }, 1));
   assert.equal(storageFullMessage({ ...shop, usedBytes: 5 * MB, closed: true }, 3 * MB), CLOSED_MESSAGE);
   assert.equal(CLOSED_MESSAGE, "Your business's plan has ended. Your records stay. To add new ones, renew the plan.");
-  assert.equal(storageFullMessage({ plan: 'business', limitBytes: 25 * GB, usedBytes: 25 * GB, business: true }),
-    "Your business's storage is full, with 25 GB of 25 GB used. Delete documents you don't need to make room.");
+  assert.equal(storageFullMessage({ plan: 'business_pro', limitBytes: 100 * GB, usedBytes: 100 * GB, business: true }),
+    "Your business's storage is full, with 100 GB of 100 GB used. Delete records you don't need to make room.");
+  assert.equal(chatStorageFullMessage({ plan: 'business_pro', limitBytes: 100 * GB, usedBytes: 100 * GB, business: true }),
+    "There's no room to save this chat. Your business has used 100 GB of 100 GB. Delete records or saved chats you don't need to make room.");
+  for (const text of [shopFull, chatStorageFullMessage({ ...shop, usedBytes: 200 * MB }, { forSale: true, price: plusPrice('inr') })]) {
+    assert.doesNotMatch(text, /₹100|Family Plus/, 'a business is never offered Family Plus');
+  }
 });
 
 if (failures.length) {

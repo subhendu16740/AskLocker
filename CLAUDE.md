@@ -182,9 +182,11 @@ invited back as it after leaving),
 business vaults (051: a stranger reads nothing of QA Business A, no client
 changes a vault's kind or gives a plan, an admin deletes anyone's record and
 file there and a viewer only their own, its last admin can neither leave nor
-step down, and in one rolled-back block on DEV deleting A's account is
-refused, a trial ends back on Free, a paid plan ends closed with nothing
-removed, and QA Vault A's Family Plus starts and ends as before),
+step down, payments refuses it Family Plus, and in one rolled-back block on
+DEV deleting A's account is refused, a Pro trial gives A Pro's numbers and
+ends back on Free, a paid Plus ends closed with nothing removed, Family Plus
+is refused for a business and its plans for a family, and QA Vault A's
+Family Plus starts and ends as before),
 a question asked by relation ("my mother's passport"), and the full upload → ingest →
 expiry-notification pipeline, the reminder made once however often Home asks (on Family Plus; QA Vault A is on Free, where 048 makes none, and that is checked), and that each answered question is counted once (049; account A's monthly count is started again before it asks; each run also starts A's and B's counts for the day again, and QA Vault A's and QA Business A's invitations, `qa/lib/dev-day.mjs`, since one run invites B three times). By hand only, suite `languages` asks 12
 questions about documents in eight more Indian languages — two of them
@@ -676,7 +678,7 @@ src/
     document/[id].tsx        # document viewer; Share opens the share sheet (036, web only)
     documents.tsx            # All documents (Home's document count, See all): every vault's documents, a vault filter, Delete one or several (Select)
     gmail-import.tsx         # connect Gmail, review what it found, import (web only, ★ Family Plus)
-    plus.tsx                 # Family Plus: what Plus gives, side by side with Free; every ★ opens it for a free family; pay for a month or a year (044, web only); called Plus in a business, with the Business plan's numbers (051)
+    plus.tsx                 # Family Plus: what Plus gives, side by side with Free; every ★ opens it for a free family; pay for a month or a year (044, web only); a business sees Plans instead: Free, Plus and Pro with their prices, and Ask us (051)
     s.tsx                    # what a share link opens: one document, for anyone with the link, no account (036)
     +html.tsx                # custom HTML shell, web only
     (tabs)/
@@ -864,9 +866,9 @@ DEV's test files and QA traffic use the same allowance as PROD's families
   database per project, 250 GB egress, daily backups kept 7 days, never
   paused. Each project also pays for its own server, about $10 a month, of
   which Pro includes $10: $25 with PROD alone in the organisation, about $35
-  with DEV in it too. **No PROD vault goes on the Business plan (051) before
-  this**: 25 GB a business, and five pilots could pass Pro's 100 GB (about
-  $0.02 a GB a month beyond).
+  with DEV in it too. **No PROD vault goes on Business Plus or Pro (051)
+  before this**: 25 GB or 100 GB a business, and a few pilots could pass
+  Pro's 100 GB (about $0.02 a GB a month beyond).
 
 ### Where the free tiers run out — worked out for 1,000 families
 
@@ -1454,6 +1456,7 @@ so storage policies live only in `019`.
   [Paying for Family Plus](#paying-for-family-plus--razorpay-a-month-or-a-year-at-a-time-044)),
   **and can still be given by hand**:
   `select set_family_plan('<family id>', now() + interval '1 month');`
+  (a family's only paid plan; a business names its own, 051)
   (or `interval '1 year'` for a yearly plan — the same plan, a longer
   `paid_until`)
   in the SQL editor (`paid_until` says how long; there is no period).
@@ -1901,27 +1904,57 @@ so storage policies live only in `019`.
      picker; rag-search does not read a business's tree, so "Sharma" there
      is a supplier, not an uncle. 031's trigger still makes a
      `family_people` row per member; other code relies on it.
-- **Plans.** A business starts on Free (200 MB, 4 members, the free limits).
-  It can be on **Plus** (bought in the app, or given by hand, called Plus
-  in a business) or on **Business** (`plan_limits.plan = 'business'`: 25 GB,
-  25 members, no monthly question limit with fair use 500, no voice limit,
-  500 uploads and 100 question tries a day each, 50 invitations a day, 30-day
-  links, expiry reminders; numbers to change in the Table editor). Business
-  is **given by hand only**:
-  `select set_family_plan('<vault id>', now() + interval '3 months', 'manual', null, 'business');`
-  or a demo, back to Free if they don't pay:
-  `select set_family_plan('<vault id>', now() + interval '14 days', 'trial', null, 'business');`.
-  `set_family_plan` refuses Business for a family; a Plus payment while
-  Business runs adds its time to Business. `person_plan()` (the best plan
-  among a person's vaults) feeds 049's `person_on_plus()` /
-  `question_allowance()` and 050's `person_daily_limit()`, so a business
-  member on a paid plan asks with its numbers everywhere; voice follows the
-  vault asked in, as before. Expiry reminders and 30-day links come with any
-  paid plan. `plan_limits.invites_per_day` (20, Business 50) replaces 050's
-  fixed 20, and `businesses_per_person` (1 on Free) counts businesses apart
-  from families, so a person on Free has one free family and one free
-  business besides their personal vault.
-- **No PROD vault goes on Business before PROD is on Supabase Pro**, and
+- **Plans — a business has its own, never Family Plus.** It starts on Free
+  (200 MB, 4 members, the free limits) and moves to one of two plans, rows
+  in `plan_limits` to change in the Table editor; the prices, before GST,
+  are `BUSINESS_PRICE` in `_shared/plan-text.ts`, shown and never charged by
+  the app:
+
+  | | Free | Plus (`business_plus`) | Pro (`business_pro`) |
+  |---|---|---|---|
+  | Price a month, + GST | — | ₹1,999 | ₹4,999 |
+  | Space | 200 MB | 25 GB | 100 GB |
+  | People who sign in | 4 | 10 | 50 |
+  | Questions each a month | 20 | 80 (fair use) | 300 (fair use, shown as no limit) |
+  | Question tries a day each | 10 | 20 | 100 |
+  | Uploads a day each | 50 | 200 | 500 |
+  | Invitations a day | 20 | 20 | 50 |
+
+  Both have voice with no limit, 30-day links, expiry reminders and Gmail
+  import. A year costs eleven months. **Why these numbers** (worked out on
+  13 October 2026, at ₹96 to the dollar): a question costs about ₹0.20 on
+  Groq's paid tier (the judge's ~8K tokens in on `gpt-oss-20b`, the answer
+  on `gpt-oss-120b`), a GB of files about ₹2 a month past Pro's 100 GB, and
+  Razorpay 2% + GST if they pay through it. A normal Plus month (5 people,
+  200 questions, 5 GB) costs about ₹125, 94% kept; one that uses every
+  limit about ₹360, 82%. Pro's numbers are set so that a business that used
+  every one would still cost less than Pro's price (50 × 300 questions is
+  about ₹3,000). Cost follows people × questions, so those are the numbers
+  to watch; storage is cheap. The fixed bills — Supabase Pro $25, Vercel
+  Pro $20, HuggingFace PRO $9, about ₹5,200 a month — are covered at an 80%
+  margin overall by about 19 businesses on Plus, fewer with Plus families.
+- **Given by hand only**, from the SQL editor, by name:
+  `select set_family_plan('<vault id>', now() + interval '1 month', 'manual', null, 'business_plus');`
+  (or `'business_pro'`), or a demo, back to Free if they don't pay:
+  `select set_family_plan('<vault id>', now() + interval '14 days', 'trial', null, 'business_pro');`.
+  A business has no default plan, so `set_family_plan` refuses it Family
+  Plus and a call naming no plan — which is what `apply_plan_payment()`
+  makes for a Razorpay payment — and refuses the business plans for a
+  family. The payments function refuses to start Family Plus for a
+  business (409 `business_plan`), so no business can pay ₹100 for 10 GB.
+  The Plans page (`/plus` in a business) says Ask us, which opens Feedback.
+- **A person's numbers are the best of their plans**, number by number:
+  `person_plans()` (the plans of their vaults, and Free) feeds 049's
+  `person_on_plus()` / `question_allowance()` and 050's
+  `person_daily_limit()`. No plan is best at everything — Family Plus has
+  500 questions each, Business Plus 80 — so joining a business never lowers
+  what a Family Plus member had. Voice follows the vault asked in, as
+  before. Expiry reminders and 30-day links come with any paid plan.
+  `plan_limits.invites_per_day` replaces 050's fixed 20, and
+  `businesses_per_person` (1 on Free) counts businesses apart from
+  families, so a person on Free has one free family and one free business
+  besides their personal vault.
+- **No PROD vault goes on Plus or Pro for a business before PROD is on Supabase Pro**, and
   Groq and HuggingFace are paid: one active business can use up Groq's
   whole free day (about 25 questions, for everyone). A business on Free has
   Free's limits, so demos fit the free tiers. The app cannot give the plan;
@@ -2101,9 +2134,9 @@ so storage policies live only in `019`.
   `verify` for a member of the family. `order` refuses a currency other
   than the server's choice, and hands back the same unpaid order for an
   hour (same person, family and price, 050), rather than making another at
-  Razorpay on every tap. Answers 400 `bad_request`, `bad_signature` or
-  `currency`, 401/403, 402 `not_paid`, 404 `no_order`, 409
-  `wrong_currency`, 502 `razorpay` (Razorpay said no), and 503
+  Razorpay on every tap, and refuses a business (051). Answers 400
+  `bad_request`, `bad_signature` or `currency`, 401/403, 402 `not_paid`,
+  404 `no_order`, 409 `wrong_currency` or `business_plan`, 502 `razorpay` (Razorpay said no), and 503
   `not_configured` without the keys or `needs_migration` where 044 is not
   applied.
 - **`razorpay-webhook`** — Razorpay reporting a payment (044). Deployed
