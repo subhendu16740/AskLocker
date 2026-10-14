@@ -14,7 +14,7 @@ import {
   type PendingInvite, type UseFor,
 } from '../lib/api';
 import { plusPage, useFamilyPlan, useOnPlus } from '../lib/family-plan';
-import { DEFAULT_PLAN_LIMITS, type PlanLimits } from '../lib/plans';
+import { DEFAULT_PLAN_LIMITS, businessPlanName, isBusinessPlan, nextBusinessPlan, type PlanLimits } from '../lib/plans';
 import { ScreenHeader, HeaderButton, PlusStar } from '../components/screen-header';
 import { InvitationCards } from '../components/invitation-cards';
 import { longDate } from '../lib/dates';
@@ -87,7 +87,10 @@ export default function FamilyScreen() {
   );
 
   // Members and waiting invitations together, against the plan's number.
-  const maxMembers = plan === 'business' ? limits.members.business : plan === 'plus' ? limits.members.plus : limits.members.free;
+  const maxMembers = isBusinessPlan(plan) ? limits.business[plan].members : plan === 'plus' ? limits.members.plus : limits.members.free;
+  // In a business, the plan above this one, if it allows more people (051).
+  const nextPlan = business && plan ? nextBusinessPlan(plan) : null;
+  const morePeople = nextPlan && limits.business[nextPlan].members > maxMembers ? limits.business[nextPlan].members : null;
   const full = members.length + pending.length >= maxMembers;
 
   const showConfirm = (title: string, message: string, onConfirm: () => void, destructive = true, confirmLabel = destructive ? 'Remove' : 'Confirm') => {
@@ -369,12 +372,10 @@ export default function FamilyScreen() {
               {pending.length > 0 ? 'withdraw an invitation or remove a member' : 'remove a member'}.
               {business ? '' : ' You can still add anyone to the family tree.'}
               {business
-                ? (plan !== 'business' && limits.members.business > maxMembers
-                    ? ` The Business plan allows up to ${limits.members.business}.`
-                    : '')
+                ? (nextPlan && morePeople ? ` ${businessPlanName(nextPlan)} allows up to ${morePeople}.` : '')
                 : (plan !== 'plus' && limits.members.plus > maxMembers ? ` Family Plus allows up to ${limits.members.plus} members.` : '')}
             </Text>
-            {(business ? plan !== 'business' && limits.members.business > maxMembers : plan !== 'plus' && limits.members.plus > maxMembers) && (
+            {(business ? !!morePeople : plan !== 'plus' && limits.members.plus > maxMembers) && (
               <TouchableOpacity onPress={() => router.push(plusPage('members') as any)} accessibilityRole="link" hitSlop={8}>
                 <Text style={styles.fullNoteLink}>{business ? 'Plans ›' : 'Family Plus ›'}</Text>
               </TouchableOpacity>
@@ -415,7 +416,7 @@ export default function FamilyScreen() {
                 const isCurrentUser = m.user_id === user?.id;
                 const isMemberAdmin = m.role === 'admin';
                 // Everyone in a vault on a paid plan is on Plus; you may be through another vault.
-                const starred = plan === 'plus' || plan === 'business' || (isCurrentUser && onPlus);
+                const starred = (!!plan && plan !== 'free') || (isCurrentUser && onPlus);
                 return (
                   <View key={m.id} style={styles.memberCard}>
                     <LinearGradient

@@ -1586,7 +1586,7 @@ export type Database = {
       person_daily_limit: { Args: { p_user_id: string; p_what: string }; Returns: number }
       is_business_vault: { Args: { p_family_id: string }; Returns: boolean }
       person_on_plus: { Args: { p_user_id: string }; Returns: boolean }
-      person_plan: { Args: { p_user_id: string }; Returns: string }
+      person_plans: { Args: { p_user_id: string }; Returns: string[] }
       purge_business: {
         Args: { p_confirm_name: string; p_family_id: string; p_user_id: string }
         Returns: string

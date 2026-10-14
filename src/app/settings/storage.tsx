@@ -17,7 +17,7 @@ import {
   fetchPlanLimits, fetchStorageStatus, fetchStorageUsage, type FamilyPlanStatus, type FamilyStorage,
 } from '../../lib/api';
 import {
-  CLOSED_MESSAGE, DEFAULT_PLAN_LIMITS, PLUS_FOR_SALE, formatBytes, localPlusPrice, localPlusPrices,
+  CLOSED_MESSAGE, DEFAULT_PLAN_LIMITS, PLUS_FOR_SALE, businessPlanName, formatBytes, isBusinessPlan, localPlusPrice, localPlusPrices,
   localPlusYearlyOffer, storageFullMessage, storageLevel, type PlanLimits, type StorageLevel,
 } from '../../lib/plans';
 import { longDate } from '../../lib/dates';
@@ -32,8 +32,8 @@ const documents = (n: number) => `${n} ${n === 1 ? 'document' : 'documents'}`;
 const BAR: Record<StorageLevel, string> = { ok: color.secondary, nearly: '#D97706', full: color.danger };
 
 function planName(status: FamilyPlanStatus | null): string {
-  if (status?.plan === 'business') return status.trial ? 'Business plan, trial' : 'Business plan';
-  if (status?.plan === 'plus') return `${status.business ? 'Plus' : 'Family Plus'}${status.trial ? ', trial' : ''}`;
+  if (isBusinessPlan(status?.plan)) return `${businessPlanName(status.plan)}${status.trial ? ', trial' : ''}`;
+  if (status?.plan === 'plus') return `Family Plus${status.trial ? ', trial' : ''}`;
   // A business whose paid plan ended (051): every record stays, nothing can be added.
   return status?.closed ? 'Plan ended' : 'Free';
 }
@@ -135,7 +135,7 @@ export default function StorageScreen() {
               const limit = status ? status.limitBytes : personalIds.has(f.familyId) ? limits.freePersonal : limits.free;
               const level = storageLevel(used, limit);
               const percent = Math.min(100, Math.round((used / limit) * 100));
-              const isPlus = status?.plan === 'plus' || status?.plan === 'business';
+              const isPlus = !!status && status.plan !== 'free';
               return (
                 <Card key={f.familyId}>
                   <View style={styles.familyRow}>
@@ -197,9 +197,10 @@ export default function StorageScreen() {
                               })
                             : "Nearly full. When it's full, you can't add documents or save chats."}
                       </Text>
-                      {!isPlus && (
+                      {/* A business on Plus can still move to Pro (051). */}
+                      {(!isPlus || (status?.business && status.plan !== 'business_pro')) && (
                         <TouchableOpacity onPress={() => router.push(plusPage('storage') as any)} accessibilityRole="link">
-                          <Text style={[styles.noteLink, level === 'full' ? styles.noteTextFull : styles.noteTextNearly]}>See {status?.business ? 'Plus' : 'Family Plus'} ›</Text>
+                          <Text style={[styles.noteLink, level === 'full' ? styles.noteTextFull : styles.noteTextNearly]}>See {status?.business ? 'plans' : 'Family Plus'} ›</Text>
                         </TouchableOpacity>
                       )}
                     </View>

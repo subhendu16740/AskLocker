@@ -6,15 +6,16 @@
 // each payment adds that time; until then the page says "Coming soon"
 // instead of offering a button that does nothing.
 //
-// In a business (051) it is called Plus, and says what the Business plan
-// adds beyond it (given by hand: ask us). A business on the Business plan
-// is not offered Plus, and nothing is ever removed from a business.
+// A business (051) sees its own plans instead — Free, Plus and Pro, side by
+// side with their prices before GST — and is never offered Family Plus:
+// Plus and Pro are set up with us (ask in Settings › Feedback), not bought
+// here. Nothing is ever removed from a business.
 
 import { useCallback, useState } from 'react';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFamily } from '../lib/family-context';
 import { isBusinessVault, isPersonalVault, vaultName } from '../lib/vaults';
@@ -22,8 +23,8 @@ import { forgetOnPlus, useFamilyPlan, usePaymentsStatus, type PlusFeature } from
 import { PaymentError, createPlusOrder, fetchPlanLimits, verifyPlusPayment } from '../lib/api';
 import { checkoutSupported, openCheckout } from '../lib/razorpay';
 import {
-  CLOSED_MESSAGE, DEFAULT_PLAN_LIMITS, formatBytes, localCurrency, localPlusAmount, localPlusPrice, localPlusYearlyOffer,
-  localPlusYearlySaving, plusName, type PlanLimits,
+  CLOSED_MESSAGE, DEFAULT_PLAN_LIMITS, businessAmount, businessPlanName, formatBytes, isBusinessPlan, localCurrency, localPlusAmount,
+  localPlusPrice, localPlusYearlyOffer, localPlusYearlySaving, plusName, type PlanLimits,
 } from '../lib/plans';
 import { longDate } from '../lib/dates';
 import { ScreenHeader } from '../components/screen-header';
@@ -47,9 +48,9 @@ const voiceCell = (n: number | null): Cell => (n == null ? true : `${n} each`);
 // "20 a month each" (049), or ✓ for a plan with no monthly limit.
 const questionsCell = (n: number | null): Cell => (n == null ? true : `${n} a month each`);
 
-function rows(limits: PlanLimits, business: boolean): Row[] {
+function rows(limits: PlanLimits): Row[] {
   const all: Array<Row | null> = [
-    { label: business ? 'Space for a business' : 'Space for a family', free: formatBytes(limits.free), plus: formatBytes(limits.plus), feature: 'storage' },
+    { label: 'Space for a family', free: formatBytes(limits.free), plus: formatBytes(limits.plus), feature: 'storage' },
     { label: 'Space in your personal vault', free: formatBytes(limits.freePersonal), plus: formatBytes(limits.plus) },
     {
       label: limits.members.plus > limits.members.free ? '★ Members who sign in' : 'Members who sign in',
@@ -63,8 +64,8 @@ function rows(limits: PlanLimits, business: boolean): Row[] {
         label: '★ Questions', free: questionsCell(limits.questions.free),
         plus: questionsCell(limits.questions.plus), feature: 'questions',
       },
-    business ? null : { label: 'Family tree and emergency cards', free: true, plus: true },
-    business ? null : { label: 'Birthday reminders', free: true, plus: true },
+    { label: 'Family tree and emergency cards', free: true, plus: true },
+    { label: 'Birthday reminders', free: true, plus: true },
     // 049 also makes a 30-day link part of Plus; before it, every plan has them.
     limits.questions.free == null
       ? { label: 'Share a document by link', free: true, plus: true }
@@ -82,7 +83,8 @@ function rows(limits: PlanLimits, business: boolean): Row[] {
   return all.filter((r): r is Row => r !== null);
 }
 
-// Which feature brought them here; "Family Plus", or "Plus" in a business (051).
+// Which feature brought them here; "Family Plus", or "Plus" in a business (051),
+// where Pro has it too.
 const BROUGHT_BY: Record<PlusFeature, { icon: string; text: (name: string) => string }> = {
   reminders: { icon: 'clock', text: (n) => `Expiry reminders come with ${n}.` },
   gmail: { icon: 'mail', text: (n) => `Import from Gmail comes with ${n}.` },
@@ -102,13 +104,16 @@ function CellView({ value, plus }: { value: Cell; plus?: boolean }) {
 }
 
 export default function PlusScreen() {
+  const { currentFamily } = useFamily();
+  return isBusinessVault(currentFamily) ? <BusinessPlans /> : <FamilyPlus />;
+}
+
+function FamilyPlus() {
   const { feature } = useLocalSearchParams<{ feature?: string }>();
   const { currentFamily } = useFamily();
   const { plan, paidUntil, removalAt, closed, trial, refresh } = useFamilyPlan();
-  const business = isBusinessVault(currentFamily);
-  const name = plusName(business);
-  // Paid up, on either paid plan.
-  const paid = plan === 'plus' || plan === 'business';
+  const name = plusName(false);
+  const paid = plan === 'plus';
   const [limits, setLimits] = useState<PlanLimits>(DEFAULT_PLAN_LIMITS);
   const monthly = localPlusPrice('monthly');
   // "₹1,100 a year instead of ₹1,200": what a screen reader hears for <YearlyPrice />.
@@ -190,7 +195,7 @@ export default function PlusScreen() {
 
         <LinearGradient colors={['#2A3D66', '#4A6491']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.hero}>
           <Text style={styles.heroTag}>★ {name}</Text>
-          <Text style={styles.heroTitle}>More space and more help for your {business ? 'business' : 'family'}</Text>
+          <Text style={styles.heroTitle}>More space and more help for your family</Text>
           <View style={styles.heroCells}>
             <View style={styles.heroCell} accessible accessibilityLabel={`Monthly, ${monthly}`}>
               <Text style={styles.heroCellLabel}>Monthly</Text>
@@ -214,7 +219,7 @@ export default function PlusScreen() {
             </View>
           </View>
           <Text style={styles.heroNote}>
-            {familyName ? `One plan for everyone in ${familyName}.` : `One plan for everyone in the ${business ? 'business' : 'family'}.`}
+            {familyName ? `One plan for everyone in ${familyName}.` : 'One plan for everyone in the family.'}
           </Text>
         </LinearGradient>
 
@@ -222,7 +227,7 @@ export default function PlusScreen() {
           <View style={[styles.state, styles.statePlus]}>
             <Feather name="check-circle" size={18} color="#15803D" />
             <Text style={[styles.stateText, { color: '#15803D' }]}>
-              {familyName ?? 'Your family'} has {plan === 'business' ? 'the Business plan' : name}
+              {familyName ?? 'Your family'} has {name}
               {trial ? ' on trial' : ''}{paidUntil ? `, until ${longDate(new Date(paidUntil))}` : ''}.
             </Text>
           </View>
@@ -260,7 +265,7 @@ export default function PlusScreen() {
               <Text style={[styles.headText, styles.headPlus]}>Yearly</Text>
             </View>
           </View>
-          {rows(limits, business).map((r) => {
+          {rows(limits).map((r) => {
             const pointed = !!broughtBy && r.feature === feature && !paid;
             return (
               <View
@@ -297,18 +302,7 @@ export default function PlusScreen() {
           </View>
         </Card>
 
-        {/* A business needing more than Plus: the Business plan, set up by us (051). */}
-        {business && (
-          <Card style={styles.payCard}>
-            <Text style={styles.payTitle}>The Business plan</Text>
-            <Text style={styles.payFine}>
-              {formatBytes(limits.business)} and up to {limits.members.business} people, with everything in Plus.
-              {plan === 'business' ? '' : ' Ask us about it in Settings › Feedback.'}
-            </Text>
-          </Card>
-        )}
-
-        {payments?.available && plan !== 'business' && (
+        {payments?.available && (
           <Card style={styles.payCard}>
             <Text style={styles.payTitle}>{plan === 'plus' ? 'Add more time' : `Get ${name}`}</Text>
             {!checkoutSupported ? (
@@ -365,9 +359,9 @@ export default function PlusScreen() {
               <Text style={styles.soonTag}>Coming soon</Text>
               <Text
                 style={styles.soonText}
-                accessibilityLabel={`You can't buy ${name} yet. It will be ${monthly} or ${yearlyOffer} for the whole ${business ? 'business' : 'family'}.`}
+                accessibilityLabel={`You can't buy ${name} yet. It will be ${monthly} or ${yearlyOffer} for the whole family.`}
               >
-                You can't buy {name} yet. It will be {monthly} or <YearlyPrice /> for the whole {business ? 'business' : 'family'}.
+                You can't buy {name} yet. It will be {monthly} or <YearlyPrice /> for the whole family.
               </Text>
             </View>
           )
@@ -377,9 +371,162 @@ export default function PlusScreen() {
           {limits.questions.free != null
             ? `Fair use on Plus: up to ${limits.questionsFairUse} questions a person each month.\n`
             : ''}
-          {business
-            ? 'If a paid plan ends, every record stays. Adding new ones waits until it is renewed.'
-            : `If Plus ends and a vault is over its free space, the newest documents over it are removed after ${limits.graceDays} days.`}
+          {`If Plus ends and a vault is over its free space, the newest documents over it are removed after ${limits.graceDays} days.`}
+        </Muted>
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
+// ─── A business's plans (051) ─────────────────────────────────────
+
+interface BusinessRow {
+  label: string;
+  free: Cell;
+  plus: Cell;
+  pro: Cell;
+  feature?: PlusFeature;
+}
+
+function businessRows(limits: PlanLimits): BusinessRow[] {
+  const plus = limits.business.business_plus;
+  const pro = limits.business.business_pro;
+  return [
+    { label: 'Space', free: formatBytes(limits.free), plus: formatBytes(plus.storage), pro: formatBytes(pro.storage), feature: 'storage' },
+    {
+      label: '★ People who sign in', free: String(limits.members.free), plus: String(plus.members), pro: `Up to ${pro.members}`,
+      feature: 'members',
+    },
+    { label: 'Add and scan records, Indian languages too', free: true, plus: true, pro: true },
+    {
+      label: '★ Questions', free: questionsCell(limits.questions.free), plus: `${plus.questionsFairUse} a month each`, pro: true,
+      feature: 'questions',
+    },
+    { label: '★ Voice chats', free: voiceCell(limits.voiceAnswers.free), plus: true, pro: true, feature: 'voice' },
+    { label: '★ Share links', free: 'Up to 7 days', plus: 'Up to 30 days', pro: 'Up to 30 days', feature: 'links' },
+    { label: '★ Expiry reminders', free: false, plus: true, pro: true, feature: 'reminders' },
+    { label: '★ Import from Gmail', free: false, plus: true, pro: true, feature: 'gmail' },
+  ];
+}
+
+function BusinessPlans() {
+  const { feature } = useLocalSearchParams<{ feature?: string }>();
+  const { currentFamily } = useFamily();
+  const { plan, paidUntil, closed, trial, refresh } = useFamilyPlan();
+  const [limits, setLimits] = useState<PlanLimits>(DEFAULT_PLAN_LIMITS);
+  const broughtBy = feature && feature in BROUGHT_BY ? BROUGHT_BY[feature as PlusFeature] : null;
+  const onPlan = isBusinessPlan(plan) ? plan : null;
+  const vault = currentFamily ? vaultName(currentFamily) : 'Your business';
+
+  useFocusEffect(useCallback(() => {
+    let cancelled = false;
+    track('plus_viewed', { feature: feature && feature in BROUGHT_BY ? feature : 'none' });
+    refresh(true);
+    fetchPlanLimits().then((l) => { if (!cancelled) setLimits(l); });
+    return () => { cancelled = true; };
+  }, [refresh, feature]));
+
+  const said3 = (r: BusinessRow) => `Free ${said(r.free)}, Plus ${said(r.plus)}, Pro ${said(r.pro)}`;
+
+  return (
+    <SafeAreaView style={screenStyles.safe} edges={['top']}>
+      <ScreenHeader title="Plans" fallback="/home" />
+      <ScrollView contentContainerStyle={screenStyles.body}>
+        {broughtBy && !onPlan && (
+          <View style={styles.brought} accessibilityLiveRegion="polite">
+            <Feather name={broughtBy.icon as any} size={16} color={color.primary} />
+            <Text style={styles.broughtText}>{broughtBy.text('Plus')}</Text>
+          </View>
+        )}
+
+        <LinearGradient colors={['#2A3D66', '#4A6491']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.hero}>
+          <Text style={styles.heroTag}>★ Plus and Pro</Text>
+          <Text style={styles.heroTitle}>More space and more help for your business</Text>
+          <View style={styles.heroCells}>
+            {(['business_plus', 'business_pro'] as const).map((p) => (
+              <View key={p} style={styles.heroCell} accessible accessibilityLabel={`${businessPlanName(p)}, ${businessAmount(p)} a month plus GST`}>
+                <Text style={styles.heroCellLabel}>{businessPlanName(p)}</Text>
+                <Text style={styles.heroAmount}>{businessAmount(p)}</Text>
+                <Text style={styles.heroPer}>a month + GST</Text>
+              </View>
+            ))}
+          </View>
+          <Text style={styles.heroNote}>One plan for everyone in {vault}. Pay for a year and get 1 month free.</Text>
+        </LinearGradient>
+
+        {onPlan ? (
+          <View style={[styles.state, styles.statePlus]}>
+            <Feather name="check-circle" size={18} color="#15803D" />
+            <Text style={[styles.stateText, { color: '#15803D' }]}>
+              {vault} has {businessPlanName(onPlan)}{trial ? ' on trial' : ''}
+              {paidUntil ? `, until ${longDate(new Date(paidUntil))}` : ''}.
+            </Text>
+          </View>
+        ) : plan === 'free' && closed ? (
+          <View style={[styles.state, styles.stateEnded]}>
+            <Feather name="alert-triangle" size={18} color="#B91C1C" />
+            <Text style={[styles.stateText, { color: '#B91C1C' }]}>{CLOSED_MESSAGE}</Text>
+          </View>
+        ) : plan === 'free' ? (
+          <View style={styles.state}>
+            <Feather name="info" size={18} color={color.primary} />
+            <Text style={styles.stateText}>{vault} is on Free.</Text>
+          </View>
+        ) : null}
+
+        <Card style={styles.tableCard}>
+          <View style={[styles.row, styles.headRow]}>
+            <Text style={[styles.label, styles.headText]}>What you get</Text>
+            <Text style={[styles.value, styles.headText]}>Free</Text>
+            <Text style={[styles.value, styles.headText, styles.headPlus]}>★ Plus</Text>
+            <Text style={[styles.value, styles.headText, styles.headPlus]}>★ Pro</Text>
+          </View>
+          {businessRows(limits).map((r) => {
+            const pointed = !!broughtBy && r.feature === feature && !onPlan;
+            return (
+              <View key={r.label} style={[styles.row, pointed && styles.rowPointed]} accessible accessibilityLabel={`${r.label.replace('★ ', '')}: ${said3(r)}`}>
+                <Text style={styles.label}>{r.label}</Text>
+                <View style={styles.value}><CellView value={r.free} /></View>
+                <View style={styles.value}><CellView value={r.plus} plus /></View>
+                <View style={styles.value}><CellView value={r.pro} plus /></View>
+              </View>
+            );
+          })}
+          <View
+            style={[styles.row, styles.priceRow]}
+            accessible
+            accessibilityLabel={`Price a month: Free costs nothing. Plus ${businessAmount('business_plus')}, Pro ${businessAmount('business_pro')}, plus GST.`}
+          >
+            <Text style={[styles.label, styles.priceLabel]}>Price</Text>
+            <Text style={[styles.value, styles.cellText]}>Free</Text>
+            {(['business_plus', 'business_pro'] as const).map((p) => (
+              <View key={p} style={styles.value}>
+                <Text style={[styles.cellText, styles.cellTextPlus]}>{businessAmount(p)}</Text>
+                <Text style={styles.cellPer}>a month</Text>
+              </View>
+            ))}
+          </View>
+        </Card>
+
+        {onPlan !== 'business_pro' && (
+          <Card style={styles.payCard}>
+            <Text style={styles.payTitle}>{onPlan === 'business_plus' ? 'Move to Pro' : 'Get Plus or Pro'}</Text>
+            <Text style={styles.payFine}>
+              {onPlan === 'business_plus' ? "Tell us, and we'll move you to Pro." : "Tell us which plan you want, and we'll set it up for you."}
+            </Text>
+            <TouchableOpacity
+              style={[styles.payBtn, styles.payBtnMain]}
+              onPress={() => router.push('/settings/feedback' as any)}
+              accessibilityRole="button"
+            >
+              <Text style={styles.payBtnText}>Ask us</Text>
+            </TouchableOpacity>
+          </Card>
+        )}
+
+        <Muted>
+          {`Prices are before GST. Fair use on Pro: up to ${limits.business.business_pro.questionsFairUse} questions a person each month.\n`}
+          If a paid plan ends, every record stays. Adding new ones waits until it is renewed.
         </Muted>
       </ScrollView>
     </SafeAreaView>

@@ -12,9 +12,9 @@
 // Plus, and Gmail import refuses a free family on the server as well.
 // Birthday reminders reach every family.
 //
-// A business (051) can be on Plus or the Business plan. Its ★ features open
-// the same /plus page, which speaks to a business. Its plan ending closes
-// adding (`closed`) instead of removing anything.
+// A business (051) has its own plans, Plus and Pro, never Family Plus. Its ★
+// features open the same /plus page, which shows a business its plans. Its
+// plan ending closes adding (`closed`) instead of removing anything.
 //
 // The plan comes from family_storage_status() (038, 039), kept for a minute
 // per family. When it cannot be read (before 038, or offline) nothing is

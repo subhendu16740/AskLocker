@@ -9,7 +9,7 @@ import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { SUPPORT_EMAIL, SUPPORT_PHONE } from '../../lib/app-info';
 import {
-  DEFAULT_PLAN_LIMITS, FREE_PERSONAL_STORAGE_LABEL, FREE_STORAGE_LABEL, MAX_FILE_BYTES, PLUS_FOR_SALE, formatBytes, plusPrice, plusPrices,
+  DEFAULT_PLAN_LIMITS, FREE_PERSONAL_STORAGE_LABEL, businessPrice, FREE_STORAGE_LABEL, MAX_FILE_BYTES, PLUS_FOR_SALE, formatBytes, plusPrice, plusPrices,
   plusYearlyOffer, plusYearlySaving,
 } from '../../lib/plans';
 import { usePaymentsStatus } from '../../lib/family-plan';
@@ -72,7 +72,7 @@ function faq(payments: PaymentsStatus | null): { q: string; a: string }[] {
     },
     {
       q: 'Can I use AskLocker for my business?',
-      a: `Yes. In Manage Family, tap Create a business, then invite your team. Admins can delete any record, and records stay even if a paid plan ends. The Business plan, with ${formatBytes(DEFAULT_PLAN_LIMITS.business)} and ${DEFAULT_PLAN_LIMITS.members.business} people, is set up by us: ask in Settings › Feedback.`,
+      a: `Yes. In Manage Family, tap Create a business, then invite your team. Admins can delete any record, and records stay even if a paid plan ends. A business has its own plans: Plus, ${businessPrice('business_plus')}, and Pro, ${businessPrice('business_pro')}. Ask for one in Settings › Feedback.`,
     },
     {
       q: 'I\'ve been invited to a family. What now?',

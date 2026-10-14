@@ -135,7 +135,9 @@ export default function SettingsScreen() {
       ? { icon: 'briefcase', label: 'Manage team', sub: 'People in this business, and your other vaults', route: '/family' }
       : { icon: 'users', label: 'Manage Families', sub: 'View and switch families', route: '/family' },
     { icon: 'hard-drive', label: 'Storage', sub: 'Your plan and space used', route: '/settings/storage' },
-    { icon: 'star', label: isBusinessVault(currentFamily) ? 'Plus' : 'Family Plus', sub: 'Compare Free and Plus', route: '/plus' },
+    isBusinessVault(currentFamily)
+      ? { icon: 'star', label: 'Plans', sub: 'Compare Free, Plus and Pro', route: '/plus' }
+      : { icon: 'star', label: 'Family Plus', sub: 'Compare Free and Plus', route: '/plus' },
     { icon: 'lock', label: 'Privacy', sub: 'Who can see your documents', route: '/settings/privacy' },
   ];
   const helpItems: LinkItem[] = [
