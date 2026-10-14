@@ -26,16 +26,17 @@
 --      rag-search does not read relations ("Nani") in a business vault.
 --      031's trigger still makes a family_people row per member.
 --
--- Plans — a business has its own three, and never Family Plus:
---   • Plus ('business_plus'):             5 members,  25 GB
---   • Pro ('business_pro'):              15 members, 100 GB
---   • Enterprise ('business_enterprise'): 50 members, 200 GB
---   On each, 100 questions a person a month (fair use, no monthly limit
---   shown), no voice limit, 300 uploads and 30 question tries a day each,
---   and 20 invitations a day (50 on Enterprise). Rows to change in the
---   Table editor; the prices are BUSINESS_PRICE in
---   supabase/functions/_shared/plan-text.ts. Even a business that used
---   every limit at once would cost less than its plan's price.
+-- Plans — a business has its own two, and never Family Plus:
+--   • Business Plus (plan_limits 'business_plus'): 25 GB, 10 members, no
+--     monthly question limit with fair use 80 each, no voice limit, 200
+--     uploads and 20 question tries a day each, 20 invitations a day.
+--   • Business Pro ('business_pro'): limits a small business does not meet —
+--     100 GB, 50 members, fair use 300 questions each, 500 uploads and 100
+--     tries a day each, 50 invitations a day. Set so that a business that
+--     met every one would still cost less than Pro's price, at about ₹0.20
+--     a question.
+--     Both are rows to change in the Table editor; the prices are
+--     BUSINESS_PRICE in supabase/functions/_shared/plan-text.ts.
 --   • plan_limits gains invites_per_day (20 on Free and Plus) and
 --     businesses_per_person (1 on Free: a person on Free creates one family
 --     AND one business, besides their personal vault).
@@ -55,7 +56,6 @@
 --   organisation is on Pro, and Groq and HuggingFace are paid:
 --     select set_family_plan('<vault id>', now() + interval '14 days', 'trial', null, 'business_pro');
 --     select set_family_plan('<vault id>', now() + interval '1 month', 'manual', null, 'business_plus');
---     (or 'business_enterprise')
 --
 -- Also: document_categories.audience ('family', 'business', 'both') and the
 -- business categories; users.use_for (what the person said they would use
@@ -104,7 +104,7 @@ AS $fn$
 $fn$;
 
 
--- ─── 2. The business plans: Plus, Pro and Enterprise ──────────────────────
+-- ─── 2. Business Plus and Business Pro ─────────────────────────────────────
 -- 038's CHECKs on the plan names, and on family_plans.source, are replaced
 -- (found by what they say: their names are Postgres's own).
 DO $do$
@@ -121,7 +121,7 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_constraint
                   WHERE conname = 'plan_limits_plan_known' AND conrelid = 'public.plan_limits'::regclass) THEN
     ALTER TABLE public.plan_limits ADD CONSTRAINT plan_limits_plan_known
-      CHECK (plan IN ('free', 'plus', 'business_plus', 'business_pro', 'business_enterprise'));
+      CHECK (plan IN ('free', 'plus', 'business_plus', 'business_pro'));
   END IF;
 
   FOR c IN SELECT conname FROM pg_constraint
@@ -134,7 +134,7 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_constraint
                   WHERE conname = 'family_plans_plan_paid' AND conrelid = 'public.family_plans'::regclass) THEN
     ALTER TABLE public.family_plans ADD CONSTRAINT family_plans_plan_paid
-      CHECK (plan IN ('plus', 'business_plus', 'business_pro', 'business_enterprise'));
+      CHECK (plan IN ('plus', 'business_plus', 'business_pro'));
   END IF;
   -- 'trial': a plan switched on by hand for a demo. When it ends, a business
   -- is back on Free rather than closed.
@@ -165,9 +165,8 @@ COMMENT ON COLUMN public.plan_limits.businesses_per_person IS
 
 INSERT INTO public.plan_limits (plan, storage_bytes, max_members, voice_answers, questions_per_month,
                                 questions_fair_use, uploads_per_day, question_tries_per_day, invites_per_day)
-VALUES ('business_plus',        25::bigint * 1024 * 1024 * 1024,  5, NULL, NULL, 100, 300, 30, 20),
-       ('business_pro',        100::bigint * 1024 * 1024 * 1024, 15, NULL, NULL, 100, 300, 30, 20),
-       ('business_enterprise', 200::bigint * 1024 * 1024 * 1024, 50, NULL, NULL, 100, 300, 30, 50)
+VALUES ('business_plus', 25::bigint  * 1024 * 1024 * 1024, 10, NULL, NULL,  80, 200,  20, 20),
+       ('business_pro',  100::bigint * 1024 * 1024 * 1024, 50, NULL, NULL, 300, 500, 100, 50)
 ON CONFLICT (plan) DO NOTHING;
 
 
@@ -489,8 +488,7 @@ $fn$;
 -- first, for the reason in section 4; apply_plan_payment()'s four arguments
 -- resolve to this, with no plan named.
 --   'plus'                           family vaults only (their default)
---   'business_plus', 'business_pro', 'business_enterprise'
---                                    business vaults only, always by name:
+--   'business_plus', 'business_pro'  business vaults only, always by name:
 --                                    a business has no default, so a
 --                                    payment for Family Plus can never
 --                                    turn into a business plan
@@ -525,14 +523,14 @@ BEGIN
     RAISE EXCEPTION 'No such family.' USING ERRCODE = '22023';
   END IF;
   IF v_kind = 'business' THEN
-    IF v_plan IS NULL OR v_plan NOT IN ('business_plus', 'business_pro', 'business_enterprise') THEN
-      RAISE EXCEPTION 'A business is on business_plus, business_pro or business_enterprise, named as the last argument. Family Plus is for family vaults.'
+    IF v_plan IS NULL OR v_plan NOT IN ('business_plus', 'business_pro') THEN
+      RAISE EXCEPTION 'A business is on business_plus or business_pro, named as the last argument. Family Plus is for family vaults.'
         USING ERRCODE = '22023';
     END IF;
   ELSE
     v_plan := coalesce(v_plan, 'plus');
     IF v_plan <> 'plus' THEN
-      RAISE EXCEPTION 'A family is on plus. The business plans are for business vaults.' USING ERRCODE = '22023';
+      RAISE EXCEPTION 'A family is on plus. business_plus and business_pro are for business vaults.' USING ERRCODE = '22023';
     END IF;
   END IF;
 
@@ -551,9 +549,8 @@ BEGIN
     v_limit := public.vault_storage_bytes(p_family_id, v_plan);
     INSERT INTO public.notifications (user_id, family_id, type, title, message)
     SELECT fm.user_id, p_family_id, 'plan',
-           left(format(CASE v_plan WHEN 'business_enterprise' THEN '%s has Enterprise'
-                                   WHEN 'business_pro'        THEN '%s has Pro'
-                                   WHEN 'business_plus'       THEN '%s has Plus'
+           left(format(CASE v_plan WHEN 'business_pro'  THEN '%s has Pro'
+                                   WHEN 'business_plus' THEN '%s has Plus'
                                    ELSE '%s has Family Plus' END, v_family), 200),
            CASE WHEN v_kind = 'business' AND v_source = 'trial'
                 THEN format('A trial until %s, with room for %s GB of records.',
@@ -614,8 +611,7 @@ BEGIN
         v_msg   := format('Your records stay. You''re on Free, with room for %s.', public.size_text(v_free));
       ELSE
         v_title := format('%s has ended for %s',
-                          CASE r.plan WHEN 'business_enterprise' THEN 'Enterprise'
-                                      WHEN 'business_pro' THEN 'Pro' ELSE 'Plus' END, r.family_name);
+                          CASE WHEN r.plan = 'business_pro' THEN 'Pro' ELSE 'Plus' END, r.family_name);
         v_msg   := 'Your records stay. To add new ones, renew the plan.';
       END IF;
       UPDATE public.family_plans
