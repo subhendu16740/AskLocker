@@ -28,12 +28,13 @@
 // Business vaults (051) have plans of their own, never Family Plus, given by
 // hand for now (billed by us, GST on top):
 //
-//   Plus   25 GB, 10 people, 80 questions each a month — ₹1,999 a month
-//   Pro    100 GB, 50 people, 300 questions each a month — ₹4,999 a month
+//   Plus         5 people,  25 GB — ₹999 a month
+//   Pro         15 people, 100 GB — ₹1,999 a month
+//   Enterprise  50 people, 200 GB — ₹4,999 a month
 //
-// Pro's numbers are ones a small business does not reach, set so that one
-// that reached them all would still cost less than Pro's price, at about
-// ₹0.20 a question.
+// Each with 100 questions a person a month. Even a business that used every
+// limit at once would cost less than its plan's price, at about ₹0.20 a
+// question.
 // Nothing is ever removed from a business: when a paid plan ends it keeps
 // every record and adds nothing until it is renewed ("closed"); a trial that
 // ends puts it back on Free.
@@ -45,13 +46,13 @@
 // is the payment company's plan.
 // ────────────────────────────────────────────────────────────────
 
-export type BusinessPlan = 'business_plus' | 'business_pro';
+export type BusinessPlan = 'business_plus' | 'business_pro' | 'business_enterprise';
 export type PlanName = 'free' | 'plus' | BusinessPlan;
 
-export const BUSINESS_PLANS: readonly BusinessPlan[] = ['business_plus', 'business_pro'];
+export const BUSINESS_PLANS: readonly BusinessPlan[] = ['business_plus', 'business_pro', 'business_enterprise'];
 
 export function isBusinessPlan(plan: string | null | undefined): plan is BusinessPlan {
-  return plan === 'business_plus' || plan === 'business_pro';
+  return (BUSINESS_PLANS as readonly string[]).includes(plan ?? '');
 }
 
 /** A vault's plan and its room, as family_storage_status() reports them. */
@@ -104,7 +105,7 @@ export interface PlanLimits {
   businessesPerPerson: number | null;
   /** Invitations a vault may send in a day, per plan (050, 051). */
   invitesPerDay: { free: number; plus: number };
-  /** Business Plus and Business Pro (051). */
+  /** A business's plans: Plus, Pro and Enterprise (051). */
   business: Record<BusinessPlan, BusinessPlanLimits>;
 }
 
@@ -128,8 +129,9 @@ export const DEFAULT_PLAN_LIMITS: PlanLimits = {
   businessesPerPerson: 1,
   invitesPerDay: { free: 20, plus: 20 },
   business: {
-    business_plus: { storage: 25 * GB, members: 10, questionsFairUse: 80, questionTriesPerDay: 20, uploadsPerDay: 200, invitesPerDay: 20 },
-    business_pro: { storage: 100 * GB, members: 50, questionsFairUse: 300, questionTriesPerDay: 100, uploadsPerDay: 500, invitesPerDay: 50 },
+    business_plus: { storage: 25 * GB, members: 5, questionsFairUse: 100, questionTriesPerDay: 30, uploadsPerDay: 300, invitesPerDay: 20 },
+    business_pro: { storage: 100 * GB, members: 15, questionsFairUse: 100, questionTriesPerDay: 30, uploadsPerDay: 300, invitesPerDay: 20 },
+    business_enterprise: { storage: 200 * GB, members: 50, questionsFairUse: 100, questionTriesPerDay: 30, uploadsPerDay: 300, invitesPerDay: 50 },
   },
 };
 
@@ -222,9 +224,9 @@ export function plusName(business?: boolean): string {
   return business ? 'Plus' : 'Family Plus';
 }
 
-/** "Plus" or "Pro": a business plan's name (051). */
+/** "Plus", "Pro" or "Enterprise": a business plan's name (051). */
 export function businessPlanName(plan: BusinessPlan): string {
-  return plan === 'business_pro' ? 'Pro' : 'Plus';
+  return plan === 'business_enterprise' ? 'Enterprise' : plan === 'business_pro' ? 'Pro' : 'Plus';
 }
 
 export function planLabel(plan: PlanName, business?: boolean): string {
@@ -238,8 +240,9 @@ export function planLabel(plan: PlanName, business?: boolean): string {
  * eleven months.
  */
 export const BUSINESS_PRICE: Record<BusinessPlan, number> = {
-  business_plus: 1999,
-  business_pro: 4999,
+  business_plus: 999,
+  business_pro: 1999,
+  business_enterprise: 4999,
 };
 
 /** The amount alone, "₹1,999", for a narrow column. */
@@ -252,14 +255,15 @@ export function businessPrice(plan: BusinessPlan): string {
   return `${businessAmount(plan)} a month + GST`;
 }
 
-/** "₹21,989 a year + GST": eleven months. */
+/** "₹10,989 a year + GST": eleven months. */
 export function businessYearPrice(plan: BusinessPlan): string {
   return `${formatMoney('inr', 11 * BUSINESS_PRICE[plan])} a year + GST`;
 }
 
-/** The business plan above this one, if any: Free → Plus → Pro. */
+/** The business plan above this one, if any: Free → Plus → Pro → Enterprise. */
 export function nextBusinessPlan(plan: PlanName): BusinessPlan | null {
-  if (plan === 'business_pro') return null;
+  if (plan === 'business_enterprise') return null;
+  if (plan === 'business_pro') return 'business_enterprise';
   return plan === 'business_plus' ? 'business_pro' : 'business_plus';
 }
 

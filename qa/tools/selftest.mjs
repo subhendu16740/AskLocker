@@ -686,8 +686,9 @@ await test('plans: every limit is finite, and a full vault says why and what to 
     businessesPerPerson: 1,
     invitesPerDay: { free: 20, plus: 20 },
     business: {
-      business_plus: { storage: 25 * GB, members: 10, questionsFairUse: 80, questionTriesPerDay: 20, uploadsPerDay: 200, invitesPerDay: 20 },
-      business_pro: { storage: 100 * GB, members: 50, questionsFairUse: 300, questionTriesPerDay: 100, uploadsPerDay: 500, invitesPerDay: 50 },
+      business_plus: { storage: 25 * GB, members: 5, questionsFairUse: 100, questionTriesPerDay: 30, uploadsPerDay: 300, invitesPerDay: 20 },
+      business_pro: { storage: 100 * GB, members: 15, questionsFairUse: 100, questionTriesPerDay: 30, uploadsPerDay: 300, invitesPerDay: 20 },
+      business_enterprise: { storage: 200 * GB, members: 50, questionsFairUse: 100, questionTriesPerDay: 30, uploadsPerDay: 300, invitesPerDay: 50 },
     },
   });
   assert.deepEqual(PLUS_PRICE, { monthly: { inr: 100, usd: 10 }, yearly: { inr: 1100, usd: 110 } });
@@ -1026,26 +1027,32 @@ await test('a category suggested from the file\'s name and text, from the vault\
   assert.equal(SUGGESTED_CATEGORIES.business.length, 11, 'every business category but Other can be suggested');
 });
 
-await test('business plans: Plus and Pro, their prices and words, and a closed business (051)', () => {
+await test('business plans: Plus, Pro and Enterprise, their prices and words, and a closed business (051)', () => {
   const GB = 1024 ** 3, MB = 1024 ** 2;
   assert.equal(DEFAULT_PLAN_LIMITS.businessesPerPerson, 1);
-  assert.deepEqual(BUSINESS_PLANS, ['business_plus', 'business_pro']);
-  assert.ok(isBusinessPlan('business_pro') && isBusinessPlan('business_plus') && !isBusinessPlan('plus') && !isBusinessPlan('business'));
-  // Pro is above Plus on every number.
-  const { business_plus: bplus, business_pro: bpro } = DEFAULT_PLAN_LIMITS.business;
-  for (const k of Object.keys(bplus)) assert.ok(bpro[k] > bplus[k], `Pro's ${k} is above Plus's`);
-  assert.deepEqual(BUSINESS_PRICE, { business_plus: 1999, business_pro: 4999 });
-  assert.equal(businessAmount('business_plus'), '₹1,999');
-  assert.equal(businessPrice('business_pro'), '₹4,999 a month + GST');
-  assert.equal(businessYearPrice('business_plus'), '₹21,989 a year + GST', 'a year is eleven months');
-  assert.equal(businessYearPrice('business_pro'), '₹54,989 a year + GST');
+  assert.deepEqual(BUSINESS_PLANS, ['business_plus', 'business_pro', 'business_enterprise']);
+  assert.ok(BUSINESS_PLANS.every(isBusinessPlan) && !isBusinessPlan('plus') && !isBusinessPlan('business') && !isBusinessPlan(null));
+  // Each plan up has more people and more space, and never less of anything.
+  for (let i = 1; i < BUSINESS_PLANS.length; i++) {
+    const lower = DEFAULT_PLAN_LIMITS.business[BUSINESS_PLANS[i - 1]], higher = DEFAULT_PLAN_LIMITS.business[BUSINESS_PLANS[i]];
+    assert.ok(higher.members > lower.members && higher.storage > lower.storage, `${BUSINESS_PLANS[i]} has more people and space`);
+    for (const k of Object.keys(lower)) assert.ok(higher[k] >= lower[k], `${BUSINESS_PLANS[i]}'s ${k} is not below`);
+  }
+  assert.deepEqual(BUSINESS_PRICE, { business_plus: 999, business_pro: 1999, business_enterprise: 4999 });
+  assert.equal(businessAmount('business_plus'), '₹999');
+  assert.equal(businessAmount('business_enterprise'), '₹4,999');
+  assert.equal(businessPrice('business_pro'), '₹1,999 a month + GST');
+  assert.equal(businessYearPrice('business_plus'), '₹10,989 a year + GST', 'a year is eleven months');
+  assert.equal(businessYearPrice('business_enterprise'), '₹54,989 a year + GST');
   assert.equal(planLabel('business_plus'), 'Plus');
   assert.equal(planLabel('business_pro'), 'Pro');
+  assert.equal(planLabel('business_enterprise'), 'Enterprise');
   assert.equal(planLabel('plus'), 'Family Plus');
   assert.equal(plusName(true), 'Plus');
   assert.equal(nextBusinessPlan('free'), 'business_plus');
   assert.equal(nextBusinessPlan('business_plus'), 'business_pro');
-  assert.equal(nextBusinessPlan('business_pro'), null);
+  assert.equal(nextBusinessPlan('business_pro'), 'business_enterprise');
+  assert.equal(nextBusinessPlan('business_enterprise'), null);
   const shop = { plan: 'free', limitBytes: 200 * MB, usedBytes: 199 * MB, business: true };
   assert.match(storageFullMessage(shop, 3 * MB), /^This file is 3 MB, but your business has only 1 MB left\./);
   // Never Family Plus, nor its price, for a business.
@@ -1063,9 +1070,11 @@ await test('business plans: Plus and Pro, their prices and words, and a closed b
   assert.equal(storageFullMessage({ ...shop, usedBytes: 5 * MB, closed: true }, 3 * MB), CLOSED_MESSAGE);
   assert.equal(CLOSED_MESSAGE, "Your business's plan has ended. Your records stay. To add new ones, renew the plan.");
   assert.equal(storageFullMessage({ plan: 'business_pro', limitBytes: 100 * GB, usedBytes: 100 * GB, business: true }),
-    "Your business's storage is full, with 100 GB of 100 GB used. Delete records you don't need to make room.");
-  assert.equal(chatStorageFullMessage({ plan: 'business_pro', limitBytes: 100 * GB, usedBytes: 100 * GB, business: true }),
-    "There's no room to save this chat. Your business has used 100 GB of 100 GB. Delete records or saved chats you don't need to make room.");
+    "Your business's storage is full, with 100 GB of 100 GB used. Delete records you don't need, or move to Enterprise for 200 GB.");
+  assert.equal(storageFullMessage({ plan: 'business_enterprise', limitBytes: 200 * GB, usedBytes: 200 * GB, business: true }),
+    "Your business's storage is full, with 200 GB of 200 GB used. Delete records you don't need to make room.");
+  assert.equal(chatStorageFullMessage({ plan: 'business_enterprise', limitBytes: 200 * GB, usedBytes: 200 * GB, business: true }),
+    "There's no room to save this chat. Your business has used 200 GB of 200 GB. Delete records or saved chats you don't need to make room.");
   for (const text of [shopFull, chatStorageFullMessage({ ...shop, usedBytes: 200 * MB }, { forSale: true, price: plusPrice('inr') })]) {
     assert.doesNotMatch(text, /₹100|Family Plus/, 'a business is never offered Family Plus');
   }

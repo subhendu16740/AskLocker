@@ -9,7 +9,7 @@
 //            zone ({ time_zone }), payerCurrency().
 //   order    a member, for their own family: { family_id, period, currency,
 //            time_zone }. Refuses a business (409 business_plan: a business
-//            has Plus or Pro, set up with us, never Family Plus — 051), and
+//            has its own plans, set up with us, never Family Plus — 051), and
 //            a currency other than the server's choice (409 wrong_currency,
 //            with the right one). Makes a Razorpay order
 //            for PLUS_PRICE's amount (never the client's), keeps it in
@@ -102,7 +102,7 @@ Deno.serve(async (req) => {
       // (051), and set_family_plan would refuse this payment after it was taken.
       const { rows: vaults } = await selectVaultRows(supabase, [familyId]);
       if (vaults[0] && vaultKind(vaults[0]) === 'business') {
-        return json(409, { status: 'business_plan', error: 'A business pays for Plus or Pro with us. Ask in Settings › Feedback.' });
+        return json(409, { status: 'business_plan', error: 'A business pays for its plan with us. Ask in Settings › Feedback.' });
       }
       if (!KEY_ID || !KEY_SECRET) return json(503, NOT_CONFIGURED);
       const cur = (typeof currency === 'string' ? currency.toUpperCase() : payIn ?? 'INR') as RazorpayCurrency;

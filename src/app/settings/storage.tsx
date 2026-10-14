@@ -197,8 +197,8 @@ export default function StorageScreen() {
                               })
                             : "Nearly full. When it's full, you can't add documents or save chats."}
                       </Text>
-                      {/* A business on Plus can still move to Pro (051). */}
-                      {(!isPlus || (status?.business && status.plan !== 'business_pro')) && (
+                      {/* A business can move up a plan until Enterprise (051). */}
+                      {(!isPlus || (status?.business && status.plan !== 'business_enterprise')) && (
                         <TouchableOpacity onPress={() => router.push(plusPage('storage') as any)} accessibilityRole="link">
                           <Text style={[styles.noteLink, level === 'full' ? styles.noteTextFull : styles.noteTextNearly]}>See {status?.business ? 'plans' : 'Family Plus'} ›</Text>
                         </TouchableOpacity>

@@ -113,13 +113,13 @@ Deno.serve(async (req) => {
     //    policy keeps for uploads from the app; the service role passes no
     //    policy, so both are checked here. Before 038 there is nothing to
     //    ask, and nothing is checked, as before.
-    //    A business (051) on Plus or Pro imports too.
+    //    A business (051) on any of its paid plans imports too.
     const { data: rooms } = await supabase.rpc('family_storage_status', { p_family_id: family_id });
     const r = (rooms as Array<{ plan: string; limit_bytes: number; used_bytes: number; personal?: boolean; business?: boolean }> | null)?.[0];
     if (r) {
       if (r.plan === 'free') {
         throw new ImportProblem(r.business
-          ? 'Import from Gmail comes with Plus or Pro.'
+          ? 'Import from Gmail comes with every paid plan.'
           : 'Import from Gmail comes with Family Plus. See Settings › Family Plus.');
       }
       const room: StorageRoom = {

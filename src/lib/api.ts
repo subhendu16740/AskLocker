@@ -1357,7 +1357,7 @@ export async function fetchStorageStatus(familyId: string): Promise<FamilyPlanSt
 // max_members and voice_answers; 048: personal_storage_bytes; 049:
 // questions_per_month and questions_fair_use; 050: question_tries_per_day,
 // uploads_per_day and families_per_person; 051: invites_per_day and
-// businesses_per_person, and the business_plus and business_pro rows). A column that is not there yet
+// businesses_per_person, and the business plans' rows). A column that is not there yet
 // fails the whole select, so each one missing asks again with the set before it.
 const PLAN_LIMIT_COLUMNS = [
   'plan, storage_bytes, grace_days, max_members, voice_answers, personal_storage_bytes, questions_per_month, questions_fair_use, question_tries_per_day, uploads_per_day, families_per_person, invites_per_day, businesses_per_person',
@@ -1423,7 +1423,7 @@ export async function fetchPlanLimits(): Promise<PlanLimits> {
     const n = rows.find((r) => r.plan === plan)?.invites_per_day;
     return n ? Number(n) : DEFAULT_PLAN_LIMITS.invitesPerDay[plan];
   };
-  // Business Plus and Pro (051): their rows, or 051's numbers before it.
+  // A business's plans (051): their rows, or 051's numbers before it.
   const businessPlan = (plan: BusinessPlan): BusinessPlanLimits => {
     const row = rows.find((r) => r.plan === plan);
     const d = DEFAULT_PLAN_LIMITS.business[plan];
@@ -1463,7 +1463,11 @@ export async function fetchPlanLimits(): Promise<PlanLimits> {
       ? (freeRow.businesses_per_person == null ? null : Number(freeRow.businesses_per_person))
       : 0,
     invitesPerDay: { free: invites('free'), plus: invites('plus') },
-    business: { business_plus: businessPlan('business_plus'), business_pro: businessPlan('business_pro') },
+    business: {
+      business_plus: businessPlan('business_plus'),
+      business_pro: businessPlan('business_pro'),
+      business_enterprise: businessPlan('business_enterprise'),
+    },
   };
 }
 
