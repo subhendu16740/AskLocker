@@ -740,7 +740,7 @@ tabs. `(tabs)` is a layout group, so routes are `/home`, `/search`, `/upload`.
 | `speech-text.ts` | `toSpeech()`: strips markdown and spells out ID numbers before they are read aloud — and a number named as one ("train number 16782", "PNR: 4512", "PIN 751001", "नंबर 16782") digit by digit, from its digits; the screen keeps the digits |
 | `voice-languages.ts` | The language picker list and the few phrases the app itself says, per language |
 | `storage.ts` | Key-value cache: localStorage on web, AsyncStorage on native |
-| `database.types.ts` | Generated Supabase types, current to 051 (030 changed nothing in them; 049's, 050's and 051's added by hand). Regenerate after every migration and re-append the hand-written block at the bottom (see the typecheck note) |
+| `database.types.ts` | Generated Supabase types, current to 052 (030 and 052 changed nothing in them; 049's, 050's and 051's added by hand). Regenerate after every migration and re-append the hand-written block at the bottom (see the typecheck note) |
 
 ---
 
@@ -1908,7 +1908,12 @@ so storage policies live only in `019`.
   on Free (200 MB, 4 members, the free limits) and moves to one of three,
   told apart by people and space. Rows in `plan_limits` to change in the
   Table editor; the prices, before GST, are `BUSINESS_PRICE` in
-  `_shared/plan-text.ts`, shown and never charged by the app:
+  `_shared/plan-text.ts`, shown and never charged by the app. 051 makes
+  two plans (Plus at 10 people, Pro at 50), as it went to DEV on 14
+  October 2026; **052 makes them the three below**, so a project needs
+  both, in order. Without 052 the Plans page shows Plus and Pro with
+  051's numbers, and Enterprise from `DEFAULT_PLAN_LIMITS`, which
+  `set_family_plan` cannot give:
 
   | | Free | Plus (`business_plus`) | Pro (`business_pro`) | Enterprise (`business_enterprise`) |
   |---|---|---|---|---|
