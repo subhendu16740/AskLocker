@@ -1092,12 +1092,13 @@ await test('business plans: Plus, Pro and Enterprise, their prices and words, an
     assert.ok(higher.members > lower.members && higher.storage > lower.storage, `${BUSINESS_PLANS[i]} has more people and space`);
     for (const k of Object.keys(lower)) assert.ok(higher[k] >= lower[k], `${BUSINESS_PLANS[i]}'s ${k} is not below`);
   }
-  assert.deepEqual(BUSINESS_PRICE, { business_plus: 999, business_pro: 1999, business_enterprise: 4499 });
-  assert.equal(businessAmount('business_plus'), '₹999');
-  assert.equal(businessAmount('business_enterprise'), '₹4,499');
-  assert.equal(businessPrice('business_pro'), '₹1,999 a month + GST');
-  assert.equal(businessYearPrice('business_plus'), '₹10,989 a year + GST', 'a year is eleven months');
-  assert.equal(businessYearPrice('business_enterprise'), '₹49,489 a year + GST');
+  assert.deepEqual(BUSINESS_PRICE, { business_plus: 500, business_pro: 1000, business_enterprise: 4000 });
+  assert.equal(businessAmount('business_plus'), '₹500');
+  assert.equal(businessAmount('business_enterprise'), '₹4,000');
+  assert.equal(businessPrice('business_pro'), '₹1,000 a month + GST');
+  assert.equal(businessYearPrice('business_plus'), '₹5,500 a year + GST', 'a year is eleven months');
+  assert.equal(businessYearPrice('business_pro'), '₹11,000 a year + GST');
+  assert.equal(businessYearPrice('business_enterprise'), '₹44,000 a year + GST');
   assert.equal(planLabel('business_plus'), 'Plus');
   assert.equal(planLabel('business_pro'), 'Pro');
   assert.equal(planLabel('business_enterprise'), 'Enterprise');

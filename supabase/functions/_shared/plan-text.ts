@@ -28,13 +28,14 @@
 // Business vaults (051) have plans of their own, never Family Plus, given by
 // hand for now (billed by us, GST on top):
 //
-//   Plus         5 people,  25 GB — ₹999 a month
-//   Pro         15 people, 100 GB — ₹1,999 a month
-//   Enterprise  50 people, 200 GB — ₹4,499 a month
+//   Plus         5 people,  25 GB — ₹500 a month
+//   Pro         15 people, 100 GB — ₹1,000 a month
+//   Enterprise  50 people, 200 GB — ₹4,000 a month
 //
 // Each with 100 questions a person a month. Even a business that used every
 // limit at once would cost less than its plan's price, at about ₹0.20 a
-// question: every plan keeps more than half its price even then.
+// question: Plus and Enterprise keep about half their price even then, Pro
+// about a quarter.
 // Nothing is ever removed from a business: when a paid plan ends it keeps
 // every record and adds nothing until it is renewed ("closed"); a trial that
 // ends puts it back on Free.
@@ -240,22 +241,22 @@ export function planLabel(plan: PlanName, business?: boolean): string {
  * eleven months.
  */
 export const BUSINESS_PRICE: Record<BusinessPlan, number> = {
-  business_plus: 999,
-  business_pro: 1999,
-  business_enterprise: 4499,
+  business_plus: 500,
+  business_pro: 1000,
+  business_enterprise: 4000,
 };
 
-/** The amount alone, "₹1,999", for a narrow column. */
+/** The amount alone, "₹1,000", for a narrow column. */
 export function businessAmount(plan: BusinessPlan): string {
   return formatMoney('inr', BUSINESS_PRICE[plan]);
 }
 
-/** "₹1,999 a month + GST". */
+/** "₹1,000 a month + GST". */
 export function businessPrice(plan: BusinessPlan): string {
   return `${businessAmount(plan)} a month + GST`;
 }
 
-/** "₹10,989 a year + GST": eleven months. */
+/** "₹5,500 a year + GST": eleven months. */
 export function businessYearPrice(plan: BusinessPlan): string {
   return `${formatMoney('inr', 11 * BUSINESS_PRICE[plan])} a year + GST`;
 }
