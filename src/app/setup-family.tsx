@@ -13,6 +13,7 @@ import { createNewFamily, fetchPlanLimits, fetchUseFor } from '../lib/api';
 import { BackButton } from '../components/back-button';
 import { color, radius, size, space, type } from '../constants/design';
 import { track } from '../lib/analytics';
+import { useOnPlus } from '../lib/family-plan';
 
 type Kind = 'family' | 'business';
 
@@ -65,6 +66,8 @@ export default function SetupFamilyScreen() {
   }, [user?.id, params.kind]);
   // On Free, one vault in all besides the personal one, a family or a
   // business (054). Said before the form, not only when it is refused.
+  // Someone in a vault on a paid plan is not on Free (055), so not to them.
+  const onPlus = useOnPlus();
   const [freeVaults, setFreeVaults] = useState<number | null>(null);
   useEffect(() => {
     fetchPlanLimits().then((l) => setFreeVaults(l.vaultsPerPerson)).catch(() => {});
@@ -140,7 +143,7 @@ export default function SetupFamilyScreen() {
           ))}
         </View>
 
-        {freeVaults != null && freeVaults > 0 && (
+        {!onPlus && freeVaults != null && freeVaults > 0 && (
           <Text style={styles.kindNote}>
             {freeVaults === 1
               ? 'On Free, you can create one family or one business.'

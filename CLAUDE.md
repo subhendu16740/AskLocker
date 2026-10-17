@@ -196,9 +196,9 @@ is refused for a business and a business plan for a family, QA Vault A's
 Family Plus starts and ends as before, on Family Plus a family that has
 used its month's questions is refused (053), QA Vault A cannot become a
 business while on Family Plus and can once it ends, staying on Free with
-everyone in it, and B creates one free family and is then refused a free
-business (054); neither a stranger nor a viewer can make QA Vault A a
-business),
+everyone in it, B (on Free, with QA Vault B) is refused a free business
+(054) and creates one once it is in a family on Family Plus (055); neither
+a stranger nor a viewer can make QA Vault A a business),
 a question asked by relation ("my mother's passport"), and the full upload → ingest →
 expiry-notification pipeline, the reminder made once however often Home asks (on Family Plus; QA Vault A is on Free, where 048 makes none, and that is checked), and that each answered question is counted once (049; account A's monthly count is started again before it asks; each run also starts A's and B's counts for the day again, and QA Vault A's and QA Business A's invitations, `qa/lib/dev-day.mjs`, since one run invites B three times). By hand only, suite `languages` asks 12
 questions about documents in eight more Indian languages — two of them
@@ -2117,6 +2117,17 @@ so storage policies live only in `019`.
   per-kind numbers are still checked within it. Paid vaults do not count;
   vaults made before stay (QA's account A has one of each). The creation
   screen says so above the form, and a refusal (`family_limit`) names it.
+- **Someone on a paid plan is not on Free** (055). 054 counted only the
+  vaults a person created, so a member of a family on Family Plus that
+  someone else pays for, with a free family of their own, was refused a
+  business ("On Free, you can create one family or one business"), found
+  on DEV on 17 October 2026. Now the combined number applies only to a
+  person in no vault on a paid plan (Family Plus or a business plan,
+  theirs or not); everyone keeps the per-kind numbers, one free family and
+  one free business. The new business starts on Business Free. The
+  creation screen hides its "On Free" line from someone on Plus
+  (`useOnPlus()`). A member of a Plus family gets two free vaults, not
+  one: bounded, and what the owner asked for.
 - **The numbers that make the move pay**, only where still the old ones:
   Family Plus 100 documents a day (was 500) and 50 question tries a day
   (was 100), which no family comes near and a busy office does; one

@@ -179,12 +179,44 @@ begin
     v_out := v_out || 'personal_business=refused;';
   end;
 
-  -- 054: QA Vault A becomes a business only once its Family Plus has ended,
-  -- as its admin, A; and on Free a person creates one vault in all: B makes
-  -- a family, then a business is refused (all rolled back, as always).
+  -- 054: on Free a person creates one vault in all, so B (on Free, with QA
+  -- Vault B) is refused a business; 055: once B is in a family on Family
+  -- Plus (QA Vault A, here), it is not on Free and may. Then QA Vault A
+  -- becomes a business only once its Family Plus has ended, as its admin, A
+  -- (all rolled back, as always).
   if exists (select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
               where n.nspname = 'public' and p.proname = 'make_business_vault') then
+    perform set_config('request.jwt.claims', v_as_b, true);
+    perform set_config('request.jwt.claim.role', 'authenticated', true);
+    perform set_config('request.jwt.claim.sub', '${userB}', true);
+    begin
+      perform public.create_family('${userB}', 'QA one free vault, business', null, null, false, 'business');
+      v_out := v_out || 'b_business=ALLOWED;';
+    exception when others then
+      get stacked diagnostics v_hint = pg_exception_hint;
+      v_out := v_out || 'b_business=' || coalesce(nullif(v_hint, ''), 'other') || ';';
+    end;
+    perform set_config('request.jwt.claims', v_service, true);
+    perform set_config('request.jwt.claim.role', 'service_role', true);
     perform public.set_family_plan('${familyA}', now() + interval '1 day');
+    if exists (select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+                where n.nspname = 'public' and p.proname = 'create_family' and p.prosrc like '%v_paid%') then
+      insert into public.family_members (family_id, user_id, role) values ('${familyA}', '${userB}', 'viewer')
+        on conflict do nothing;
+      perform set_config('request.jwt.claims', v_as_b, true);
+      perform set_config('request.jwt.claim.role', 'authenticated', true);
+      perform set_config('request.jwt.claim.sub', '${userB}', true);
+      begin
+        perform public.create_family('${userB}', 'QA free business beside Plus', null, null, false, 'business');
+        v_out := v_out || 'b_business_on_plus=ok;';
+      exception when others then
+        get stacked diagnostics v_hint = pg_exception_hint;
+        v_out := v_out || 'b_business_on_plus=' || coalesce(nullif(v_hint, ''), 'other:' || replace(left(SQLERRM, 60), ';', ',')) || ';';
+      end;
+    else
+      v_out := v_out || 'b_business_on_plus=none;';
+    end if;
+
     perform set_config('request.jwt.claims', v_as_a, true);
     perform set_config('request.jwt.claim.role', 'authenticated', true);
     perform set_config('request.jwt.claim.sub', '${userA}', true);
@@ -208,21 +240,8 @@ begin
     exception when others then
       v_out := v_out || 'converted=refused:' || replace(left(SQLERRM, 60), ';', ',') || ';';
     end;
-    perform set_config('request.jwt.claims', v_as_b, true);
-    perform set_config('request.jwt.claim.sub', '${userB}', true);
-    begin
-      perform public.create_family('${userB}', 'QA one free vault', null, null, false, 'family');
-      v_out := v_out || 'b_family=ok;';
-      begin
-        perform public.create_family('${userB}', 'QA one free vault, business', null, null, false, 'business');
-        v_out := v_out || 'b_business=ALLOWED;';
-      exception when others then
-        get stacked diagnostics v_hint = pg_exception_hint;
-        v_out := v_out || 'b_business=' || coalesce(nullif(v_hint, ''), 'other') || ';';
-      end;
-    exception when others then
-      v_out := v_out || 'b_family=refused;';
-    end;
+    perform set_config('request.jwt.claims', v_service, true);
+    perform set_config('request.jwt.claim.role', 'service_role', true);
   else
     v_out := v_out || 'converted=none;';
   end if;
@@ -465,7 +484,7 @@ export async function runBusinessChecks(cfg, { a, b, anon, vaultA, vaultB }, res
     for (const [id, title] of [
       ['db-convert-on-plus', 'A family vault on Family Plus cannot become a business until Plus ends (054)'],
       ['db-convert', 'Its admin makes a family vault a business: everyone stays, on Free (054)'],
-      ['db-one-free-vault', 'On Free, a person creates one vault in all: a family, then a business is refused (054)'],
+      ['db-one-free-vault', 'On Free, a person creates one vault in all: B, with a free family, is refused a business (054)'],
     ]) results.add('business', id, title, 'skipped', { why: 'migration 054 is not applied to DEV yet' });
   } else {
     check('db-convert-on-plus', 'A family vault on Family Plus cannot become a business until Plus ends (054)',
@@ -473,12 +492,14 @@ export async function runBusinessChecks(cfg, { a, b, anon, vaultA, vaultB }, res
     check('db-convert', 'Its admin makes a family vault a business: everyone stays, on Free (054)',
       result.converted === 'business' && result.converted_plan === 'free' && Number(result.converted_members) >= 1,
       `${said('converted')}, ${said('converted_plan')}, members ${result.converted_members ?? '—'}`);
-    if (result.b_family === 'refused') {
-      results.add('business', 'db-one-free-vault', 'On Free, a person creates one vault in all: a family, then a business is refused (054)',
-        'inconclusive', { why: 'account B already has a free vault of its own, so its first was refused' });
-    } else {
-      check('db-one-free-vault', 'On Free, a person creates one vault in all: a family, then a business is refused (054)',
-        result.b_family === 'ok' && result.b_business === 'family_limit', `${said('b_family')}, ${said('b_business')}`);
-    }
+    check('db-one-free-vault', 'On Free, a person creates one vault in all: B, with a free family, is refused a business (054)',
+      result.b_business === 'family_limit', said('b_business'));
+  }
+  if (result.b_business_on_plus === 'none' || result.b_business_on_plus == null) {
+    results.add('business', 'db-business-beside-plus', 'Someone in a family on Family Plus creates a free business (055)', 'skipped',
+      { why: 'migration 055 is not applied to DEV yet' });
+  } else {
+    check('db-business-beside-plus', 'Someone in a family on Family Plus creates a free business (055)',
+      result.b_business_on_plus === 'ok', said('b_business_on_plus'));
   }
 }
