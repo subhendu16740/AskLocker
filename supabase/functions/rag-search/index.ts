@@ -222,7 +222,9 @@ Deno.serve(async (req) => {
     if (claim && !claim.allowed) {
       console.log(claim.allowance.reason === 'tries'
         ? `[rag] Tries for today used up (${claim.allowance.tries}/${claim.allowance.triesLimit})`
-        : `[rag] Question limit reached (${claim.allowance.used}/${claim.allowance.ceiling})`);
+        : claim.allowance.reason === 'family'
+          ? `[rag] The family's questions used up (${claim.allowance.familyUsed}/${claim.allowance.familyLimit})`
+          : `[rag] Question limit reached (${claim.allowance.used}/${claim.allowance.ceiling})`);
       return jsonResponse({
         answer: questionLimitMessage(claim.allowance, language),
         sources: [],

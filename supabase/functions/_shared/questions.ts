@@ -2,8 +2,9 @@
 //
 // A question is the most expensive thing AskLocker does, so each person has
 // a monthly allowance: 20 on Free (plan_limits.questions_per_month), and on
-// Family Plus no monthly limit, up to a fair-use ceiling of 500
-// (questions_fair_use). A month is a calendar month in India time.
+// Family Plus no monthly limit for one person, but 200 a month shared by the
+// whole family (053: family_questions_per_month; 500 each before). A month
+// is a calendar month in India time.
 //
 // rag-search counts one through claim_question() before it answers, and
 // gives it back when no answer came; Ask shows what question_status() says.
@@ -27,11 +28,15 @@ export interface QuestionAllowance {
   plus: boolean;
   /** The day the count starts again, YYYY-MM-DD. */
   resetsOn: string | null;
-  /** Why a question was refused (050): the month's answers, or the day's tries. */
-  reason?: 'month' | 'tries' | null;
+  /** Why a question was refused (050): the month's answers, the day's tries, or the family's month (053). */
+  reason?: 'month' | 'tries' | 'family' | null;
   /** Questions tried today, and the most a day (050). */
   tries?: number | null;
   triesLimit?: number | null;
+  /** The questions the person's family shares this month, and what is left of them (053). */
+  familyLimit?: number | null;
+  familyUsed?: number | null;
+  familyLeft?: number | null;
 }
 
 const num = (v: unknown): number | null => (v == null || v === '' || Number.isNaN(Number(v)) ? null : Number(v));
@@ -52,9 +57,15 @@ export function parseAllowance(raw: unknown): QuestionAllowance | null {
     plus: r.plus === true,
     resetsOn: typeof r.resets_on === 'string' ? r.resets_on.slice(0, 10) : null,
     // 050's, only when the database said them.
-    ...(r.reason === 'tries' || r.reason === 'month' ? { reason: r.reason } : {}),
+    ...(r.reason === 'tries' || r.reason === 'month' || r.reason === 'family' ? { reason: r.reason } : {}),
     ...(num(r.tries) != null ? { tries: num(r.tries) } : {}),
     ...(num(r.tries_limit) != null ? { triesLimit: num(r.tries_limit) } : {}),
+    // 053's, only when the person's family shares a number.
+    ...(num(r.family_limit) != null ? {
+      familyLimit: num(r.family_limit),
+      familyUsed: num(r.family_used) ?? 0,
+      familyLeft: num(r.family_left) ?? Math.max((num(r.family_limit) ?? 0) - (num(r.family_used) ?? 0), 0),
+    } : {}),
   };
 }
 
@@ -76,8 +87,9 @@ const isHindi = (language?: string) => (language ?? 'en').split('-')[0].toLowerC
 
 /**
  * What the person reads, and hears, when this month's questions are used up:
- * on Free, that they start again on the 1st and that Family Plus has no
- * monthly limit; on Plus, that they asked the most one person can.
+ * on Free, that they start again on the 1st and that Family Plus gives more;
+ * on Plus, that they asked the most one person can, or that the family's
+ * shared month is used up (053).
  */
 export function questionLimitMessage(a: QuestionAllowance, language?: string): string {
   const hi = isHindi(language);
@@ -95,17 +107,23 @@ export function questionLimitMessage(a: QuestionAllowance, language?: string): s
       : `You've reached today's limit of ${t} questions on Free. Every question counts, answered or not. You can ask again tomorrow.`;
   }
   const day = resetDay(a.resetsOn, hi ? 'hi' : 'en');
+  if (a.reason === 'family') {
+    // The family's shared month (053): one number for everyone in it.
+    const f = a.familyLimit ?? a.familyUsed ?? 0;
+    if (hi) return `आपके परिवार के इस महीने के ${f} सवाल पूरे हो गए।${day ? ` ये ${day} को फिर से मिलेंगे।` : ' ये अगले महीने फिर से मिलेंगे।'}`;
+    return `Your family has used its ${f} questions for this month.${day ? ` They start again on ${day}.` : ' They start again next month.'}`;
+  }
   const n = a.ceiling ?? a.used;
   if (hi) {
     const again = day ? ` ये ${day} को फिर से मिलेंगे।` : ' ये अगले महीने फिर से मिलेंगे।';
     return a.plus
       ? `इस महीने के लिए ${n} सवालों की सीमा पूरी हो गई।${again}`
-      : `इस महीने के आपके ${n} मुफ़्त सवाल पूरे हो गए।${again} Family Plus में सवालों की कोई मासिक सीमा नहीं है।`;
+      : `इस महीने के आपके ${n} मुफ़्त सवाल पूरे हो गए।${again} Family Plus में आपके परिवार को और सवाल मिलते हैं।`;
   }
   const again = day ? ` They start again on ${day}.` : ' They start again next month.';
   return a.plus
     ? `You've reached the fair-use limit of ${n} questions this month.${again}`
-    : `You've used your ${n} free questions for this month.${again} Family Plus has no monthly limit.`;
+    : `You've used your ${n} free questions for this month.${again} Family Plus gives your family more.`;
 }
 
 /**
@@ -113,6 +131,13 @@ export function questionLimitMessage(a: QuestionAllowance, language?: string): s
  * there is nothing worth saying (Family Plus, below the fair-use ceiling).
  */
 export function questionsLeftText(a: QuestionAllowance): string | null {
+  if (a.familyLimit != null && a.familyLeft != null && (a.left == null || a.familyLeft <= a.left)) {
+    // Family Plus (053): the family's shared month, once it is close.
+    if (a.familyLeft > 50) return null;
+    return a.familyLeft === 0
+      ? `Your family has used its ${a.familyLimit} questions this month`
+      : `${a.familyLeft} of ${a.familyLimit} family questions left this month`;
+  }
   if (a.limit == null) {
     // Plus: say nothing until fair use is close.
     if (a.ceiling == null || a.left == null || a.left > 50) return null;
@@ -128,7 +153,15 @@ export function questionsLeftText(a: QuestionAllowance): string | null {
 /** The allowance after one question was given back (no answer came of it). */
 export function givenBack(a: QuestionAllowance): QuestionAllowance {
   const used = Math.max(a.used - 1, 0);
-  return { ...a, used, left: a.ceiling == null ? null : Math.max(a.ceiling - used, 0) };
+  const family = a.familyLimit == null ? {} : {
+    familyUsed: Math.max((a.familyUsed ?? 0) - 1, 0),
+    familyLeft: Math.min((a.familyLeft ?? 0) + 1, a.familyLimit),
+  };
+  const personLeft = a.ceiling == null ? null : Math.max(a.ceiling - used, 0);
+  const left = 'familyLeft' in family && family.familyLeft != null
+    ? Math.min(personLeft ?? family.familyLeft, family.familyLeft)
+    : personLeft;
+  return { ...a, ...family, used, left };
 }
 
 /** As the database writes it, for a response the app reads with parseAllowance(). */
@@ -138,5 +171,6 @@ export function allowanceJson(a: QuestionAllowance): Record<string, unknown> {
     ...(a.reason ? { reason: a.reason } : {}),
     ...(a.tries != null ? { tries: a.tries } : {}),
     ...(a.triesLimit != null ? { tries_limit: a.triesLimit } : {}),
+    ...(a.familyLimit != null ? { family_limit: a.familyLimit, family_used: a.familyUsed ?? 0, family_left: a.familyLeft ?? 0 } : {}),
   };
 }

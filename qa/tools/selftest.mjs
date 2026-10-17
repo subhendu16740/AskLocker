@@ -674,14 +674,16 @@ await test('plans: every limit is finite, and a full vault says why and what to 
   // 30 days after Plus ends before anything above Free goes, 4 members on
   // Free and 8 on Plus (049), 10 voice chats for each person on Free (043),
   // and 20 questions a month for each person on Free, none on Plus up to
-  // fair use (049). A business (051): one free business a person beside one
-  // free family, and its own Plus and Pro.
+  // fair use (049), and on Plus 200 a month the whole family shares (053).
+  // A business (051): one free business a person beside one free family,
+  // and its own Plus and Pro.
   assert.deepEqual(DEFAULT_PLAN_LIMITS, {
     free: 200 * MB, freePersonal: 100 * MB, plus: 10 * GB, graceDays: 30,
     members: { free: 4, plus: 8 },
     voiceAnswers: { free: 10, plus: null },
     questions: { free: 20, plus: null },
-    questionsFairUse: 500,
+    questionsFairUse: 200,
+    familyQuestions: 200,
     questionTriesPerDay: { free: 10, plus: 100 },
     uploadsPerDay: { free: 50, plus: 500 },
     familiesPerPerson: 1,
@@ -904,7 +906,7 @@ await test('questions each month: the count, and the words when they are used up
   const free = parseAllowance({ allowed: false, used: 20, limit: 20, ceiling: 20, plus: false, resets_on: '2026-11-01' });
   assert.deepEqual(free, { used: 20, limit: 20, ceiling: 20, left: 0, plus: false, resetsOn: '2026-11-01' });
   assert.equal(questionLimitMessage(free),
-    "You've used your 20 free questions for this month. They start again on 1 November. Family Plus has no monthly limit.");
+    "You've used your 20 free questions for this month. They start again on 1 November. Family Plus gives your family more.");
   assert.match(questionLimitMessage(free, 'hi-IN'), /20 मुफ़्त सवाल/);
   assert.match(questionLimitMessage(free, 'hi-IN'), /1 नवंबर/);
   assert.equal(questionsLeftText(free), "You've used your 20 free questions this month");
@@ -917,6 +919,22 @@ await test('questions each month: the count, and the words when they are used up
   const plusFull = parseAllowance({ allowed: false, used: 500, limit: null, ceiling: 500, plus: true, resets_on: '2026-12-01' });
   assert.equal(questionLimitMessage(plusFull),
     "You've reached the fair-use limit of 500 questions this month. They start again on 1 December.");
+  // Family Plus (053): the family's 200 shared; said once 50 or fewer are left.
+  const family = parseAllowance({ used: 40, limit: null, ceiling: 200, left: 20, plus: true, resets_on: '2026-11-01',
+    family_limit: 200, family_used: 180, family_left: 20 });
+  assert.deepEqual(family, { used: 40, limit: null, ceiling: 200, left: 20, plus: true, resetsOn: '2026-11-01',
+    familyLimit: 200, familyUsed: 180, familyLeft: 20 });
+  assert.equal(questionsLeftText(family), '20 of 200 family questions left this month');
+  assert.equal(questionsLeftText({ ...family, familyUsed: 100, familyLeft: 100, left: 100 }), null);
+  const familyFull = parseAllowance({ allowed: false, reason: 'family', used: 40, limit: null, ceiling: 200, plus: true,
+    resets_on: '2026-11-01', family_limit: 200, family_used: 200, family_left: 0 });
+  assert.equal(familyFull.reason, 'family');
+  assert.equal(questionLimitMessage(familyFull), "Your family has used its 200 questions for this month. They start again on 1 November.");
+  assert.match(questionLimitMessage(familyFull, 'hi-IN'), /परिवार के इस महीने के 200 सवाल/);
+  assert.equal(questionsLeftText({ ...familyFull, left: 0 }), 'Your family has used its 200 questions this month');
+  // Given back: to the person and to the family.
+  assert.deepEqual(givenBack(family), { ...family, used: 39, familyUsed: 179, familyLeft: 21, left: 21 });
+  assert.deepEqual(parseAllowance(allowanceJson(family)), family);
   // A question given back: one fewer used, one more left; never below zero.
   assert.deepEqual(givenBack(few), { ...few, used: 16, left: 4 });
   assert.equal(givenBack({ ...few, used: 0, left: 20 }).used, 0);

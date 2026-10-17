@@ -268,6 +268,14 @@ const questionsJudge = (expect) => (outcome) => {
   }
   return judge(expect, outcome);
 };
+// Family Plus shares its month (053): what a family has asked, and which of
+// a person's families has room, are the server's to know. Skipped until 053.
+const familyQuestionsJudge = (expect) => (outcome) => {
+  if (outcome.missing || ['PGRST202'].includes(String(outcome.error?.code))) {
+    return ['skipped', 'migration 053 is not applied to DEV yet'];
+  }
+  return judge(expect, outcome);
+};
 // Limits against abuse (050): each person's counts for the day are the
 // server's, and so is reading a document — no client reads or changes a
 // count, starts a read, or raises a plan's number. Skipped until 050 is on
@@ -1098,6 +1106,9 @@ export async function runAccessChecks(cfg, { a, b, anon, vaultA, vaultB, docsA }
     ['B', "give account A's questions back (server-only)", questionsJudge('refused'), onQuestions(rpc(b, 'release_question', { p_user_id: A.user }))],
     ['B', 'ask whether account A is on Family Plus (server-only)', questionsJudge('refused'), onQuestions(rpc(b, 'person_on_plus', { p_user_id: A.user }))],
     ['B', "read everyone's question counts", questionsJudge('refused-or-empty'), onQuestions(() => b.client.from('question_usage').select('questions').limit(5))],
+    ['anon', "add up QA Vault A's questions this month (server-only)", familyQuestionsJudge('refused'), rpc(anon, 'family_questions_used', { p_family_id: A.family })],
+    ['B', "add up QA Vault A's questions this month (server-only)", familyQuestionsJudge('refused'), rpc(b, 'family_questions_used', { p_family_id: A.family })],
+    ['B', "ask which of account A's families has questions left (server-only)", familyQuestionsJudge('refused'), rpc(b, 'family_question_room', { p_user_id: A.user })],
     ['B', "raise every plan's question limit", questionsJudge('refused'), onQuestions(() => b.client.from('plan_limits').update({ questions_per_month: 100000 }).eq('plan', 'free'))],
     // Limits against abuse (050): the day's counts, and reading a document.
     ['anon', "start reading one of account A's documents (server-only)", abuseJudge('refused'), rpc(anon, 'start_document_read', { p_family_id: A.family, p_document_id: sacrificialId, p_user_id: A.user })],

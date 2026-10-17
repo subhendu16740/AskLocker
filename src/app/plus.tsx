@@ -62,7 +62,9 @@ function rows(limits: PlanLimits): Row[] {
       ? { label: 'Ask about your documents', free: true, plus: true }
       : {
         label: '★ Questions', free: questionsCell(limits.questions.free),
-        plus: questionsCell(limits.questions.plus), feature: 'questions',
+        // 053: one number the whole family shares; before it, fair use for each person.
+        plus: limits.familyQuestions != null ? `${limits.familyQuestions} a month for the family` : questionsCell(limits.questions.plus),
+        feature: 'questions',
       },
     { label: 'Family tree and emergency cards', free: true, plus: true },
     { label: 'Birthday reminders', free: true, plus: true },
@@ -90,7 +92,7 @@ const BROUGHT_BY: Record<PlusFeature, { icon: string; text: (name: string) => st
   gmail: { icon: 'mail', text: (n) => `Import from Gmail comes with ${n}.` },
   storage: { icon: 'hard-drive', text: (n) => `More space comes with ${n}.` },
   voice: { icon: 'mic', text: (n) => `Voice chats with no limit come with ${n}.` },
-  questions: { icon: 'message-circle', text: (n) => `Questions with no monthly limit come with ${n}.` },
+  questions: { icon: 'message-circle', text: (n) => `More questions come with ${n}.` },
   members: { icon: 'users', text: (n) => `Room for more members comes with ${n}.` },
   links: { icon: 'link', text: (n) => `30-day share links come with ${n}.` },
 };
@@ -368,7 +370,7 @@ function FamilyPlus() {
         )}
 
         <Muted>
-          {limits.questions.free != null
+          {limits.questions.free != null && limits.familyQuestions == null
             ? `Fair use on Plus: up to ${limits.questionsFairUse} questions a person each month.\n`
             : ''}
           {`If Plus ends and a vault is over its free space, the newest documents over it are removed after ${limits.graceDays} days.`}

@@ -104,7 +104,10 @@ Four things will mislead you if you assume otherwise:
    written by no client, your own `users.use_for` has its own grant, and a
    plan is given (`set_family_plan`) and a business deleted
    (`business_deletion_plan`, `purge_business`) only by the server: see
-   [Business vaults](#business-vaults--a-pilot-for-small-businesses-051)).
+   [Business vaults](#business-vaults--a-pilot-for-small-businesses-051);
+   053's family count of questions is the server's alone
+   (`family_questions_used`, `family_question_room`, service role only): see
+   [Family Plus shares its month](#family-plus-shares-its-month--200-questions-for-the-whole-family-053)).
    **A new writable
    column needs its own `GRANT` in a migration.** Nobody joins a family
    without saying yes: only an admin asks a person in, through the
@@ -185,8 +188,9 @@ file there and a viewer only their own, its last admin can neither leave nor
 step down, payments refuses it Family Plus, and in one rolled-back block on
 DEV deleting A's account is refused, a Pro trial gives A Pro's numbers and
 ends back on Free, a paid Plus ends closed with nothing removed, Family Plus
-is refused for a business and a business plan for a family, and QA Vault A's
-Family Plus starts and ends as before),
+is refused for a business and a business plan for a family, QA Vault A's
+Family Plus starts and ends as before, and on Family Plus a family that has
+used its month's questions is refused (053)),
 a question asked by relation ("my mother's passport"), and the full upload → ingest →
 expiry-notification pipeline, the reminder made once however often Home asks (on Family Plus; QA Vault A is on Free, where 048 makes none, and that is checked), and that each answered question is counted once (049; account A's monthly count is started again before it asks; each run also starts A's and B's counts for the day again, and QA Vault A's and QA Business A's invitations, `qa/lib/dev-day.mjs`, since one run invites B three times). By hand only, suite `languages` asks 12
 questions about documents in eight more Indian languages — two of them
@@ -725,7 +729,7 @@ tabs. `(tabs)` is a layout group, so routes are `/home`, `/search`, `/upload`.
 | `dates.ts` | `parseDocumentDate()`: expiry dates exactly as ingest stores them (DD/MM/YYYY and kin, YYYY-MM-DD, "19 October 2026") |
 | `emergency.ts` | The emergency card's shape, blood groups (`bloodGroupLabel()`: "A−", "Bombay (hh)"), `telHref()`, and `cardProblem()` — the same checks and messages as `save_emergency_card()`, so the form can say what is wrong before saving |
 | `family-people.ts` | Whose a document can be: everyone in the tree, you first (`useDocumentOwners()`, members only before 031), and a person's expiry badge (`badgeFromExpiries()`) |
-| `plans.ts` | What each plan allows (038–048): the limits as 039–048 set them — storage (on Free 200 MB for a family and 100 MB for a personal vault, `freePersonal`; 10 GB on Plus), 4 members on Free and 8 on Plus, 10 voice chats and 20 questions a month for each person on Free (049; fair use 500 on Plus) (`DEFAULT_PLAN_LIMITS`, used only when the database cannot be asked), Family Plus's prices, monthly and yearly (`PLUS_PRICE`; `localPlusPrice()` / `localPlusPrices()` show rupees in India, dollars elsewhere, by the device's time zone; the yearly one against twelve months, crossed out, and the months it saves: `plusTwelveMonths()`, `plusYearlySaving()`), `storageLevel()`, and the words for a full vault (`storageFullMessage()`; for a chat, `chatStorageFullMessage()`), which live in `supabase/functions/_shared/plan-text.ts` so Gmail import says the same; 050's file limit and the words for its refusals (`MAX_FILE_BYTES`, `fileTooLargeMessage()`, `limitHint()`, `QUESTION_INPUT_MAX`) come from `_shared/limits.ts`. Whether Plus can be bought is the payments function's answer (044: `usePaymentsStatus()`, `plusForSale()`); `PLUS_FOR_SALE` (false) is only what the words assume before it answers |
+| `plans.ts` | What each plan allows (038–048): the limits as 039–048 set them — storage (on Free 200 MB for a family and 100 MB for a personal vault, `freePersonal`; 10 GB on Plus), 4 members on Free and 8 on Plus, 10 voice chats and 20 questions a month for each person on Free (049; on Plus 200 a month the whole family shares, `familyQuestions`, 053) (`DEFAULT_PLAN_LIMITS`, used only when the database cannot be asked), Family Plus's prices, monthly and yearly (`PLUS_PRICE`; `localPlusPrice()` / `localPlusPrices()` show rupees in India, dollars elsewhere, by the device's time zone; the yearly one against twelve months, crossed out, and the months it saves: `plusTwelveMonths()`, `plusYearlySaving()`), `storageLevel()`, and the words for a full vault (`storageFullMessage()`; for a chat, `chatStorageFullMessage()`), which live in `supabase/functions/_shared/plan-text.ts` so Gmail import says the same; 050's file limit and the words for its refusals (`MAX_FILE_BYTES`, `fileTooLargeMessage()`, `limitHint()`, `QUESTION_INPUT_MAX`) come from `_shared/limits.ts`. Whether Plus can be bought is the payments function's answer (044: `usePaymentsStatus()`, `plusForSale()`); `PLUS_FOR_SALE` (false) is only what the words assume before it answers |
 | `family-plan.ts` | Is the current family on Family Plus? `useFamilyPlan()` (from `family_storage_status()`, kept a minute per family): `isFree`, `closed` and `trial` (051), and `routeFor(feature, route)`, which sends a free family to `/plus?feature=…` instead of a starred feature. Unknown (before 038, offline) gates nothing. `usePaymentsStatus()`: can Family Plus be bought here (044). `useOnPlus()`: is the signed-in person on Plus in any vault (from `question_status()`, a minute, shared; `forgetOnPlus()` after paying), for the ★ before their name |
 | `file-types.ts` | What a picked file is (`detectFileType()`: MIME type, then name, never a web `blob:` uri) and whether the vault can keep it (PDF, JPG, PNG) |
 | `app-info.ts` | Version, release date and commit (stamped into `extra` by `app.config.ts` at build time), and the support contact Help shows |
@@ -740,7 +744,7 @@ tabs. `(tabs)` is a layout group, so routes are `/home`, `/search`, `/upload`.
 | `speech-text.ts` | `toSpeech()`: strips markdown and spells out ID numbers before they are read aloud — and a number named as one ("train number 16782", "PNR: 4512", "PIN 751001", "नंबर 16782") digit by digit, from its digits; the screen keeps the digits |
 | `voice-languages.ts` | The language picker list and the few phrases the app itself says, per language |
 | `storage.ts` | Key-value cache: localStorage on web, AsyncStorage on native |
-| `database.types.ts` | Generated Supabase types, current to 052 (030 and 052 changed nothing in them; 049's, 050's and 051's added by hand). Regenerate after every migration and re-append the hand-written block at the bottom (see the typecheck note) |
+| `database.types.ts` | Generated Supabase types, current to 053 (030 and 052 changed nothing in them; 049's, 050's, 051's and 053's added by hand). Regenerate after every migration and re-append the hand-written block at the bottom (see the typecheck note) |
 
 ---
 
@@ -1544,8 +1548,9 @@ so storage policies live only in `019`.
   `/plus?feature=voice`. Listening and reading are the device's own, so this
   is the app's rule to keep; when the server cannot be asked (before 041,
   offline) voice works.
-- **Questions: 20 a month for each person on Free; on Family Plus no
-  monthly limit** (049; see [What Plus adds](#questions-members-and-links--what-family-plus-adds-049)).
+- **Questions: 20 a month for each person on Free; on Family Plus 200 a
+  month the whole family shares** (049, 053; see [What Plus adds](#questions-members-and-links--what-family-plus-adds-049)
+  and [Family Plus shares its month](#family-plus-shares-its-month--200-questions-for-the-whole-family-053)).
 
 ### Questions, members and links — what Family Plus adds (049)
 
@@ -1553,7 +1558,8 @@ so storage policies live only in `019`.
   tokens, and Groq's free day is about 25 questions for everyone), so each
   person has a monthly allowance: `plan_limits.questions_per_month`, 20 on
   Free, NULL on Plus — no monthly limit, up to a fair-use ceiling,
-  `questions_fair_use`, 500 a month for one person, which the Plus page and
+  `questions_fair_use`, 500 a month for one person (200 since 053, with 200
+  for the whole family, below), which the Plus page and
   Help say plainly. A month is a calendar month in India time
   (`question_month()`); the count starts again on the 1st.
 - **A person is on Plus for questions when any vault they are in is on
@@ -1592,6 +1598,41 @@ so storage policies live only in `019`.
   questions run low, in Manage Family when it is full, and on the share
   sheet's ★ 30 days. Each opens `/plus?feature=…` (`reminders`,
   `questions`, `members`, `links`), which marks its row.
+
+### Family Plus shares its month — 200 questions for the whole family (053)
+
+- **One number for the family, not one each.** 049 gave every person in a
+  vault on Family Plus a fair-use ceiling of 500 questions a month: a family
+  of 8 could ask 4,000, about ₹800 of AI a month on Groq's paid tier against
+  the ₹100 it pays. Since 053 everyone in the family shares 200 a month
+  (`plan_limits.family_questions_per_month`, a row to change in the Table
+  editor; NULL is no family number, which every other plan has), and one
+  person's fair use is the same 200, so one person may use the family's
+  whole month. A normal family asks about 45. The owner set it on 17
+  October 2026; with it, Family Plus keeps about 28% a month (21% on a
+  year) even when a family uses everything, and about 87% at normal use.
+- **Nothing new is counted.** `family_questions_used()` adds up the
+  members' own counts (049's `question_usage`) for the month, so a question
+  given back to its asker (`release_question`, when no answer came) is given
+  back to the family too. 049 counts per person, not per vault: a member's
+  questions count wherever they asked them, their personal vault included,
+  and someone who leaves takes their count with them.
+- **The server keeps it.** `claim_question()` checks the family after the
+  day's try (050): of the person's vaults on a plan with a family number,
+  the one with the most left (`family_question_room()`), its row locked
+  while it counts, so two members asking at once cannot both take the last
+  one. Used up, it refuses with reason `family` and gives the try back —
+  unless the person is also on a business plan, whose own 100 still count
+  (051's best of their plans). Both helpers take ids, so both are service
+  role only. `question_status()` adds `family_limit`, `family_used` and
+  `family_left`, and `left` is the smaller of the person's and the family's.
+- **What people see.** Ask says nothing until 50 or fewer are left for the
+  family, then "20 of 200 family questions left this month"; at 0, "Your
+  family has used its 200 questions for this month. They start again on 1
+  November." (English and Hindi, `_shared/questions.ts`). The Plus page's
+  Questions row reads "200 a month for the family", and Help says so.
+  Before 053 the app reads the plan without the column (no family number)
+  and the server keeps 049's fair use.
 
 ### Limits against abuse — one account cannot use up what everyone shares (050)
 
@@ -1980,7 +2021,8 @@ so storage policies live only in `019`.
   `person_plans()` (the plans of their vaults, and Free) feeds 049's
   `person_on_plus()` / `question_allowance()` and 050's
   `person_daily_limit()`. No plan is best at everything — Family Plus has
-  500 questions each, the business plans 100 — so joining a business never lowers
+  200 questions a family (053; 500 each before), the business plans 100
+  each — so joining a business never lowers
   what a Family Plus member had. Voice follows the vault asked in, as
   before. Expiry reminders and 30-day links come with any paid plan.
   `plan_limits.invites_per_day` replaces 050's fixed 20, and
@@ -2570,8 +2612,8 @@ rule again once pinned chunks are mixed in.
   this file, not on a screen.
 - **★ Family Plus marks what only Plus families get** (`<PlusTag />`; in a
   business it reads ★ Plus, `plusName()`, 051):
-  10 GB instead of 200 MB (100 MB for a personal vault), questions with no
-  monthly limit (on Free, each person has 20 a month, 049), voice chats with
+  10 GB instead of 200 MB (100 MB for a personal vault), 200 questions a
+  month the whole family shares (053; on Free, each person has 20 a month, 049), voice chats with
   no limit (on Free, each person has 10), up to 8 members (4 on Free),
   share links that last 30 days (7 on Free), expiry reminders and the
   Reminders page (in the drawer, 048) and Import from

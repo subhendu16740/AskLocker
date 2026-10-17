@@ -140,6 +140,19 @@ begin
   perform public.set_family_plan('${familyA}', now() + interval '1 day');
   v_out := v_out || 'family_given=' || exists (select 1 from public.notifications n where n.family_id = '${familyA}' and n.type = 'plan'
              and n.user_id = '${userA}' and n.title = v_fam || ' has Family Plus' and n.message like 'Room for % GB of documents, until %') || ';';
+  -- 053: on Family Plus the family shares its month; at its number, a
+  -- question is refused for the family (the block rolls back, as always).
+  if exists (select 1 from information_schema.columns where table_schema = 'public'
+              and table_name = 'plan_limits' and column_name = 'family_questions_per_month') then
+    insert into public.question_usage (user_id, month) values ('${userA}', public.question_month())
+      on conflict (user_id, month) do nothing;
+    update public.question_usage
+       set questions = (select family_questions_per_month from public.plan_limits where plan = 'plus')
+     where user_id = '${userA}' and month = public.question_month();
+    v_out := v_out || 'family_pool=' || coalesce(public.claim_question('${userA}')->>'reason', 'allowed') || ';';
+  else
+    v_out := v_out || 'family_pool=none;';
+  end if;
   perform public.end_family_plan('${familyA}');
   perform public.queue_plan_notices();
   v_out := v_out || 'family_ended=' || exists (select 1 from public.notifications n where n.family_id = '${familyA}' and n.type = 'plan'
@@ -387,6 +400,13 @@ export async function runBusinessChecks(cfg, { a, b, anon, vaultA, vaultB }, res
     result.family_given === 'true' && result.family_ended === 'true',
     `${said('family_given')}, ${said('family_ended')}`);
   check('db-pro-questions', 'On Pro, a member asks with Pro\'s fair use', result.pro_questions === 'true', said('pro_questions'));
+  if (result.family_pool === 'none' || result.family_pool == null) {
+    results.add('business', 'db-family-questions', 'Family Plus: a family that has used its month\'s questions is refused (053)', 'skipped',
+      { why: 'migration 053 is not applied to DEV yet' });
+  } else {
+    check('db-family-questions', 'Family Plus: a family that has used its month\'s questions is refused (053)',
+      result.family_pool === 'family', said('family_pool'));
+  }
   check('db-business-plan-family', 'Business Plus is refused for a family', result.family_business === 'refused', said('family_business'));
   check('db-family-plus-business', 'Family Plus, and a payment naming no plan, is refused for a business',
     result.business_family_plus === 'refused', said('business_family_plus'));

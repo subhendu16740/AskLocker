@@ -1357,9 +1357,11 @@ export async function fetchStorageStatus(familyId: string): Promise<FamilyPlanSt
 // max_members and voice_answers; 048: personal_storage_bytes; 049:
 // questions_per_month and questions_fair_use; 050: question_tries_per_day,
 // uploads_per_day and families_per_person; 051: invites_per_day and
-// businesses_per_person, and the business plans' rows). A column that is not there yet
+// businesses_per_person, and the business plans' rows; 053:
+// family_questions_per_month). A column that is not there yet
 // fails the whole select, so each one missing asks again with the set before it.
 const PLAN_LIMIT_COLUMNS = [
+  'plan, storage_bytes, grace_days, max_members, voice_answers, personal_storage_bytes, questions_per_month, questions_fair_use, question_tries_per_day, uploads_per_day, families_per_person, invites_per_day, businesses_per_person, family_questions_per_month',
   'plan, storage_bytes, grace_days, max_members, voice_answers, personal_storage_bytes, questions_per_month, questions_fair_use, question_tries_per_day, uploads_per_day, families_per_person, invites_per_day, businesses_per_person',
   'plan, storage_bytes, grace_days, max_members, voice_answers, personal_storage_bytes, questions_per_month, questions_fair_use, question_tries_per_day, uploads_per_day, families_per_person',
   'plan, storage_bytes, grace_days, max_members, voice_answers, personal_storage_bytes, questions_per_month, questions_fair_use',
@@ -1378,11 +1380,12 @@ export async function fetchPlanLimits(): Promise<PlanLimits> {
     questions_per_month?: number | null; questions_fair_use?: number | null;
     question_tries_per_day?: number | null; uploads_per_day?: number | null; families_per_person?: number | null;
     invites_per_day?: number | null; businesses_per_person?: number | null;
+    family_questions_per_month?: number | null;
   };
   let answer: { data: unknown; error: { message?: string } | null } = { data: null, error: null };
   for (const columns of PLAN_LIMIT_COLUMNS) {
     answer = await supabase.from('plan_limits').select(columns);
-    if (!answer.error || !/grace_days|max_members|voice_answers|personal_storage_bytes|questions_per_month|questions_fair_use|question_tries_per_day|uploads_per_day|families_per_person|invites_per_day|businesses_per_person/.test(answer.error.message ?? '')) break;
+    if (!answer.error || !/grace_days|max_members|voice_answers|personal_storage_bytes|questions_per_month|questions_fair_use|question_tries_per_day|uploads_per_day|families_per_person|invites_per_day|businesses_per_person|family_questions_per_month/.test(answer.error.message ?? '')) break;
   }
   const rows = (answer.data ?? []) as Row[];
   if (answer.error || !rows.length) return DEFAULT_PLAN_LIMITS;
@@ -1411,6 +1414,12 @@ export async function fetchPlanLimits(): Promise<PlanLimits> {
     return row.questions_per_month == null ? null : Number(row.questions_per_month);
   };
   const fairUse = rows.find((r) => r.plan === 'plus')?.questions_fair_use;
+  // The family's shared month (053): NULL is a real answer (no family number);
+  // a row without the column is a database before 053, which keeps none.
+  const plusRow = rows.find((r) => r.plan === 'plus');
+  const familyQuestions = plusRow && 'family_questions_per_month' in plusRow
+    ? (plusRow.family_questions_per_month == null ? null : Number(plusRow.family_questions_per_month))
+    : null;
   // The day's numbers (050): NULL is a real answer (no limit); a row without
   // the column is a database before 050, which keeps none.
   const perDay = (plan: 'free' | 'plus', column: 'question_tries_per_day' | 'uploads_per_day') => {
@@ -1453,6 +1462,7 @@ export async function fetchPlanLimits(): Promise<PlanLimits> {
     voiceAnswers: { free: voice('free'), plus: voice('plus') },
     questions: { free: questions('free'), plus: questions('plus') },
     questionsFairUse: fairUse ? Number(fairUse) : DEFAULT_PLAN_LIMITS.questionsFairUse,
+    familyQuestions,
     questionTriesPerDay: { free: perDay('free', 'question_tries_per_day'), plus: perDay('plus', 'question_tries_per_day') },
     uploadsPerDay: { free: perDay('free', 'uploads_per_day'), plus: perDay('plus', 'uploads_per_day') },
     familiesPerPerson: freeRow && 'families_per_person' in freeRow
@@ -1638,7 +1648,7 @@ export async function fetchVoiceStatus(familyId: string): Promise<VoiceStatus | 
 // ─── Questions each month (049) ──────────────────────────────────
 //
 // On the free plan each person asks 20 questions a month; on Family Plus
-// there is no monthly limit (fair use: 500 a month each). rag-search counts
+// the family shares 200 a month (053; fair use of 500 each before). rag-search counts
 // each question before it answers, gives it back when no answer came, and
 // says where the count stands in its response; question_status() says the
 // same without asking anything. Before 049, or offline, nothing is counted
