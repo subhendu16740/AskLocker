@@ -7,6 +7,9 @@ import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { BackButton } from './back-button';
+import { useFamily } from '../lib/family-context';
+import { isBusinessVault } from '../lib/vaults';
+import { plusName } from '../lib/plans';
 import { color, size, space, type } from '../constants/design';
 
 export function ScreenHeader({
@@ -72,11 +75,14 @@ export function HeaderButton({ icon, label, onPress }: { icon?: string; label: s
  * the Family Plus page (Free and Plus side by side); without, it is only a
  * mark, for a tag inside something that is already tappable.
  */
-export function PlusTag({ link = false }: { link?: boolean }) {
+export function PlusTag({ link = false, name: fixedName }: { link?: boolean; name?: string }) {
+  // In a business (051) it is called Plus, unless the screen speaks of every vault.
+  const { currentFamily } = useFamily();
+  const name = fixedName ?? plusName(isBusinessVault(currentFamily));
   const tag = (
-    <View style={styles.plusTag} accessibilityLabel="Part of Family Plus, the paid plan">
+    <View style={styles.plusTag} accessibilityLabel={`Part of ${name}, the paid plan`}>
       <Text style={styles.plusStar}>★</Text>
-      <Text style={styles.plusText}>Family Plus</Text>
+      <Text style={styles.plusText}>{name}</Text>
     </View>
   );
   if (!link) return tag;
@@ -86,7 +92,7 @@ export function PlusTag({ link = false }: { link?: boolean }) {
       activeOpacity={0.7}
       hitSlop={{ top: 10, bottom: 10, left: 6, right: 6 }}
       accessibilityRole="link"
-      accessibilityLabel="Family Plus: see what it includes"
+      accessibilityLabel={`${name}: see what it includes`}
     >
       {tag}
     </TouchableOpacity>
@@ -94,11 +100,11 @@ export function PlusTag({ link = false }: { link?: boolean }) {
 }
 
 /**
- * "★ " before the name of someone on Family Plus, inside the name's own Text.
+ * " ★" after the name of someone on Family Plus, inside the name's own Text.
  * Hidden from screen readers: the name's Text says "Family Plus" instead.
  */
 export function PlusStar({ onDark = false }: { onDark?: boolean }) {
-  return <Text style={[styles.nameStar, onDark && styles.nameStarOnDark]} aria-hidden>★ </Text>;
+  return <Text style={[styles.nameStar, onDark && styles.nameStarOnDark]} aria-hidden> ★</Text>;
 }
 
 const styles = StyleSheet.create({

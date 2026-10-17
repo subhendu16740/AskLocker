@@ -11,6 +11,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../../lib/auth';
 import { useFamily } from '../../../lib/family-context';
+import { useFamilyOnly } from '../../../lib/family-only';
 import {
   fetchFamilyTree, fetchEmergencyCard, saveEmergencyCard, isMissingMigration, type FamilyPerson,
 } from '../../../lib/api';
@@ -30,6 +31,7 @@ type ContactDraft = { name: string; relation: string; phone: string };
 const blankContact = (): ContactDraft => ({ name: '', relation: '', phone: '' });
 
 export default function EditEmergencyCardScreen() {
+  useFamilyOnly();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { user } = useAuth();
   const { currentFamily, membership } = useFamily();

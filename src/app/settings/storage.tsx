@@ -17,7 +17,7 @@ import {
   fetchPlanLimits, fetchStorageStatus, fetchStorageUsage, type FamilyPlanStatus, type FamilyStorage,
 } from '../../lib/api';
 import {
-  DEFAULT_PLAN_LIMITS, PLUS_FOR_SALE, formatBytes, localPlusPrice, localPlusPrices,
+  CLOSED_MESSAGE, DEFAULT_PLAN_LIMITS, PLUS_FOR_SALE, businessPlanName, formatBytes, isBusinessPlan, localPlusPrice, localPlusPrices,
   localPlusYearlyOffer, storageFullMessage, storageLevel, type PlanLimits, type StorageLevel,
 } from '../../lib/plans';
 import { longDate } from '../../lib/dates';
@@ -32,7 +32,10 @@ const documents = (n: number) => `${n} ${n === 1 ? 'document' : 'documents'}`;
 const BAR: Record<StorageLevel, string> = { ok: color.secondary, nearly: '#D97706', full: color.danger };
 
 function planName(status: FamilyPlanStatus | null): string {
-  return status?.plan === 'plus' ? 'Family Plus' : 'Free';
+  if (isBusinessPlan(status?.plan)) return `${businessPlanName(status.plan)}${status.trial ? ', trial' : ''}`;
+  if (status?.plan === 'plus') return `Family Plus${status.trial ? ', trial' : ''}`;
+  // A business whose paid plan ended (051): every record stays, nothing can be added.
+  return status?.closed ? 'Plan ended' : 'Free';
 }
 
 export default function StorageScreen() {
@@ -113,7 +116,7 @@ export default function StorageScreen() {
               </View>
               {payments && !payments.available && (
                 <View style={styles.plusRow}>
-                  <PlusTag link />
+                  <PlusTag link name="Family Plus" />
                   <Text style={styles.plusText}>Family Plus is coming soon.</Text>
                 </View>
               )}
@@ -132,7 +135,7 @@ export default function StorageScreen() {
               const limit = status ? status.limitBytes : personalIds.has(f.familyId) ? limits.freePersonal : limits.free;
               const level = storageLevel(used, limit);
               const percent = Math.min(100, Math.round((used / limit) * 100));
-              const isPlus = status?.plan === 'plus';
+              const isPlus = !!status && status.plan !== 'free';
               return (
                 <Card key={f.familyId}>
                   <View style={styles.familyRow}>
@@ -173,7 +176,12 @@ export default function StorageScreen() {
                   </Muted>
                   <Muted>You added {formatBytes(f.yourBytes)} ({documents(f.yourDocuments)}).</Muted>
                   {!!status?.chatsBytes && <Muted>Saved chats use {formatBytes(status.chatsBytes)}.</Muted>}
-                  {level !== 'ok' && (
+                  {status?.closed && (
+                    <View style={[styles.note, styles.noteFull]}>
+                      <Text style={[styles.noteText, styles.noteTextFull]}>{CLOSED_MESSAGE}</Text>
+                    </View>
+                  )}
+                  {level !== 'ok' && !status?.closed && (
                     <View style={[styles.note, level === 'full' ? styles.noteFull : styles.noteNearly]}>
                       <Text style={[styles.noteText, level === 'full' ? styles.noteTextFull : styles.noteTextNearly]}>
                         {!status
@@ -189,9 +197,10 @@ export default function StorageScreen() {
                               })
                             : "Nearly full. When it's full, you can't add documents or save chats."}
                       </Text>
-                      {!isPlus && (
+                      {/* A business can move up a plan until Enterprise (051). */}
+                      {(!isPlus || (status?.business && status.plan !== 'business_enterprise')) && (
                         <TouchableOpacity onPress={() => router.push(plusPage('storage') as any)} accessibilityRole="link">
-                          <Text style={[styles.noteLink, level === 'full' ? styles.noteTextFull : styles.noteTextNearly]}>See Family Plus ›</Text>
+                          <Text style={[styles.noteLink, level === 'full' ? styles.noteTextFull : styles.noteTextNearly]}>See {status?.business ? 'plans' : 'Family Plus'} ›</Text>
                         </TouchableOpacity>
                       )}
                     </View>

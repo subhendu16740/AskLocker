@@ -12,6 +12,7 @@ import { router, useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../lib/auth';
 import { useFamily } from '../../lib/family-context';
+import { useFamilyOnly } from '../../lib/family-only';
 import { vaultName } from '../../lib/vaults';
 import { fetchFamilyTree, fetchEmergencyCards, isMissingMigration, type FamilyTree } from '../../lib/api';
 import type { EmergencyCard } from '../../lib/emergency';
@@ -23,6 +24,7 @@ import { Muted, Status, screenStyles } from '../../components/settings-ui';
 import { color, radius, shadow, size, space, type } from '../../constants/design';
 
 export default function EmergencyCardsScreen() {
+  useFamilyOnly();
   const { user } = useAuth();
   const { currentFamily } = useFamily();
   const [tree, setTree] = useState<FamilyTree | null>(null);

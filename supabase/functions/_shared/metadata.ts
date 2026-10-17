@@ -4,7 +4,39 @@
 // reads secrets at load time) so they can be tested without a Deno runtime:
 // qa/tools/selftest.mjs imports this file directly, and the expiry date it
 // finds is what the expiry alerts and notifications are built from.
+//
+// Business papers too (051): a GSTIN, kept only when its check character is
+// right, so an OCR slip is not stored as someone's tax number; an invoice's
+// number, date, total and due date; and a licence's "valid up to" date,
+// which becomes an expiry date like any other.
 // ────────────────────────────────────────────────────────────────
+
+// ─── GSTIN ─────────────────────────────────────────────────────
+// 15 characters: a state code, the holder's PAN, an entity number, a letter
+// (Z for most), and a check character worked out from the other 14, mod 36.
+const GSTIN_CHARS = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+
+/** The check character for a GSTIN's first 14 characters; null when one is not 0-9 or A-Z. */
+export function gstinCheckChar(first14: string): string | null {
+  if (first14.length !== 14) return null;
+  let sum = 0;
+  for (let i = 0; i < 14; i++) {
+    const v = GSTIN_CHARS.indexOf(first14[i]);
+    if (v < 0) return null;
+    const product = v * (i % 2 === 0 ? 1 : 2);
+    sum += Math.floor(product / 36) + (product % 36);
+  }
+  return GSTIN_CHARS[(36 - (sum % 36)) % 36];
+}
+
+/** A GSTIN in the right shape, with a real state code and the right check character. */
+export function isValidGstin(value: string): boolean {
+  const g = value.toUpperCase();
+  if (!/^\d{2}[A-Z]{5}\d{4}[A-Z][0-9A-Z]{3}$/.test(g)) return false;
+  const state = Number(g.slice(0, 2));
+  if (!((state >= 1 && state <= 38) || state === 97 || state === 99)) return false;
+  return gstinCheckChar(g.slice(0, 14)) === g[14];
+}
 
 export interface ExtractedMeta {
   key: string;
@@ -36,14 +68,15 @@ export function extractMetadata(text: string): ExtractedMeta[] {
   };
 
   // Expiry / validity dates
+  // A licence says "Valid up to", "Validity" or "Renewal due" (051).
   addFirstDate('expiry_date', 0.85, [
-    /(?:expir(?:y|ation|es)|valid\s*(?:until|thru|through|till|upto)|exp\.?\s*date|date\s*of\s*expir)[:\s]*(\d{1,2}[\s/\-\.]\d{1,2}[\s/\-\.]\d{2,4})/i,
+    /(?:expir(?:y|ation|es)|valid\s*(?:until|thru|through|till|upto|up\s*to)|validity(?:\s*(?:upto|up\s*to|till|until|date))?|renewal\s*(?:due|date)|exp\.?\s*date|date\s*of\s*expir)[:\s\-]*(\d{1,2}[\s/\-\.]\d{1,2}[\s/\-\.]\d{2,4})/i,
     // Year first. The year must be four digits and end there: with \d{2,4}
     // this also matched "17/10/2026" — as "17/10/20" — so every DD/MM/YYYY
     // expiry was stored twice, once truncated, and the document viewer showed
     // both.
-    /(?:expir(?:y|ation|es)|valid\s*(?:until|thru))[:\s]*(\d{4}[\s/\-\.]\d{1,2}[\s/\-\.]\d{1,2})(?!\d)/i,
-    /(?:expir(?:y|ation)|valid\s*(?:until|thru))[:\s]*(\d{1,2}\s+\w+\s+\d{4})/i,
+    /(?:expir(?:y|ation|es)|valid\s*(?:until|thru|till|upto|up\s*to))[:\s]*(\d{4}[\s/\-\.]\d{1,2}[\s/\-\.]\d{1,2})(?!\d)/i,
+    /(?:expir(?:y|ation)|valid\s*(?:until|thru|till|upto|up\s*to))[:\s]*(\d{1,2}\s+\w+\s+\d{4})/i,
   ]);
 
   // Date of birth
@@ -89,8 +122,36 @@ export function extractMetadata(text: string): ExtractedMeta[] {
 
   // ─── Amounts ───────────────────────────────────────────────
 
+  // An invoice's total (051), from the labels invoices use. The generic
+  // amount below would find the same figure under "Grand Total"; it is not
+  // stored twice.
+  const totalMatch = text.match(/(?:grand\s*total|total\s*invoice\s*(?:value|amount)|invoice\s*(?:total|value)|total\s*amount(?:\s*payable)?|amount\s*payable|net\s*payable)\s*(?:\(\s*(?:Rs\.?|INR|₹)\s*\))?[:\s\-]*(?:(?:Rs\.?|INR|₹)\s*)?(\d[\d,]*(?:\.\d{1,2})?)/i);
+  if (totalMatch) addMeta('total_amount', totalMatch[1], 0.75);
+
   const amountMatch = text.match(/(?:(?:sum\s*(?:insured|assured))|(?:total|amount|premium|coverage))[:\s]*(?:(?:Rs\.?|INR|₹|\$|USD)\s*)?([\d,]+(?:\.\d{2})?)/i);
-  if (amountMatch) addMeta('amount', amountMatch[1], 0.7);
+  if (amountMatch && amountMatch[1] !== totalMatch?.[1]) addMeta('amount', amountMatch[1], 0.7);
+
+  // ─── Business papers (051) ─────────────────────────────────
+
+  // GSTINs: every one in the text whose check character is right (an
+  // invoice carries the seller's and the buyer's).
+  for (const m of text.matchAll(/(?<![0-9A-Za-z])(\d{2}[A-Za-z]{5}\d{4}[A-Za-z][0-9A-Za-z]{3})(?![0-9A-Za-z])/g)) {
+    const g = m[1].toUpperCase();
+    if (isValidGstin(g)) addMeta('gstin', g, 0.95);
+  }
+
+  const invoiceNo = text.match(/(?:invoice|inv|bill)\.?\s*(?:no|number|#)\.?\s*[:\-]?\s*([A-Z0-9][A-Z0-9\/\-]{1,29})/i);
+  if (invoiceNo && /\d/.test(invoiceNo[1])) addMeta('invoice_number', invoiceNo[1].toUpperCase(), 0.8);
+
+  addFirstDate('invoice_date', 0.8, [
+    /(?:invoice|bill|inv)\.?\s*date[:\s\-]*(\d{1,2}[\s/\-\.]\d{1,2}[\s/\-\.]\d{2,4})/i,
+    /(?:invoice|bill|inv)\.?\s*date[:\s\-]*(\d{1,2}[\s\-]+[A-Za-z]{3,9}[\s\-,]+\d{4})/i,
+  ]);
+
+  addFirstDate('due_date', 0.8, [
+    /(?:due\s*date|payment\s*due(?:\s*(?:date|on|by))?|due\s*(?:on|by))[:\s\-]*(\d{1,2}[\s/\-\.]\d{1,2}[\s/\-\.]\d{2,4})/i,
+    /(?:due\s*date|payment\s*due(?:\s*(?:date|on|by))?|due\s*(?:on|by))[:\s\-]*(\d{1,2}[\s\-]+[A-Za-z]{3,9}[\s\-,]+\d{4})/i,
+  ]);
 
   // ─── Phone numbers ────────────────────────────────────────
 

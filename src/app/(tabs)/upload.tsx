@@ -15,7 +15,7 @@ import { useAuth } from '../../lib/auth';
 import { StorageFullError, fetchCategories, fetchDocumentExpiry, fetchStorageStatus, uploadDocument } from '../../lib/api';
 import { longDate } from '../../lib/dates';
 import { plusPage, useFamilyPlan } from '../../lib/family-plan';
-import { MAX_FILE_BYTES, fileTooLargeMessage, type PlanName } from '../../lib/plans';
+import { MAX_FILE_BYTES, fileTooLargeMessage, plusName, type PlanName } from '../../lib/plans';
 import {
   extractTextFromImage, isImageFile, ocrLanguageGapOnThisDevice, type OcrProgress,
 } from '../../lib/ocr';
@@ -27,10 +27,10 @@ import {
 import type { Database } from '../../lib/database.types';
 import { ScreenHeader, PlusTag } from '../../components/screen-header';
 import { VaultDropdown, type VaultChoice } from '../../components/vault-sheet';
-import { isPersonalVault, splitVaults, vaultName, vaultSubtitle } from '../../lib/vaults';
+import { isBusinessVault, isPersonalVault, splitVaults, vaultIcon, vaultName, vaultSubtitle } from '../../lib/vaults';
 import { color, radius, shadow, size, space, type } from '../../constants/design';
 import { categoryForAnalytics, track } from '../../lib/analytics';
-import { COMMON_CATEGORIES, categoryOrder, suggestCategory } from '../../../supabase/functions/_shared/doc-category';
+import { categoryOrder, suggestCategory } from '../../../supabase/functions/_shared/doc-category';
 
 type DocumentCategory = Database['public']['Tables']['document_categories']['Row'];
 
@@ -61,13 +61,16 @@ export default function UploadScreen() {
     ? vaults.find((v) => v.family_id === destination) ?? null
     : vaults[0] ?? null;
   const targetFamily = target?.families ?? null;
-  // Everyone in that vault's family tree (you first); the members, before migration 031.
-  const owners = useDocumentOwners(target?.family_id ?? null);
+  const toBusiness = isBusinessVault(targetFamily);
+  // Everyone in that vault's family tree (you first); the members, before
+  // migration 031. A business has no "whose document" (051).
+  const familyOwners = useDocumentOwners(target?.family_id ?? null);
+  const owners = toBusiness ? [] : familyOwners;
   const vaultChoices: VaultChoice[] = vaults.map((v) => ({
     key: v.family_id,
     name: vaultName(v.families),
     subtitle: vaultSubtitle(v),
-    icon: isPersonalVault(v.families) ? 'lock' : 'users',
+    icon: vaultIcon(v.families),
   }));
   const { documentLanguages } = usePreferences();
   // Shown while scanning, so it is obvious which languages are being read —
@@ -113,30 +116,38 @@ export default function UploadScreen() {
     else if (owners.length > 0 && !owners.some((o) => o.id === selectedPerson)) setSelectedPerson(owners[0].id);
   }, [owners, person]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // The vault's own list first (051): a business's for a business, a
+  // family's otherwise; before 051 every category is a family's. A family's
+  // common ones lead, "Other" is last, and the rest are one tap away.
+  const audience: 'family' | 'business' = toBusiness ? 'business' : 'family';
+  const inList = (c: DocumentCategory) => {
+    const a = (c as { audience?: string | null }).audience ?? 'family';
+    return a === audience || a === 'both';
+  };
+  const byOrder = (x: DocumentCategory, y: DocumentCategory) =>
+    categoryOrder(x.is_system !== false ? x.name : '') - categoryOrder(y.is_system !== false ? y.name : '');
+  const ownCategories = categories.filter(inList).sort(byOrder);
+  const firstCategories = ownCategories.slice(0, 12);
+  const shownCategories = allCategories
+    ? [...ownCategories, ...categories.filter((c) => !inList(c)).sort(byOrder)]
+    : [...firstCategories, ...categories.filter((c) => c.id === selectedCategory && !firstCategories.includes(c))];
+  const hiddenCount = categories.length - shownCategories.length;
+
   // A suggestion, until the person picks: from the file's name at once, and
-  // again once the text of a photo has been read.
+  // again once the text of a photo has been read, from the vault's own list.
+  // Nothing is picked when nothing says.
   useEffect(() => {
     if (categoryTouched) return;
-    const name = pickedFile ? suggestCategory(pickedFile.name, ocrText) : null;
-    const match = name ? categories.find((c) => c.is_system && c.name === name) : undefined;
+    const name = pickedFile ? suggestCategory({ fileName: pickedFile.name, text: ocrText, audience }) : null;
+    const match = name ? ownCategories.find((c) => c.is_system !== false && c.name === name) : undefined;
     setSuggestedCategory(match?.id ?? null);
     setSelectedCategory(match?.id ?? '');
-  }, [pickedFile, ocrText, categories, categoryTouched]);
+  }, [categories, audience, pickedFile?.name, ocrText, categoryTouched]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const pickCategory = (id: string) => {
     setCategoryTouched(true);
     setSelectedCategory((now) => (now === id ? '' : id));
   };
-
-  // The common ones first, then every other built-in, then the family's own;
-  // the rest behind More, unless the suggestion or the choice is among them.
-  const sortedCategories = [...categories].sort(
-    (a, b) => categoryOrder(a.is_system ? a.name : '') - categoryOrder(b.is_system ? b.name : ''),
-  );
-  const shownCategories = allCategories
-    ? sortedCategories
-    : sortedCategories.filter((c) =>
-      (c.is_system && (COMMON_CATEGORIES as readonly string[]).includes(c.name)) || c.id === selectedCategory);
 
   // ─── File Pickers ─────────────────────────────────────────────
 
@@ -283,7 +294,7 @@ export default function UploadScreen() {
       track('document_added', {
         category: categoryForAnalytics(categories.find((c) => c.id === selectedCategory)),
         file_type: /^[a-z0-9]{1,8}$/.test(pickedFile.type) ? pickedFile.type : 'other',
-        vault: isPersonalVault(targetFamily) ? 'personal' : 'family',
+        vault: isPersonalVault(targetFamily) ? 'personal' : toBusiness ? 'business' : 'family',
         category_source: !selectedCategory ? 'none'
           : suggestedCategory ? (selectedCategory === suggestedCategory ? 'suggested' : 'changed')
             : 'chosen',
@@ -465,7 +476,7 @@ export default function UploadScreen() {
                 />
                 <Text style={styles.whereHint}>
                   {!targetFamily
-                    ? `${personal ? 'Your personal vault is yours alone. ' : ''}Everyone in a family can see what's saved there.`
+                    ? `${personal ? 'Your personal vault is yours alone. ' : ''}Everyone in a family or business can see what's saved there.`
                     : isPersonalVault(targetFamily)
                       ? "Yours alone. Your family won't see it."
                       : `Everyone in ${targetFamily.name} will see it.`}
@@ -532,11 +543,12 @@ export default function UploadScreen() {
                   </Text>
                 </TouchableOpacity>
               ))}
-              {sortedCategories.length > shownCategories.length || allCategories ? (
+              {hiddenCount > 0 || allCategories ? (
                 <TouchableOpacity
                   onPress={() => setAllCategories((v) => !v)}
                   style={[styles.chip, styles.chipMore]}
                   accessibilityRole="button"
+                  accessibilityLabel={allCategories ? 'Show fewer categories' : `Show ${hiddenCount} more categories`}
                 >
                   <Text style={[styles.chipText, styles.chipMoreText]}>{allCategories ? 'Fewer' : 'More…'}</Text>
                 </TouchableOpacity>
@@ -586,7 +598,7 @@ export default function UploadScreen() {
             {uploadResult?.expiresOn && (
               <View style={styles.offer}>
                 <Text style={styles.offerText}>
-                  It expires on {longDate(uploadResult.expiresOn)}. ★ With Family Plus, everyone gets reminders
+                  It expires on {longDate(uploadResult.expiresOn)}. ★ With {plusName(toBusiness)}, everyone gets reminders
                   90, 30 and 7 days before.
                 </Text>
                 <TouchableOpacity
@@ -602,7 +614,7 @@ export default function UploadScreen() {
                   accessibilityRole="link"
                   hitSlop={8}
                 >
-                  <Text style={styles.offerLink}>See Family Plus ›</Text>
+                  <Text style={styles.offerLink}>See {plusName(toBusiness)} ›</Text>
                 </TouchableOpacity>
               </View>
             )}
@@ -652,7 +664,7 @@ export default function UploadScreen() {
                   }}
                   accessibilityRole="button"
                 >
-                  <Text style={styles.dialogBtnOutlineText}>See Family Plus</Text>
+                  <Text style={styles.dialogBtnOutlineText}>See {plusName(toBusiness)}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.dialogBtnFilled} onPress={() => setErrorMsg(null)} accessibilityRole="button">
                   <Text style={styles.dialogBtnFilledText}>OK</Text>

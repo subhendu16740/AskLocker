@@ -29,7 +29,7 @@ export interface AnalyticsEvents {
   // How a document's category came about: Upload's suggestion kept or
   // changed, picked with no suggestion, or none at all.
   document_added: {
-    category: string; file_type: string; vault: 'personal' | 'family';
+    category: string; file_type: string; vault: 'personal' | 'family' | 'business';
     category_source: 'suggested' | 'changed' | 'chosen' | 'none';
   };
   // What kinds of documents people come back to: opened, and used in an answer.
@@ -39,7 +39,9 @@ export interface AnalyticsEvents {
   chat_saved: Record<string, never>;
   share_link_made: { days: number };
   member_invited: Record<string, never>;
-  family_created: Record<string, never>;
+  family_created: { kind: 'family' | 'business' };
+  use_for_chosen: { choice: 'family' | 'business' | 'both' | 'skipped' };
+  business_deleted: Record<string, never>;
   plus_viewed: { feature: string };
   pay_started: { period: 'monthly' | 'yearly'; currency: 'INR' | 'USD' };
   payment_done: { period: 'monthly' | 'yearly'; currency: 'INR' | 'USD' };
@@ -171,8 +173,9 @@ export async function setAnalyticsOn(on: boolean) {
 }
 
 /**
- * A category as counted: its built-in name, "Other" for a family's own (whose
- * name could say something private), "None" for no category.
+ * A category as counted: its built-in name (a family's or a business's), "Other"
+ * for a vault's own (whose name could say something private), "None" for no
+ * category.
  */
 export function categoryForAnalytics(category: { name: string | null; is_system?: boolean | null } | null | undefined): string {
   return countedCategory(category?.name, category?.is_system);

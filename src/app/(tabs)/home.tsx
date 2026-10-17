@@ -16,7 +16,8 @@ import { useOnPlus } from '../../lib/family-plan';
 import { PlusStar } from '../../components/screen-header';
 import { InvitationCards } from '../../components/invitation-cards';
 import { LockOffer } from '../../components/lock-offer';
-import { isPersonalVault, vaultName } from '../../lib/vaults';
+import { UseForOffer } from '../../components/use-for-offer';
+import { isPersonalVault, vaultIcon, vaultName } from '../../lib/vaults';
 import type { FamilyDocumentRow } from '../../lib/database.types';
 import { color, radius, shadow, size, space, type } from '../../constants/design';
 
@@ -69,6 +70,8 @@ interface RecentDoc extends FamilyDocumentRow {
   familyId: string;
   vault: string;
   personalVault: boolean;
+  /** The vault's icon: a lock, a briefcase (051) or people. */
+  vaultIcon: 'lock' | 'briefcase' | 'users';
 }
 
 export default function HomeScreen() {
@@ -127,6 +130,7 @@ export default function HomeScreen() {
               familyId: vaults[i].family_id,
               vault: vaultName(vaults[i].families),
               personalVault: isPersonalVault(vaults[i].families),
+              vaultIcon: vaultIcon(vaults[i].families),
             })))
             .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
             .slice(0, RECENT),
@@ -173,7 +177,7 @@ export default function HomeScreen() {
                     style={styles.headerTitle}
                     accessibilityLabel={onPlus ? `${displayName}, Family Plus` : undefined}
                   >
-                    {onPlus && <PlusStar onDark />}{displayName}
+                    {displayName}{onPlus && <PlusStar onDark />}
                   </Text>
                 </View>
               </View>
@@ -207,6 +211,9 @@ export default function HomeScreen() {
 
         {/* Invitations to join a family (037): answered here, the first place anyone looks */}
         <InvitationCards style={styles.invites} />
+
+        {/* What they will use AskLocker for, asked once of someone new (051) */}
+        <UseForOffer style={styles.invites} />
 
         {/* The fingerprint or face lock, offered once where the device can check one */}
         <LockOffer style={styles.invites} />
@@ -296,9 +303,9 @@ export default function HomeScreen() {
                           <Text style={styles.categoryBadgeText}>{doc.category_name}</Text>
                         </View>
                       )}
-                      {/* The vault it is in: a lock for the personal vault, people for a family */}
+                      {/* The vault it is in: a lock for the personal vault, a briefcase for a business, people for a family */}
                       <View style={[styles.vaultTag, isDark && styles.vaultTagDark]}>
-                        <Feather name={doc.personalVault ? 'lock' : 'users'} size={12} color={isDark ? '#9DB4E0' : color.primary} />
+                        <Feather name={doc.vaultIcon} size={12} color={isDark ? '#9DB4E0' : color.primary} />
                         <Text style={[styles.vaultTagText, isDark && styles.vaultTagTextDark]} numberOfLines={1}>{doc.vault}</Text>
                       </View>
                       {/* One piece of text, so it wraps whole: never a dot left at the end of a line */}

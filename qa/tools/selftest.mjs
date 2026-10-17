@@ -15,14 +15,16 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { getDocument } from 'pdfjs-serverless';
 import { reconstructLayout } from '../../supabase/functions/_shared/pdf-text.ts';
-import { extractMetadata, parseFlexibleDate } from '../../supabase/functions/_shared/metadata.ts';
+import { extractMetadata, parseFlexibleDate, gstinCheckChar, isValidGstin } from '../../supabase/functions/_shared/metadata.ts';
 import { cleanText } from '../../supabase/functions/_shared/text.ts';
 import { ticketCodeNotes, ticketSearchTerms } from '../../supabase/functions/_shared/tickets.ts';
 import { digitsFromWords, restoreCodes } from '../../supabase/functions/_shared/numbers.ts';
 import { takeInTurn, uniqueRelatives } from '../../supabase/functions/_shared/vaults.ts';
 import { passagesUsed, splitUsedPassages } from '../../supabase/functions/_shared/used-passages.ts';
 import { toSpeech } from '../../src/lib/speech-text.ts';
-import { BUILT_IN_CATEGORIES, categoryOrder, countedCategory, suggestCategory } from '../../supabase/functions/_shared/doc-category.ts';
+import {
+  BUILT_IN_CATEGORIES, BUSINESS_CATEGORIES, FAMILY_CATEGORIES, SUGGESTED_CATEGORIES, categoryOrder, countedCategory, suggestCategory,
+} from '../../supabase/functions/_shared/doc-category.ts';
 import { acceptedCurrencies, connectionCountry, hmacSha256Hex, payerCurrency, payerCurrencyMessage, paymentSignatureOk, plusOrderAmount, plusOrderDescription, sameText, webhookSignatureOk, ORDER_ID, PAYMENT_ID } from '../../supabase/functions/_shared/razorpay.ts';
 import { createHmac } from 'node:crypto';
 import {
@@ -37,7 +39,7 @@ import { phoneLooksRight, cardProblem, cardIsEmpty, emptyCard, bloodGroupLabel, 
 import { allowanceJson, givenBack, parseAllowance, questionLimitMessage, questionsLeftText, resetDay } from '../../supabase/functions/_shared/questions.ts';
 import { MAX_DOCUMENT_TEXT, MAX_FILE_BYTES, QUESTION_INPUT_MAX, MAX_QUESTION_CHARS, fileTooLargeMessage, inVaultFolder, limitHint, providedTextLimit } from '../../supabase/functions/_shared/limits.ts';
 import { MAX_IMPORT_BYTES } from '../../supabase/functions/_shared/gmail-rules.ts';
-import { DEFAULT_PLAN_LIMITS, PLUS_FOR_SALE, PLUS_PRICE, chatStorageFullMessage, fits, formatBytes, plusAmount, plusPrice, plusPrices, plusTwelveMonths, plusYearlyOffer, plusYearlySaving, storageFullMessage } from '../../supabase/functions/_shared/plan-text.ts';
+import { BUSINESS_PLANS, BUSINESS_PRICE, CLOSED_MESSAGE, DEFAULT_PLAN_LIMITS, PLUS_FOR_SALE, PLUS_PRICE, businessAmount, businessPrice, businessYearPrice, chatStorageFullMessage, fits, formatBytes, isBusinessPlan, nextBusinessPlan, planLabel, plusName, plusAmount, plusPrice, plusPrices, plusTwelveMonths, plusYearlyOffer, plusYearlySaving, storageFullMessage } from '../../supabase/functions/_shared/plan-text.ts';
 import { mentionsDate, mentionsAmount, mentionsPhone, mentionsText, refuses, devanagariShare, scriptShare, hasMarkdown } from '../lib/match.mjs';
 import { judgeAnswer } from '../lib/checks/ask.mjs';
 import { vehicleInsurance } from '../lib/tiny-pdf.mjs';
@@ -672,7 +674,8 @@ await test('plans: every limit is finite, and a full vault says why and what to 
   // 30 days after Plus ends before anything above Free goes, 4 members on
   // Free and 8 on Plus (049), 10 voice chats for each person on Free (043),
   // and 20 questions a month for each person on Free, none on Plus up to
-  // fair use (049).
+  // fair use (049). A business (051): one free business a person beside one
+  // free family, and its own Plus and Pro.
   assert.deepEqual(DEFAULT_PLAN_LIMITS, {
     free: 200 * MB, freePersonal: 100 * MB, plus: 10 * GB, graceDays: 30,
     members: { free: 4, plus: 8 },
@@ -682,6 +685,13 @@ await test('plans: every limit is finite, and a full vault says why and what to 
     questionTriesPerDay: { free: 10, plus: 100 },
     uploadsPerDay: { free: 50, plus: 500 },
     familiesPerPerson: 1,
+    businessesPerPerson: 1,
+    invitesPerDay: { free: 20, plus: 20 },
+    business: {
+      business_plus: { storage: 25 * GB, members: 5, questionsFairUse: 100, questionTriesPerDay: 30, uploadsPerDay: 300, invitesPerDay: 20 },
+      business_pro: { storage: 100 * GB, members: 15, questionsFairUse: 100, questionTriesPerDay: 30, uploadsPerDay: 300, invitesPerDay: 20 },
+      business_enterprise: { storage: 200 * GB, members: 50, questionsFairUse: 100, questionTriesPerDay: 30, uploadsPerDay: 300, invitesPerDay: 50 },
+    },
   });
   assert.deepEqual(PLUS_PRICE, { monthly: { inr: 100, usd: 10 }, yearly: { inr: 1100, usd: 110 } });
   // The Plus page says what a year saves in months ("1 month free"): a year
@@ -785,7 +795,9 @@ await test('razorpay: the server sets the price, and only Razorpay\'s signature 
 });
 
 await test('categories: Upload suggests one from the file, never a default, and counts only built-in names', async () => {
-  assert.equal(BUILT_IN_CATEGORIES.length, 23);
+  assert.equal(FAMILY_CATEGORIES.length, 23);
+  assert.equal(BUSINESS_CATEGORIES.length, 11);
+  assert.equal(new Set(BUILT_IN_CATEGORIES).size, 34, 'a family\'s 23 and a business\'s 11, "Other" shared');
   const cases = [
     ['Passport_Asha_Verma.pdf', null, 'Passport'],
     ['scan_1.jpg', 'Government of India  Aadhaar  1234 5678 9012  Asha Verma', 'National ID / Aadhaar'],
@@ -796,6 +808,9 @@ await test('categories: Upload suggests one from the file, never a default, and 
     ['health_policy_verma.pdf', null, 'Health Insurance'],
     ['Car insurance 2026.pdf', null, 'Vehicle Insurance'],
     ['ticket.pdf', 'ELECTRONIC RESERVATION SLIP  PNR 4512345678', 'Visa / Travel Docs'],
+    ['scan.jpg', 'VISA  Type: Tourist  Passport No. Z1234567', 'Visa / Travel Docs'],
+    ['statement.pdf', 'Your VISA card statement  Bank statement for September', 'Bank Statements'],
+    ['rate ticket.pdf', null, null],
     ['visa_application.pdf', 'Passport No. Z1234567', 'Visa / Travel Docs'],
     ['electricity_bill_sept.pdf', null, 'Utility Bills'],
     ['Rent Agreement Flat 4B.pdf', null, 'Property Documents'],
@@ -810,7 +825,9 @@ await test('categories: Upload suggests one from the file, never a default, and 
     ['citrus_farm.pdf', null, null],
     ['', '', null],
   ];
-  for (const [name, text, want] of cases) assert.equal(suggestCategory(name, text), want, `${name} / ${text}`);
+  for (const [name, text, want] of cases) {
+    assert.equal(suggestCategory({ fileName: name, text, audience: 'family' }), want, `${name} / ${text}`);
+  }
   // Counting: built-in names as they are; a family's own category never by name.
   assert.equal(countedCategory('Passport'), 'Passport');
   assert.equal(countedCategory('Passport', true), 'Passport');
@@ -818,10 +835,15 @@ await test('categories: Upload suggests one from the file, never a default, and 
   assert.equal(countedCategory("Mom's reports", false), 'Other');
   assert.equal(countedCategory('Something new'), 'Other');
   assert.equal(countedCategory(null), 'None');
-  // Upload's order: the common ones, then other built-ins, then a family's own.
+  assert.equal(countedCategory('GST Returns', true), 'GST Returns', 'a business\'s built-in names count too');
+  // Upload's order: the common ones, then other built-ins, then a business's,
+  // then a vault's own, "Other" last.
   assert.ok(categoryOrder('Passport') < categoryOrder('Medical Records'));
   assert.ok(categoryOrder('Medical Records') < categoryOrder('Voter ID'));
-  assert.ok(categoryOrder('Voter ID') < categoryOrder(''));
+  assert.ok(categoryOrder('Voter ID') < categoryOrder('Sales Invoices'));
+  assert.ok(categoryOrder('Sales Invoices') < categoryOrder('Tax (ITR/TDS)'));
+  assert.ok(categoryOrder('Tax (ITR/TDS)') < categoryOrder(''));
+  assert.ok(categoryOrder('') < categoryOrder('Other'));
 });
 
 await test('razorpay: the server picks rupees or dollars from where the payer connects, not from a setting', async () => {
@@ -950,9 +972,171 @@ await test('limits against abuse (050): a vault reads only its own folder, and t
   assert.equal('reason' in parseAllowance({ used: 1, limit: 20, ceiling: 20 }), false);
 });
 
+await test('business papers: a GSTIN only with its check character, and an invoice\'s details (051)', () => {
+  // Fictional numbers: the check character is worked out here, from the
+  // 14 before it, the way GST's own rule does.
+  const seller = `27ABCDE1234F1Z${gstinCheckChar('27ABCDE1234F1Z')}`;
+  const buyer = `07ZZZZZ9999Z1Z${gstinCheckChar('07ZZZZZ9999Z1Z')}`;
+  assert.equal(seller, '27ABCDE1234F1Z0');
+  assert.equal(buyer, '07ZZZZZ9999Z1ZA');
+  assert.ok(isValidGstin(seller) && isValidGstin(buyer) && isValidGstin(seller.toLowerCase()));
+  assert.ok(!isValidGstin('27ABCDE1234F1Z1'), 'one wrong character');
+  assert.ok(!isValidGstin('27ABCDE1243F1Z0'), 'two characters swapped');
+  assert.ok(!isValidGstin(`00ABCDE1234F1Z${gstinCheckChar('00ABCDE1234F1Z')}`), 'no state 00');
+  assert.ok(!isValidGstin('27ABCDE1234F1Z'), 'too short');
+  assert.equal(gstinCheckChar('27abcde1234f1z'), null, 'lower case is for isValidGstin to fold');
+
+  const invoice = [
+    'SPECIMEN — fictional, for AskLocker QA',
+    'TAX INVOICE',
+    `Sharma Traders (SPECIMEN)   GSTIN: ${seller}`,
+    `Bill To: Acme Specimen Pvt Ltd   GSTIN: ${buyer}`,
+    'Invoice No.: INV/2026-27/0042   Invoice Date: 12/03/2026',
+    'Due Date: 11-04-2026',
+    'Taxable value 10,000.00   IGST 18% 1,800.00',
+    'Grand Total: ₹11,800.00',
+  ].join('\n');
+  const meta = extractMetadata(invoice);
+  const all = (key) => meta.filter((m) => m.key === key).map((m) => m.value);
+  assert.deepEqual(all('gstin'), [seller, buyer]);
+  assert.deepEqual(all('invoice_number'), ['INV/2026-27/0042']);
+  assert.deepEqual(all('invoice_date'), ['12/03/2026']);
+  assert.deepEqual(all('due_date'), ['11-04-2026']);
+  assert.deepEqual(all('total_amount'), ['11,800.00']);
+  assert.deepEqual(all('amount'), [], 'the total is not stored twice');
+  assert.deepEqual(all('expiry_date'), [], 'a due date is not an expiry');
+  // A GSTIN with an OCR slip is not stored at all.
+  assert.deepEqual(extractMetadata('GSTIN: 27ABCDE1234F1Z1').filter((m) => m.key === 'gstin'), []);
+  assert.deepEqual(extractMetadata('Invoice No. pending').filter((m) => m.key === 'invoice_number'), [], 'a number has a digit');
+  assert.deepEqual(extractMetadata('Invoice Date: 5 March 2026').filter((m) => m.key === 'invoice_date').map((m) => m.value), ['5 March 2026']);
+
+  // A licence's validity becomes an expiry date, and so the expiry reminders.
+  const expiries = (t) => extractMetadata(t).filter((m) => m.key === 'expiry_date').map((m) => m.value);
+  assert.deepEqual(expiries('FSSAI Licence (SPECIMEN)\nValid up to: 31-03-2027'), ['31-03-2027']);
+  assert.deepEqual(expiries('Trade Licence (SPECIMEN) valid upto 31/03/2027'), ['31/03/2027']);
+  assert.deepEqual(expiries('Shop and Establishment (SPECIMEN)\nValidity: 31/12/2027'), ['31/12/2027']);
+  assert.deepEqual(expiries('Renewal due: 15.06.2027'), ['15.06.2027']);
+  assert.deepEqual(expiries('Valid till 30 June 2027'), ['30 June 2027']);
+  assert.deepEqual(expiries('Validity: 5 years'), [], 'no date, no expiry');
+  assert.equal(parseFlexibleDate('31-03-2027'), '2027-03-31');
+  // A family's papers read as before: an insurance total is still its amount.
+  const policy = extractMetadata('Total Premium: 12,000');
+  assert.deepEqual(policy.map((m) => `${m.key}=${m.value}`), ['amount=12,000']);
+});
+
+await test('a category suggested from the file\'s name and text, from the vault\'s own list (051)', () => {
+  const biz = (fileName, text) => suggestCategory({ fileName, text, audience: 'business' });
+  const fam = (fileName, text) => suggestCategory({ fileName, text, audience: 'family' });
+  assert.equal(biz('GSTR-3B_March_2026.pdf'), 'GST Returns');
+  assert.equal(biz('gst return q4.pdf'), 'GST Returns');
+  assert.equal(biz('FSSAI licence.pdf'), 'Licences & Registrations');
+  assert.equal(biz('Udyam-Registration-Certificate.pdf'), 'Licences & Registrations');
+  assert.equal(biz('scan.jpg', 'Form REG-06 Registration Certificate (SPECIMEN)'), 'Licences & Registrations');
+  assert.equal(biz('Shop & Establishment.pdf'), 'Licences & Registrations');
+  assert.equal(biz('payslip_march.pdf', 'TDS deducted 2,000'), 'Payroll', 'a payslip mentions TDS: still payroll');
+  assert.equal(biz('Salary Register Mar.pdf'), 'Payroll');
+  assert.equal(biz('Form16_FY2025-26.pdf'), 'Tax (ITR/TDS)');
+  assert.equal(biz('ITR-V acknowledgement.pdf'), 'Tax (ITR/TDS)');
+  assert.equal(biz('Rent Agreement - Godown.pdf'), 'Lease & Property', 'a lease before a contract');
+  assert.equal(biz('Leave and Licence agreement.pdf'), 'Lease & Property');
+  assert.equal(biz('NDA with Specimen Ltd.pdf'), 'Contracts & Agreements');
+  assert.equal(biz('Distribution Agreement.pdf'), 'Contracts & Agreements');
+  assert.equal(biz('Purchase Order 0042.pdf'), 'Purchase Bills');
+  assert.equal(biz('scan.jpg', 'Supplier: Sharma Traders (SPECIMEN)'), 'Purchase Bills');
+  assert.equal(biz('Tax Invoice 0042.pdf'), 'Sales Invoices');
+  assert.equal(biz('e-way bill.pdf'), 'Sales Invoices');
+  assert.equal(biz('HDFC loan sanction letter.pdf'), 'Bank & Loans');
+  assert.equal(biz('bank statement march.pdf'), 'Bank & Loans');
+  assert.equal(biz('Fire insurance policy.pdf'), 'Business Insurance');
+  assert.equal(biz('Offer Letter - Ravi.pdf'), 'Employee Records');
+  assert.equal(biz('IMG_2041.jpg'), null, 'nothing to go on');
+  // The file's name speaks first: a person named it.
+  assert.equal(biz('Tax Invoice 0042.pdf', 'Registration Certificate'), 'Sales Invoices');
+
+  assert.equal(fam('Mom passport.pdf'), 'Passport');
+  assert.equal(fam('aadhar card.jpg'), 'National ID / Aadhaar');
+  assert.equal(fam('e-PAN.pdf'), 'PAN Card');
+  assert.equal(fam('ITR-V 2025.pdf'), 'Tax Returns', 'a tax return before a PAN card');
+  assert.equal(fam('scan.jpg', 'Union of India Driving Licence DL No MH12 20110012345'), 'Driving License');
+  assert.equal(fam('Star mediclaim policy.pdf'), 'Health Insurance');
+  assert.equal(fam('LIC term plan.pdf'), 'Life Insurance');
+  assert.equal(fam('car insurance 2026.pdf'), 'Vehicle Insurance');
+  assert.equal(fam('electricity bill sept.pdf'), 'Utility Bills');
+  assert.equal(fam('Goa e-ticket.pdf'), 'Visa / Travel Docs');
+  assert.equal(fam('Class 10 marksheet.pdf'), 'Educational Certificates');
+  assert.equal(fam('Fridge warranty.pdf'), 'Warranty Cards');
+
+  // Only the vault's own list: a laptop bill in a family vault is not a Sales Invoice.
+  assert.equal(fam('Laptop invoice.pdf'), null);
+  assert.equal(fam('GSTR-3B March.pdf'), null);
+  assert.equal(biz('Mom passport.pdf'), null);
+  // Every name is a built-in category's (migrations 003 and 051).
+  const builtIn = new Set(['Passport', 'National ID / Aadhaar', 'PAN Card', 'Driving License', 'Voter ID', 'Birth Certificate',
+    'Marriage Certificate', 'Death Certificate', 'Health Insurance', 'Life Insurance', 'Vehicle Insurance', 'Property Documents',
+    'Tax Returns', 'Bank Statements', 'Medical Records', 'Prescriptions', 'Educational Certificates', 'Employment Letters',
+    'Utility Bills', 'Visa / Travel Docs', 'Legal Documents', 'Warranty Cards', 'Other',
+    'Sales Invoices', 'Purchase Bills', 'GST Returns', 'Contracts & Agreements', 'Licences & Registrations', 'Bank & Loans',
+    'Business Insurance', 'Employee Records', 'Payroll', 'Lease & Property', 'Tax (ITR/TDS)']);
+  for (const c of [...SUGGESTED_CATEGORIES.family, ...SUGGESTED_CATEGORIES.business]) assert.ok(builtIn.has(c), c);
+  assert.equal(SUGGESTED_CATEGORIES.business.length, 11, 'every business category but Other can be suggested');
+});
+
+await test('business plans: Plus, Pro and Enterprise, their prices and words, and a closed business (051)', () => {
+  const GB = 1024 ** 3, MB = 1024 ** 2;
+  assert.equal(DEFAULT_PLAN_LIMITS.businessesPerPerson, 1);
+  assert.deepEqual(BUSINESS_PLANS, ['business_plus', 'business_pro', 'business_enterprise']);
+  assert.ok(BUSINESS_PLANS.every(isBusinessPlan) && !isBusinessPlan('plus') && !isBusinessPlan('business') && !isBusinessPlan(null));
+  // Each plan up has more people and more space, and never less of anything.
+  for (let i = 1; i < BUSINESS_PLANS.length; i++) {
+    const lower = DEFAULT_PLAN_LIMITS.business[BUSINESS_PLANS[i - 1]], higher = DEFAULT_PLAN_LIMITS.business[BUSINESS_PLANS[i]];
+    assert.ok(higher.members > lower.members && higher.storage > lower.storage, `${BUSINESS_PLANS[i]} has more people and space`);
+    for (const k of Object.keys(lower)) assert.ok(higher[k] >= lower[k], `${BUSINESS_PLANS[i]}'s ${k} is not below`);
+  }
+  assert.deepEqual(BUSINESS_PRICE, { business_plus: 999, business_pro: 1999, business_enterprise: 4499 });
+  assert.equal(businessAmount('business_plus'), '₹999');
+  assert.equal(businessAmount('business_enterprise'), '₹4,499');
+  assert.equal(businessPrice('business_pro'), '₹1,999 a month + GST');
+  assert.equal(businessYearPrice('business_plus'), '₹10,989 a year + GST', 'a year is eleven months');
+  assert.equal(businessYearPrice('business_enterprise'), '₹49,489 a year + GST');
+  assert.equal(planLabel('business_plus'), 'Plus');
+  assert.equal(planLabel('business_pro'), 'Pro');
+  assert.equal(planLabel('business_enterprise'), 'Enterprise');
+  assert.equal(planLabel('plus'), 'Family Plus');
+  assert.equal(plusName(true), 'Plus');
+  assert.equal(nextBusinessPlan('free'), 'business_plus');
+  assert.equal(nextBusinessPlan('business_plus'), 'business_pro');
+  assert.equal(nextBusinessPlan('business_pro'), 'business_enterprise');
+  assert.equal(nextBusinessPlan('business_enterprise'), null);
+  const shop = { plan: 'free', limitBytes: 200 * MB, usedBytes: 199 * MB, business: true };
+  assert.match(storageFullMessage(shop, 3 * MB), /^This file is 3 MB, but your business has only 1 MB left\./);
+  // Never Family Plus, nor its price, for a business.
+  const shopFull = storageFullMessage({ ...shop, usedBytes: 200 * MB }, 0, { forSale: true, price: plusPrice('inr') });
+  assert.equal(shopFull, "Your business's storage is full, with 200 MB of 200 MB used. Delete records you don't need, or move to Plus for 25 GB.");
+  assert.equal(storageFullMessage({ plan: 'business_plus', limitBytes: 25 * GB, usedBytes: 25 * GB, business: true }),
+    "Your business's storage is full, with 25 GB of 25 GB used. Delete records you don't need, or move to Pro for 100 GB.");
+  assert.match(chatStorageFullMessage({ ...shop, usedBytes: 200 * MB }), /^There's no room to save this chat\. Your business has used 200 MB of 200 MB\. To save more, move to Plus for 25 GB\./);
+  for (const text of [storageFullMessage(shop, 3 * MB), shopFull, chatStorageFullMessage(shop)]) {
+    assert.doesNotMatch(text, /family/i, 'a business is not called a family');
+  }
+  // A paid plan that ended: every record stays, adding waits for the plan.
+  assert.ok(!fits({ ...shop, usedBytes: 5 * MB, closed: true }, 1), 'nothing fits in a closed business');
+  assert.ok(fits({ ...shop, usedBytes: 5 * MB }, 1));
+  assert.equal(storageFullMessage({ ...shop, usedBytes: 5 * MB, closed: true }, 3 * MB), CLOSED_MESSAGE);
+  assert.equal(CLOSED_MESSAGE, "Your business's plan has ended. Your records stay. To add new ones, renew the plan.");
+  assert.equal(storageFullMessage({ plan: 'business_pro', limitBytes: 100 * GB, usedBytes: 100 * GB, business: true }),
+    "Your business's storage is full, with 100 GB of 100 GB used. Delete records you don't need, or move to Enterprise for 200 GB.");
+  assert.equal(storageFullMessage({ plan: 'business_enterprise', limitBytes: 200 * GB, usedBytes: 200 * GB, business: true }),
+    "Your business's storage is full, with 200 GB of 200 GB used. Delete records you don't need to make room.");
+  assert.equal(chatStorageFullMessage({ plan: 'business_enterprise', limitBytes: 200 * GB, usedBytes: 200 * GB, business: true }),
+    "There's no room to save this chat. Your business has used 200 GB of 200 GB. Delete records or saved chats you don't need to make room.");
+  for (const text of [shopFull, chatStorageFullMessage({ ...shop, usedBytes: 200 * MB }, { forSale: true, price: plusPrice('inr') })]) {
+    assert.doesNotMatch(text, /₹100|Family Plus/, 'a business is never offered Family Plus');
+  }
+});
+
 if (failures.length) {
   console.error(failures.map((f) => `✗ ${f}`).join('\n'));
   console.error(`\n${failures.length} self-test(s) failed, ${passed} passed.`);
   process.exit(1);
 }
-console.log(`✓ ${passed} self-tests passed — matchers, judge, run-time PDF, metadata, ticket codes, text cleaning, Gmail rules and token sealing, kinship and the family tree, emergency card checks, web push, plan limits, questions each month, limits against abuse, Razorpay signatures, numbers in digits, sources the answer used, questions and budget.`);
+console.log(`✓ ${passed} self-tests passed — matchers, judge, run-time PDF, metadata, ticket codes, text cleaning, Gmail rules and token sealing, kinship and the family tree, emergency card checks, web push, plan limits, questions each month, limits against abuse, business papers, categories and plan words, Razorpay signatures, numbers in digits, sources the answer used, questions and budget.`);

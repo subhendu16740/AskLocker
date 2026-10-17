@@ -12,6 +12,10 @@
 // Plus, and Gmail import refuses a free family on the server as well.
 // Birthday reminders reach every family.
 //
+// A business (051) has its own plans, Plus, Pro and Enterprise, never Family Plus. Its ★
+// features open the same /plus page, which shows a business its plans. Its
+// plan ending closes adding (`closed`) instead of removing anything.
+//
 // The plan comes from family_storage_status() (038, 039), kept for a minute
 // per family. When it cannot be read (before 038, or offline) nothing is
 // gated here: the app never locks a family out because it could not ask.
@@ -31,6 +35,10 @@ interface KnownPlan {
   paidUntil: string | null;
   /** Plus has ended and the family is above the free limit: when the newest documents above it go (040). */
   removalAt: string | null;
+  /** A business whose paid plan ended: it keeps every record and adds nothing until renewed (051). */
+  closed: boolean;
+  /** The plan running now was switched on for a demo (051). */
+  trial: boolean;
   at: number;
 }
 
@@ -46,12 +54,14 @@ async function readPlan(familyId: string, force: boolean): Promise<KnownPlan> {
       plan: status?.plan ?? null,
       paidUntil: status?.paidUntil ?? null,
       removalAt: status?.removalAt ?? null,
+      closed: status?.closed === true,
+      trial: status?.trial === true,
       at: Date.now(),
     };
     known.set(familyId, fresh);
     return fresh;
   } catch {
-    return hit ?? { plan: null, paidUntil: null, removalAt: null, at: 0 };
+    return hit ?? { plan: null, paidUntil: null, removalAt: null, closed: false, trial: false, at: 0 };
   }
 }
 
@@ -119,6 +129,8 @@ export function useFamilyPlan() {
     plan: plan?.plan ?? null,
     paidUntil: plan?.paidUntil ?? null,
     removalAt: plan?.removalAt ?? null,
+    closed: plan?.closed === true,
+    trial: plan?.trial === true,
     isFree: plan?.plan === 'free',
     loading,
     refresh,

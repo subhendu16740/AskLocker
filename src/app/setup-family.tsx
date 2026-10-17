@@ -1,18 +1,53 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity,
   StyleSheet, ActivityIndicator,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Feather } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../lib/auth';
 import { useFamily } from '../lib/family-context';
-import { createNewFamily } from '../lib/api';
+import { createNewFamily, fetchUseFor } from '../lib/api';
 import { BackButton } from '../components/back-button';
 import { color, radius, size, space, type } from '../constants/design';
 import { track } from '../lib/analytics';
+
+type Kind = 'family' | 'business';
+
+// The words that change with what is being made (051).
+const WORDS: Record<Kind, {
+  title: string; subtitle: string; label: string; placeholder: string; empty: string;
+  button: string; failed: string; infoTitle: string; infoSub: string; plusLink: string; icon: 'users' | 'briefcase';
+}> = {
+  family: {
+    title: 'Create Your Family Vault',
+    subtitle: 'Everyone you invite can see its documents. Your personal vault stays yours.',
+    label: 'Family Name',
+    placeholder: 'e.g. The Sharma Family',
+    empty: 'Enter a family name.',
+    button: 'Create Family Vault',
+    failed: "Couldn't create the family. Try again.",
+    infoTitle: "Your family's own space",
+    infoSub: 'Only your family can open its documents in AskLocker.',
+    plusLink: 'See Family Plus ›',
+    icon: 'users',
+  },
+  business: {
+    title: 'Create Your Business Vault',
+    subtitle: 'Everyone you invite can see its records. Your personal vault stays yours.',
+    label: 'Business Name',
+    placeholder: 'e.g. Sharma Traders',
+    empty: 'Enter a business name.',
+    button: 'Create Business Vault',
+    failed: "Couldn't create the business. Try again.",
+    infoTitle: "Your business's own space",
+    infoSub: 'Only your team can open its records in AskLocker.',
+    plusLink: 'See Plus ›',
+    icon: 'briefcase',
+  },
+};
 
 export default function SetupFamilyScreen() {
   const { user } = useAuth();
@@ -20,6 +55,15 @@ export default function SetupFamilyScreen() {
   // until they have a vault. Someone who already has one came from Manage
   // Family to make another, and needs a way out.
   const { families, refreshFamilies, switchFamily } = useFamily();
+  // Family or business (051): from the button that opened this, else from
+  // what the person said they use AskLocker for. Either can be picked here.
+  const params = useLocalSearchParams<{ kind?: string }>();
+  const [kind, setKind] = useState<Kind>(params.kind === 'business' ? 'business' : 'family');
+  useEffect(() => {
+    if (params.kind || !user) return;
+    fetchUseFor(user.id).then((u) => { if (u === 'business') setKind('business'); }).catch(() => {});
+  }, [user?.id, params.kind]);
+  const w = WORDS[kind];
   const [familyName, setFamilyName] = useState('');
   const [description, setDescription] = useState('');
   const [loading, setLoading] = useState(false);
@@ -30,21 +74,21 @@ export default function SetupFamilyScreen() {
   const handleCreate = async () => {
     setProblem(null);
     if (!familyName.trim()) {
-      setProblem({ message: 'Enter a family name.', plus: false });
+      setProblem({ message: w.empty, plus: false });
       return;
     }
     if (!user) return;
 
     setLoading(true);
     try {
-      const familyId = await createNewFamily(user.id, familyName.trim(), description.trim() || undefined);
-      track('family_created', {});
+      const familyId = await createNewFamily(user.id, familyName.trim(), description.trim() || undefined, undefined, kind);
+      track('family_created', { kind });
       await refreshFamilies();
       // Their own new family, so it opens: making it is their own choice.
       switchFamily(familyId);
       router.replace('/home' as any);
     } catch (err: any) {
-      setProblem({ message: err?.message || "Couldn't create the family. Try again.", plus: err?.hint === 'family_limit' });
+      setProblem({ message: err?.message || w.failed, plus: err?.hint === 'family_limit' });
     } finally {
       setLoading(false);
     }
@@ -67,22 +111,37 @@ export default function SetupFamilyScreen() {
             end={{ x: 1, y: 1 }}
             style={styles.iconBox}
           >
-            <Text style={styles.iconEmoji}>🏛️</Text>
+            <Feather name={w.icon} size={28} color="#FFFFFF" />
           </LinearGradient>
-          <Text style={styles.title}>Create Your Family Vault</Text>
-          <Text style={styles.subtitle}>
-            Everyone you invite can see its documents. Your personal vault stays yours.
-          </Text>
+          <Text style={styles.title}>{w.title}</Text>
+          <Text style={styles.subtitle}>{w.subtitle}</Text>
+        </View>
+
+        {/* Family or business */}
+        <View style={styles.kinds} accessibilityRole="radiogroup">
+          {(['family', 'business'] as const).map((k) => (
+            <TouchableOpacity
+              key={k}
+              onPress={() => { setKind(k); setProblem(null); }}
+              style={[styles.kind, kind === k && styles.kindOn]}
+              accessibilityRole="radio"
+              accessibilityState={{ checked: kind === k }}
+              activeOpacity={0.8}
+            >
+              <Feather name={WORDS[k].icon} size={16} color={kind === k ? '#FFFFFF' : color.primary} />
+              <Text style={[styles.kindText, kind === k && styles.kindTextOn]}>{k === 'family' ? 'Family' : 'Business'}</Text>
+            </TouchableOpacity>
+          ))}
         </View>
 
         {/* Form */}
         <View style={styles.form}>
           <View style={styles.field}>
-            <Text style={styles.fieldLabel}>Family Name</Text>
+            <Text style={styles.fieldLabel}>{w.label}</Text>
             <View style={styles.inputWrapper}>
-              <Feather name="users" size={18} color="#9CA3AF" style={styles.inputIcon} />
+              <Feather name={w.icon} size={18} color="#9CA3AF" style={styles.inputIcon} />
               <TextInput
-                placeholder="e.g. The Sharma Family"
+                placeholder={w.placeholder}
                 placeholderTextColor="#9CA3AF"
                 value={familyName}
                 onChangeText={setFamilyName}
@@ -116,7 +175,7 @@ export default function SetupFamilyScreen() {
               <Text style={styles.problemText}>{problem.message}</Text>
               {problem.plus && (
                 <Text style={styles.problemLink} accessibilityRole="link" onPress={() => router.push('/plus' as any)}>
-                  See Family Plus ›
+                  {w.plusLink}
                 </Text>
               )}
             </View>
@@ -138,7 +197,7 @@ export default function SetupFamilyScreen() {
             {loading ? (
               <ActivityIndicator size="small" color="#FFFFFF" />
             ) : (
-              <Text style={styles.createBtnText}>Create Family Vault</Text>
+              <Text style={styles.createBtnText}>{w.button}</Text>
             )}
           </LinearGradient>
         </TouchableOpacity>
@@ -147,10 +206,8 @@ export default function SetupFamilyScreen() {
         <View style={styles.infoCard}>
           <Feather name="lock" size={16} color={color.primary} style={styles.infoIcon} />
           <View style={styles.infoTextWrap}>
-            <Text style={styles.infoTitle}>Your family's own space</Text>
-            <Text style={styles.infoSub}>
-              Only your family can open its documents in AskLocker.
-            </Text>
+            <Text style={styles.infoTitle}>{w.infoTitle}</Text>
+            <Text style={styles.infoSub}>{w.infoSub}</Text>
           </View>
         </View>
       </View>
@@ -173,7 +230,7 @@ const styles = StyleSheet.create({
   containerBelowBack: { paddingTop: space.sm },
   header: {
     alignItems: 'center',
-    marginBottom: space.xl + 8,
+    marginBottom: space.xl,
   },
   iconBox: {
     width: 64,
@@ -183,7 +240,22 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: space.lg,
   },
-  iconEmoji: { fontSize: 28 },
+  kinds: { flexDirection: 'row', gap: space.sm, marginBottom: space.lg },
+  kind: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: space.sm,
+    minHeight: 40,
+    borderRadius: radius.control,
+    borderWidth: 1,
+    borderColor: color.inputBorder,
+    backgroundColor: color.surface,
+  },
+  kindOn: { backgroundColor: color.primary, borderColor: color.primary },
+  kindText: { ...type.label, color: color.primary },
+  kindTextOn: { color: '#FFFFFF' },
   title: {
     fontSize: 20,
     lineHeight: 26,

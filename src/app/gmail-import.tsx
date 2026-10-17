@@ -23,7 +23,8 @@ import { Redirect, router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../lib/auth';
 import { useFamily } from '../lib/family-context';
-import { vaultName } from '../lib/vaults';
+import { isBusinessVault, vaultName } from '../lib/vaults';
+import { plusName } from '../lib/plans';
 import {
   fetchCategories, gmailDisconnect, gmailFinishConnect, gmailImportItem, gmailListItems, gmailScanBatch,
   gmailStartConnect, gmailStatus, GmailApiError, type GmailImportResult, type GmailItem, type GmailStatus,
@@ -475,7 +476,7 @@ export default function GmailImportScreen() {
             )}
             {!status?.expired && (
               <Text style={styles.plusNote}>
-                <Text style={styles.plusNoteTag}>★ Family Plus</Text>
+                <Text style={styles.plusNoteTag}>★ {plusName(isBusinessVault(currentFamily))}</Text>
                 {'  '}For everyone in your family.
               </Text>
             )}
