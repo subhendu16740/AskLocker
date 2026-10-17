@@ -953,6 +953,7 @@ export type Database = {
         Row: {
           businesses_per_person: number | null
           families_per_person: number | null
+          family_questions_per_month: number | null
           grace_days: number | null
           invites_per_day: number
           max_members: number
@@ -968,6 +969,7 @@ export type Database = {
         Insert: {
           businesses_per_person?: number | null
           families_per_person?: number | null
+          family_questions_per_month?: number | null
           grace_days?: number | null
           invites_per_day?: number
           max_members?: number
@@ -983,6 +985,7 @@ export type Database = {
         Update: {
           businesses_per_person?: number | null
           families_per_person?: number | null
+          family_questions_per_month?: number | null
           grace_days?: number | null
           invites_per_day?: number
           max_members?: number
@@ -1405,6 +1408,11 @@ export type Database = {
       family_chats_bytes: { Args: { p_family_id: string }; Returns: number }
       family_files_bytes: { Args: { p_ns: string }; Returns: number }
       family_plan_now: { Args: { p_family_id: string }; Returns: string }
+      family_question_room: {
+        Args: { p_user_id: string }
+        Returns: { cap: number; family_id: string; used: number }[]
+      }
+      family_questions_used: { Args: { p_family_id: string }; Returns: number }
       family_storage_status: {
         Args: { p_family_id: string }
         Returns: {

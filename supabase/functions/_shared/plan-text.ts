@@ -28,13 +28,14 @@
 // Business vaults (051) have plans of their own, never Family Plus, given by
 // hand for now (billed by us, GST on top):
 //
-//   Plus         5 people,  25 GB — ₹999 a month
-//   Pro         15 people, 100 GB — ₹1,999 a month
-//   Enterprise  50 people, 200 GB — ₹4,499 a month
+//   Plus         5 people,  25 GB — ₹500 a month
+//   Pro         15 people, 100 GB — ₹1,000 a month
+//   Enterprise  50 people, 200 GB — ₹4,000 a month
 //
 // Each with 100 questions a person a month. Even a business that used every
 // limit at once would cost less than its plan's price, at about ₹0.20 a
-// question: every plan keeps more than half its price even then.
+// question: Plus and Enterprise keep about half their price even then, Pro
+// about a quarter.
 // Nothing is ever removed from a business: when a paid plan ends it keeps
 // every record and adds nothing until it is renewed ("closed"); a trial that
 // ends puts it back on Free.
@@ -95,6 +96,8 @@ export interface PlanLimits {
   questions: { free: number | null; plus: number | null };
   /** The most one person may ask in a month where there is no monthly limit (049). */
   questionsFairUse: number;
+  /** The questions everyone in a vault on Family Plus shares in a month (053); null: no family number. */
+  familyQuestions: number | null;
   /** Questions each person may try in a day, answered or not, per plan; null: no limit (050). */
   questionTriesPerDay: { free: number | null; plus: number | null };
   /** Documents each person may add in a day, per plan; null: no limit (050). */
@@ -113,7 +116,7 @@ const GB = 1024 ** 3;
 
 const MB = 1024 ** 2;
 
-/** What 039–051 set; plan_limits is the truth. */
+/** What 039–053 set; plan_limits is the truth. */
 export const DEFAULT_PLAN_LIMITS: PlanLimits = {
   free: 200 * MB,
   freePersonal: 100 * MB,
@@ -122,7 +125,8 @@ export const DEFAULT_PLAN_LIMITS: PlanLimits = {
   members: { free: 4, plus: 8 },
   voiceAnswers: { free: 10, plus: null },
   questions: { free: 20, plus: null },
-  questionsFairUse: 500,
+  questionsFairUse: 200,
+  familyQuestions: 200,
   questionTriesPerDay: { free: 10, plus: 100 },
   uploadsPerDay: { free: 50, plus: 500 },
   familiesPerPerson: 1,
@@ -240,22 +244,22 @@ export function planLabel(plan: PlanName, business?: boolean): string {
  * eleven months.
  */
 export const BUSINESS_PRICE: Record<BusinessPlan, number> = {
-  business_plus: 999,
-  business_pro: 1999,
-  business_enterprise: 4499,
+  business_plus: 500,
+  business_pro: 1000,
+  business_enterprise: 4000,
 };
 
-/** The amount alone, "₹1,999", for a narrow column. */
+/** The amount alone, "₹1,000", for a narrow column. */
 export function businessAmount(plan: BusinessPlan): string {
   return formatMoney('inr', BUSINESS_PRICE[plan]);
 }
 
-/** "₹1,999 a month + GST". */
+/** "₹1,000 a month + GST". */
 export function businessPrice(plan: BusinessPlan): string {
   return `${businessAmount(plan)} a month + GST`;
 }
 
-/** "₹10,989 a year + GST": eleven months. */
+/** "₹5,500 a year + GST": eleven months. */
 export function businessYearPrice(plan: BusinessPlan): string {
   return `${formatMoney('inr', 11 * BUSINESS_PRICE[plan])} a year + GST`;
 }

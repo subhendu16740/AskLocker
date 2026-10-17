@@ -28,9 +28,9 @@ import type { Database } from '../../lib/database.types';
 import { ScreenHeader, PlusTag } from '../../components/screen-header';
 import { VaultDropdown, type VaultChoice } from '../../components/vault-sheet';
 import { isBusinessVault, isPersonalVault, splitVaults, vaultIcon, vaultName, vaultSubtitle } from '../../lib/vaults';
-import { suggestCategory } from '../../../supabase/functions/_shared/doc-category';
 import { color, radius, shadow, size, space, type } from '../../constants/design';
 import { categoryForAnalytics, track } from '../../lib/analytics';
+import { categoryOrder, suggestCategory } from '../../../supabase/functions/_shared/doc-category';
 
 type DocumentCategory = Database['public']['Tables']['document_categories']['Row'];
 
@@ -82,10 +82,12 @@ export default function UploadScreen() {
   const [pickedFile, setPickedFile] = useState<PickedFile | null>(null);
   const [selectedPerson, setSelectedPerson] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
-  // Tapped by the person: no suggestion replaces it (051).
+  const [categories, setCategories] = useState<DocumentCategory[]>([]);
+  // Nothing is picked for the person but a suggestion from the file itself
+  // (its name, and the text read off a photo); a tap changes or clears it.
+  const [suggestedCategory, setSuggestedCategory] = useState<string | null>(null);
   const [categoryTouched, setCategoryTouched] = useState(false);
   const [allCategories, setAllCategories] = useState(false);
-  const [categories, setCategories] = useState<DocumentCategory[]>([]);
   const [uploading, setUploading] = useState(false);
   // `expiresOn`: a date ingest found in a document saved to a vault on Free —
   // the moment to offer Family Plus's expiry reminders (049).
@@ -115,27 +117,37 @@ export default function UploadScreen() {
   }, [owners, person]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // The vault's own list first (051): a business's for a business, a
-  // family's otherwise; before 051 every category is a family's. The rest
-  // are one tap away.
+  // family's otherwise; before 051 every category is a family's. A family's
+  // common ones lead, "Other" is last, and the rest are one tap away.
   const audience: 'family' | 'business' = toBusiness ? 'business' : 'family';
   const inList = (c: DocumentCategory) => {
     const a = (c as { audience?: string | null }).audience ?? 'family';
     return a === audience || a === 'both';
   };
-  // "Other", which both lists share, last.
-  const ownCategories = categories.filter(inList).sort((x, y) =>
-    Number((x as { audience?: string | null }).audience === 'both') - Number((y as { audience?: string | null }).audience === 'both'));
-  const shownCategories = allCategories ? [...ownCategories, ...categories.filter((c) => !inList(c))] : ownCategories.slice(0, 12);
+  const byOrder = (x: DocumentCategory, y: DocumentCategory) =>
+    categoryOrder(x.is_system !== false ? x.name : '') - categoryOrder(y.is_system !== false ? y.name : '');
+  const ownCategories = categories.filter(inList).sort(byOrder);
+  const firstCategories = ownCategories.slice(0, 12);
+  const shownCategories = allCategories
+    ? [...ownCategories, ...categories.filter((c) => !inList(c)).sort(byOrder)]
+    : [...firstCategories, ...categories.filter((c) => c.id === selectedCategory && !firstCategories.includes(c))];
   const hiddenCount = categories.length - shownCategories.length;
 
-  // Until the person taps one, the category follows the file and the vault:
-  // a suggestion from its name and text, else the list's first.
+  // A suggestion, until the person picks: from the file's name at once, and
+  // again once the text of a photo has been read, from the vault's own list.
+  // Nothing is picked when nothing says.
   useEffect(() => {
-    if (categoryTouched || ownCategories.length === 0) return;
-    const name = suggestCategory({ fileName: pickedFile?.name, text: ocrText, audience });
-    const suggested = name ? ownCategories.find((c) => c.is_system !== false && c.name === name) : undefined;
-    setSelectedCategory((suggested ?? ownCategories[0]).id);
+    if (categoryTouched) return;
+    const name = pickedFile ? suggestCategory({ fileName: pickedFile.name, text: ocrText, audience }) : null;
+    const match = name ? ownCategories.find((c) => c.is_system !== false && c.name === name) : undefined;
+    setSuggestedCategory(match?.id ?? null);
+    setSelectedCategory(match?.id ?? '');
   }, [categories, audience, pickedFile?.name, ocrText, categoryTouched]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const pickCategory = (id: string) => {
+    setCategoryTouched(true);
+    setSelectedCategory((now) => (now === id ? '' : id));
+  };
 
   // ─── File Pickers ─────────────────────────────────────────────
 
@@ -170,6 +182,7 @@ export default function UploadScreen() {
     setPickedFile(file);
     setOcrText(null);
     setCategoryTouched(false);
+    setAllCategories(false);
     runOcr(file);
   };
 
@@ -282,6 +295,9 @@ export default function UploadScreen() {
         category: categoryForAnalytics(categories.find((c) => c.id === selectedCategory)),
         file_type: /^[a-z0-9]{1,8}$/.test(pickedFile.type) ? pickedFile.type : 'other',
         vault: isPersonalVault(targetFamily) ? 'personal' : toBusiness ? 'business' : 'family',
+        category_source: !selectedCategory ? 'none'
+          : suggestedCategory ? (selectedCategory === suggestedCategory ? 'suggested' : 'changed')
+            : 'chosen',
       });
 
       // A future expiry date in a vault on Free: offer the reminders for it.
@@ -504,11 +520,16 @@ export default function UploadScreen() {
 
             {/* Category */}
             <Text style={[styles.sectionTitle, styles.sectionTitleLater]}>Category</Text>
+            {!!suggestedCategory && selectedCategory === suggestedCategory && !categoryTouched && (
+              <Text style={styles.categoryHint}>Picked from the file. Tap another to change it.</Text>
+            )}
             <View style={styles.chipsWrap}>
               {shownCategories.map((cat) => (
                 <TouchableOpacity
                   key={cat.id}
-                  onPress={() => { setSelectedCategory(cat.id); setCategoryTouched(true); }}
+                  onPress={() => pickCategory(cat.id)}
+                  accessibilityRole="button"
+                  aria-pressed={selectedCategory === cat.id}
                   style={[
                     styles.chip,
                     selectedCategory === cat.id && styles.chipSelected,
@@ -522,16 +543,16 @@ export default function UploadScreen() {
                   </Text>
                 </TouchableOpacity>
               ))}
-              {hiddenCount > 0 && !allCategories && (
+              {hiddenCount > 0 || allCategories ? (
                 <TouchableOpacity
-                  onPress={() => setAllCategories(true)}
-                  style={styles.chip}
+                  onPress={() => setAllCategories((v) => !v)}
+                  style={[styles.chip, styles.chipMore]}
                   accessibilityRole="button"
-                  accessibilityLabel={`Show ${hiddenCount} more categories`}
+                  accessibilityLabel={allCategories ? 'Show fewer categories' : `Show ${hiddenCount} more categories`}
                 >
-                  <Text style={styles.chipText}>More…</Text>
+                  <Text style={[styles.chipText, styles.chipMoreText]}>{allCategories ? 'Fewer' : 'More…'}</Text>
                 </TouchableOpacity>
-              )}
+              ) : null}
             </View>
 
             {/* Upload Button */}
@@ -841,6 +862,9 @@ const styles = StyleSheet.create({
   chipCheck: { marginRight: space.xs },
   chipText: { fontSize: 14, lineHeight: 20, fontWeight: '500', color: color.textBody },
   chipTextSelected: { color: '#FFFFFF' },
+  chipMore: { borderStyle: 'dashed' },
+  chipMoreText: { color: color.primary },
+  categoryHint: { ...type.caption, marginTop: -space.sm, marginBottom: space.sm },
   saveBtnWrap: { marginTop: space.xl },
   saveBtn: {
     borderRadius: radius.control,

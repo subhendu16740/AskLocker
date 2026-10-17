@@ -16,13 +16,15 @@ import { readFileSync } from 'node:fs';
 import { getDocument } from 'pdfjs-serverless';
 import { reconstructLayout } from '../../supabase/functions/_shared/pdf-text.ts';
 import { extractMetadata, parseFlexibleDate, gstinCheckChar, isValidGstin } from '../../supabase/functions/_shared/metadata.ts';
-import { suggestCategory, SUGGESTED_CATEGORIES } from '../../supabase/functions/_shared/doc-category.ts';
 import { cleanText } from '../../supabase/functions/_shared/text.ts';
 import { ticketCodeNotes, ticketSearchTerms } from '../../supabase/functions/_shared/tickets.ts';
 import { digitsFromWords, restoreCodes } from '../../supabase/functions/_shared/numbers.ts';
 import { takeInTurn, uniqueRelatives } from '../../supabase/functions/_shared/vaults.ts';
 import { passagesUsed, splitUsedPassages } from '../../supabase/functions/_shared/used-passages.ts';
 import { toSpeech } from '../../src/lib/speech-text.ts';
+import {
+  BUILT_IN_CATEGORIES, BUSINESS_CATEGORIES, FAMILY_CATEGORIES, SUGGESTED_CATEGORIES, categoryOrder, countedCategory, suggestCategory,
+} from '../../supabase/functions/_shared/doc-category.ts';
 import { acceptedCurrencies, connectionCountry, hmacSha256Hex, payerCurrency, payerCurrencyMessage, paymentSignatureOk, plusOrderAmount, plusOrderDescription, sameText, webhookSignatureOk, ORDER_ID, PAYMENT_ID } from '../../supabase/functions/_shared/razorpay.ts';
 import { createHmac } from 'node:crypto';
 import {
@@ -672,14 +674,16 @@ await test('plans: every limit is finite, and a full vault says why and what to 
   // 30 days after Plus ends before anything above Free goes, 4 members on
   // Free and 8 on Plus (049), 10 voice chats for each person on Free (043),
   // and 20 questions a month for each person on Free, none on Plus up to
-  // fair use (049). A business (051): one free business a person beside one
-  // free family, and its own Plus and Pro.
+  // fair use (049), and on Plus 200 a month the whole family shares (053).
+  // A business (051): one free business a person beside one free family,
+  // and its own Plus and Pro.
   assert.deepEqual(DEFAULT_PLAN_LIMITS, {
     free: 200 * MB, freePersonal: 100 * MB, plus: 10 * GB, graceDays: 30,
     members: { free: 4, plus: 8 },
     voiceAnswers: { free: 10, plus: null },
     questions: { free: 20, plus: null },
-    questionsFairUse: 500,
+    questionsFairUse: 200,
+    familyQuestions: 200,
     questionTriesPerDay: { free: 10, plus: 100 },
     uploadsPerDay: { free: 50, plus: 500 },
     familiesPerPerson: 1,
@@ -792,6 +796,58 @@ await test('razorpay: the server sets the price, and only Razorpay\'s signature 
   assert.ok(PAYMENT_ID.test('pay_Specimen000001') && !PAYMENT_ID.test('pay_ bad'));
 });
 
+await test('categories: Upload suggests one from the file, never a default, and counts only built-in names', async () => {
+  assert.equal(FAMILY_CATEGORIES.length, 23);
+  assert.equal(BUSINESS_CATEGORIES.length, 11);
+  assert.equal(new Set(BUILT_IN_CATEGORIES).size, 34, 'a family\'s 23 and a business\'s 11, "Other" shared');
+  const cases = [
+    ['Passport_Asha_Verma.pdf', null, 'Passport'],
+    ['scan_1.jpg', 'Government of India  Aadhaar  1234 5678 9012  Asha Verma', 'National ID / Aadhaar'],
+    ['IMG_2031.jpg', 'INCOME TAX DEPARTMENT  GOVT. OF INDIA  Permanent Account Number Card  ABCDE1234F', 'PAN Card'],
+    ['photo.jpg', 'INCOME TAX DEPARTMENT  ASHA VERMA  ABCDE1234F', 'PAN Card'],
+    ['ITR-V_2026.pdf', null, 'Tax Returns'],
+    ['ack.pdf', 'Acknowledgement Number 1234  Assessment Year 2026-27  PAN ABCDE1234F', 'Tax Returns'],
+    ['health_policy_verma.pdf', null, 'Health Insurance'],
+    ['Car insurance 2026.pdf', null, 'Vehicle Insurance'],
+    ['ticket.pdf', 'ELECTRONIC RESERVATION SLIP  PNR 4512345678', 'Visa / Travel Docs'],
+    ['scan.jpg', 'VISA  Type: Tourist  Passport No. Z1234567', 'Visa / Travel Docs'],
+    ['statement.pdf', 'Your VISA card statement  Bank statement for September', 'Bank Statements'],
+    ['rate ticket.pdf', null, null],
+    ['visa_application.pdf', 'Passport No. Z1234567', 'Visa / Travel Docs'],
+    ['electricity_bill_sept.pdf', null, 'Utility Bills'],
+    ['Rent Agreement Flat 4B.pdf', null, 'Property Documents'],
+    ['Discharge Summary.pdf', null, 'Medical Records'],
+    ['fixed_deposit_receipt.pdf', null, 'Bank Statements'],
+    ['gas_booking_receipt.jpg', null, 'Utility Bills'],
+    ['Salary slip Aug.pdf', null, 'Employment Letters'],
+    ['Class 10 marksheet.jpg', null, 'Educational Certificates'],
+    ['IMG_2031.jpg', null, null],
+    ['resume.pdf', null, null],
+    ['policy.pdf', null, null],
+    ['citrus_farm.pdf', null, null],
+    ['', '', null],
+  ];
+  for (const [name, text, want] of cases) {
+    assert.equal(suggestCategory({ fileName: name, text, audience: 'family' }), want, `${name} / ${text}`);
+  }
+  // Counting: built-in names as they are; a family's own category never by name.
+  assert.equal(countedCategory('Passport'), 'Passport');
+  assert.equal(countedCategory('Passport', true), 'Passport');
+  assert.equal(countedCategory('Passport', false), 'Other');
+  assert.equal(countedCategory("Mom's reports", false), 'Other');
+  assert.equal(countedCategory('Something new'), 'Other');
+  assert.equal(countedCategory(null), 'None');
+  assert.equal(countedCategory('GST Returns', true), 'GST Returns', 'a business\'s built-in names count too');
+  // Upload's order: the common ones, then other built-ins, then a business's,
+  // then a vault's own, "Other" last.
+  assert.ok(categoryOrder('Passport') < categoryOrder('Medical Records'));
+  assert.ok(categoryOrder('Medical Records') < categoryOrder('Voter ID'));
+  assert.ok(categoryOrder('Voter ID') < categoryOrder('Sales Invoices'));
+  assert.ok(categoryOrder('Sales Invoices') < categoryOrder('Tax (ITR/TDS)'));
+  assert.ok(categoryOrder('Tax (ITR/TDS)') < categoryOrder(''));
+  assert.ok(categoryOrder('') < categoryOrder('Other'));
+});
+
 await test('razorpay: the server picks rupees or dollars from where the payer connects, not from a setting', async () => {
   // Cloudflare's header: two letters; "XX" (unknown) and junk are no country.
   assert.equal(connectionCountry('IN'), 'IN');
@@ -850,7 +906,7 @@ await test('questions each month: the count, and the words when they are used up
   const free = parseAllowance({ allowed: false, used: 20, limit: 20, ceiling: 20, plus: false, resets_on: '2026-11-01' });
   assert.deepEqual(free, { used: 20, limit: 20, ceiling: 20, left: 0, plus: false, resetsOn: '2026-11-01' });
   assert.equal(questionLimitMessage(free),
-    "You've used your 20 free questions for this month. They start again on 1 November. Family Plus has no monthly limit.");
+    "You've used your 20 free questions for this month. They start again on 1 November. Family Plus gives your family more.");
   assert.match(questionLimitMessage(free, 'hi-IN'), /20 मुफ़्त सवाल/);
   assert.match(questionLimitMessage(free, 'hi-IN'), /1 नवंबर/);
   assert.equal(questionsLeftText(free), "You've used your 20 free questions this month");
@@ -863,6 +919,22 @@ await test('questions each month: the count, and the words when they are used up
   const plusFull = parseAllowance({ allowed: false, used: 500, limit: null, ceiling: 500, plus: true, resets_on: '2026-12-01' });
   assert.equal(questionLimitMessage(plusFull),
     "You've reached the fair-use limit of 500 questions this month. They start again on 1 December.");
+  // Family Plus (053): the family's 200 shared; said once 50 or fewer are left.
+  const family = parseAllowance({ used: 40, limit: null, ceiling: 200, left: 20, plus: true, resets_on: '2026-11-01',
+    family_limit: 200, family_used: 180, family_left: 20 });
+  assert.deepEqual(family, { used: 40, limit: null, ceiling: 200, left: 20, plus: true, resetsOn: '2026-11-01',
+    familyLimit: 200, familyUsed: 180, familyLeft: 20 });
+  assert.equal(questionsLeftText(family), '20 of 200 family questions left this month');
+  assert.equal(questionsLeftText({ ...family, familyUsed: 100, familyLeft: 100, left: 100 }), null);
+  const familyFull = parseAllowance({ allowed: false, reason: 'family', used: 40, limit: null, ceiling: 200, plus: true,
+    resets_on: '2026-11-01', family_limit: 200, family_used: 200, family_left: 0 });
+  assert.equal(familyFull.reason, 'family');
+  assert.equal(questionLimitMessage(familyFull), "Your family has used its 200 questions for this month. They start again on 1 November.");
+  assert.match(questionLimitMessage(familyFull, 'hi-IN'), /परिवार के इस महीने के 200 सवाल/);
+  assert.equal(questionsLeftText({ ...familyFull, left: 0 }), 'Your family has used its 200 questions this month');
+  // Given back: to the person and to the family.
+  assert.deepEqual(givenBack(family), { ...family, used: 39, familyUsed: 179, familyLeft: 21, left: 21 });
+  assert.deepEqual(parseAllowance(allowanceJson(family)), family);
   // A question given back: one fewer used, one more left; never below zero.
   assert.deepEqual(givenBack(few), { ...few, used: 16, left: 4 });
   assert.equal(givenBack({ ...few, used: 0, left: 20 }).used, 0);
@@ -1038,12 +1110,13 @@ await test('business plans: Plus, Pro and Enterprise, their prices and words, an
     assert.ok(higher.members > lower.members && higher.storage > lower.storage, `${BUSINESS_PLANS[i]} has more people and space`);
     for (const k of Object.keys(lower)) assert.ok(higher[k] >= lower[k], `${BUSINESS_PLANS[i]}'s ${k} is not below`);
   }
-  assert.deepEqual(BUSINESS_PRICE, { business_plus: 999, business_pro: 1999, business_enterprise: 4499 });
-  assert.equal(businessAmount('business_plus'), '₹999');
-  assert.equal(businessAmount('business_enterprise'), '₹4,499');
-  assert.equal(businessPrice('business_pro'), '₹1,999 a month + GST');
-  assert.equal(businessYearPrice('business_plus'), '₹10,989 a year + GST', 'a year is eleven months');
-  assert.equal(businessYearPrice('business_enterprise'), '₹49,489 a year + GST');
+  assert.deepEqual(BUSINESS_PRICE, { business_plus: 500, business_pro: 1000, business_enterprise: 4000 });
+  assert.equal(businessAmount('business_plus'), '₹500');
+  assert.equal(businessAmount('business_enterprise'), '₹4,000');
+  assert.equal(businessPrice('business_pro'), '₹1,000 a month + GST');
+  assert.equal(businessYearPrice('business_plus'), '₹5,500 a year + GST', 'a year is eleven months');
+  assert.equal(businessYearPrice('business_pro'), '₹11,000 a year + GST');
+  assert.equal(businessYearPrice('business_enterprise'), '₹44,000 a year + GST');
   assert.equal(planLabel('business_plus'), 'Plus');
   assert.equal(planLabel('business_pro'), 'Pro');
   assert.equal(planLabel('business_enterprise'), 'Enterprise');

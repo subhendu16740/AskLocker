@@ -40,7 +40,7 @@ function faq(payments: PaymentsStatus | null): { q: string; a: string }[] {
     },
     {
       q: 'How many questions can I ask?',
-      a: `On Free, you can ask ${DEFAULT_PLAN_LIMITS.questions.free} questions a month, and the count starts again on the 1st. Questions that get no answer don't count, but you can only try ${DEFAULT_PLAN_LIMITS.questionTriesPerDay.free} a day. ★ Family Plus has no monthly limit, just a fair-use cap of ${DEFAULT_PLAN_LIMITS.questionsFairUse} a month and ${DEFAULT_PLAN_LIMITS.questionTriesPerDay.plus} tries a day.`,
+      a: `On Free, you can ask ${DEFAULT_PLAN_LIMITS.questions.free} questions a month, and the count starts again on the 1st. Questions that get no answer don't count, but you can only try ${DEFAULT_PLAN_LIMITS.questionTriesPerDay.free} a day. ★ With Family Plus, your family shares ${DEFAULT_PLAN_LIMITS.familyQuestions} questions a month, and each person can try ${DEFAULT_PLAN_LIMITS.questionTriesPerDay.plus} a day.`,
     },
     {
       q: 'Are there other limits?',
