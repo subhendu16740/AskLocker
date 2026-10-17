@@ -19,6 +19,7 @@ const typeConfig: Record<string, { icon: string; bg: string; color: string }> = 
   invite: { icon: 'mail', bg: '#EFF6FF', color: '#2563EB' },
   // "Priya joined Verma Family" / "… said no" (037), or "You were added to <family>" (025).
   member: { icon: 'user-plus', bg: '#F0FDF4', color: '#16A34A' },
+  note: { icon: 'edit-3', bg: '#EFF6FF', color: '#2A3D66' },
   // "Today is Kamala Verma's 78th birthday" — migration 035.
   birthday: { icon: 'gift', bg: '#FDF2F8', color: '#DB2777' },
   // "Rohan shared your PAN by link" — migration 036; opens the document.
@@ -73,7 +74,7 @@ export default function NotificationsScreen() {
     // so a tap that opens something opens it in the notification's own. (A
     // family the person has since left falls back to their default, as any
     // stale choice does.)
-    const opens = !!notif.document_ref || notif.type === 'member' || notif.type === 'birthday' || notif.type === 'plan';
+    const opens = !!notif.document_ref || notif.type === 'member' || notif.type === 'birthday' || notif.type === 'plan' || notif.type === 'note';
     if (opens && notif.family_id && notif.family_id !== currentFamily?.id) {
       switchFamily(notif.family_id);
     }
@@ -87,6 +88,9 @@ export default function NotificationsScreen() {
       router.push('/family-tree' as any);
     } else if (notif.type === 'plan') {
       router.push('/settings/storage' as any);
+    } else if (notif.type === 'note') {
+      // A reminder on one of your notes (056), in its business.
+      router.push('/notes' as any);
     } else if (notif.type === 'invite') {
       // Not their family yet, so no switching: the invitation is answered there.
       router.push('/family' as any);

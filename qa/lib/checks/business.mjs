@@ -108,6 +108,26 @@ begin
   perform public.set_family_plan('${bizId}', now() + interval '1 day', 'trial', null, 'business_pro');
   v_out := v_out || 'pro_questions=' || ((select ceiling from public.question_allowance('${userA}'))
              >= (select questions_fair_use from public.plan_limits where plan = 'business_pro')) || ';';
+  -- 056: on Pro the overview has money in and out, and a reminder on a note
+  -- reaches its owner from 9 in the morning, India time.
+  if exists (select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+              where n.nspname = 'public' and p.proname = 'business_overview') then
+    perform set_config('request.jwt.claims', v_as_a, true);
+    perform set_config('request.jwt.claim.role', 'authenticated', true);
+    perform set_config('request.jwt.claim.sub', '${userA}', true);
+    v_out := v_out || 'overview_pro=' || coalesce(public.business_overview('${bizId}')->>'tier', 'none')
+          || ';overview_money=' || (jsonb_typeof(public.business_overview('${bizId}')->'money') = 'array') || ';';
+    insert into public.scratch_notes (family_id, body, remind_on)
+      values ('${bizId}', 'QA note reminder', (now() at time zone 'Asia/Kolkata')::date);
+    perform set_config('request.jwt.claims', v_service, true);
+    perform set_config('request.jwt.claim.role', 'service_role', true);
+    -- Two statements: the second must see what the first made.
+    v_out := v_out || 'note_reminders=' || public.queue_note_reminders(((now() at time zone 'Asia/Kolkata')::date + time '10:00') at time zone 'Asia/Kolkata') || ';';
+    v_out := v_out || 'note_notified=' || exists (select 1 from public.notifications n where n.user_id = '${userA}' and n.type = 'note'
+                                                    and n.title = 'QA note reminder' and n.family_id = '${bizId}') || ';';
+  else
+    v_out := v_out || 'overview_pro=none;';
+  end if;
   perform public.end_family_plan('${bizId}');
   perform public.queue_plan_notices();
   select * into s from public.family_storage_status('${bizId}');
@@ -405,6 +425,38 @@ export async function runBusinessChecks(cfg, { a, b, anon, vaultA, vaultB }, res
       stillAdmin && !!stepErr && (stepErr.hint === 'last_admin' || /last admin/i.test(stepErr.message)),
       stepErr ? short(stepErr) : stillAdmin ? 'no error, but still an admin' : 'A is a VIEWER now');
 
+    // 056: each person's notes, and the overview a plan opens.
+    {
+      const { data: ov, error: ovErr } = await a.client.rpc('business_overview', { p_family_id: biz.id });
+      if (ovErr && String(ovErr.code) === 'PGRST202') {
+        for (const [id, title] of [
+          ['overview-free', 'On Free, a business overview gives counts, not lists (056)'],
+          ['note-free', 'A note in a business on Free; no reminder on it (056)'],
+          ['note-private', "A teammate cannot read, change or delete someone's note (056)"],
+        ]) results.add('business', id, title, 'skipped', { why: 'migration 056 is not applied to DEV yet' });
+      } else {
+        check('overview-free', 'On Free, a business overview gives counts, not lists (056)',
+          !ovErr && ov?.tier === 'free' && ov?.renewals == null && ov?.money == null && typeof ov?.counts?.documents === 'number',
+          ovErr ? short(ovErr) : `tier ${ov?.tier}, ${ov?.counts?.documents} documents`);
+        const { data: note, error: noteErr } = await a.client.from('scratch_notes')
+          .insert({ family_id: biz.id, body: `QA note ${process.env.GITHUB_RUN_ID ?? 'local'}` }).select('id').single();
+        const { error: remindErr } = await a.client.from('scratch_notes')
+          .insert({ family_id: biz.id, body: 'QA reminder on Free', remind_on: new Date(Date.now() + 3 * 86_400_000).toISOString().slice(0, 10) });
+        check('note-free', 'A note in a business on Free; no reminder on it (056)',
+          !noteErr && !!note && remindErr?.hint === 'plus_only', noteErr ? short(noteErr) : remindErr ? short(remindErr) : 'a reminder WAS set on Free');
+        if (note) {
+          const { data: seen } = await b.client.from('scratch_notes').select('id').eq('id', note.id);
+          await b.client.from('scratch_notes').update({ body: 'QA intrusion' }).eq('id', note.id);
+          await b.client.from('scratch_notes').delete().eq('id', note.id);
+          const { data: after } = await a.client.from('scratch_notes').select('body').eq('id', note.id).maybeSingle();
+          check('note-private', "A teammate cannot read, change or delete someone's note (056)",
+            (seen ?? []).length === 0 && !!after && after.body !== 'QA intrusion',
+            `B saw ${(seen ?? []).length}; ${after ? `body "${after.body}"` : 'the note is GONE'}`);
+          await a.client.from('scratch_notes').delete().eq('id', note.id);
+        }
+      }
+    }
+
     const preview = await invokeFunction(cfg, a, 'delete-account', { action: 'preview' }, { timeoutMs: 30_000 });
     const row = (preview.data?.families ?? []).find((f) => f.family_id === biz.id);
     if (preview.status === 200 && row && 'blocked' in row) {
@@ -494,6 +546,17 @@ export async function runBusinessChecks(cfg, { a, b, anon, vaultA, vaultB }, res
       `${said('converted')}, ${said('converted_plan')}, members ${result.converted_members ?? '—'}`);
     check('db-one-free-vault', 'On Free, a person creates one vault in all: B, with a free family, is refused a business (054)',
       result.b_business === 'family_limit', said('b_business'));
+  }
+  if (result.overview_pro === 'none' || result.overview_pro == null) {
+    for (const [id, title] of [
+      ['db-overview-pro', 'On Pro, the overview has money in and out (056)'],
+      ['db-note-reminder', 'On a paid plan, a reminder on a note reaches its owner, once (056)'],
+    ]) results.add('business', id, title, 'skipped', { why: 'migration 056 is not applied to DEV yet' });
+  } else {
+    check('db-overview-pro', 'On Pro, the overview has money in and out (056)',
+      result.overview_pro === 'pro' && result.overview_money === 'true', `${said('overview_pro')}, ${said('overview_money')}`);
+    check('db-note-reminder', 'On a paid plan, a reminder on a note reaches its owner, once (056)',
+      Number(result.note_reminders) >= 1 && result.note_notified === 'true', `${said('note_reminders')}, ${said('note_notified')}`);
   }
   if (result.b_business_on_plus === 'none' || result.b_business_on_plus == null) {
     results.add('business', 'db-business-beside-plus', 'Someone in a family on Family Plus creates a free business (055)', 'skipped',

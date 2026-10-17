@@ -5,7 +5,8 @@
 // back button. Layout from the v4 design (who you are on top, then Home,
 // Family tree, Emergency cards, Manage Family, Reminders and Settings, Sign Out
 // at the bottom), in the app's own colours. In a business (051) there is no
-// family tree and no emergency cards, and Manage Family is Manage team.
+// family tree and no emergency cards, and Manage Family is Manage team; it has
+// its Overview and My notes instead (056).
 // ────────────────────────────────────────────────────────────────
 
 import { useEffect, useRef, useState } from 'react';
@@ -25,10 +26,13 @@ import { appVersion } from '../lib/app-info';
 import { PlusStar, PlusTag } from './screen-header';
 import { color, radius, size, space, type } from '../constants/design';
 
-type MenuItem = { icon: string; label: string; route: string; plus?: PlusFeature; familyOnly?: boolean };
+type MenuItem = { icon: string; label: string; route: string; plus?: PlusFeature; familyOnly?: boolean; businessOnly?: boolean };
 
 const menuItems: MenuItem[] = [
   { icon: 'home', label: 'Home', route: '/home' },
+  // A business's own (056): what its papers say, and each person's notes.
+  { icon: 'bar-chart-2', label: 'Overview', route: '/overview', businessOnly: true },
+  { icon: 'edit-3', label: 'My notes', route: '/notes', businessOnly: true },
   { icon: 'git-branch', label: 'Family tree', route: '/family-tree', familyOnly: true },
   { icon: 'plus-square', label: 'Emergency cards', route: '/emergency', familyOnly: true },
   { icon: 'users', label: 'Manage Family', route: '/family' },
@@ -80,7 +84,7 @@ export default function ProfileDrawer() {
 
   const business = isBusinessVault(currentFamily);
   const items = menuItems
-    .filter((item) => !(business && item.familyOnly))
+    .filter((item) => !(business && item.familyOnly) && !(!business && item.businessOnly))
     .map((item) => (business && item.route === '/family' ? { ...item, icon: 'briefcase', label: 'Manage team' } : item));
 
   const handleNavigate = async (item: MenuItem) => {

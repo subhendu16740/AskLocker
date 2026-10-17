@@ -110,6 +110,8 @@ export interface PlanLimits {
   businessesPerPerson: number | null;
   /** Vaults, families and businesses together, one person may create on Free besides their personal vault (054); null: no combined limit. */
   vaultsPerPerson: number | null;
+  /** Notes one person may keep in a business vault, on Free and on a paid plan (056); null: no limit. */
+  notesPerPerson: { free: number | null; paid: number | null };
   /** Invitations a vault may send in a day, per plan (050, 051). */
   invitesPerDay: { free: number; plus: number };
   /** A business's plans: Plus, Pro and Enterprise (051). */
@@ -120,7 +122,7 @@ const GB = 1024 ** 3;
 
 const MB = 1024 ** 2;
 
-/** What 039–054 set; plan_limits is the truth. */
+/** What 039–056 set; plan_limits is the truth. */
 export const DEFAULT_PLAN_LIMITS: PlanLimits = {
   free: 200 * MB,
   freePersonal: 100 * MB,
@@ -136,6 +138,7 @@ export const DEFAULT_PLAN_LIMITS: PlanLimits = {
   familiesPerPerson: 1,
   businessesPerPerson: 1,
   vaultsPerPerson: 1,
+  notesPerPerson: { free: 20, paid: 500 },
   invitesPerDay: { free: 20, plus: 20 },
   business: {
     business_plus: { storage: 25 * GB, members: 10, questionsFairUse: 100, questionTriesPerDay: 30, uploadsPerDay: 300, invitesPerDay: 20 },

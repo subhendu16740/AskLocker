@@ -45,6 +45,10 @@ export interface AnalyticsEvents {
   // A family vault made a business vault (054): the small business that
   // started on Family Plus and grew.
   vault_made_business: Record<string, never>;
+  // A business's own notes and bills (056): whether a note has a reminder,
+  // never what it says.
+  note_added: { reminder: boolean };
+  bill_marked_paid: Record<string, never>;
   plus_viewed: { feature: string };
   pay_started: { period: 'monthly' | 'yearly'; currency: 'INR' | 'USD' };
   payment_done: { period: 'monthly' | 'yearly'; currency: 'INR' | 'USD' };

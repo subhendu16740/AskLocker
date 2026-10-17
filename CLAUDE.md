@@ -111,7 +111,13 @@ Four things will mislead you if you assume otherwise:
    054's one change of kind, a family vault to a business, is made only by
    `make_business_vault()`, an admin's, the caller from `auth.uid()`, and the
    rule it asks (`business_vault_blocker`) is service role only: see
-   [A family vault becomes a business](#a-family-vault-becomes-a-business--one-free-vault-and-the-move-054)).
+   [A family vault becomes a business](#a-family-vault-becomes-a-business--one-free-vault-and-the-move-054);
+   056's notes, `scratch_notes`, are their owner's alone — RLS on the owner,
+   three columns to insert and three to change, a trigger keeping the rest —
+   the overview (`business_overview`) is a member's and carries only what
+   the plan covers, a bill is marked paid only through `set_bill_paid`, and
+   note reminders are the server's (`queue_note_reminders`, service role
+   only): see [Business overview and notes](#business-overview-and-notes--what-a-businesss-papers-say-056)).
    **A new writable
    column needs its own `GRANT` in a migration.** Nobody joins a family
    without saying yes: only an admin asks a person in, through the
@@ -198,7 +204,10 @@ used its month's questions is refused (053), QA Vault A cannot become a
 business while on Family Plus and can once it ends, staying on Free with
 everyone in it, B (on Free, with QA Vault B) is refused a free business
 (054) and creates one once it is in a family on Family Plus (055); neither
-a stranger nor a viewer can make QA Vault A a business),
+a stranger nor a viewer can make QA Vault A a business; on Free the
+overview gives counts and a note takes no reminder, a teammate cannot read,
+change or delete someone's note, and on Pro the overview has money in and
+out and a note's reminder reaches its owner (056)),
 a question asked by relation ("my mother's passport"), and the full upload → ingest →
 expiry-notification pipeline, the reminder made once however often Home asks (on Family Plus; QA Vault A is on Free, where 048 makes none, and that is checked), and that each answered question is counted once (049; account A's monthly count is started again before it asks; each run also starts A's and B's counts for the day again, and QA Vault A's and QA Business A's invitations, `qa/lib/dev-day.mjs`, since one run invites B three times). By hand only, suite `languages` asks 12
 questions about documents in eight more Indian languages — two of them
@@ -675,6 +684,8 @@ src/
     family.tsx               # Manage Family: members, invitations (Pending approval), leaving, every vault, Create a family or a business; the personal vault's own page (046); Manage team for a business, with Delete this business (051)    (NOT a tab)
     delete-business.tsx      # Delete this business: what goes and who loses it, type its name (051)
     make-business.tsx        # Make this a business vault: what stays, changes and goes, for an admin of a family vault (054)
+    overview.tsx             # a business's Overview (drawer): counts; renewals and bills due on Plus; money in and out on Pro (056)
+    notes.tsx                # My notes (drawer, in a business): each person's own notes, reminders on a paid plan (056)
     family-tree.tsx          # the family tree: everyone, and how they are related (031)
     person/[id].tsx          # one person: their relation to you, emergency card, documents, expiry dates, link to their account (033)
     emergency/               # emergency cards (032), in the drawer
@@ -734,7 +745,8 @@ tabs. `(tabs)` is a layout group, so routes are `/home`, `/search`, `/upload`.
 | `vaults.ts` | Personal vault, family or business (046, 051): `vaultName()` ("Personal vault" everywhere), `isBusinessVault()`, `vaultWord()`, `vaultIcon()`, `splitVaults()`, `vaultSubtitle()`, `canDeleteDocument()` (whoever added it, or any admin in a business) |
 | `family-only.ts` | `useFamilyOnly()`: the family tree, a person's page and emergency cards send a business to Manage team (051) |
 | `drawer-context.tsx` | Profile drawer open/close state |
-| `api.ts` | **All** Supabase queries — documents, search, upload, RAG, notifications, adding and leaving families, invitations, Gmail import, saved chats, share links, deleting your account, plans and storage limits (`fetchStorageStatus`, `fetchPlanLimits`; `uploadDocument` throws `StorageFullError` before a file that does not fit is sent, and `saveChat` `ChatStorageFullError` for a chat, 042), voice chats (`claimVoiceAnswer`, 041; `fetchVoiceStatus`, how many are left, 042), paying for Family Plus (`fetchPaymentsStatus`, whether this project takes payments, asked once a session; `createPlusOrder`, `verifyPlusPayment`, 044), questions this month (`fetchQuestionStatus`; `ragSearch`'s `questions` and `question_limit`, 049), the expiry date found in a new upload (`fetchDocumentExpiry`, for Upload's Plus offer), personal vaults and Ask across vaults (`ensurePersonalVault`; `ragSearch`'s `vaults` option, 046), businesses (`createNewFamily(…, kind)`, `previewBusinessDeletion`, `deleteBusiness`, `fetchUseFor` / `saveUseFor`, 051), and the Settings screens (profile, storage use, expiry dates, feedback) |
+| `api.ts` | **All** Supabase queries — documents, search, upload, RAG, notifications, adding and leaving families, invitations, Gmail import, saved chats, share links, deleting your account, plans and storage limits (`fetchStorageStatus`, `fetchPlanLimits`; `uploadDocument` throws `StorageFullError` before a file that does not fit is sent, and `saveChat` `ChatStorageFullError` for a chat, 042), voice chats (`claimVoiceAnswer`, 041; `fetchVoiceStatus`, how many are left, 042), paying for Family Plus (`fetchPaymentsStatus`, whether this project takes payments, asked once a session; `createPlusOrder`, `verifyPlusPayment`, 044), questions this month (`fetchQuestionStatus`; `ragSearch`'s `questions` and `question_limit`, 049), the expiry date found in a new upload (`fetchDocumentExpiry`, for Upload's Plus offer), personal vaults and Ask across vaults (`ensurePersonalVault`; `ragSearch`'s `vaults` option, 046), businesses (`createNewFamily(…, kind)`, `previewBusinessDeletion`, `deleteBusiness`, `fetchUseFor` / `saveUseFor`, 051; `previewBusinessVault`, `makeBusinessVault`, 054; `fetchBusinessOverview`, `setBillPaid`, `fetchNotes`, `addNote`, `updateNote`, `deleteNote`, 056), and the Settings screens (profile, storage use, expiry dates, feedback) |
+| `overview.ts` | The overview's arithmetic (056), pure: `parseAmount()` ("1,18,000.00"), `formatRupees()` (lakhs and crores), `compactRupees()` for the axis, `monthlyTotals()`, `financialYearTotals()` (since 1 April), `daysFromToday()`, `whenText()` |
 | `dates.ts` | `parseDocumentDate()`: expiry dates exactly as ingest stores them (DD/MM/YYYY and kin, YYYY-MM-DD, "19 October 2026") |
 | `emergency.ts` | The emergency card's shape, blood groups (`bloodGroupLabel()`: "A−", "Bombay (hh)"), `telHref()`, and `cardProblem()` — the same checks and messages as `save_emergency_card()`, so the form can say what is wrong before saving |
 | `family-people.ts` | Whose a document can be: everyone in the tree, you first (`useDocumentOwners()`, members only before 031), and a person's expiry badge (`badgeFromExpiries()`) |
@@ -753,7 +765,7 @@ tabs. `(tabs)` is a layout group, so routes are `/home`, `/search`, `/upload`.
 | `speech-text.ts` | `toSpeech()`: strips markdown and spells out ID numbers before they are read aloud — and a number named as one ("train number 16782", "PNR: 4512", "PIN 751001", "नंबर 16782") digit by digit, from its digits; the screen keeps the digits |
 | `voice-languages.ts` | The language picker list and the few phrases the app itself says, per language |
 | `storage.ts` | Key-value cache: localStorage on web, AsyncStorage on native |
-| `database.types.ts` | Generated Supabase types, current to 054 (030 and 052 changed nothing in them; 049's, 050's, 051's, 053's and 054's added by hand). Regenerate after every migration and re-append the hand-written block at the bottom (see the typecheck note) |
+| `database.types.ts` | Generated Supabase types, current to 056 (030, 052 and 055 changed nothing in them; 049's, 050's, 051's, 053's, 054's and 056's added by hand). Regenerate after every migration and re-append the hand-written block at the bottom (see the typecheck note) |
 
 ---
 
@@ -822,7 +834,7 @@ Supabase, cloud-hosted. Three layers:
   saved_chats, family_people, family_links, family_emergency_cards,
   push_subscriptions, reminders_sent, push_config, document_shares,
   family_invites, plan_limits, family_plans, member_usage, plan_payments,
-  question_usage, daily_usage.
+  question_usage, daily_usage, scratch_notes.
   RLS enabled.
 - **Layer 2 (private)** — one isolated schema per family (`family_<short_uuid>`)
   holding documents, document_metadata, document_chunks, expiry_alerts,
@@ -2075,7 +2087,13 @@ so storage policies live only in `019`.
 - **Not built (Phase 2)**: folders with member access lists, a log of who
   opened what, export as a zip, self-serve Business checkout with GST
   invoices, an Employees area, business terms and a DPA, and a review of
-  schema-per-vault at thousands of vaults.
+  schema-per-vault at thousands of vaults. The owner's tiers for the
+  business ideas (17 October 2026), the simpler on Plus, the heaviest on
+  Pro: renewals and bills due, reminders on notes, a duplicate-bill alert
+  and a Monday summary on Plus; money in and out, a CA pack (the month's
+  invoices and bills, sent to the accountant), a directory of parties by
+  GSTIN and a staff papers checklist on Pro. 056 builds the first two of
+  each kind that need no new reading: the overview and notes.
 
 ### A family vault becomes a business — one free vault, and the move (054)
 
@@ -2144,6 +2162,52 @@ so storage policies live only in `019`.
   that started on Family Plus grew into a business.
 - Before 054 the preview finds no function and the screen says the move
   isn't switched on yet; creating keeps 051's one of each.
+
+### Business overview and notes — what a business's papers say (056)
+
+- **Overview** (drawer › Overview, in a business; `src/app/overview.tsx`):
+  four counts on every plan (renewals in 90 days, expired in the last 30,
+  bills with a due date, invoices and bills), then, as far as the plan
+  goes — on Business Plus, **renewals** (each document's latest expiry date,
+  30 days back to 90 ahead, soonest first) and **bills due** (to pay, and to
+  collect from sales invoices; late, due within a week, later; **Mark
+  paid**); on Pro and Enterprise, **money in and out** (Sales Invoices in,
+  Purchase Bills out, by the invoice's own date or when it was added,
+  the last six months as bars, and the total since 1 April). A locked card
+  shows its count and opens Plans (`/plus?feature=overview` or `money`).
+  `business_overview()` (the caller from `auth.uid()`, a member, a business)
+  sends only what the plan covers, so the gate is the server's.
+- **Read, not checked.** Dates and amounts are what ingest stored (051's
+  `invoice_date`, `due_date`, `total_amount`, the expiry alerts), read with
+  `dates.ts` and `overview.ts`; the screen says so, and each row opens its
+  document. Money counts only documents filed under Sales Invoices or
+  Purchase Bills, and says how many had no total it could read. Nothing is
+  sent to an AI service for it: no question is used, nothing costs a token.
+- **A bill paid** leaves bills due: `set_bill_paid()` writes
+  `document_metadata` 'paid_on' (the day, India time), any member on a paid
+  plan, undoable, in `audit_logs`. Nothing else knows a bill was paid.
+- **The chart's colours** are `#3E6BB0` (in) and `#C9625A` (out), checked
+  with the dataviz skill's validator for colour-blind separation and
+  contrast on white; a legend names them, every month is a button that
+  reads its two numbers, and the line above the bars says the chosen month.
+- **My notes** (drawer › My notes, in a business; `src/app/notes.tsx`): each
+  person's scratchpad. `scratch_notes` has RLS on its owner, like saved chats
+  (028), and a foreign key to the membership, so leaving deletes them;
+  nobody else reads them, not even an admin. Clients insert `family_id,
+  body, remind_on` and change `body, remind_on, done`. A trigger keeps the
+  rules on every path: business vaults only (`not_business`), at most
+  `plan_limits.notes_per_person` each (20 on Free, 500 paid;
+  `notes_limit`), 2,000 characters, and a **reminder** only on a paid plan
+  (`plus_only`), on a day from today to five years on (`bad_date`).
+- **A note's reminder** is a `note` notification for its owner, made once by
+  `queue_note_reminders()` (pg_cron at three past every hour, so 034's run
+  at five past pushes it to their devices) from 9 in the morning, India
+  time, while the business is on a paid plan; the first line is its title.
+  A new date asks again. Tapping it opens My notes in that business.
+- **Usage counts**: `note_added` (whether it had a reminder, never what it
+  says) and `bill_marked_paid`.
+- Before 056 the screens say they aren't switched on yet, and the Plans
+  page's rows still show what the plans will bring.
 
 ## Edge Functions
 

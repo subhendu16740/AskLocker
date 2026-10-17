@@ -19,7 +19,7 @@ import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFamily } from '../lib/family-context';
 import { isBusinessVault, isPersonalVault, vaultName } from '../lib/vaults';
-import { forgetOnPlus, useFamilyPlan, usePaymentsStatus, type PlusFeature } from '../lib/family-plan';
+import { forgetOnPlus, useFamilyPlan, usePaymentsStatus, type BusinessFeature, type PlusFeature } from '../lib/family-plan';
 import { PaymentError, createPlusOrder, fetchPlanLimits, verifyPlusPayment } from '../lib/api';
 import { checkoutSupported, openCheckout } from '../lib/razorpay';
 import {
@@ -385,17 +385,21 @@ function FamilyPlus() {
 const PAID: readonly BusinessPlan[] = ['business_plus', 'business_pro', 'business_enterprise'];
 
 // A business's plans have a monthly number of questions, and more people as they go up.
-const BUSINESS_BROUGHT_BY: Record<PlusFeature, { icon: string; text: string }> = {
+const BUSINESS_BROUGHT_BY: Record<PlusFeature | BusinessFeature, { icon: string; text: string }> = {
   ...(Object.fromEntries(Object.entries(BROUGHT_BY).map(([k, v]) => [k, { icon: v.icon, text: v.text('every paid plan') }])) as
     Record<PlusFeature, { icon: string; text: string }>),
   questions: { icon: 'message-circle', text: 'More questions come with every paid plan.' },
   members: { icon: 'users', text: 'Room for more people comes with a bigger plan.' },
+  // The business's own (056).
+  overview: { icon: 'refresh-cw', text: 'Renewals and bills due come with every paid plan.' },
+  money: { icon: 'bar-chart-2', text: 'Money in and out comes with Pro and Enterprise.' },
+  notes: { icon: 'bell', text: 'Reminders on your notes come with every paid plan.' },
 };
 
 interface BusinessRow {
   label: string;
   cells: Record<BusinessPlan, Cell>;
-  feature?: PlusFeature;
+  feature?: PlusFeature | BusinessFeature;
 }
 
 function businessRows(limits: PlanLimits): BusinessRow[] {
@@ -409,6 +413,9 @@ function businessRows(limits: PlanLimits): BusinessRow[] {
     { label: '★ 30-day share links', cells: each(() => true), feature: 'links' },
     { label: '★ Expiry reminders', cells: each(() => true), feature: 'reminders' },
     { label: '★ Import from Gmail', cells: each(() => true), feature: 'gmail' },
+    { label: '★ Renewals and bills due', cells: each(() => true), feature: 'overview' },
+    { label: '★ Money in and out', cells: each((p) => p !== 'business_plus'), feature: 'money' },
+    { label: '★ Reminders on notes', cells: each(() => true), feature: 'notes' },
   ];
 }
 
@@ -417,7 +424,7 @@ function BusinessPlans() {
   const { currentFamily } = useFamily();
   const { plan, paidUntil, closed, trial, refresh } = useFamilyPlan();
   const [limits, setLimits] = useState<PlanLimits>(DEFAULT_PLAN_LIMITS);
-  const broughtBy = feature && feature in BUSINESS_BROUGHT_BY ? BUSINESS_BROUGHT_BY[feature as PlusFeature] : null;
+  const broughtBy = feature && feature in BUSINESS_BROUGHT_BY ? BUSINESS_BROUGHT_BY[feature as PlusFeature | BusinessFeature] : null;
   const onPlan = isBusinessPlan(plan) ? plan : null;
   const next = plan ? nextBusinessPlan(plan) : 'business_plus';
   const vault = currentFamily ? vaultName(currentFamily) : 'Your business';
@@ -515,7 +522,7 @@ function BusinessPlans() {
             ))}
           </View>
           <Muted>
-            {`On Free: ${limits.members.free} people, ${formatBytes(limits.free)}, ${limits.questions.free ?? 20} questions each a month.`}
+            {`On Free: ${limits.members.free} people, ${formatBytes(limits.free)}, ${limits.questions.free ?? 20} questions each a month, ${limits.notesPerPerson.free ?? 20} notes each.`}
           </Muted>
         </Card>
 

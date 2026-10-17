@@ -965,6 +965,7 @@ export type Database = {
           storage_bytes: number
           uploads_per_day: number | null
           vaults_per_person: number | null
+          notes_per_person: number | null
           voice_answers: number | null
         }
         Insert: {
@@ -982,6 +983,7 @@ export type Database = {
           storage_bytes: number
           uploads_per_day?: number | null
           vaults_per_person?: number | null
+          notes_per_person?: number | null
           voice_answers?: number | null
         }
         Update: {
@@ -999,6 +1001,7 @@ export type Database = {
           storage_bytes?: number
           uploads_per_day?: number | null
           vaults_per_person?: number | null
+          notes_per_person?: number | null
           voice_answers?: number | null
         }
         Relationships: []
@@ -1186,6 +1189,42 @@ export type Database = {
           },
         ]
       }
+      scratch_notes: {
+        Row: {
+          body: string
+          created_at: string
+          done: boolean
+          family_id: string
+          id: string
+          remind_on: string | null
+          reminded_at: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          body: string
+          created_at?: string
+          done?: boolean
+          family_id: string
+          id?: string
+          remind_on?: string | null
+          reminded_at?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Update: {
+          body?: string
+          created_at?: string
+          done?: boolean
+          family_id?: string
+          id?: string
+          remind_on?: string | null
+          reminded_at?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       saved_chats: {
         Row: {
           created_at: string
@@ -1346,6 +1385,11 @@ export type Database = {
       claim_daily: { Args: { p_user_id: string; p_what: string }; Returns: Json }
       claim_question: { Args: { p_user_id: string }; Returns: Json }
       make_business_vault: { Args: { p_family_id: string }; Returns: Json }
+      queue_note_reminders: { Args: { p_now?: string }; Returns: number }
+      set_bill_paid: {
+        Args: { p_document_id: string; p_family_id: string; p_paid?: boolean }
+        Returns: undefined
+      }
       claim_voice_answer: { Args: { p_family_id: string }; Returns: Json }
       complete_document_ingestion: {
         Args: {
@@ -1385,6 +1429,7 @@ export type Database = {
         }
         Returns: string
       }
+      business_overview: { Args: { p_family_id: string }; Returns: Json }
       business_vault_blocker: { Args: { p_family_id: string }; Returns: Json }
       business_vault_preview: { Args: { p_family_id: string }; Returns: Json }
       business_deletion_plan: {

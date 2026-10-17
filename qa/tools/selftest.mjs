@@ -690,6 +690,7 @@ await test('plans: every limit is finite, and a full vault says why and what to 
     familiesPerPerson: 1,
     businessesPerPerson: 1,
     vaultsPerPerson: 1,
+    notesPerPerson: { free: 20, paid: 500 },
     invitesPerDay: { free: 20, plus: 20 },
     business: {
       business_plus: { storage: 25 * GB, members: 10, questionsFairUse: 100, questionTriesPerDay: 30, uploadsPerDay: 300, invitesPerDay: 20 },
