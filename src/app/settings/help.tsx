@@ -44,7 +44,7 @@ function faq(payments: PaymentsStatus | null): { q: string; a: string }[] {
     },
     {
       q: 'Are there other limits?',
-      a: `Files can be up to ${MAX_FILE_BYTES / (1024 * 1024)} MB. On Free, you can add ${DEFAULT_PLAN_LIMITS.uploadsPerDay.free} documents a day (${DEFAULT_PLAN_LIMITS.uploadsPerDay.plus} with ★ Family Plus) and create one family and one business besides your personal vault. Saved chats, the family tree, share links and invitations have caps too, and AskLocker tells you if you reach one.`,
+      a: `Files can be up to ${MAX_FILE_BYTES / (1024 * 1024)} MB. On Free, you can add ${DEFAULT_PLAN_LIMITS.uploadsPerDay.free} documents a day (${DEFAULT_PLAN_LIMITS.uploadsPerDay.plus} with ★ Family Plus) and create one family or one business besides your personal vault. Saved chats, the family tree, share links and invitations have caps too, and AskLocker tells you if you reach one.`,
     },
     {
       q: 'Can I ask by speaking?',
@@ -72,7 +72,7 @@ function faq(payments: PaymentsStatus | null): { q: string; a: string }[] {
     },
     {
       q: 'Can I use AskLocker for my business?',
-      a: `Yes. In Manage Family, tap Create a business, then invite your team. Admins can delete any record, and records stay even if a paid plan ends. A business has its own plans: Plus for ${DEFAULT_PLAN_LIMITS.business.business_plus.members} people, ${businessPrice('business_plus')}. Pro for ${DEFAULT_PLAN_LIMITS.business.business_pro.members}, ${businessPrice('business_pro')}. Enterprise for ${DEFAULT_PLAN_LIMITS.business.business_enterprise.members}, ${businessPrice('business_enterprise')}. Ask for one in Settings › Feedback.`,
+      a: `Yes. In Manage Family, tap Create a business, then invite your team. Admins can delete any record, and records stay even if a paid plan ends. A business has its own plans: Plus for ${DEFAULT_PLAN_LIMITS.business.business_plus.members} people, ${businessPrice('business_plus')}. Pro for ${DEFAULT_PLAN_LIMITS.business.business_pro.members}, ${businessPrice('business_pro')}. Enterprise for ${DEFAULT_PLAN_LIMITS.business.business_enterprise.members}, ${businessPrice('business_enterprise')}. Ask for one in Settings › Feedback. Started your shop in a family vault? An admin can tap Make this a business vault in Manage Family. Everything stays.`,
     },
     {
       q: 'I\'ve been invited to a family. What now?',

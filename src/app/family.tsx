@@ -537,6 +537,19 @@ export default function FamilyScreen() {
 
         {!vaultList && createFamily}
 
+        {/* A small business that started here moves when it grows (054). */}
+        {!business && isAdmin && (
+          <TouchableOpacity
+            onPress={() => router.push({ pathname: '/make-business', params: { family: currentFamily.id } } as any)}
+            style={styles.businessBtn}
+            activeOpacity={0.8}
+            accessibilityRole="button"
+          >
+            <Feather name="briefcase" size={16} color={color.primary} />
+            <Text style={styles.businessBtnText}>Make this a business vault</Text>
+          </TouchableOpacity>
+        )}
+
         {canLeave && (
           <TouchableOpacity onPress={handleLeave} style={styles.leaveBtn} activeOpacity={0.8}>
             <Feather name="log-out" size={16} color="#EF4444" />
@@ -857,6 +870,20 @@ const styles = StyleSheet.create({
     minHeight: size.control,
   },
   leaveBtnText: { ...type.button, color: color.danger },
+  businessBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: space.sm,
+    marginHorizontal: space.lg,
+    marginTop: space.xl,
+    borderRadius: radius.control,
+    borderWidth: 1,
+    borderColor: color.inputBorder,
+    backgroundColor: color.surface,
+    minHeight: size.control,
+  },
+  businessBtnText: { ...type.button, color: color.primary },
   lastAdminNote: { ...type.caption, textAlign: 'center', marginTop: space.sm, marginHorizontal: space.lg },
   // Modal
   modalOverlay: {

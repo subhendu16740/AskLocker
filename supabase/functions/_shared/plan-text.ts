@@ -12,9 +12,10 @@
 // A family has at most 4 members on Free and 8 on Family Plus (041, 049) —
 // the people who sign in; anyone can be in the family tree. Each person on
 // Free has 10 voice chats (041–043) and 20 questions a month (049); on Family
-// Plus, voice without a limit and questions without a monthly limit (fair
-// use: 500 a month each). A share link lasts 1 or 7 days on Free, and up to
-// 30 days on Family Plus (049).
+// Plus, voice without a limit and 200 questions a month the whole family
+// shares (053). A share link lasts 1 or 7 days on Free, and up to 30 days on
+// Family Plus (049). On Free a person creates one vault besides their
+// personal vault, a family or a business (054).
 //
 // A year costs eleven months: one month free. The yearly price is shown
 // against twelve months at the monthly price, crossed out (₹1,200 → ₹1,100,
@@ -28,14 +29,15 @@
 // Business vaults (051) have plans of their own, never Family Plus, given by
 // hand for now (billed by us, GST on top):
 //
-//   Plus         5 people,  25 GB — ₹500 a month
+//   Plus        10 people,  25 GB — ₹500 a month (5 people before 054)
 //   Pro         15 people, 100 GB — ₹1,000 a month
 //   Enterprise  50 people, 200 GB — ₹4,000 a month
 //
 // Each with 100 questions a person a month. Even a business that used every
 // limit at once would cost less than its plan's price, at about ₹0.20 a
-// question: Plus and Enterprise keep about half their price even then, Pro
-// about a quarter.
+// question: Enterprise keeps about half its price even then, Plus and Pro
+// about a quarter to a third. A small business may start in a family vault
+// on Family Plus and make it a business vault later, keeping everything (054).
 // Nothing is ever removed from a business: when a paid plan ends it keeps
 // every record and adds nothing until it is renewed ("closed"); a trial that
 // ends puts it back on Free.
@@ -106,6 +108,8 @@ export interface PlanLimits {
   familiesPerPerson: number | null;
   /** Businesses one person may create on Free (051), apart from families; null: no limit. */
   businessesPerPerson: number | null;
+  /** Vaults, families and businesses together, one person may create on Free besides their personal vault (054); null: no combined limit. */
+  vaultsPerPerson: number | null;
   /** Invitations a vault may send in a day, per plan (050, 051). */
   invitesPerDay: { free: number; plus: number };
   /** A business's plans: Plus, Pro and Enterprise (051). */
@@ -116,7 +120,7 @@ const GB = 1024 ** 3;
 
 const MB = 1024 ** 2;
 
-/** What 039–053 set; plan_limits is the truth. */
+/** What 039–054 set; plan_limits is the truth. */
 export const DEFAULT_PLAN_LIMITS: PlanLimits = {
   free: 200 * MB,
   freePersonal: 100 * MB,
@@ -127,13 +131,14 @@ export const DEFAULT_PLAN_LIMITS: PlanLimits = {
   questions: { free: 20, plus: null },
   questionsFairUse: 200,
   familyQuestions: 200,
-  questionTriesPerDay: { free: 10, plus: 100 },
-  uploadsPerDay: { free: 50, plus: 500 },
+  questionTriesPerDay: { free: 10, plus: 50 },
+  uploadsPerDay: { free: 50, plus: 100 },
   familiesPerPerson: 1,
   businessesPerPerson: 1,
+  vaultsPerPerson: 1,
   invitesPerDay: { free: 20, plus: 20 },
   business: {
-    business_plus: { storage: 25 * GB, members: 5, questionsFairUse: 100, questionTriesPerDay: 30, uploadsPerDay: 300, invitesPerDay: 20 },
+    business_plus: { storage: 25 * GB, members: 10, questionsFairUse: 100, questionTriesPerDay: 30, uploadsPerDay: 300, invitesPerDay: 20 },
     business_pro: { storage: 100 * GB, members: 15, questionsFairUse: 100, questionTriesPerDay: 30, uploadsPerDay: 300, invitesPerDay: 20 },
     business_enterprise: { storage: 200 * GB, members: 50, questionsFairUse: 100, questionTriesPerDay: 30, uploadsPerDay: 300, invitesPerDay: 50 },
   },

@@ -82,7 +82,7 @@ async function managementQuery(cfg, sql) {
  * QA-RESULT, so everything it does rolls back. Exported so it can be tried on
  * a local Postgres before it ever reaches DEV.
  */
-export function businessDbSql({ bizId, userA, familyA }) {
+export function businessDbSql({ bizId, userA, familyA, userB }) {
   return `do $qa$
 declare
   v_out text := '';
@@ -92,6 +92,8 @@ declare
   s     record;
   v_service text := '{"role":"service_role"}';
   v_as_a    text := '{"role":"authenticated","sub":"${userA}"}';
+  v_as_b    text := '{"role":"authenticated","sub":"${userB}"}';
+  v_hint    text;
 begin
   perform set_config('request.jwt.claims', v_service, true);
   perform set_config('request.jwt.claim.role', 'service_role', true);
@@ -176,6 +178,54 @@ begin
   exception when others then
     v_out := v_out || 'personal_business=refused;';
   end;
+
+  -- 054: QA Vault A becomes a business only once its Family Plus has ended,
+  -- as its admin, A; and on Free a person creates one vault in all: B makes
+  -- a family, then a business is refused (all rolled back, as always).
+  if exists (select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+              where n.nspname = 'public' and p.proname = 'make_business_vault') then
+    perform public.set_family_plan('${familyA}', now() + interval '1 day');
+    perform set_config('request.jwt.claims', v_as_a, true);
+    perform set_config('request.jwt.claim.role', 'authenticated', true);
+    perform set_config('request.jwt.claim.sub', '${userA}', true);
+    begin
+      perform public.make_business_vault('${familyA}');
+      v_out := v_out || 'convert_on_plus=ALLOWED;';
+    exception when others then
+      get stacked diagnostics v_hint = pg_exception_hint;
+      v_out := v_out || 'convert_on_plus=' || coalesce(nullif(v_hint, ''), 'other') || ';';
+    end;
+    perform set_config('request.jwt.claims', v_service, true);
+    perform set_config('request.jwt.claim.role', 'service_role', true);
+    perform public.end_family_plan('${familyA}');
+    perform set_config('request.jwt.claims', v_as_a, true);
+    perform set_config('request.jwt.claim.role', 'authenticated', true);
+    begin
+      perform public.make_business_vault('${familyA}');
+      v_out := v_out || 'converted=' || (select kind from public.families where id = '${familyA}')
+            || ';converted_plan=' || public.family_plan_now('${familyA}')
+            || ';converted_members=' || (select count(*) from public.family_members m where m.family_id = '${familyA}') || ';';
+    exception when others then
+      v_out := v_out || 'converted=refused:' || replace(left(SQLERRM, 60), ';', ',') || ';';
+    end;
+    perform set_config('request.jwt.claims', v_as_b, true);
+    perform set_config('request.jwt.claim.sub', '${userB}', true);
+    begin
+      perform public.create_family('${userB}', 'QA one free vault', null, null, false, 'family');
+      v_out := v_out || 'b_family=ok;';
+      begin
+        perform public.create_family('${userB}', 'QA one free vault, business', null, null, false, 'business');
+        v_out := v_out || 'b_business=ALLOWED;';
+      exception when others then
+        get stacked diagnostics v_hint = pg_exception_hint;
+        v_out := v_out || 'b_business=' || coalesce(nullif(v_hint, ''), 'other') || ';';
+      end;
+    exception when others then
+      v_out := v_out || 'b_family=refused;';
+    end;
+  else
+    v_out := v_out || 'converted=none;';
+  end if;
 
   raise exception 'QA-RESULT %', v_out;
 end
@@ -360,13 +410,13 @@ export async function runBusinessChecks(cfg, { a, b, anon, vaultA, vaultB }, res
     results.add('business', 'db', "A business's plan ending, and account deletion, in the database", 'skipped', { why: 'SUPABASE_ACCESS_TOKEN is not set' });
     return;
   }
-  const ids = [biz.id, a.user.id, vaultA.id];
+  const ids = [biz.id, a.user.id, vaultA.id, b.user.id];
   if (!ids.every((id) => UUID.test(String(id)))) {
     results.add('business', 'db', 'Database checks', 'skipped', { why: 'an id is missing' });
     return;
   }
-  const [bizId, userA, familyA] = ids;
-  const sql = businessDbSql({ bizId, userA, familyA });
+  const [bizId, userA, familyA, userB] = ids;
+  const sql = businessDbSql({ bizId, userA, familyA, userB });
 
   let result;
   try {
@@ -411,4 +461,24 @@ export async function runBusinessChecks(cfg, { a, b, anon, vaultA, vaultB }, res
   check('db-family-plus-business', 'Family Plus, and a payment naming no plan, is refused for a business',
     result.business_family_plus === 'refused', said('business_family_plus'));
   check('db-personal-business', 'A personal vault cannot be a business', result.personal_business !== 'ALLOWED', said('personal_business'));
+  if (result.converted === 'none' || result.converted == null) {
+    for (const [id, title] of [
+      ['db-convert-on-plus', 'A family vault on Family Plus cannot become a business until Plus ends (054)'],
+      ['db-convert', 'Its admin makes a family vault a business: everyone stays, on Free (054)'],
+      ['db-one-free-vault', 'On Free, a person creates one vault in all: a family, then a business is refused (054)'],
+    ]) results.add('business', id, title, 'skipped', { why: 'migration 054 is not applied to DEV yet' });
+  } else {
+    check('db-convert-on-plus', 'A family vault on Family Plus cannot become a business until Plus ends (054)',
+      result.convert_on_plus === 'plan_active', said('convert_on_plus'));
+    check('db-convert', 'Its admin makes a family vault a business: everyone stays, on Free (054)',
+      result.converted === 'business' && result.converted_plan === 'free' && Number(result.converted_members) >= 1,
+      `${said('converted')}, ${said('converted_plan')}, members ${result.converted_members ?? '—'}`);
+    if (result.b_family === 'refused') {
+      results.add('business', 'db-one-free-vault', 'On Free, a person creates one vault in all: a family, then a business is refused (054)',
+        'inconclusive', { why: 'account B already has a free vault of its own, so its first was refused' });
+    } else {
+      check('db-one-free-vault', 'On Free, a person creates one vault in all: a family, then a business is refused (054)',
+        result.b_family === 'ok' && result.b_business === 'family_limit', `${said('b_family')}, ${said('b_business')}`);
+    }
+  }
 }

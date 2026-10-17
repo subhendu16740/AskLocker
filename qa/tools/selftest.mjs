@@ -675,8 +675,9 @@ await test('plans: every limit is finite, and a full vault says why and what to 
   // Free and 8 on Plus (049), 10 voice chats for each person on Free (043),
   // and 20 questions a month for each person on Free, none on Plus up to
   // fair use (049), and on Plus 200 a month the whole family shares (053).
-  // A business (051): one free business a person beside one free family,
-  // and its own Plus and Pro.
+  // A business (051) has its own plans. On Free a person creates one vault
+  // in all, a family or a business (054), and Family Plus adds 100
+  // documents and 50 question tries a day.
   assert.deepEqual(DEFAULT_PLAN_LIMITS, {
     free: 200 * MB, freePersonal: 100 * MB, plus: 10 * GB, graceDays: 30,
     members: { free: 4, plus: 8 },
@@ -684,13 +685,14 @@ await test('plans: every limit is finite, and a full vault says why and what to 
     questions: { free: 20, plus: null },
     questionsFairUse: 200,
     familyQuestions: 200,
-    questionTriesPerDay: { free: 10, plus: 100 },
-    uploadsPerDay: { free: 50, plus: 500 },
+    questionTriesPerDay: { free: 10, plus: 50 },
+    uploadsPerDay: { free: 50, plus: 100 },
     familiesPerPerson: 1,
     businessesPerPerson: 1,
+    vaultsPerPerson: 1,
     invitesPerDay: { free: 20, plus: 20 },
     business: {
-      business_plus: { storage: 25 * GB, members: 5, questionsFairUse: 100, questionTriesPerDay: 30, uploadsPerDay: 300, invitesPerDay: 20 },
+      business_plus: { storage: 25 * GB, members: 10, questionsFairUse: 100, questionTriesPerDay: 30, uploadsPerDay: 300, invitesPerDay: 20 },
       business_pro: { storage: 100 * GB, members: 15, questionsFairUse: 100, questionTriesPerDay: 30, uploadsPerDay: 300, invitesPerDay: 20 },
       business_enterprise: { storage: 200 * GB, members: 50, questionsFairUse: 100, questionTriesPerDay: 30, uploadsPerDay: 300, invitesPerDay: 50 },
     },

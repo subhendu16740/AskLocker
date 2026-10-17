@@ -964,6 +964,7 @@ export type Database = {
           questions_per_month: number | null
           storage_bytes: number
           uploads_per_day: number | null
+          vaults_per_person: number | null
           voice_answers: number | null
         }
         Insert: {
@@ -980,6 +981,7 @@ export type Database = {
           questions_per_month?: number | null
           storage_bytes: number
           uploads_per_day?: number | null
+          vaults_per_person?: number | null
           voice_answers?: number | null
         }
         Update: {
@@ -996,6 +998,7 @@ export type Database = {
           questions_per_month?: number | null
           storage_bytes?: number
           uploads_per_day?: number | null
+          vaults_per_person?: number | null
           voice_answers?: number | null
         }
         Relationships: []
@@ -1342,6 +1345,7 @@ export type Database = {
       }
       claim_daily: { Args: { p_user_id: string; p_what: string }; Returns: Json }
       claim_question: { Args: { p_user_id: string }; Returns: Json }
+      make_business_vault: { Args: { p_family_id: string }; Returns: Json }
       claim_voice_answer: { Args: { p_family_id: string }; Returns: Json }
       complete_document_ingestion: {
         Args: {
@@ -1381,6 +1385,8 @@ export type Database = {
         }
         Returns: string
       }
+      business_vault_blocker: { Args: { p_family_id: string }; Returns: Json }
+      business_vault_preview: { Args: { p_family_id: string }; Returns: Json }
       business_deletion_plan: {
         Args: { p_family_id: string; p_user_id: string }
         Returns: {

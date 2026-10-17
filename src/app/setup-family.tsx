@@ -9,7 +9,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../lib/auth';
 import { useFamily } from '../lib/family-context';
-import { createNewFamily, fetchUseFor } from '../lib/api';
+import { createNewFamily, fetchPlanLimits, fetchUseFor } from '../lib/api';
 import { BackButton } from '../components/back-button';
 import { color, radius, size, space, type } from '../constants/design';
 import { track } from '../lib/analytics';
@@ -63,6 +63,12 @@ export default function SetupFamilyScreen() {
     if (params.kind || !user) return;
     fetchUseFor(user.id).then((u) => { if (u === 'business') setKind('business'); }).catch(() => {});
   }, [user?.id, params.kind]);
+  // On Free, one vault in all besides the personal one, a family or a
+  // business (054). Said before the form, not only when it is refused.
+  const [freeVaults, setFreeVaults] = useState<number | null>(null);
+  useEffect(() => {
+    fetchPlanLimits().then((l) => setFreeVaults(l.vaultsPerPerson)).catch(() => {});
+  }, []);
   const w = WORDS[kind];
   const [familyName, setFamilyName] = useState('');
   const [description, setDescription] = useState('');
@@ -133,6 +139,14 @@ export default function SetupFamilyScreen() {
             </TouchableOpacity>
           ))}
         </View>
+
+        {freeVaults != null && freeVaults > 0 && (
+          <Text style={styles.kindNote}>
+            {freeVaults === 1
+              ? 'On Free, you can create one family or one business.'
+              : `On Free, you can create ${freeVaults} families or businesses.`}
+          </Text>
+        )}
 
         {/* Form */}
         <View style={styles.form}>
@@ -241,6 +255,7 @@ const styles = StyleSheet.create({
     marginBottom: space.lg,
   },
   kinds: { flexDirection: 'row', gap: space.sm, marginBottom: space.lg },
+  kindNote: { ...type.caption, textAlign: 'center', marginTop: -space.sm, marginBottom: space.lg },
   kind: {
     flex: 1,
     flexDirection: 'row',
