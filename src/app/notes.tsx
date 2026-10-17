@@ -18,7 +18,7 @@ import { formatDateInput, parseDocumentDate } from '../lib/dates';
 import { daysFromToday, shortDate } from '../lib/overview';
 import { ScreenHeader, PlusTag } from '../components/screen-header';
 import { Card, Muted, PrimaryButton, SecondaryButton, Status, screenStyles } from '../components/settings-ui';
-import { color, radius, size, space, type } from '../constants/design';
+import { biz, color, radius, size, space, type } from '../constants/design';
 import { track } from '../lib/analytics';
 
 const MAX_LENGTH = 2000;
@@ -173,7 +173,7 @@ export default function NotesScreen() {
             {!problem.unavailable && <SecondaryButton label="Try again" icon="refresh-cw" onPress={load} />}
           </>
         ) : notes === null ? (
-          <View style={styles.center}><ActivityIndicator color={color.primary} /></View>
+          <View style={styles.center}><ActivityIndicator color={biz.primary} /></View>
         ) : (
           <>
             <Card>
@@ -276,7 +276,7 @@ function NoteRow({ n, asking, onToggle, onEdit, onDelete }: {
         <Text style={[styles.noteText, n.done && styles.noteDone]} numberOfLines={6}>{n.body}</Text>
         {when && !n.done && (
           <View style={styles.when}>
-            <Feather name="bell" size={12} color={when.late ? color.danger : color.secondary} />
+            <Feather name="bell" size={12} color={when.late ? color.danger : biz.secondary} />
             <Text style={[styles.whenText, when.late && { color: color.danger }]}>{when.text}</Text>
           </View>
         )}
@@ -297,7 +297,7 @@ function NoteRow({ n, asking, onToggle, onEdit, onDelete }: {
 const styles = StyleSheet.create({
   center: { alignItems: 'center', paddingVertical: 40 },
   intro: { ...type.body },
-  link: { ...type.caption, fontWeight: '600', color: color.primary },
+  link: { ...type.caption, fontWeight: '600', color: biz.primary },
   input: {
     ...type.body, minHeight: 88, textAlignVertical: 'top', borderWidth: 1, borderColor: color.inputBorder,
     borderRadius: radius.control, padding: space.md, outlineStyle: 'none',
@@ -309,8 +309,8 @@ const styles = StyleSheet.create({
     minHeight: 36, paddingHorizontal: space.md, borderRadius: radius.control, borderWidth: 1,
     borderColor: color.inputBorder, justifyContent: 'center', backgroundColor: color.surface,
   },
-  chipOn: { backgroundColor: color.primary, borderColor: color.primary },
-  chipText: { ...type.caption, fontWeight: '600', color: color.primary },
+  chipOn: { backgroundColor: biz.primary, borderColor: biz.primary },
+  chipText: { ...type.caption, fontWeight: '600', color: biz.primary },
   chipTextOn: { color: '#FFFFFF' },
   dayInput: {
     ...type.body, minHeight: size.control, borderWidth: 1, borderColor: color.inputBorder,
@@ -325,7 +325,7 @@ const styles = StyleSheet.create({
   noteText: { ...type.body },
   noteDone: { color: color.textMuted, textDecorationLine: 'line-through' },
   when: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  whenText: { ...type.meta, fontSize: 12, fontWeight: '600', color: color.secondary },
+  whenText: { ...type.meta, fontSize: 12, fontWeight: '600', color: biz.secondary },
   del: { minWidth: 24, alignItems: 'flex-end', paddingTop: 2 },
   delAsk: { ...type.meta, fontSize: 12, fontWeight: '700', color: color.danger },
   doneHead: { ...type.overline, marginTop: space.sm },

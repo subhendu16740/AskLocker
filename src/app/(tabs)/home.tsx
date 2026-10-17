@@ -17,9 +17,10 @@ import { PlusStar } from '../../components/screen-header';
 import { InvitationCards } from '../../components/invitation-cards';
 import { LockOffer } from '../../components/lock-offer';
 import { UseForOffer } from '../../components/use-for-offer';
-import { isPersonalVault, vaultIcon, vaultName } from '../../lib/vaults';
+import { isBusinessVault, isPersonalVault, vaultIcon, vaultName } from '../../lib/vaults';
+import { useVaultTheme, vaultTheme } from '../../lib/vault-theme';
 import type { FamilyDocumentRow } from '../../lib/database.types';
-import { color, radius, shadow, size, space, type } from '../../constants/design';
+import { biz, color, radius, shadow, size, space, type } from '../../constants/design';
 
 
 function getTimeGreeting(): string {
@@ -72,6 +73,8 @@ interface RecentDoc extends FamilyDocumentRow {
   personalVault: boolean;
   /** The vault's icon: a lock, a briefcase (051) or people. */
   vaultIcon: 'lock' | 'briefcase' | 'users';
+  /** A business vault: its documents wear the business's colours. */
+  business: boolean;
 }
 
 export default function HomeScreen() {
@@ -79,10 +82,13 @@ export default function HomeScreen() {
   const isDark = colorScheme === 'dark';
   const { user } = useAuth();
   const onPlus = useOnPlus();
-  // Home lists the newest documents from every vault together (046), each
-  // tagged with the vault it is in, and opens each in its own vault.
-  const { families, refreshFamilies } = useFamily();
-  const familyKey = families.map((f) => `${f.family_id}:${vaultName(f.families)}`).join('|');
+  // Home lists the newest documents from every vault of the mode together
+  // (046; Family or Business, the drawer's switch), each tagged with the
+  // vault it is in, and opens each in its own vault.
+  const { families, modeVaults, mode, refreshFamilies } = useFamily();
+  const theme = useVaultTheme();
+  const shown = modeVaults.length ? modeVaults : families;
+  const familyKey = `${mode}:` + shown.map((f) => `${f.family_id}:${vaultName(f.families)}`).join('|');
   const { openDrawer } = useDrawer();
   // Settings › Notifications off: the bell stays, its count does not.
   const { notificationsEnabled } = usePreferences();
@@ -110,7 +116,7 @@ export default function HomeScreen() {
       setLoading(false);
       return;
     }
-    const vaults = families;
+    const vaults = shown;
     const load = ++loads.current;
     setLoading(true);
     Promise.all([
@@ -131,6 +137,7 @@ export default function HomeScreen() {
               vault: vaultName(vaults[i].families),
               personalVault: isPersonalVault(vaults[i].families),
               vaultIcon: vaultIcon(vaults[i].families),
+              business: isBusinessVault(vaults[i].families),
             })))
             .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
             .slice(0, RECENT),
@@ -145,7 +152,7 @@ export default function HomeScreen() {
       .finally(() => { if (load === loads.current) setLoading(false); });
     // Each vault's expiry reminders, as Home has always asked: made once, however often (034),
     // and only for a vault on Family Plus (048) — the server decides, so Free asks too.
-    vaults.forEach((v) => { checkExpiryNotifications(v.family_id).catch(() => 0); });
+    families.forEach((v) => { checkExpiryNotifications(v.family_id).catch(() => 0); });
   }, [familyKey, user?.id, refreshFamilies]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Re-fetch when screen gains focus (e.g. after deleting a document)
@@ -160,7 +167,7 @@ export default function HomeScreen() {
       <ScrollView showsVerticalScrollIndicator={false} stickyHeaderIndices={[0]}>
         {/* Gradient Header */}
         <LinearGradient
-          colors={['#2A3D66', '#4A6491']}
+          colors={theme.gradient}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={styles.header}
@@ -220,7 +227,7 @@ export default function HomeScreen() {
 
         {/* Stats Bar */}
         <View style={styles.section}>
-          <View style={[styles.statsBar, isDark && styles.statsBarDark]}>
+          <View style={[styles.statsBar, { backgroundColor: theme.tint }, isDark && styles.statsBarDark]}>
             {/* Opens All documents: every vault's documents, a vault filter, and Delete */}
             <TouchableOpacity
               style={styles.statLink}
@@ -230,20 +237,20 @@ export default function HomeScreen() {
               accessibilityRole="button"
               accessibilityLabel={`${count(stats.docs, 'document', 'documents')}. See all documents`}
             >
-              <Text style={[styles.statText, styles.statLinkText, isDark && styles.statTextDark]}>{count(stats.docs, 'Document', 'Documents')}</Text>
-              <Feather name="chevron-right" size={14} color={isDark ? '#4A6491' : color.primary} />
+              <Text style={[styles.statText, styles.statLinkText, { color: theme.primary }, isDark && styles.statTextDark]}>{count(stats.docs, 'Document', 'Documents')}</Text>
+              <Feather name="chevron-right" size={14} color={isDark ? '#4A6491' : theme.primary} />
             </TouchableOpacity>
             <Text style={styles.statDivider}>|</Text>
-            {families.length > 1 ? (
+            {shown.length > 1 ? (
               // Several vaults: what they hold together, and in how many.
-              <Text style={[styles.statText, isDark && styles.statTextDark]}>{count(families.length, 'Vault', 'Vaults')}</Text>
+              <Text style={[styles.statText, { color: theme.primary }, isDark && styles.statTextDark]}>{count(shown.length, 'Vault', 'Vaults')}</Text>
             ) : (
               <>
-                <Text style={[styles.statText, isDark && styles.statTextDark]}>
-                  {isPersonalVault(families[0]?.families) ? 'Only you' : count(stats.members, 'Member', 'Members')}
+                <Text style={[styles.statText, { color: theme.primary }, isDark && styles.statTextDark]}>
+                  {isPersonalVault(shown[0]?.families) ? 'Only you' : count(stats.members, 'Member', 'Members')}
                 </Text>
                 <Text style={styles.statDivider}>|</Text>
-                <Text style={[styles.statText, isDark && styles.statTextDark]}>{count(stats.categories, 'Category', 'Categories')}</Text>
+                <Text style={[styles.statText, { color: theme.primary }, isDark && styles.statTextDark]}>{count(stats.categories, 'Category', 'Categories')}</Text>
               </>
             )}
           </View>
@@ -260,7 +267,7 @@ export default function HomeScreen() {
                 accessibilityRole="button"
                 accessibilityLabel="See all documents"
               >
-                <Text style={styles.seeAllText}>See all</Text>
+                <Text style={[styles.seeAllText, { color: theme.primary }]}>See all</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -286,7 +293,7 @@ export default function HomeScreen() {
                   accessibilityLabel={`${doc.file_name}, in ${doc.vault}`}
                 >
                   <LinearGradient
-                    colors={['#2A3D66', '#4A6491']}
+                    colors={vaultTheme(doc.business ? { kind: 'business' } : null).gradient}
                     start={{ x: 0, y: 0 }}
                     end={{ x: 1, y: 1 }}
                     style={styles.docIcon}
@@ -304,9 +311,9 @@ export default function HomeScreen() {
                         </View>
                       )}
                       {/* The vault it is in: a lock for the personal vault, a briefcase for a business, people for a family */}
-                      <View style={[styles.vaultTag, isDark && styles.vaultTagDark]}>
-                        <Feather name={doc.vaultIcon} size={12} color={isDark ? '#9DB4E0' : color.primary} />
-                        <Text style={[styles.vaultTagText, isDark && styles.vaultTagTextDark]} numberOfLines={1}>{doc.vault}</Text>
+                      <View style={[styles.vaultTag, isDark && styles.vaultTagDark, doc.business && !isDark && styles.vaultTagBiz]}>
+                        <Feather name={doc.vaultIcon} size={12} color={isDark ? '#9DB4E0' : doc.business ? biz.primary : color.primary} />
+                        <Text style={[styles.vaultTagText, isDark && styles.vaultTagTextDark, doc.business && !isDark && styles.vaultTagTextBiz]} numberOfLines={1}>{doc.vault}</Text>
                       </View>
                       {/* One piece of text, so it wraps whole: never a dot left at the end of a line */}
                       <Text style={styles.docDate}>
@@ -476,6 +483,8 @@ const styles = StyleSheet.create({
     borderColor: '#D6E2F5',
   },
   vaultTagDark: { backgroundColor: '#1C2433', borderColor: '#30363D' },
+  vaultTagBiz: { backgroundColor: biz.tint, borderColor: '#BFE3DE' },
+  vaultTagTextBiz: { color: biz.primary },
   vaultTagText: { ...type.meta, color: color.primary, fontWeight: '600', flexShrink: 1 },
   vaultTagTextDark: { color: '#9DB4E0' },
   docDate: type.meta,

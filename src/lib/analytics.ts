@@ -48,6 +48,8 @@ export interface AnalyticsEvents {
   // A business's own notes and bills (056): whether a note has a reminder,
   // never what it says.
   note_added: { reminder: boolean };
+  // The drawer's Family or Business switch: which mode people run in.
+  mode_switched: { mode: 'family' | 'business' };
   bill_marked_paid: Record<string, never>;
   plus_viewed: { feature: string };
   pay_started: { period: 'monthly' | 'yearly'; currency: 'INR' | 'USD' };

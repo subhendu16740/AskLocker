@@ -741,7 +741,8 @@ tabs. `(tabs)` is a layout group, so routes are `/home`, `/search`, `/upload`.
 | `supabase.ts` | Client init. AsyncStorage for session persistence on native only. |
 | `auth.tsx` | `AuthProvider`: session, signInWithGoogle (the redirect), signInWithGoogleToken (Google's own button's ID token), signOut. Google is the only way in; `signInWithPassword` / `signUpWithPassword` serve only the test builds' form |
 | `app-lock.tsx` | Fingerprint sign-in (`AppLockProvider`, `useAppLock()`): a Supabase passkey — turning it on and off (`registerPasskey`, `passkey.delete`), signing in with it (`signIn`, the login screen's button), the lock (opened signed in; back after `LOCK_AFTER_MS`) and unlocking with it, checking the passkey is still there (`entryStillWorks()`), and errors in words (`passkeyErrorText()`). What the device can do is `app-lock-device.ts` / `app-lock-device.web.ts`; the screen, `components/app-lock-screen.tsx`. See [Fingerprint sign-in](#fingerprint-sign-in--a-passkey-after-google-once) |
-| `family-context.tsx` | `FamilyProvider`: currentFamily, members, membership, needsFamily; `families` is every vault, the personal one included, which it makes the first time it sees an account without one (`ensurePersonalVault()`, 046) |
+| `family-context.tsx` | `FamilyProvider`: currentFamily, members, membership, needsFamily; `families` is every vault, the personal one included, which it makes the first time it sees an account without one (`ensurePersonalVault()`, 046); `mode` (Family or Business, the open vault's kind), `modeVaults` and `setMode()` for the drawer's switch |
+| `vault-theme.ts` | A vault's colours: `useVaultTheme()` (the open vault's, so the mode's), `vaultTheme(family)`, `FAMILY_THEME` and `BUSINESS_THEME` (design.ts's `biz`) |
 | `vaults.ts` | Personal vault, family or business (046, 051): `vaultName()` ("Personal vault" everywhere), `isBusinessVault()`, `vaultWord()`, `vaultIcon()`, `splitVaults()`, `vaultSubtitle()`, `canDeleteDocument()` (whoever added it, or any admin in a business) |
 | `family-only.ts` | `useFamilyOnly()`: the family tree, a person's page and emergency cards send a business to Manage team (051) |
 | `drawer-context.tsx` | Profile drawer open/close state |
@@ -2209,6 +2210,39 @@ so storage policies live only in `019`.
 - Before 056 the screens say they aren't switched on yet, and the Plans
   page's rows still show what the plans will bring.
 
+### Family or Business — the drawer's switch, and a business's colours
+
+- **The drawer has a Family | Business switch** under its header
+  (`ProfileDrawer.tsx`). The mode is the open vault's kind (`modeOf()` in
+  `family-context.tsx`), never a setting of its own, so nothing can
+  disagree with it; the personal vault belongs to Family. No server change:
+  it is which vaults the app shows.
+- **Home, Ask and Upload show only the mode's vaults** (`modeVaults`):
+  Business lists, asks across and saves to businesses alone; Family the
+  personal vault and families. Ask sends `family_ids` for them (`'all'`
+  when they are every vault), and in Business with one business there is
+  no "Search in" and Upload does not ask where. Home's expiry check still
+  runs for every vault. All documents, Notifications and Settings show
+  everything, as before.
+- **The switch goes back to the vault left in that mode**
+  (`accountKey.modeVaults`, on the device, forgotten with the account), else
+  the first of the mode, a family before the personal vault. Someone with
+  no business is taken to Create a business; creating one opens it, and so
+  Business mode. Manage Family's list of vaults still opens any vault.
+- **A business wears teal and gold** (`biz` in `design.ts`: primary
+  `#0F5C57`, secondary `#1A7A72`, tint `#E7F4F2`, accent `#B7791F`), a
+  family the app's navy. `useVaultTheme()` (`src/lib/vault-theme.ts`) is the
+  open vault's colours, and the shared pieces follow it: the top bar, back
+  arrow and header buttons, `settings-ui` cards and buttons, Home's header,
+  the tab bar and its Ask button, the drawer. Anything about a business
+  wears teal wherever it is listed, whichever mode is open
+  (`vaultTheme(family)`): its row in Manage Family, Create a business, its
+  documents on Home, a business's invitation, the vault picker, Upload's
+  buttons when saving to one, the creation screen when Business is picked,
+  Make this a business vault, and the business-only screens (Plans,
+  Overview, My notes, Delete this business). One place to change it: `biz`.
+- **Usage counts**: `mode_switched`, with the mode chosen.
+
 ## Edge Functions
 
 `supabase/functions/` — Deno, excluded from `tsconfig.json` (they use remote
@@ -2677,7 +2711,11 @@ rule again once pinned chunks are mixed in.
 
   Colours are hex literals in older files; `color` in `design.ts` holds the
   same values: primary `#2A3D66`, secondary `#4A6491`, accent `#D4807B`,
-  background `#F8F9FC`, dark bg `#0D1117`, dark card `#161B22`.
+  background `#F8F9FC`, dark bg `#0D1117`, dark card `#161B22`. A business
+  has its own, `biz` (teal `#0F5C57`, gold `#B7791F`); a new screen takes
+  `useVaultTheme()` where it should follow the mode, and `vaultTheme(family)`
+  for a row about a particular vault (see
+  [Family or Business](#family-or-business--the-drawers-switch-and-a-businesss-colours)).
   `src/constants/theme.ts` is the untouched `create-expo-app` scaffold
   (generic `Colors`/`Fonts`/`Spacing`) and the AskLocker screens do **not**
   read from it — don't assume editing it changes anything.

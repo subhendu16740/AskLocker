@@ -15,7 +15,7 @@ import { previewBusinessVault, makeBusinessVault, BusinessVaultUnavailable, type
 import { vaultName } from '../lib/vaults';
 import { ScreenHeader } from '../components/screen-header';
 import { Card, CardTitle, Body, Muted, PrimaryButton, SecondaryButton, Status, screenStyles } from '../components/settings-ui';
-import { color, space } from '../constants/design';
+import { biz, color, space } from '../constants/design';
 import { track } from '../lib/analytics';
 
 const count = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
@@ -102,7 +102,7 @@ export default function MakeBusinessScreen() {
       <ScrollView contentContainerStyle={screenStyles.body}>
         {preview === null && !problem ? (
           <View style={styles.center}>
-            <ActivityIndicator color={color.primary} />
+            <ActivityIndicator color={biz.primary} />
             <Muted>Checking {name}…</Muted>
           </View>
         ) : problem ? (

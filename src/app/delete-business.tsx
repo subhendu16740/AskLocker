@@ -12,7 +12,7 @@ import { useFamily } from '../lib/family-context';
 import { previewBusinessDeletion, deleteBusiness, AccountDeletionError, type BusinessDeletion } from '../lib/api';
 import { ScreenHeader } from '../components/screen-header';
 import { Card, CardTitle, Body, Muted, Field, PrimaryButton, SecondaryButton, DangerButton, Status, screenStyles } from '../components/settings-ui';
-import { color, space, type } from '../constants/design';
+import { biz, color, space, type } from '../constants/design';
 import { track } from '../lib/analytics';
 
 const records = (n: number) => `${n} ${n === 1 ? 'record' : 'records'}`;
@@ -95,7 +95,7 @@ export default function DeleteBusinessScreen() {
       <ScrollView contentContainerStyle={screenStyles.body} keyboardShouldPersistTaps="handled">
         {plan === null && !problem ? (
           <View style={styles.center}>
-            <ActivityIndicator color={color.primary} />
+            <ActivityIndicator color={biz.primary} />
             <Muted>Checking what would be deleted…</Muted>
           </View>
         ) : problem ? (

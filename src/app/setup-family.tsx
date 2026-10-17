@@ -14,6 +14,7 @@ import { BackButton } from '../components/back-button';
 import { color, radius, size, space, type } from '../constants/design';
 import { track } from '../lib/analytics';
 import { useOnPlus } from '../lib/family-plan';
+import { vaultTheme } from '../lib/vault-theme';
 
 type Kind = 'family' | 'business';
 
@@ -73,6 +74,8 @@ export default function SetupFamilyScreen() {
     fetchPlanLimits().then((l) => setFreeVaults(l.vaultsPerPerson)).catch(() => {});
   }, []);
   const w = WORDS[kind];
+  // What is being made wears its own colours: a business's from the start.
+  const theme = vaultTheme({ kind });
   const [familyName, setFamilyName] = useState('');
   const [description, setDescription] = useState('');
   const [loading, setLoading] = useState(false);
@@ -115,14 +118,14 @@ export default function SetupFamilyScreen() {
         {/* Header */}
         <View style={styles.header}>
           <LinearGradient
-            colors={['#2A3D66', '#4A6491']}
+            colors={theme.gradient}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={styles.iconBox}
           >
             <Feather name={w.icon} size={28} color="#FFFFFF" />
           </LinearGradient>
-          <Text style={styles.title}>{w.title}</Text>
+          <Text style={[styles.title, { color: theme.primary }]}>{w.title}</Text>
           <Text style={styles.subtitle}>{w.subtitle}</Text>
         </View>
 
@@ -132,13 +135,14 @@ export default function SetupFamilyScreen() {
             <TouchableOpacity
               key={k}
               onPress={() => { setKind(k); setProblem(null); }}
-              style={[styles.kind, kind === k && styles.kindOn]}
+              style={[styles.kind, kind === k && { backgroundColor: vaultTheme({ kind: k }).primary, borderColor: vaultTheme({ kind: k }).primary }]}
               accessibilityRole="radio"
               accessibilityState={{ checked: kind === k }}
+              aria-checked={kind === k}
               activeOpacity={0.8}
             >
-              <Feather name={WORDS[k].icon} size={16} color={kind === k ? '#FFFFFF' : color.primary} />
-              <Text style={[styles.kindText, kind === k && styles.kindTextOn]}>{k === 'family' ? 'Family' : 'Business'}</Text>
+              <Feather name={WORDS[k].icon} size={16} color={kind === k ? '#FFFFFF' : vaultTheme({ kind: k }).primary} />
+              <Text style={[styles.kindText, { color: vaultTheme({ kind: k }).primary }, kind === k && styles.kindTextOn]}>{k === 'family' ? 'Family' : 'Business'}</Text>
             </TouchableOpacity>
           ))}
         </View>
@@ -206,7 +210,7 @@ export default function SetupFamilyScreen() {
           disabled={loading}
         >
           <LinearGradient
-            colors={['#2A3D66', '#4A6491']}
+            colors={theme.gradient}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 0 }}
             style={[styles.createBtn, loading && styles.btnDisabled]}
@@ -220,10 +224,10 @@ export default function SetupFamilyScreen() {
         </TouchableOpacity>
 
         {/* Info Card */}
-        <View style={styles.infoCard}>
-          <Feather name="lock" size={16} color={color.primary} style={styles.infoIcon} />
+        <View style={[styles.infoCard, { backgroundColor: theme.tint }]}>
+          <Feather name="lock" size={16} color={theme.primary} style={styles.infoIcon} />
           <View style={styles.infoTextWrap}>
-            <Text style={styles.infoTitle}>{w.infoTitle}</Text>
+            <Text style={[styles.infoTitle, { color: theme.primary }]}>{w.infoTitle}</Text>
             <Text style={styles.infoSub}>{w.infoSub}</Text>
           </View>
         </View>
@@ -271,7 +275,6 @@ const styles = StyleSheet.create({
     borderColor: color.inputBorder,
     backgroundColor: color.surface,
   },
-  kindOn: { backgroundColor: color.primary, borderColor: color.primary },
   kindText: { ...type.label, color: color.primary },
   kindTextOn: { color: '#FFFFFF' },
   title: {

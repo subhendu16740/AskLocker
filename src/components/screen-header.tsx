@@ -11,6 +11,7 @@ import { useFamily } from '../lib/family-context';
 import { isBusinessVault } from '../lib/vaults';
 import { plusName } from '../lib/plans';
 import { color, size, space, type } from '../constants/design';
+import { useVaultTheme } from '../lib/vault-theme';
 
 export function ScreenHeader({
   title, subtitle, fallback, right, titleLines = 1,
@@ -22,11 +23,13 @@ export function ScreenHeader({
   /** 2 where the title is a name the person must be able to read in full. */
   titleLines?: number;
 }) {
+  // Business mode wears the business's colours (the drawer's switch).
+  const theme = useVaultTheme();
   return (
     <View style={styles.bar}>
       <BackButton fallback={fallback} />
       <View style={styles.titles}>
-        <Text style={styles.title} numberOfLines={titleLines} accessibilityRole="header">{title}</Text>
+        <Text style={[styles.title, { color: theme.primary }]} numberOfLines={titleLines} accessibilityRole="header">{title}</Text>
         {!!subtitle && <Text style={styles.subtitle} numberOfLines={1}>{subtitle}</Text>}
       </View>
       {right}
@@ -41,6 +44,7 @@ export function HeaderActions({ children }: { children: ReactNode }) {
 
 /** An icon-only action at the right of the bar, drawn like the back arrow. */
 export function HeaderIconButton({ icon, label, onPress }: { icon: string; label: string; onPress: () => void }) {
+  const theme = useVaultTheme();
   return (
     <TouchableOpacity
       onPress={onPress}
@@ -49,17 +53,18 @@ export function HeaderIconButton({ icon, label, onPress }: { icon: string; label
       accessibilityRole="button"
       accessibilityLabel={label}
     >
-      <Feather name={icon as any} size={size.icon} color={color.primary} />
+      <Feather name={icon as any} size={size.icon} color={theme.primary} />
     </TouchableOpacity>
   );
 }
 
 /** A small labelled action at the right of the bar: "Add", "Save". */
 export function HeaderButton({ icon, label, onPress }: { icon?: string; label: string; onPress: () => void }) {
+  const theme = useVaultTheme();
   return (
     <TouchableOpacity
       onPress={onPress}
-      style={styles.textButton}
+      style={[styles.textButton, { backgroundColor: theme.primary }]}
       activeOpacity={0.8}
       hitSlop={{ top: 4, bottom: 4 }}
       accessibilityRole="button"

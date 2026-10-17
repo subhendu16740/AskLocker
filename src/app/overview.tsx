@@ -21,7 +21,7 @@ import {
 } from '../lib/overview';
 import { ScreenHeader, PlusTag } from '../components/screen-header';
 import { Card, CardTitle, Muted, SecondaryButton, Status, screenStyles } from '../components/settings-ui';
-import { color, radius, space, type } from '../constants/design';
+import { biz, color, radius, space, type } from '../constants/design';
 import { track } from '../lib/analytics';
 
 // Two series, validated together for colour-blind separation and contrast
@@ -75,7 +75,7 @@ export default function OverviewScreen() {
           </>
         ) : !data ? (
           <View style={styles.center}>
-            <ActivityIndicator color={color.primary} />
+            <ActivityIndicator color={biz.primary} />
           </View>
         ) : (
           <>
@@ -285,7 +285,7 @@ function BillGroup({ title, bills, busy, onPaid }: { title: string; bills: Overv
                 accessibilityLabel={`Mark ${b.invoiceNumber ?? b.fileName} paid`}
               >
                 {busy === b.documentId
-                  ? <ActivityIndicator size="small" color={color.primary} />
+                  ? <ActivityIndicator size="small" color={biz.primary} />
                   : <Text style={styles.paidText}>Mark paid</Text>}
               </TouchableOpacity>
             </View>
@@ -382,7 +382,7 @@ const styles = StyleSheet.create({
   center: { alignItems: 'center', paddingVertical: 40 },
   intro: { ...type.body },
   body: { ...type.body },
-  link: { ...type.caption, fontWeight: '600', color: color.primary, marginTop: space.xs },
+  link: { ...type.caption, fontWeight: '600', color: biz.primary, marginTop: space.xs },
   tiles: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
   tile: {
     flexGrow: 1, flexBasis: '45%', backgroundColor: color.surface, borderRadius: radius.control,
@@ -408,7 +408,7 @@ const styles = StyleSheet.create({
     minHeight: 28, minWidth: 76, paddingHorizontal: space.sm, borderRadius: 8, borderWidth: 1,
     borderColor: color.inputBorder, alignItems: 'center', justifyContent: 'center',
   },
-  paidText: { ...type.meta, fontSize: 12, fontWeight: '600', color: color.primary },
+  paidText: { ...type.meta, fontSize: 12, fontWeight: '600', color: biz.primary },
   legend: { flexDirection: 'row', gap: space.lg },
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   swatch: { width: 10, height: 10, borderRadius: 2 },
