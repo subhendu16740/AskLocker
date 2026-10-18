@@ -142,8 +142,9 @@ export default function DeleteAccountScreen() {
                     <Text style={styles.familyLine}>{documents(f.documentCount)}</Text>
                   </View>
                 ))}
-                <Body>Make someone else an admin, or delete the business. Then come back here.</Body>
+                <Body>Make someone else an admin in Manage team, or delete the business in Your vaults. Then come back here.</Body>
                 <SecondaryButton label="Manage team" icon="briefcase" onPress={() => router.push('/family' as any)} />
+                <SecondaryButton label="Your vaults" icon="layers" onPress={() => router.push('/settings/vaults' as any)} />
               </Card>
             )}
 

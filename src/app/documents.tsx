@@ -71,7 +71,8 @@ function joinNames(names: string[]): string {
 
 export default function DocumentsScreen() {
   const { user } = useAuth();
-  const { families } = useFamily();
+  // Only the mode's vaults (the drawer's Family or Business): a business never lists a family's documents.
+  const { modeVaults: families, mode } = useFamily();
   const params = useLocalSearchParams<{ vault?: string }>();
   const [filter, setFilter] = useState<string>(typeof params.vault === 'string' ? params.vault : ALL);
   const [docs, setDocs] = useState<ListedDoc[]>([]);
@@ -130,7 +131,7 @@ export default function DocumentsScreen() {
     return byVault;
   }, [docs]);
   const choices: VaultChoice[] = [
-    { key: ALL, name: 'All vaults', subtitle: plural(docs.length, 'document', 'documents'), icon: 'layers' },
+    { key: ALL, name: mode === 'business' ? 'All businesses' : 'All vaults', subtitle: plural(docs.length, 'document', 'documents'), icon: 'layers' },
     ...families.map((v) => ({
       key: v.family_id,
       name: vaultName(v.families),

@@ -1,4 +1,4 @@
-// Manage Family › Make this a business vault (054). A small business may
+// Settings › Your vaults › Make it a business (054). A small business may
 // start in a family vault and move when it grows, keeping every document,
 // member and link. One way only. The server decides, and says why not in its
 // own words (Family Plus still paid up, more than a free business keeps).
@@ -37,7 +37,7 @@ export default function MakeBusinessScreen() {
     setProblem(null);
     setPreview(null);
     if (!familyId) {
-      setProblem({ unavailable: true, text: 'Open the family in Manage Family first.' });
+      setProblem({ unavailable: true, text: 'Pick the family in Settings › Your vaults first.' });
       return;
     }
     previewBusinessVault(familyId)
@@ -76,7 +76,7 @@ export default function MakeBusinessScreen() {
   if (done) {
     return (
       <SafeAreaView style={screenStyles.safe} edges={['top']}>
-        <ScreenHeader title="Business vault" fallback="/family" />
+        <ScreenHeader title="Business vault" fallback="/settings/vaults" />
         <ScrollView contentContainerStyle={screenStyles.body}>
           <Card>
             <CardTitle icon="check-circle">{name} is now a business vault</CardTitle>
@@ -98,7 +98,7 @@ export default function MakeBusinessScreen() {
 
   return (
     <SafeAreaView style={screenStyles.safe} edges={['top']}>
-      <ScreenHeader title="Make it a business" fallback="/family" />
+      <ScreenHeader title="Make it a business" fallback="/settings/vaults" />
       <ScrollView contentContainerStyle={screenStyles.body}>
         {preview === null && !problem ? (
           <View style={styles.center}>

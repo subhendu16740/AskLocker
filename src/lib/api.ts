@@ -1133,12 +1133,18 @@ export async function openSharedDocument(token: string): Promise<SharedDocument 
 
 // ─── Notifications ───────────────────────────────────────────────
 
-export async function fetchUnreadNotificationCount(userId: string): Promise<number> {
-  const { count, error } = await supabase
+/**
+ * Unread notifications, leaving out those of `exceptVaults`: the vaults of
+ * the other mode, Family or Business, whose news is not shown in this one.
+ */
+export async function fetchUnreadNotificationCount(userId: string, exceptVaults: string[] = []): Promise<number> {
+  let query = supabase
     .from('notifications')
     .select('*', { count: 'exact', head: true })
     .eq('user_id', userId)
     .eq('is_read', false);
+  if (exceptVaults.length) query = query.not('family_id', 'in', `(${exceptVaults.join(',')})`);
+  const { count, error } = await query;
 
   if (error) throw error;
   return count ?? 0;
@@ -2009,6 +2015,43 @@ export async function previewBusinessDeletion(familyId: string): Promise<Busines
 export async function deleteBusiness(familyId: string, typedName: string): Promise<{ filesDeleted: number }> {
   const result = await deleteAccountInvoke<{ files_deleted: number }>({
     action: 'delete_business',
+    family_id: familyId,
+    confirm_name: typedName,
+  });
+  return { filesDeleted: result.files_deleted ?? 0 };
+}
+
+/**
+ * What deleting a family vault would take (057): its documents, and who loses
+ * it. Any admin may look; only its owner (its creator while an admin, else
+ * its longest-standing admin) may delete, and `ownerName` says who that is.
+ */
+export interface FamilyDeletion extends BusinessDeletion {
+  canDelete: boolean;
+  ownerName: string | null;
+}
+
+export async function previewFamilyDeletion(familyId: string): Promise<FamilyDeletion> {
+  const { family } = await deleteAccountInvoke<{
+    family: {
+      family_id: string; name: string; can_delete: boolean; owner_name: string | null;
+      other_members: string[]; document_count: number;
+    };
+  }>({ action: 'family_preview', family_id: familyId });
+  return {
+    familyId: family.family_id,
+    name: family.name,
+    canDelete: family.can_delete === true,
+    ownerName: family.owner_name ?? null,
+    otherMembers: family.other_members ?? [],
+    documentCount: family.document_count ?? 0,
+  };
+}
+
+/** Delete a family vault, its documents and files, for everyone in it. Its owner only; the name must be typed. */
+export async function deleteFamilyVault(familyId: string, typedName: string): Promise<{ filesDeleted: number }> {
+  const result = await deleteAccountInvoke<{ files_deleted: number }>({
+    action: 'delete_family',
     family_id: familyId,
     confirm_name: typedName,
   });

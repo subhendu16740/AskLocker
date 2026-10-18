@@ -42,6 +42,8 @@ export interface AnalyticsEvents {
   family_created: { kind: 'family' | 'business' };
   use_for_chosen: { choice: 'family' | 'business' | 'both' | 'skipped' };
   business_deleted: Record<string, never>;
+  // A family vault deleted by its owner, from Settings › Your vaults (057).
+  family_deleted: Record<string, never>;
   // A family vault made a business vault (054): the small business that
   // started on Family Plus and grew.
   vault_made_business: Record<string, never>;

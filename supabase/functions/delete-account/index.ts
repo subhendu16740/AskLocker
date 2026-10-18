@@ -7,6 +7,13 @@
 //   { action: 'delete', confirm: 'DELETE' } do it
 //   { action: 'business_preview', family_id }                 Delete this business (051):
 //   { action: 'delete_business', family_id, confirm_name }    what goes, then do it
+//   { action: 'family_preview', family_id }                   Delete a family vault (057),
+//   { action: 'delete_family', family_id, confirm_name }      from Settings › Your vaults
+//
+// A family is deleted only by its owner: its creator while an admin of it,
+// else its longest-standing admin (057's family_owner). Another admin's
+// preview says who the owner is. Never a personal vault, which goes only
+// with its account.
 //
 // A business never goes with an account (051). While someone is a
 // business's last admin, deleting their account is refused (409
@@ -29,10 +36,13 @@
 //   200 delete:  { deleted: true, families_deleted, families_left, files_deleted }
 //   200 business_preview: { business: { family_id, name, other_members, document_count } }
 //   200 delete_business:  { deleted: true, files_deleted }
+//   200 family_preview: { family: { family_id, name, can_delete, owner_name, other_members, document_count } }
+//   200 delete_family:  { deleted: true, files_deleted }
 //   400 no confirmation, or the wrong name     401 not signed in
-//   403 not an admin of that business
+//   403 not an admin of that business, or not that family's owner
+//   409 { status: 'personal_vault' | 'business' }  not a family vault to delete this way
 //   409 { status: 'business_admin', businesses }  the last admin of a business
-//   503 { status: 'needs_migration' }  029 (or, for a business, 051) is not applied
+//   503 { status: 'needs_migration' }  029 (for a business 051, for a family 057) is not applied
 // ────────────────────────────────────────────────────────────────
 
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -67,6 +77,11 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const BUSINESS_NEEDS_MIGRATION = {
   status: "needs_migration",
   error: "Deleting a business is not switched on yet.",
+};
+
+const FAMILY_NEEDS_MIGRATION = {
+  status: "needs_migration",
+  error: "Deleting a family vault is not switched on yet.",
 };
 
 const needsMigration = (error: { code?: string; message?: string }) =>
@@ -124,8 +139,8 @@ Deno.serve(async (req) => {
 
   try {
     const { action, confirm, family_id: familyId, confirm_name: confirmName } = await req.json().catch(() => ({}));
-    if (!["preview", "delete", "business_preview", "delete_business"].includes(action)) {
-      return json(400, { error: "action must be preview, delete, business_preview or delete_business" });
+    if (!["preview", "delete", "business_preview", "delete_business", "family_preview", "delete_family"].includes(action)) {
+      return json(400, { error: "action must be preview, delete, business_preview, delete_business, family_preview or delete_family" });
     }
 
     const supabase = createClient(
@@ -187,6 +202,68 @@ Deno.serve(async (req) => {
         lateFiles = await removeFamilyFiles(supabase, purged ? [purged as string] : []);
       } catch (err) {
         console.error("[delete-account] business files left behind:", (err as Error).message);
+      }
+      return json(200, { deleted: true, files_deleted: files + lateFiles });
+    }
+
+    // ── Delete a family vault (057) ────────────────────────────────
+    // Its owner only, the name typed; files first, then rows, as above.
+    if (action === "family_preview" || action === "delete_family") {
+      if (typeof familyId !== "string" || !UUID.test(familyId)) {
+        return json(400, { error: "Say which family." });
+      }
+      const { data: famData, error: famErr } = await supabase.rpc("family_deletion_plan", {
+        p_user_id: userId, p_family_id: familyId,
+      });
+      if (famErr) {
+        if (needsMigration(famErr)) return json(503, FAMILY_NEEDS_MIGRATION);
+        if (famErr.code === "42501") return json(403, { error: "Only an admin of this family can do this." });
+        if (famErr.hint === "personal_vault" || famErr.hint === "business") {
+          return json(409, { status: famErr.hint, error: famErr.message });
+        }
+        console.error("[delete-account] family plan failed:", famErr.code, famErr.message);
+        return json(500, { error: "Could not work out what to delete. Please try again." });
+      }
+      const fam = ((famData ?? []) as Array<{
+        family_id: string; family_name: string; storage_namespace: string; is_owner: boolean;
+        owner_name: string | null; other_members: string[]; document_count: number;
+      }>)[0];
+      if (!fam) return json(403, { error: "Only an admin of this family can do this." });
+
+      if (action === "family_preview") {
+        return json(200, {
+          family: {
+            family_id: fam.family_id,
+            name: fam.family_name,
+            can_delete: fam.is_owner,
+            owner_name: fam.owner_name,
+            other_members: fam.other_members ?? [],
+            document_count: fam.document_count,
+          },
+        });
+      }
+
+      if (!fam.is_owner) {
+        return json(403, { error: `Only ${fam.owner_name ?? "its owner"} can delete ${fam.family_name}.` });
+      }
+      const typed = typeof confirmName === "string" ? confirmName.trim().toLowerCase() : "";
+      if (!typed || typed !== fam.family_name.trim().toLowerCase()) {
+        return json(400, { error: `Type the family's name, ${fam.family_name}, to delete it.` });
+      }
+      const files = await removeFamilyFiles(supabase, [fam.storage_namespace]);
+      const { data: purged, error: purgeErr } = await supabase.rpc("purge_family_vault", {
+        p_user_id: userId, p_family_id: familyId, p_confirm_name: confirmName,
+      });
+      if (purgeErr) {
+        if (purgeErr.code === "42501") return json(403, { error: purgeErr.message || "Only its owner can delete this family." });
+        console.error("[delete-account] purge_family_vault failed:", purgeErr.code, purgeErr.message);
+        return json(500, { error: "The family couldn't be deleted. Please try again." });
+      }
+      let lateFiles = 0;
+      try {
+        lateFiles = await removeFamilyFiles(supabase, purged ? [purged as string] : []);
+      } catch (err) {
+        console.error("[delete-account] family files left behind:", (err as Error).message);
       }
       return json(200, { deleted: true, files_deleted: files + lateFiles });
     }

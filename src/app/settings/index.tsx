@@ -131,9 +131,10 @@ export default function SettingsScreen() {
     },
   ];
   const vaultItems: LinkItem[] = [
+    { icon: 'layers', label: 'Your vaults', sub: 'Family and business vaults: open, create, delete', route: '/settings/vaults' },
     isBusinessVault(currentFamily)
-      ? { icon: 'briefcase', label: 'Manage team', sub: 'People in this business, and your other vaults', route: '/family' }
-      : { icon: 'users', label: 'Manage Families', sub: 'Switch vaults, or create a family or business', route: '/family' },
+      ? { icon: 'briefcase', label: 'Manage team', sub: 'People in this business', route: '/family' }
+      : { icon: 'users', label: 'Manage Family', sub: 'People in this family', route: '/family' },
     { icon: 'hard-drive', label: 'Storage', sub: 'Your plan and space used', route: '/settings/storage' },
     isBusinessVault(currentFamily)
       ? { icon: 'star', label: 'Plans', sub: 'Plus, Pro and Enterprise', route: '/plus' }

@@ -117,7 +117,11 @@ Four things will mislead you if you assume otherwise:
    the overview (`business_overview`) is a member's and carries only what
    the plan covers, a bill is marked paid only through `set_bill_paid`, and
    note reminders are the server's (`queue_note_reminders`, service role
-   only): see [Business overview and notes](#business-overview-and-notes--what-a-businesss-papers-say-056)).
+   only): see [Business overview and notes](#business-overview-and-notes--what-a-businesss-papers-say-056);
+   057's deleting a family vault is its owner's alone, through the
+   delete-account function, and its three functions (`family_owner`,
+   `family_deletion_plan`, `purge_family_vault`) are service role only: see
+   [Your vaults](#your-vaults--in-settings-and-a-family-deleted-by-its-owner-057)).
    **A new writable
    column needs its own `GRANT` in a migration.** Nobody joins a family
    without saying yes: only an admin asks a person in, through the
@@ -207,7 +211,8 @@ everyone in it, B (on Free, with QA Vault B) is refused a free business
 a stranger nor a viewer can make QA Vault A a business; on Free the
 overview gives counts and a note takes no reminder, a teammate cannot read,
 change or delete someone's note, and on Pro the overview has money in and
-out and a note's reminder reaches its owner (056)),
+out and a note's reminder reaches its owner (056); nobody but its owner
+deletes a family, and only the server calls 057's functions),
 a question asked by relation ("my mother's passport"), and the full upload → ingest →
 expiry-notification pipeline, the reminder made once however often Home asks (on Family Plus; QA Vault A is on Free, where 048 makes none, and that is checked), and that each answered question is counted once (049; account A's monthly count is started again before it asks; each run also starts A's and B's counts for the day again, and QA Vault A's and QA Business A's invitations, `qa/lib/dev-day.mjs`, since one run invites B three times). By hand only, suite `languages` asks 12
 questions about documents in eight more Indian languages — two of them
@@ -681,8 +686,8 @@ src/
     login.tsx                # Google; the first sign-in makes the account (google-sign-in.tsx: Google's own button on the web where set up); "Sign in with fingerprint" first where turned on (fingerprint-sign-in.tsx); test builds add email and password (password-sign-in.tsx)
     setup-family.tsx         # creating a vault: Family or Business at the top (051), and the first one
     notifications.tsx        # expiry alerts, uploads, invites, Family Plus
-    family.tsx               # Manage Family: members, invitations (Pending approval), leaving, every vault, Create a family or a business; the personal vault's own page (046); Manage team for a business, with Delete this business (051)    (NOT a tab)
-    delete-business.tsx      # Delete this business: what goes and who loses it, type its name (051)
+    family.tsx               # Manage Family: the open vault's members, invitations (Pending approval), leaving; the personal vault's own page (046); Manage team for a business (051). No vaults: they are in Settings › Your vaults    (NOT a tab)
+    delete-vault.tsx         # Delete a business (any admin, 051) or a family (its owner, 057): what goes and who loses it, type its name
     make-business.tsx        # Make this a business vault: what stays, changes and goes, for an admin of a family vault (054)
     overview.tsx             # a business's Overview (drawer): counts; renewals and bills due on Plus; money in and out on Pro (056)
     notes.tsx                # My notes (drawer, in a business): each person's own notes, reminders on a paid plan (056)
@@ -698,6 +703,7 @@ src/
       index.tsx              # the list; every row opens a screen
       profile.tsx  security.tsx  notifications.tsx  privacy.tsx   # notifications: the switch, and this device (034)
       storage.tsx  help.tsx  feedback.tsx  about.tsx   # storage: each family's plan, and how much of its space is used (038, 039)
+      vaults.tsx             # Your vaults: Family vaults and Business vaults, open, create, Make it a business, Delete (057)
       delete-account.tsx     # Security › Delete account: shows what goes, asks for DELETE (029)
     document/[id].tsx        # document viewer; Share opens the share sheet (036, web only)
     documents.tsx            # All documents (Home's document count, See all): every vault's documents, a vault filter, Delete one or several (Select)
@@ -766,7 +772,7 @@ tabs. `(tabs)` is a layout group, so routes are `/home`, `/search`, `/upload`.
 | `speech-text.ts` | `toSpeech()`: strips markdown and spells out ID numbers before they are read aloud — and a number named as one ("train number 16782", "PNR: 4512", "PIN 751001", "नंबर 16782") digit by digit, from its digits; the screen keeps the digits |
 | `voice-languages.ts` | The language picker list and the few phrases the app itself says, per language |
 | `storage.ts` | Key-value cache: localStorage on web, AsyncStorage on native |
-| `database.types.ts` | Generated Supabase types, current to 056 (030, 052 and 055 changed nothing in them; 049's, 050's, 051's, 053's, 054's and 056's added by hand). Regenerate after every migration and re-append the hand-written block at the bottom (see the typecheck note) |
+| `database.types.ts` | Generated Supabase types, current to 057 (030, 052 and 055 changed nothing in them; 049's, 050's, 051's, 053's, 054's, 056's and 057's added by hand). Regenerate after every migration and re-append the hand-written block at the bottom (see the typecheck note) |
 
 ---
 
@@ -1192,7 +1198,8 @@ so storage policies live only in `019`.
   keeps everyone and invites again once it is below. Manage Family shows
   "3 of 4 members" and, once the places are taken, a note instead of Add.
 - **Leaving needs nobody's permission.** The person sees every family they
-  are in under Manage Family and can leave any of them
+  are in under Settings › Your vaults, and leaves the open one in Manage
+  Family
   (`family_members_delete_self`). The last admin cannot leave: the app
   hides Leave, and for a business (051) a trigger refuses it too. For a
   family it is still only the app's rule.
@@ -1863,7 +1870,7 @@ so storage policies live only in `019`.
   tagged with the vault it is in (a lock for the personal vault, people for a
   family) and opened there, like a source on Ask. There is no vault switcher
   on Home: the open vault — what the family tree, emergency cards and
-  Manage Family show — changes in Manage Family's list of vaults. Home asks
+  Manage Family show — changes in Settings › Your vaults. Home asks
   each vault for its newest documents and stats (`get_family_documents`,
   `get_family_stats`, one call each per vault); a vault that cannot be read
   leaves the others listed. With one vault the stats are as before
@@ -1962,8 +1969,8 @@ so storage policies live only in `019`.
      (`account_deletion_plan.blocked`; delete-account answers 409
      `business_admin` before touching anything) until someone else is an
      admin or the business is deleted. **A business never goes with an
-     account**: only an admin who types its name deletes it (Manage team ›
-     Delete this business → delete-account's `business_preview` /
+     account**: only an admin who types its name deletes it (Settings › Your
+     vaults › Delete → delete-account's `business_preview` /
      `delete_business` → `business_deletion_plan`, `purge_business`, service
      role only; files first, then 029's `purge_family`).
   3. **Nothing is ever removed when a plan ends.** `queue_plan_notices()`
@@ -2103,7 +2110,7 @@ so storage policies live only in `019`.
   chose to let it (17 October 2026), as a way in: the 200-question cap
   (053) keeps such a shop's cost under about ₹70 a month, so it still pays,
   and the move to a business is one tap when it grows.
-- **Make this a business vault** (Manage Family, an admin of a family vault;
+- **Make this a business vault** (Settings › Your vaults › Make it a business, an admin of a family vault;
   `src/app/make-business.tsx`): `business_vault_preview()` says what stays,
   what changes and what goes, then `make_business_vault()` sets
   `families.kind` to business. Both take the caller from `auth.uid()` and
@@ -2222,13 +2229,18 @@ so storage policies live only in `019`.
   personal vault and families. Ask sends `family_ids` for them (`'all'`
   when they are every vault), and in Business with one business there is
   no "Search in" and Upload does not ask where. Home's expiry check still
-  runs for every vault. All documents, Notifications and Settings show
-  everything, as before.
+  runs for every vault.
+- **A business never shows a family's documents, nor the other way round**
+  (the owner's ask, 18 October 2026). There is no fallback to every vault:
+  All documents lists the mode's vaults ("All businesses" in Business), and
+  Notifications and the bell leave out the news of the other mode's vaults
+  (`otherModeVaultIds`; an invitation, or a vault since left, shows in
+  both). Only Settings shows every vault: Storage, and Your vaults.
 - **The switch goes back to the vault left in that mode**
   (`accountKey.modeVaults`, on the device, forgotten with the account), else
   the first of the mode, a family before the personal vault. Someone with
   no business is taken to Create a business; creating one opens it, and so
-  Business mode. Manage Family's list of vaults still opens any vault.
+  Business mode. Settings › Your vaults opens any vault, of either kind.
 - **A business wears teal and gold** (`biz` in `design.ts`: primary
   `#0F5C57`, secondary `#1A7A72`, tint `#E7F4F2`, accent `#B7791F`), a
   family the app's navy. `useVaultTheme()` (`src/lib/vault-theme.ts`) is the
@@ -2242,6 +2254,37 @@ so storage policies live only in `019`.
   Make this a business vault, and the business-only screens (Plans,
   Overview, My notes, Delete this business). One place to change it: `biz`.
 - **Usage counts**: `mode_switched`, with the mode chosen.
+
+### Your vaults — in Settings, and a family deleted by its owner (057)
+
+- **Settings › Your vaults** (`src/app/settings/vaults.tsx`) lists every vault
+  the person is in, in two sections, Family vaults (the personal vault
+  first) and Business vaults, each in its own colours, and the kind they
+  said they use AskLocker for first (051's `use_for`). Tapping one opens it.
+  Under an admin's vault: **Make it a business** (a family, 054) and
+  **Delete**. Each section ends with Create a family / Create a business.
+  The owner asked for it on 18 October 2026, so that **Manage Family only
+  manages people**: the open vault's members, invitations and leaving. Its
+  vault list, Create links, Make this a business vault and Delete this
+  business all moved here; a personal vault's page links here.
+- **Deleting a family** was possible only with its last admin's account
+  (029). Now its **owner** deletes it on purpose (`delete-vault.tsx`, which
+  also deletes a business): the creator while an admin of it, else its
+  longest-standing admin (`family_owner()`, the person 029 hands
+  `created_by` to). Not any admin: since 047 an admin cannot delete another
+  member's documents one by one, so a second admin cannot delete them all
+  at once either. Another admin's screen says who the owner is. The screen
+  names who loses it and asks for its name; the delete-account function
+  checks the owner and the name, removes the files, then
+  `purge_family_vault()` re-checks both and runs 029's `purge_family()`.
+  Everyone else in it gets a `member` notification in their own personal
+  vault ("Das family was deleted"), since a notification in the family
+  would go with it. A personal vault is never deleted here (HINT
+  `personal_vault`); a business keeps 051's way (any admin; HINT
+  `business`).
+- **Usage counts**: `family_deleted`, no properties.
+- Before 057 Delete on a family says deleting a family vault is not switched
+  on yet; a business's Delete works as before.
 
 ## Edge Functions
 
@@ -2410,7 +2453,10 @@ so storage policies live only in `019`.
   lists what would go, `delete` with `confirm: 'DELETE'` does it (409
   `business_admin` while they are a business's last admin, 051), and an
   admin deletes a business (`business_preview`, `delete_business` with
-  `confirm_name`, 051); see
+  `confirm_name`, 051), and a family's owner the family (`family_preview`,
+  which tells another admin who the owner is, and `delete_family` with
+  `confirm_name`, 057; 403 for anyone else, 409 `personal_vault` or
+  `business`); see
   [Deleting your account](#deleting-your-account--at-once-nothing-kept-029-030).
   503 `needs_migration` where 029 is not applied.
 - **`gmail-connect`**, **`gmail-callback`**, **`gmail-scan`**,

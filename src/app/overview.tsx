@@ -58,7 +58,7 @@ export default function OverviewScreen() {
       <SafeAreaView style={screenStyles.safe} edges={['top']}>
         <ScreenHeader title="Overview" fallback="/home" />
         <ScrollView contentContainerStyle={screenStyles.body}>
-          <Status kind="error">The overview is for business vaults. Open one in Manage Family.</Status>
+          <Status kind="error">The overview is for business vaults. Switch to Business in the menu.</Status>
         </ScrollView>
       </SafeAreaView>
     );

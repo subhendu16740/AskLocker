@@ -70,7 +70,7 @@ export default function SearchScreen() {
   };
   // Only the vaults of the mode (Family or Business, the drawer's switch):
   // a business's questions search its records, a family's its papers.
-  const askable = modeVaults.length ? modeVaults : families;
+  const askable = modeVaults;
   const allLabel = mode === 'business' ? 'All my businesses' : 'All my vaults';
   const severalVaults = askable.length > 1;
   const pickedVault = searchIn !== 'all' ? askable.find((f) => f.family_id === searchIn) ?? null : null;

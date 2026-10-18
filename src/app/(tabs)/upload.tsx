@@ -56,7 +56,7 @@ export default function UploadScreen() {
   // default. From a person's page, it is that person's vault. Only the
   // vaults of the mode (the drawer's Family or Business): in Business, a
   // business's records go to a business, asked when there are several.
-  const { personal, families: shared } = splitVaults(modeVaults.length ? modeVaults : families);
+  const { personal, families: shared } = splitVaults(modeVaults);
   const vaults = [...(personal ? [personal] : []), ...shared];
   const askWhere = mode === 'business' ? vaults.length > 1 : shared.length > 0 && vaults.length > 1;
   const [destination, setDestination] = useState<string | null>(person ? currentFamily?.id ?? null : null);

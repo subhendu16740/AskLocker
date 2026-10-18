@@ -43,7 +43,7 @@ function getRelativeTime(dateStr: string): string {
 
 export default function NotificationsScreen() {
   const { user } = useAuth();
-  const { currentFamily, switchFamily } = useFamily();
+  const { currentFamily, switchFamily, otherModeVaultIds } = useFamily();
   const { notificationsEnabled, setNotificationsEnabled } = usePreferences();
   const [notifications, setNotifications] = useState<NotificationRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -52,11 +52,16 @@ export default function NotificationsScreen() {
     // Switched off in Settings: the list is hidden, so there is nothing to load.
     if (!user || !notificationsEnabled) return;
     setLoading(true);
-    fetchNotifications(user.id)
+    fetchNotifications(user.id, 50)
       .then(setNotifications)
       .catch(console.error)
       .finally(() => setLoading(false));
   }, [user?.id, notificationsEnabled]);
+
+  // Family or Business (the drawer's switch): news of the other mode's vaults
+  // is not shown here, so a business never lists a family's documents, nor the
+  // other way round. Invitations, and vaults since left, show in both.
+  const shown = notifications.filter((n) => !otherModeVaultIds.includes(n.family_id));
 
   const handlePress = useCallback(async (notif: NotificationRow) => {
     if (!user) return;
@@ -142,7 +147,7 @@ export default function NotificationsScreen() {
         <View style={styles.center}>
           <ActivityIndicator color={color.primary} />
         </View>
-      ) : notifications.length === 0 ? (
+      ) : shown.length === 0 ? (
         <View style={styles.center}>
           <Feather name="bell-off" size={32} color="#D1D5DB" />
           <Text style={styles.emptyTitle}>No notifications</Text>
@@ -150,7 +155,7 @@ export default function NotificationsScreen() {
         </View>
       ) : (
         <FlatList
-          data={notifications}
+          data={shown}
           keyExtractor={(item) => item.id}
           renderItem={renderItem}
           contentContainerStyle={styles.list}
