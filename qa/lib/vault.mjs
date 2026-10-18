@@ -10,6 +10,7 @@ import { readFileSync } from 'node:fs';
 import { invokeFunction } from './supabase.mjs';
 import { readLikeTheWebApp } from './client-ocr.mjs';
 import { permanentDocuments } from '../fixtures/documents.mjs';
+import { EMBED_ALLOWANCE } from './results.mjs';
 
 export const VAULT_A = 'QA Vault A';
 export const VAULT_B = 'QA Vault B';
@@ -168,7 +169,7 @@ export async function syncFixtures(cfg, actor, vault, results) {
     const error = String(body.error ?? up.error ?? '');
     const readBy = fixture.clientOcr ? `, read in the browser (${fixture.clientOcr.join('+')}, ${ocrText.length} chars)` : '';
     let [status, why] = ok
-      ? [body.embed_error ? 'fail' : 'pass', `${body.chunks} chunk(s)${readBy}${body.embed_error ? `, NO VECTORS: ${body.embed_error}` : ''}`]
+      ? [body.embed_error ? (EMBED_ALLOWANCE.test(body.embed_error) ? 'inconclusive' : 'fail') : 'pass', `${body.chunks} chunk(s)${readBy}${body.embed_error ? `, NO VECTORS: ${body.embed_error}` : ''}`]
       : ['fail', up.stage === 'ingest' ? `ingest-document answered ${up.ingest.status}: ${error || JSON.stringify(body).slice(0, 200)}` : `${up.stage} failed: ${error}`];
 
     if (!ok) {

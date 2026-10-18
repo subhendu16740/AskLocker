@@ -312,6 +312,14 @@ export async function runBusinessChecks(cfg, { a, b, anon, vaultA, vaultB }, res
       p_user_id: a.user.id, p_family_name: 'QA anon business', p_kind: 'business',
     });
     refused('anon-create-business', 'A logged-out visitor cannot create a business', anonErr);
+    // 056: RLS keeps notes to members. In a family vault the trigger refuses
+    // first, so the access probe cannot show this; a business can.
+    const { error: noteErr } = await b.client.from('scratch_notes').insert({ family_id: biz.id, body: 'QA intrusion' });
+    if (noteErr && (String(noteErr.code) === 'PGRST205' || /could not find the table/i.test(noteErr.message ?? ''))) {
+      results.add('business', 'stranger-note', "A stranger cannot write a note into a business (056)", 'skipped', { why: 'migration 056 is not applied to DEV yet' });
+    } else {
+      refused('stranger-note', "A stranger cannot write a note into a business (056)", noteErr);
+    }
   }
   {
     const { error } = await b.client.from('families').update({ kind: 'business' }).eq('id', vaultB.id);
