@@ -1991,23 +1991,35 @@ export async function previewAccountDeletion(): Promise<AccountDeletionFamily[]>
   }));
 }
 
-/** What deleting a business would take (051): its records, and who loses it. Admins only. */
+/**
+ * What deleting a vault would take: its documents, and who loses it. Any
+ * admin may look; only its owner (its creator while an admin, else its
+ * longest-standing admin, 057) may delete, and `ownerName` says who that is.
+ */
 export interface BusinessDeletion {
   familyId: string;
   name: string;
   otherMembers: string[];
   documentCount: number;
+  canDelete: boolean;
+  ownerName: string | null;
 }
 
 export async function previewBusinessDeletion(familyId: string): Promise<BusinessDeletion> {
   const { business } = await deleteAccountInvoke<{
-    business: { family_id: string; name: string; other_members: string[]; document_count: number };
+    business: {
+      family_id: string; name: string; other_members: string[]; document_count: number;
+      can_delete?: boolean; owner_name?: string | null;
+    };
   }>({ action: 'business_preview', family_id: familyId });
   return {
     familyId: business.family_id,
     name: business.name,
     otherMembers: business.other_members ?? [],
     documentCount: business.document_count ?? 0,
+    // A delete-account from before 057 says nothing: 051's functions decide.
+    canDelete: business.can_delete !== false,
+    ownerName: business.owner_name ?? null,
   };
 }
 
@@ -2021,15 +2033,8 @@ export async function deleteBusiness(familyId: string, typedName: string): Promi
   return { filesDeleted: result.files_deleted ?? 0 };
 }
 
-/**
- * What deleting a family vault would take (057): its documents, and who loses
- * it. Any admin may look; only its owner (its creator while an admin, else
- * its longest-standing admin) may delete, and `ownerName` says who that is.
- */
-export interface FamilyDeletion extends BusinessDeletion {
-  canDelete: boolean;
-  ownerName: string | null;
-}
+/** What deleting a family vault would take (057): the same as a business's. */
+export type FamilyDeletion = BusinessDeletion;
 
 export async function previewFamilyDeletion(familyId: string): Promise<FamilyDeletion> {
   const { family } = await deleteAccountInvoke<{

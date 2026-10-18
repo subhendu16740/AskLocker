@@ -1,5 +1,5 @@
-// Settings › Your vaults › Delete. A business is deleted by any of its admins
-// (051); a family by its owner, its creator while an admin of it, else its
+// Settings › Your vaults › Delete. A vault, family or business, is deleted
+// only by its owner: its creator while an admin of it, else its
 // longest-standing admin (057), and another admin is told who that is. A
 // personal vault is never deleted here: it goes only with its account. Every
 // document and file in the vault goes, for everyone in it, so the screen
@@ -36,7 +36,7 @@ export default function DeleteVaultScreen() {
   const things = (n: number) => (business ? count(n, 'record', 'records') : count(n, 'document', 'documents'));
   const word = business ? 'business' : 'family';
 
-  const [plan, setPlan] = useState<(BusinessDeletion & Partial<FamilyDeletion>) | null>(null);
+  const [plan, setPlan] = useState<BusinessDeletion | FamilyDeletion | null>(null);
   const [problem, setProblem] = useState<{ unavailable: boolean; text: string } | null>(null);
   const [typed, setTyped] = useState('');
   const [deleting, setDeleting] = useState(false);
@@ -138,7 +138,7 @@ export default function DeleteVaultScreen() {
             <CardTitle icon="lock">Only its owner can delete it</CardTitle>
             <Body>
               {plan.ownerName ? `${plan.ownerName} owns ${plan.name}` : `${plan.name} has an owner`}, so only they can delete it. You can
-              leave it in Manage Family.
+              leave it in {business ? 'Manage team' : 'Manage Family'}.
             </Body>
           </Card>
         ) : plan && (

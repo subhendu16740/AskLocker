@@ -1,9 +1,9 @@
 // Settings › Your vaults: every vault this person is in, family vaults and
 // business vaults apart (the owner's ask, 18 October 2026), so Manage Family
 // only manages the people in one. Tapping a vault opens it. An admin's
-// actions sit under its row: Make it a business (054) and Delete — a
-// business by any admin (051), a family by its owner (057; the screen says
-// who that is), a personal vault never, since it goes only with the account.
+// actions sit under its row: Make it a business (054) and Delete — by the
+// vault's owner only, family or business (057; the screen tells another
+// admin who that is), a personal vault never, since it goes with the account.
 
 import { useCallback, useEffect, useState } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';

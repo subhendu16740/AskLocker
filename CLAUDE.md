@@ -118,10 +118,12 @@ Four things will mislead you if you assume otherwise:
    the plan covers, a bill is marked paid only through `set_bill_paid`, and
    note reminders are the server's (`queue_note_reminders`, service role
    only): see [Business overview and notes](#business-overview-and-notes--what-a-businesss-papers-say-056);
-   057's deleting a family vault is its owner's alone, through the
-   delete-account function, and its three functions (`family_owner`,
-   `family_deletion_plan`, `purge_family_vault`) are service role only: see
-   [Your vaults](#your-vaults--in-settings-and-a-family-deleted-by-its-owner-057)).
+   057's deleting a vault, family or business, is its owner's alone,
+   through the delete-account function, and its functions (`family_owner`,
+   `family_deletion_plan`, `purge_family_vault`, and 051's
+   `business_deletion_plan` and `purge_business`, which ask for the owner
+   too) are service role only: see
+   [Your vaults](#your-vaults--in-settings-and-a-vault-deleted-by-its-owner-057)).
    **A new writable
    column needs its own `GRANT` in a migration.** Nobody joins a family
    without saying yes: only an admin asks a person in, through the
@@ -212,7 +214,7 @@ a stranger nor a viewer can make QA Vault A a business; on Free the
 overview gives counts and a note takes no reminder, a teammate cannot read,
 change or delete someone's note, and on Pro the overview has money in and
 out and a note's reminder reaches its owner (056); nobody but its owner
-deletes a family, and only the server calls 057's functions),
+deletes a vault, and only the server calls 057's functions),
 a question asked by relation ("my mother's passport"), and the full upload → ingest →
 expiry-notification pipeline, the reminder made once however often Home asks (on Family Plus; QA Vault A is on Free, where 048 makes none, and that is checked), and that each answered question is counted once (049; account A's monthly count is started again before it asks; each run also starts A's and B's counts for the day again, and QA Vault A's and QA Business A's invitations, `qa/lib/dev-day.mjs`, since one run invites B three times). By hand only, suite `languages` asks 12
 questions about documents in eight more Indian languages — two of them
@@ -687,7 +689,7 @@ src/
     setup-family.tsx         # creating a vault: Family or Business at the top (051), and the first one
     notifications.tsx        # expiry alerts, uploads, invites, Family Plus
     family.tsx               # Manage Family: the open vault's members, invitations (Pending approval), leaving; the personal vault's own page (046); Manage team for a business (051). No vaults: they are in Settings › Your vaults    (NOT a tab)
-    delete-vault.tsx         # Delete a business (any admin, 051) or a family (its owner, 057): what goes and who loses it, type its name
+    delete-vault.tsx         # Delete a family or a business, its owner only (057): what goes and who loses it, type its name
     make-business.tsx        # Make this a business vault: what stays, changes and goes, for an admin of a family vault (054)
     overview.tsx             # a business's Overview (drawer): counts; renewals and bills due on Plus; money in and out on Pro (056)
     notes.tsx                # My notes (drawer, in a business): each person's own notes, reminders on a paid plan (056)
@@ -1969,10 +1971,11 @@ so storage policies live only in `019`.
      (`account_deletion_plan.blocked`; delete-account answers 409
      `business_admin` before touching anything) until someone else is an
      admin or the business is deleted. **A business never goes with an
-     account**: only an admin who types its name deletes it (Settings › Your
-     vaults › Delete → delete-account's `business_preview` /
-     `delete_business` → `business_deletion_plan`, `purge_business`, service
-     role only; files first, then 029's `purge_family`).
+     account**: only its owner, typing its name, deletes it (any admin
+     before 057; Settings › Your vaults › Delete → delete-account's
+     `business_preview` / `delete_business` → 057's `family_deletion_plan`,
+     `purge_family_vault`, service role only; files first, then 029's
+     `purge_family`).
   3. **Nothing is ever removed when a plan ends.** `queue_plan_notices()`
      sends one notice and settles a business at once; it is never a clean-up
      candidate, `plan_take_excess` refuses it. A **paid** plan that ends
@@ -2255,7 +2258,7 @@ so storage policies live only in `019`.
   Overview, My notes, Delete this business). One place to change it: `biz`.
 - **Usage counts**: `mode_switched`, with the mode chosen.
 
-### Your vaults — in Settings, and a family deleted by its owner (057)
+### Your vaults — in Settings, and a vault deleted by its owner (057)
 
 - **Settings › Your vaults** (`src/app/settings/vaults.tsx`) lists every vault
   the person is in, in two sections, Family vaults (the personal vault
@@ -2267,24 +2270,27 @@ so storage policies live only in `019`.
   manages people**: the open vault's members, invitations and leaving. Its
   vault list, Create links, Make this a business vault and Delete this
   business all moved here; a personal vault's page links here.
-- **Deleting a family** was possible only with its last admin's account
-  (029). Now its **owner** deletes it on purpose (`delete-vault.tsx`, which
-  also deletes a business): the creator while an admin of it, else its
-  longest-standing admin (`family_owner()`, the person 029 hands
-  `created_by` to). Not any admin: since 047 an admin cannot delete another
+- **Only a vault's owner deletes it, family or business** (the owner's
+  rule, 18 October 2026). A family was deleted only with its last admin's
+  account (029), and a business by any of its admins (051). Now the
+  **owner** deletes either on purpose (`delete-vault.tsx`): the creator
+  while an admin of it, else its longest-standing admin (`family_owner()`,
+  the person 029 hands `created_by` to; "family" is the table's word for
+  every vault). Not any admin: since 047 an admin cannot delete another
   member's documents one by one, so a second admin cannot delete them all
   at once either. Another admin's screen says who the owner is. The screen
   names who loses it and asks for its name; the delete-account function
   checks the owner and the name, removes the files, then
   `purge_family_vault()` re-checks both and runs 029's `purge_family()`.
   Everyone else in it gets a `member` notification in their own personal
-  vault ("Das family was deleted"), since a notification in the family
-  would go with it. A personal vault is never deleted here (HINT
-  `personal_vault`); a business keeps 051's way (any admin; HINT
-  `business`).
-- **Usage counts**: `family_deleted`, no properties.
-- Before 057 Delete on a family says deleting a family vault is not switched
-  on yet; a business's Delete works as before.
+  vault ("Das family was deleted"), since a notification in the vault would
+  go with it. A personal vault is never deleted here (HINT
+  `personal_vault`). 051's `business_deletion_plan()` and
+  `purge_business()` ask for the owner too, so a delete-account from before
+  057 cannot let another admin delete a business.
+- **Usage counts**: `family_deleted` and `business_deleted`, no properties.
+- Before 057, Delete on a family says deleting a family vault is not
+  switched on yet, and a business's Delete goes 051's way (any admin).
 
 ## Edge Functions
 
@@ -2452,11 +2458,11 @@ so storage policies live only in `019`.
 - **`delete-account`** — a person deletes their own account: `preview`
   lists what would go, `delete` with `confirm: 'DELETE'` does it (409
   `business_admin` while they are a business's last admin, 051), and an
-  admin deletes a business (`business_preview`, `delete_business` with
-  `confirm_name`, 051), and a family's owner the family (`family_preview`,
-  which tells another admin who the owner is, and `delete_family` with
-  `confirm_name`, 057; 403 for anyone else, 409 `personal_vault` or
-  `business`); see
+  owner deletes their vault, a business (`business_preview`,
+  `delete_business`) or a family (`family_preview`, `delete_family`), each
+  with `confirm_name` (057; the previews tell another admin who the owner
+  is; 403 for anyone else, 409 `personal_vault`, or `business` / `family`
+  for the other kind's action; before 057 a business goes 051's way); see
   [Deleting your account](#deleting-your-account--at-once-nothing-kept-029-030).
   503 `needs_migration` where 029 is not applied.
 - **`gmail-connect`**, **`gmail-callback`**, **`gmail-scan`**,

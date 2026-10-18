@@ -76,7 +76,7 @@ function faq(payments: PaymentsStatus | null): { q: string; a: string }[] {
     },
     {
       q: 'How do I delete a vault?',
-      a: 'Go to Settings › Your vaults and tap Delete under it. Any admin can delete a business. Only a family\'s owner, who created it, can delete the family. Everyone in it loses it, so type its name to confirm.',
+      a: 'Go to Settings › Your vaults and tap Delete under it. Only its owner, who created it, can delete a family or a business. Everyone in it loses it, so type its name to confirm.',
     },
     {
       q: 'I\'ve been invited to a family. What now?',
