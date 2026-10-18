@@ -2078,9 +2078,11 @@ so storage policies live only in `019`.
   Enterprise, row by row (the owner's ask, 18 October 2026), and says Ask
   us, which opens Feedback. A border runs round the whole column of the
   plan the vault is on, top to bottom, marked "Current" (`CurrentColumn`
-  in `plus.tsx`; the same on the Family Plus page, where Plus takes both
-  its columns, monthly and yearly); none while the plan is unknown or once
-  a paid plan has ended.
+  in `plus.tsx`; the same on the Family Plus page, round Monthly or
+  Yearly, whichever the family last paid for: `fetchPlusPeriod()` reads
+  `family_plans`' `paid_until` less `updated_at`, which each payment sets,
+  so over six months added is a year); none while the plan is unknown or
+  once a paid plan has ended.
 - **A person's numbers are the best of their plans**, number by number:
   `person_plans()` (the plans of their vaults, and Free) feeds 049's
   `person_on_plus()` / `question_allowance()` and 050's
