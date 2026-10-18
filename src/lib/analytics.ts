@@ -42,6 +42,15 @@ export interface AnalyticsEvents {
   family_created: { kind: 'family' | 'business' };
   use_for_chosen: { choice: 'family' | 'business' | 'both' | 'skipped' };
   business_deleted: Record<string, never>;
+  // A family vault made a business vault (054): the small business that
+  // started on Family Plus and grew.
+  vault_made_business: Record<string, never>;
+  // A business's own notes and bills (056): whether a note has a reminder,
+  // never what it says.
+  note_added: { reminder: boolean };
+  // The drawer's Family or Business switch: which mode people run in.
+  mode_switched: { mode: 'family' | 'business' };
+  bill_marked_paid: Record<string, never>;
   plus_viewed: { feature: string };
   pay_started: { period: 'monthly' | 'yearly'; currency: 'INR' | 'USD' };
   payment_done: { period: 'monthly' | 'yearly'; currency: 'INR' | 'USD' };

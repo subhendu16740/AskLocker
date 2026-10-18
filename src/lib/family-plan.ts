@@ -29,6 +29,8 @@ import type { PlanName } from './plans';
 
 /** What a starred feature is called in /plus?feature=… */
 export type PlusFeature = 'reminders' | 'gmail' | 'storage' | 'voice' | 'questions' | 'members' | 'links';
+/** What only a business's paid plans bring (056): the overview's lists, money in and out, reminders on notes. */
+export type BusinessFeature = 'overview' | 'money' | 'notes';
 
 interface KnownPlan {
   plan: PlanName | null;
@@ -80,7 +82,7 @@ export function usePaymentsStatus(): PaymentsStatus | null {
 }
 
 /** The page a free family sees instead of a starred feature. */
-export function plusPage(feature?: PlusFeature): string {
+export function plusPage(feature?: PlusFeature | BusinessFeature): string {
   return feature ? `/plus?feature=${feature}` : '/plus';
 }
 

@@ -2,6 +2,7 @@ import { supabase } from './supabase';
 import { accountKey, storageGet, storageSet } from './storage';
 import { longDate, parseDocumentDate } from './dates';
 import { isSaveable, mimeTypeFor, unsupportedFileMessage } from './file-types';
+import { parseAmount, readDate, type MoneyRow } from './overview';
 import type { Gender, KinLink, KinPerson } from '../../supabase/functions/_shared/kinship';
 import { parseAllowance, type QuestionAllowance } from '../../supabase/functions/_shared/questions';
 import { isBloodGroup, type EmergencyCard, type EmergencyCardInput, type EmergencyContact } from './emergency';
@@ -1358,9 +1359,11 @@ export async function fetchStorageStatus(familyId: string): Promise<FamilyPlanSt
 // questions_per_month and questions_fair_use; 050: question_tries_per_day,
 // uploads_per_day and families_per_person; 051: invites_per_day and
 // businesses_per_person, and the business plans' rows; 053:
-// family_questions_per_month). A column that is not there yet
+// family_questions_per_month; 054: vaults_per_person; 056: notes_per_person). A column that is not there yet
 // fails the whole select, so each one missing asks again with the set before it.
 const PLAN_LIMIT_COLUMNS = [
+  'plan, storage_bytes, grace_days, max_members, voice_answers, personal_storage_bytes, questions_per_month, questions_fair_use, question_tries_per_day, uploads_per_day, families_per_person, invites_per_day, businesses_per_person, family_questions_per_month, vaults_per_person, notes_per_person',
+  'plan, storage_bytes, grace_days, max_members, voice_answers, personal_storage_bytes, questions_per_month, questions_fair_use, question_tries_per_day, uploads_per_day, families_per_person, invites_per_day, businesses_per_person, family_questions_per_month, vaults_per_person',
   'plan, storage_bytes, grace_days, max_members, voice_answers, personal_storage_bytes, questions_per_month, questions_fair_use, question_tries_per_day, uploads_per_day, families_per_person, invites_per_day, businesses_per_person, family_questions_per_month',
   'plan, storage_bytes, grace_days, max_members, voice_answers, personal_storage_bytes, questions_per_month, questions_fair_use, question_tries_per_day, uploads_per_day, families_per_person, invites_per_day, businesses_per_person',
   'plan, storage_bytes, grace_days, max_members, voice_answers, personal_storage_bytes, questions_per_month, questions_fair_use, question_tries_per_day, uploads_per_day, families_per_person',
@@ -1380,12 +1383,12 @@ export async function fetchPlanLimits(): Promise<PlanLimits> {
     questions_per_month?: number | null; questions_fair_use?: number | null;
     question_tries_per_day?: number | null; uploads_per_day?: number | null; families_per_person?: number | null;
     invites_per_day?: number | null; businesses_per_person?: number | null;
-    family_questions_per_month?: number | null;
+    family_questions_per_month?: number | null; vaults_per_person?: number | null; notes_per_person?: number | null;
   };
   let answer: { data: unknown; error: { message?: string } | null } = { data: null, error: null };
   for (const columns of PLAN_LIMIT_COLUMNS) {
     answer = await supabase.from('plan_limits').select(columns);
-    if (!answer.error || !/grace_days|max_members|voice_answers|personal_storage_bytes|questions_per_month|questions_fair_use|question_tries_per_day|uploads_per_day|families_per_person|invites_per_day|businesses_per_person|family_questions_per_month/.test(answer.error.message ?? '')) break;
+    if (!answer.error || !/grace_days|max_members|voice_answers|personal_storage_bytes|questions_per_month|questions_fair_use|question_tries_per_day|uploads_per_day|families_per_person|invites_per_day|businesses_per_person|family_questions_per_month|vaults_per_person|notes_per_person/.test(answer.error.message ?? '')) break;
   }
   const rows = (answer.data ?? []) as Row[];
   if (answer.error || !rows.length) return DEFAULT_PLAN_LIMITS;
@@ -1472,6 +1475,20 @@ export async function fetchPlanLimits(): Promise<PlanLimits> {
     businessesPerPerson: freeRow && 'businesses_per_person' in freeRow
       ? (freeRow.businesses_per_person == null ? null : Number(freeRow.businesses_per_person))
       : 0,
+    // Before 054 there is no combined number: one of each kind.
+    vaultsPerPerson: freeRow && 'vaults_per_person' in freeRow
+      ? (freeRow.vaults_per_person == null ? null : Number(freeRow.vaults_per_person))
+      : null,
+    // Before 056 there are no notes; the numbers they would have.
+    notesPerPerson: {
+      free: freeRow && 'notes_per_person' in freeRow
+        ? (freeRow.notes_per_person == null ? null : Number(freeRow.notes_per_person)) : DEFAULT_PLAN_LIMITS.notesPerPerson.free,
+      paid: (() => {
+        const row = rows.find((r) => r.plan === 'business_plus');
+        return row && 'notes_per_person' in row
+          ? (row.notes_per_person == null ? null : Number(row.notes_per_person)) : DEFAULT_PLAN_LIMITS.notesPerPerson.paid;
+      })(),
+    },
     invitesPerDay: { free: invites('free'), plus: invites('plus') },
     business: {
       business_plus: businessPlan('business_plus'),
@@ -1996,6 +2013,211 @@ export async function deleteBusiness(familyId: string, typedName: string): Promi
     confirm_name: typedName,
   });
   return { filesDeleted: result.files_deleted ?? 0 };
+}
+
+// ─── Making a family vault a business (054) ──────────────────────
+//
+// A small business may start in a family vault and move when it grows: an
+// admin makes it a business vault, keeping every document, member and link.
+// One way only. The server decides (business_vault_preview,
+// make_business_vault, the caller from the session) and says why not in its
+// own words: Family Plus still paid up, more than a free business keeps, a
+// personal vault. Before 054 neither function exists, and the screen says
+// the move isn't switched on yet.
+
+export type BusinessVaultBlocker = 'personal_vault' | 'already_business' | 'plan_active' | 'storage_over' | 'missing';
+
+export interface BusinessVaultPreview {
+  allowed: boolean;
+  reason: BusinessVaultBlocker | null;
+  /** The server's words for why not; null when allowed. */
+  message: string | null;
+  documents: number;
+  members: number;
+  /** People a free business may have; above it nobody is removed, nobody new is invited. */
+  freeMembers: number;
+  /** What goes: emergency cards, people in the tree without an account, the tree's links. */
+  cards: number;
+  people: number;
+  links: number;
+}
+
+export class BusinessVaultUnavailable extends Error {}
+
+const missingFunction = (error: { code?: string; message?: string }) =>
+  error.code === 'PGRST202' || error.code === '42883' || /could not find the function/i.test(error.message ?? '');
+
+export async function previewBusinessVault(familyId: string): Promise<BusinessVaultPreview> {
+  const { data, error } = await supabase.rpc('business_vault_preview', { p_family_id: familyId });
+  if (error) {
+    if (missingFunction(error)) throw new BusinessVaultUnavailable("Making a family vault a business isn't switched on yet.");
+    throw error;
+  }
+  const r = (data ?? {}) as Record<string, unknown>;
+  const n = (v: unknown) => (typeof v === 'number' ? v : Number(v ?? 0)) || 0;
+  return {
+    allowed: r.allowed === true,
+    reason: (r.reason as BusinessVaultBlocker | null) ?? null,
+    message: typeof r.message === 'string' ? r.message : null,
+    documents: n(r.documents),
+    members: n(r.members),
+    freeMembers: n(r.free_members),
+    cards: n(r.cards),
+    people: n(r.people),
+    links: n(r.links),
+  };
+}
+
+/** Make the family vault a business vault. One way: there is no undo. */
+export async function makeBusinessVault(familyId: string): Promise<void> {
+  const { error } = await supabase.rpc('make_business_vault', { p_family_id: familyId });
+  if (error) {
+    if (missingFunction(error)) throw new BusinessVaultUnavailable("Making a family vault a business isn't switched on yet.");
+    throw error;
+  }
+}
+
+// ─── Business overview and notes (056) ───────────────────────────
+//
+// What a business's papers say, as far as its plan goes: counts on every
+// plan, renewals and bills due on Business Plus, money in and out on Pro
+// and Enterprise. The server decides what to send (business_overview); the
+// app reads the dates and amounts as ingest stored them. Notes are each
+// person's own (scratch_notes: RLS on the owner), and a reminder on one is
+// for a paid plan, which the server keeps. Before 056 neither exists, and
+// the screens say they aren't switched on yet.
+
+export type OverviewTier = 'free' | 'plus' | 'pro';
+
+export interface OverviewRenewal {
+  documentId: string;
+  fileName: string;
+  category: string | null;
+  expiry: Date;
+}
+
+export interface OverviewBill {
+  documentId: string;
+  fileName: string;
+  category: string | null;
+  /** Null when the due date could not be read. */
+  due: Date | null;
+  amount: number | null;
+  invoiceNumber: string | null;
+  /** A sales invoice: money owed to the business, not by it. */
+  collect: boolean;
+}
+
+export interface BusinessOverview {
+  tier: OverviewTier;
+  counts: { renewals: number; expired: number; bills: number; invoices: number; documents: number };
+  renewals: OverviewRenewal[] | null;
+  bills: OverviewBill[] | null;
+  money: MoneyRow[] | null;
+}
+
+export class FeatureUnavailable extends Error {}
+
+export async function fetchBusinessOverview(familyId: string): Promise<BusinessOverview> {
+  const { data, error } = await supabase.rpc('business_overview', { p_family_id: familyId });
+  if (error) {
+    if (missingFunction(error)) throw new FeatureUnavailable("The overview isn't switched on yet.");
+    throw error;
+  }
+  type Raw = {
+    tier?: string;
+    counts?: Record<string, number>;
+    renewals?: { document_id: string; file_name: string; category: string | null; expiry_date: string }[] | null;
+    bills?: { document_id: string; file_name: string; category: string | null; due_date: string | null; total_amount: string | null; invoice_number: string | null }[] | null;
+    money?: { kind: 'in' | 'out'; invoice_date: string | null; total_amount: string | null; created_at: string }[] | null;
+  };
+  const r = (data ?? {}) as Raw;
+  const n = (k: string) => Number(r.counts?.[k] ?? 0) || 0;
+  return {
+    tier: r.tier === 'pro' || r.tier === 'plus' ? r.tier : 'free',
+    counts: { renewals: n('renewals'), expired: n('expired'), bills: n('bills'), invoices: n('invoices'), documents: n('documents') },
+    renewals: r.renewals
+      ? r.renewals
+        .map((x) => ({ documentId: x.document_id, fileName: x.file_name, category: x.category, expiry: parseDocumentDate(x.expiry_date) }))
+        .filter((x): x is OverviewRenewal => x.expiry !== null)
+      : null,
+    bills: r.bills
+      ? r.bills.map((x) => ({
+        documentId: x.document_id,
+        fileName: x.file_name,
+        category: x.category,
+        due: x.due_date ? parseDocumentDate(x.due_date) : null,
+        amount: parseAmount(x.total_amount),
+        invoiceNumber: x.invoice_number,
+        collect: x.category === 'Sales Invoices',
+      }))
+      : null,
+    money: r.money
+      ? r.money.map((x) => ({ kind: x.kind, date: readDate(x.invoice_date, new Date(x.created_at)), amount: parseAmount(x.total_amount) }))
+      : null,
+  };
+}
+
+/** Mark a bill paid (or not paid again): it leaves bills due. A paid plan's. */
+export async function setBillPaid(familyId: string, documentId: string, paid = true): Promise<void> {
+  const { error } = await supabase.rpc('set_bill_paid', { p_family_id: familyId, p_document_id: documentId, p_paid: paid });
+  if (error) {
+    if (missingFunction(error)) throw new FeatureUnavailable("Bills due aren't switched on yet.");
+    throw error;
+  }
+}
+
+export interface Note {
+  id: string;
+  body: string;
+  /** "2026-10-21", or null. */
+  remindOn: string | null;
+  done: boolean;
+  createdAt: string;
+}
+
+const NOTE_COLUMNS = 'id, body, remind_on, done, created_at';
+type NoteRow = { id: string; body: string; remind_on: string | null; done: boolean; created_at: string };
+const toNote = (r: NoteRow): Note => ({ id: r.id, body: r.body, remindOn: r.remind_on, done: r.done, createdAt: r.created_at });
+const notesUnavailable = () => new FeatureUnavailable("Notes aren't switched on yet.");
+
+/** Your own notes in a business, open ones first. */
+export async function fetchNotes(familyId: string): Promise<Note[]> {
+  const { data, error } = await supabase
+    .from('scratch_notes')
+    .select(NOTE_COLUMNS)
+    .eq('family_id', familyId)
+    .order('created_at', { ascending: false })
+    .limit(1000);
+  if (error) {
+    if (isMissingMigration(error)) throw notesUnavailable();
+    throw error;
+  }
+  return ((data ?? []) as NoteRow[]).map(toNote);
+}
+
+export async function addNote(familyId: string, body: string, remindOn: string | null): Promise<Note> {
+  const { data, error } = await supabase
+    .from('scratch_notes')
+    .insert({ family_id: familyId, body, remind_on: remindOn })
+    .select(NOTE_COLUMNS)
+    .single();
+  if (error) {
+    if (isMissingMigration(error)) throw notesUnavailable();
+    throw error;
+  }
+  return toNote(data as NoteRow);
+}
+
+export async function updateNote(id: string, patch: { body?: string; remind_on?: string | null; done?: boolean }): Promise<Note> {
+  const { data, error } = await supabase.from('scratch_notes').update(patch).eq('id', id).select(NOTE_COLUMNS).single();
+  if (error) throw error;
+  return toNote(data as NoteRow);
+}
+
+export async function deleteNote(id: string): Promise<void> {
+  const { error } = await supabase.from('scratch_notes').delete().eq('id', id);
+  if (error) throw error;
 }
 
 /** Delete the signed-in account, as the preview described. There is no undo. */

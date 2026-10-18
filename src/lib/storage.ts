@@ -54,6 +54,7 @@ export async function storageRemove(key: string): Promise<void> {
 // kept" includes the device.
 export const accountKey = {
   family: (userId: string) => `fv:family:${userId}`, // the vault last chosen
+  modeVaults: (userId: string) => `fv:mode-vaults:${userId}`, // the vault last open in Family and in Business mode
   prefs: (userId: string) => `fv:prefs:${userId}`,   // voice, languages, notifications
   askIn: (userId: string) => `fv:ask-in:${userId}`,  // where Ask searches: all vaults, or one (046)
   appLock: (userId: string) => `fv:app-lock:${userId}`, // fingerprint sign-in on this device: its passkey at Supabase (app-lock.tsx)

@@ -107,7 +107,17 @@ Four things will mislead you if you assume otherwise:
    [Business vaults](#business-vaults--a-pilot-for-small-businesses-051);
    053's family count of questions is the server's alone
    (`family_questions_used`, `family_question_room`, service role only): see
-   [Family Plus shares its month](#family-plus-shares-its-month--200-questions-for-the-whole-family-053)).
+   [Family Plus shares its month](#family-plus-shares-its-month--200-questions-for-the-whole-family-053);
+   054's one change of kind, a family vault to a business, is made only by
+   `make_business_vault()`, an admin's, the caller from `auth.uid()`, and the
+   rule it asks (`business_vault_blocker`) is service role only: see
+   [A family vault becomes a business](#a-family-vault-becomes-a-business--one-free-vault-and-the-move-054);
+   056's notes, `scratch_notes`, are their owner's alone — RLS on the owner,
+   three columns to insert and three to change, a trigger keeping the rest —
+   the overview (`business_overview`) is a member's and carries only what
+   the plan covers, a bill is marked paid only through `set_bill_paid`, and
+   note reminders are the server's (`queue_note_reminders`, service role
+   only): see [Business overview and notes](#business-overview-and-notes--what-a-businesss-papers-say-056)).
    **A new writable
    column needs its own `GRANT` in a migration.** Nobody joins a family
    without saying yes: only an admin asks a person in, through the
@@ -189,8 +199,15 @@ step down, payments refuses it Family Plus, and in one rolled-back block on
 DEV deleting A's account is refused, a Pro trial gives A Pro's numbers and
 ends back on Free, a paid Plus ends closed with nothing removed, Family Plus
 is refused for a business and a business plan for a family, QA Vault A's
-Family Plus starts and ends as before, and on Family Plus a family that has
-used its month's questions is refused (053)),
+Family Plus starts and ends as before, on Family Plus a family that has
+used its month's questions is refused (053), QA Vault A cannot become a
+business while on Family Plus and can once it ends, staying on Free with
+everyone in it, B (on Free, with QA Vault B) is refused a free business
+(054) and creates one once it is in a family on Family Plus (055); neither
+a stranger nor a viewer can make QA Vault A a business; on Free the
+overview gives counts and a note takes no reminder, a teammate cannot read,
+change or delete someone's note, and on Pro the overview has money in and
+out and a note's reminder reaches its owner (056)),
 a question asked by relation ("my mother's passport"), and the full upload → ingest →
 expiry-notification pipeline, the reminder made once however often Home asks (on Family Plus; QA Vault A is on Free, where 048 makes none, and that is checked), and that each answered question is counted once (049; account A's monthly count is started again before it asks; each run also starts A's and B's counts for the day again, and QA Vault A's and QA Business A's invitations, `qa/lib/dev-day.mjs`, since one run invites B three times). By hand only, suite `languages` asks 12
 questions about documents in eight more Indian languages — two of them
@@ -666,6 +683,9 @@ src/
     notifications.tsx        # expiry alerts, uploads, invites, Family Plus
     family.tsx               # Manage Family: members, invitations (Pending approval), leaving, every vault, Create a family or a business; the personal vault's own page (046); Manage team for a business, with Delete this business (051)    (NOT a tab)
     delete-business.tsx      # Delete this business: what goes and who loses it, type its name (051)
+    make-business.tsx        # Make this a business vault: what stays, changes and goes, for an admin of a family vault (054)
+    overview.tsx             # a business's Overview (drawer): counts; renewals and bills due on Plus; money in and out on Pro (056)
+    notes.tsx                # My notes (drawer, in a business): each person's own notes, reminders on a paid plan (056)
     family-tree.tsx          # the family tree: everyone, and how they are related (031)
     person/[id].tsx          # one person: their relation to you, emergency card, documents, expiry dates, link to their account (033)
     emergency/               # emergency cards (032), in the drawer
@@ -721,11 +741,13 @@ tabs. `(tabs)` is a layout group, so routes are `/home`, `/search`, `/upload`.
 | `supabase.ts` | Client init. AsyncStorage for session persistence on native only. |
 | `auth.tsx` | `AuthProvider`: session, signInWithGoogle (the redirect), signInWithGoogleToken (Google's own button's ID token), signOut. Google is the only way in; `signInWithPassword` / `signUpWithPassword` serve only the test builds' form |
 | `app-lock.tsx` | Fingerprint sign-in (`AppLockProvider`, `useAppLock()`): a Supabase passkey — turning it on and off (`registerPasskey`, `passkey.delete`), signing in with it (`signIn`, the login screen's button), the lock (opened signed in; back after `LOCK_AFTER_MS`) and unlocking with it, checking the passkey is still there (`entryStillWorks()`), and errors in words (`passkeyErrorText()`). What the device can do is `app-lock-device.ts` / `app-lock-device.web.ts`; the screen, `components/app-lock-screen.tsx`. See [Fingerprint sign-in](#fingerprint-sign-in--a-passkey-after-google-once) |
-| `family-context.tsx` | `FamilyProvider`: currentFamily, members, membership, needsFamily; `families` is every vault, the personal one included, which it makes the first time it sees an account without one (`ensurePersonalVault()`, 046) |
+| `family-context.tsx` | `FamilyProvider`: currentFamily, members, membership, needsFamily; `families` is every vault, the personal one included, which it makes the first time it sees an account without one (`ensurePersonalVault()`, 046); `mode` (Family or Business, the open vault's kind), `modeVaults` and `setMode()` for the drawer's switch |
+| `vault-theme.ts` | A vault's colours: `useVaultTheme()` (the open vault's, so the mode's), `vaultTheme(family)`, `FAMILY_THEME` and `BUSINESS_THEME` (design.ts's `biz`) |
 | `vaults.ts` | Personal vault, family or business (046, 051): `vaultName()` ("Personal vault" everywhere), `isBusinessVault()`, `vaultWord()`, `vaultIcon()`, `splitVaults()`, `vaultSubtitle()`, `canDeleteDocument()` (whoever added it, or any admin in a business) |
 | `family-only.ts` | `useFamilyOnly()`: the family tree, a person's page and emergency cards send a business to Manage team (051) |
 | `drawer-context.tsx` | Profile drawer open/close state |
-| `api.ts` | **All** Supabase queries — documents, search, upload, RAG, notifications, adding and leaving families, invitations, Gmail import, saved chats, share links, deleting your account, plans and storage limits (`fetchStorageStatus`, `fetchPlanLimits`; `uploadDocument` throws `StorageFullError` before a file that does not fit is sent, and `saveChat` `ChatStorageFullError` for a chat, 042), voice chats (`claimVoiceAnswer`, 041; `fetchVoiceStatus`, how many are left, 042), paying for Family Plus (`fetchPaymentsStatus`, whether this project takes payments, asked once a session; `createPlusOrder`, `verifyPlusPayment`, 044), questions this month (`fetchQuestionStatus`; `ragSearch`'s `questions` and `question_limit`, 049), the expiry date found in a new upload (`fetchDocumentExpiry`, for Upload's Plus offer), personal vaults and Ask across vaults (`ensurePersonalVault`; `ragSearch`'s `vaults` option, 046), businesses (`createNewFamily(…, kind)`, `previewBusinessDeletion`, `deleteBusiness`, `fetchUseFor` / `saveUseFor`, 051), and the Settings screens (profile, storage use, expiry dates, feedback) |
+| `api.ts` | **All** Supabase queries — documents, search, upload, RAG, notifications, adding and leaving families, invitations, Gmail import, saved chats, share links, deleting your account, plans and storage limits (`fetchStorageStatus`, `fetchPlanLimits`; `uploadDocument` throws `StorageFullError` before a file that does not fit is sent, and `saveChat` `ChatStorageFullError` for a chat, 042), voice chats (`claimVoiceAnswer`, 041; `fetchVoiceStatus`, how many are left, 042), paying for Family Plus (`fetchPaymentsStatus`, whether this project takes payments, asked once a session; `createPlusOrder`, `verifyPlusPayment`, 044), questions this month (`fetchQuestionStatus`; `ragSearch`'s `questions` and `question_limit`, 049), the expiry date found in a new upload (`fetchDocumentExpiry`, for Upload's Plus offer), personal vaults and Ask across vaults (`ensurePersonalVault`; `ragSearch`'s `vaults` option, 046), businesses (`createNewFamily(…, kind)`, `previewBusinessDeletion`, `deleteBusiness`, `fetchUseFor` / `saveUseFor`, 051; `previewBusinessVault`, `makeBusinessVault`, 054; `fetchBusinessOverview`, `setBillPaid`, `fetchNotes`, `addNote`, `updateNote`, `deleteNote`, 056), and the Settings screens (profile, storage use, expiry dates, feedback) |
+| `overview.ts` | The overview's arithmetic (056), pure: `parseAmount()` ("1,18,000.00"), `formatRupees()` (lakhs and crores), `compactRupees()` for the axis, `monthlyTotals()`, `financialYearTotals()` (since 1 April), `daysFromToday()`, `whenText()` |
 | `dates.ts` | `parseDocumentDate()`: expiry dates exactly as ingest stores them (DD/MM/YYYY and kin, YYYY-MM-DD, "19 October 2026") |
 | `emergency.ts` | The emergency card's shape, blood groups (`bloodGroupLabel()`: "A−", "Bombay (hh)"), `telHref()`, and `cardProblem()` — the same checks and messages as `save_emergency_card()`, so the form can say what is wrong before saving |
 | `family-people.ts` | Whose a document can be: everyone in the tree, you first (`useDocumentOwners()`, members only before 031), and a person's expiry badge (`badgeFromExpiries()`) |
@@ -744,7 +766,7 @@ tabs. `(tabs)` is a layout group, so routes are `/home`, `/search`, `/upload`.
 | `speech-text.ts` | `toSpeech()`: strips markdown and spells out ID numbers before they are read aloud — and a number named as one ("train number 16782", "PNR: 4512", "PIN 751001", "नंबर 16782") digit by digit, from its digits; the screen keeps the digits |
 | `voice-languages.ts` | The language picker list and the few phrases the app itself says, per language |
 | `storage.ts` | Key-value cache: localStorage on web, AsyncStorage on native |
-| `database.types.ts` | Generated Supabase types, current to 053 (030 and 052 changed nothing in them; 049's, 050's, 051's and 053's added by hand). Regenerate after every migration and re-append the hand-written block at the bottom (see the typecheck note) |
+| `database.types.ts` | Generated Supabase types, current to 056 (030, 052 and 055 changed nothing in them; 049's, 050's, 051's, 053's, 054's and 056's added by hand). Regenerate after every migration and re-append the hand-written block at the bottom (see the typecheck note) |
 
 ---
 
@@ -813,7 +835,7 @@ Supabase, cloud-hosted. Three layers:
   saved_chats, family_people, family_links, family_emergency_cards,
   push_subscriptions, reminders_sent, push_config, document_shares,
   family_invites, plan_limits, family_plans, member_usage, plan_payments,
-  question_usage, daily_usage.
+  question_usage, daily_usage, scratch_notes.
   RLS enabled.
 - **Layer 2 (private)** — one isolated schema per family (`family_<short_uuid>`)
   holding documents, document_metadata, document_chunks, expiry_alerts,
@@ -1657,9 +1679,9 @@ so storage policies live only in `019`.
   no document pointed outside its folder (checked 9 October 2026).
 - **Per person, per day (India time), in `daily_usage`**, counted only by
   `claim_daily()` (service role): documents added (`plan_limits.uploads_per_day`,
-  50 on Free, 500 on Plus; HINT `upload_limit`), documents the server reads
+  50 on Free, 100 on Plus since 054, 500 before; HINT `upload_limit`), documents the server reads
   (twice that, `start_document_read()`), and questions tried
-  (`question_tries_per_day`, 10 on Free, 100 on Plus). A try counts whether
+  (`question_tries_per_day`, 10 on Free, 50 on Plus since 054, 100 before). A try counts whether
   or not an answer came: 049 gives back a question that found nothing or
   met a busy AI service, but the judge had already spent its tokens, so
   asking nonsense on repeat, or many questions at once, used to cost the
@@ -1672,7 +1694,8 @@ so storage policies live only in `019`.
   account made 200 MB families as often as it liked, and five of them are
   the whole organisation's 1 GB. A family on Plus does not count, so paying
   for one lets a person create another. Create a family says so on the
-  screen, with Family Plus › (an alert shows nothing on the web).
+  screen, with Family Plus › (an alert shows nothing on the web). Since
+  054 it is one vault in all, a family or a business.
 - **The same on every plan** — each is a row in the shared 500 MB database,
   which turns read-only when full: 50 saved chats a person in a vault
   (`chat_limit`), 10 feedback messages a day (`feedback_limit`), 300 people
@@ -1970,7 +1993,7 @@ so storage policies live only in `019`.
   |---|---|---|---|---|
   | Price a month, + GST | — | ₹500 | ₹1,000 | ₹4,000 |
   | Price a year (eleven months), + GST | — | ₹5,500 | ₹11,000 | ₹44,000 |
-  | People who sign in | 4 | 5 | 15 | 50 |
+  | People who sign in | 4 | 10 (5 before 054) | 15 | 50 |
   | Space | 200 MB | 25 GB | 100 GB | 200 GB |
   | Questions each a month | 20 | 100 (fair use) | 100 | 100 |
   | Question tries a day each | 10 | 30 | 30 | 30 |
@@ -1978,9 +2001,10 @@ so storage policies live only in `019`.
   | Invitations a day | 20 | 20 | 20 | 50 |
 
   Every paid plan has voice with no limit, 30-day links, expiry reminders
-  and Gmail import; a year costs eleven months. Free already has 4 people,
-  so Plus sells on space (25 GB against 200 MB), questions (100 against
-  20) and reminders, not on people. **Why these numbers** (13 October 2026,
+  and Gmail import; a year costs eleven months. Plus sells on space (25 GB
+  against 200 MB), questions (100 each against 20) and reminders, and
+  since 054 on people too: 10, more than Family Plus's 8, so a shop that
+  started on Family Plus has a reason to move. **Why these numbers** (13 October 2026,
   ₹96 to the dollar): a question costs about ₹0.20 on Groq's paid tier
   (the judge's ~8K tokens in on `gpt-oss-20b`, the answer on
   `gpt-oss-120b`) and a try with no answer about ₹0.10; a GB kept about ₹3
@@ -1991,21 +2015,24 @@ so storage policies live only in `019`.
 
   | | Normal use | Heavy (half of every limit) | Every limit at once |
   |---|---|---|---|
-  | Plus, ₹500 / ₹5,500 | ₹45: 88% / 87% | ₹108: 76% / 74% | ₹205: 56% / 52% |
+  | Plus, ₹500 / ₹5,500 (10 people) | ₹79: 81% / 80% | ₹183: 61% / 57% | ₹355: 26% / 20% |
   | Pro, ₹1,000 / ₹11,000 | ₹133: 84% / 83% | ₹345: 63% / 60% | ₹670: 30% / 24% |
   | Enterprise, ₹4,000 / ₹44,000 | ₹365: 88% / 87% | ₹925: 74% / 72% | ₹1,800: 52% / 48% |
 
   Normal is about half the people asking 30 questions a month, with a fifth
   of the space used. The owner set these prices on 17 October 2026 (₹999,
-  ₹1,999 and ₹4,499 before, which kept 57–77% at every limit). Plus and
-  Enterprise keep about half even at every limit; Pro is the thinnest, a
-  quarter to a third, since fifteen people asking 100 questions each with
-  100 GB cost ₹670 of its ₹1,000. Per person Plus is ₹100, Pro ₹67 and
-  Enterprise ₹80, so a team of 50 pays more a head than one of 15. These
+  ₹1,999 and ₹4,499 before, which kept 57–77% at every limit). Enterprise
+  keeps about half even at every limit; Plus and Pro a quarter to a third,
+  since ten people asking 100 questions each cost ₹200 of Plus's ₹500 and
+  fifteen with 100 GB ₹670 of Pro's ₹1,000. With 5 people (051–053) Plus
+  kept 56% / 52% at every limit; 054 gave it 10, which the owner agreed to
+  on 17 October 2026 with the funnel from Family Plus (below). Per person
+  Plus is ₹50, Pro ₹67 and Enterprise ₹80, so a team of 50 pays more a
+  head than one of 15. These
   are each business's own costs; the fixed bills below come out of the
   total. Cost follows people × questions, so those are the numbers to
   watch; storage is cheap. The fixed bills — Supabase Pro $25, Vercel Pro
-  $20, HuggingFace PRO $9, about ₹5,200 a month — are covered by 12
+  $20, HuggingFace PRO $9, about ₹5,200 a month — are covered by 13
   businesses on Plus, 7 on Pro or 2 on Enterprise at normal use.
 - **Given by hand only**, from the SQL editor, by name:
   `select set_family_plan('<vault id>', now() + interval '1 month', 'manual', null, 'business_plus');`
@@ -2027,8 +2054,9 @@ so storage policies live only in `019`.
   before. Expiry reminders and 30-day links come with any paid plan.
   `plan_limits.invites_per_day` replaces 050's fixed 20, and
   `businesses_per_person` (1 on Free) counts businesses apart from
-  families, so a person on Free has one free family and one free business
-  besides their personal vault.
+  families. Since 054 `vaults_per_person` (1 on Free) counts both
+  together, so a person on Free has one free family or one free business
+  besides their personal vault; vaults made before stay.
 - **No PROD business goes on a paid plan before PROD is on Supabase Pro**, and
   Groq and HuggingFace are paid: one active business can use up Groq's
   whole free day (about 25 questions, for everyone). A business on Free has
@@ -2060,7 +2088,160 @@ so storage policies live only in `019`.
 - **Not built (Phase 2)**: folders with member access lists, a log of who
   opened what, export as a zip, self-serve Business checkout with GST
   invoices, an Employees area, business terms and a DPA, and a review of
-  schema-per-vault at thousands of vaults.
+  schema-per-vault at thousands of vaults. The owner's tiers for the
+  business ideas (17 October 2026), the simpler on Plus, the heaviest on
+  Pro: renewals and bills due, reminders on notes, a duplicate-bill alert
+  and a Monday summary on Plus; money in and out, a CA pack (the month's
+  invoices and bills, sent to the accountant), a directory of parties by
+  GSTIN and a staff papers checklist on Pro. 056 builds the first two of
+  each kind that need no new reading: the overview and notes.
+
+### A family vault becomes a business — one free vault, and the move (054)
+
+- **A small business may start in a family vault.** Family Plus costs ₹100
+  and a business plan ₹500, so a shop may pick the family one. The owner
+  chose to let it (17 October 2026), as a way in: the 200-question cap
+  (053) keeps such a shop's cost under about ₹70 a month, so it still pays,
+  and the move to a business is one tap when it grows.
+- **Make this a business vault** (Manage Family, an admin of a family vault;
+  `src/app/make-business.tsx`): `business_vault_preview()` says what stays,
+  what changes and what goes, then `make_business_vault()` sets
+  `families.kind` to business. Both take the caller from `auth.uid()` and
+  refuse anyone but an admin (42501); the rule they share,
+  `business_vault_blocker()`, takes an id and is service role only. One way
+  only: a business keeps its records when people leave (051), and turning
+  back would undo that.
+- **Everything stays**: documents, members, invitations, share links, saved
+  chats, the members' own tree entries. Business rules apply from then on.
+  The other members get a `member` notification ("… made Sharma Stores a
+  business vault"), which opens Manage Family.
+- **What only a family uses goes**, because a business's members are its
+  team, and RLS lets every member read the tree and the cards: emergency
+  cards, the tree's links, people in the tree without an account (their
+  documents stay, unmarked; an invitation to be one of them goes, with its
+  notification), and every member's birth date, gender and nickname.
+- **Refused, with the server's own words and a HINT the app does not need**:
+  a personal vault (`personal_vault`), a business already
+  (`already_business`), Family Plus still paid up (`plan_active`: "Family
+  Plus runs until 12 November 2026…"; what was paid for is not lost), and a
+  vault holding more than a free business keeps (`storage_over`, 200 MB). A
+  business is never cleaned up (051), so without that last check one month
+  of Family Plus could buy 10 GB kept free for ever. Both send the person
+  to Feedback ("ask us"): we move it by hand with a business plan. An ended
+  plan row is deleted, since a business whose paid plan ended reads as
+  closed; the new business starts on Free. A family above Free's 4 members
+  keeps everyone and invites again once below.
+- **On Free, one vault in all** (`plan_limits.vaults_per_person`, 1), a
+  family or a business, besides the personal vault; 050's and 051's
+  per-kind numbers are still checked within it. Paid vaults do not count;
+  vaults made before stay (QA's account A has one of each). The creation
+  screen says so above the form, and a refusal (`family_limit`) names it.
+- **Someone on a paid plan is not on Free** (055). 054 counted only the
+  vaults a person created, so a member of a family on Family Plus that
+  someone else pays for, with a free family of their own, was refused a
+  business ("On Free, you can create one family or one business"), found
+  on DEV on 17 October 2026. Now the combined number applies only to a
+  person in no vault on a paid plan (Family Plus or a business plan,
+  theirs or not); everyone keeps the per-kind numbers, one free family and
+  one free business. The new business starts on Business Free. The
+  creation screen hides its "On Free" line from someone on Plus
+  (`useOnPlus()`). A member of a Plus family gets two free vaults, not
+  one: bounded, and what the owner asked for.
+- **The numbers that make the move pay**, only where still the old ones:
+  Family Plus 100 documents a day (was 500) and 50 question tries a day
+  (was 100), which no family comes near and a busy office does; one
+  person's Family Plus fair use 200 where a project had 150; Business Plus
+  10 people (was 5), more than Family Plus's 8.
+- **The two 053s.** Another chat wrote `053_family_plus_family_sized.sql`
+  (branch `claude/relaxed-pasteur-itakll`, never merged): Family Plus fair
+  use 150, 100 uploads and 50 tries a day. It was applied to DEV on 17
+  October 2026 by mistake for this repo's 053. 054 records its two daily
+  numbers and sets the fair use back to the family's 200; its Gmail change
+  (import stops at the day's limit) came over too. That branch's 053 must
+  not be merged.
+- **Usage counts**: `vault_made_business`, no properties: how many shops
+  that started on Family Plus grew into a business.
+- Before 054 the preview finds no function and the screen says the move
+  isn't switched on yet; creating keeps 051's one of each.
+
+### Business overview and notes — what a business's papers say (056)
+
+- **Overview** (drawer › Overview, in a business; `src/app/overview.tsx`):
+  four counts on every plan (renewals in 90 days, expired in the last 30,
+  bills with a due date, invoices and bills), then, as far as the plan
+  goes — on Business Plus, **renewals** (each document's latest expiry date,
+  30 days back to 90 ahead, soonest first) and **bills due** (to pay, and to
+  collect from sales invoices; late, due within a week, later; **Mark
+  paid**); on Pro and Enterprise, **money in and out** (Sales Invoices in,
+  Purchase Bills out, by the invoice's own date or when it was added,
+  the last six months as bars, and the total since 1 April). A locked card
+  shows its count and opens Plans (`/plus?feature=overview` or `money`).
+  `business_overview()` (the caller from `auth.uid()`, a member, a business)
+  sends only what the plan covers, so the gate is the server's.
+- **Read, not checked.** Dates and amounts are what ingest stored (051's
+  `invoice_date`, `due_date`, `total_amount`, the expiry alerts), read with
+  `dates.ts` and `overview.ts`; the screen says so, and each row opens its
+  document. Money counts only documents filed under Sales Invoices or
+  Purchase Bills, and says how many had no total it could read. Nothing is
+  sent to an AI service for it: no question is used, nothing costs a token.
+- **A bill paid** leaves bills due: `set_bill_paid()` writes
+  `document_metadata` 'paid_on' (the day, India time), any member on a paid
+  plan, undoable, in `audit_logs`. Nothing else knows a bill was paid.
+- **The chart's colours** are `#3E6BB0` (in) and `#C9625A` (out), checked
+  with the dataviz skill's validator for colour-blind separation and
+  contrast on white; a legend names them, every month is a button that
+  reads its two numbers, and the line above the bars says the chosen month.
+- **My notes** (drawer › My notes, in a business; `src/app/notes.tsx`): each
+  person's scratchpad. `scratch_notes` has RLS on its owner, like saved chats
+  (028), and a foreign key to the membership, so leaving deletes them;
+  nobody else reads them, not even an admin. Clients insert `family_id,
+  body, remind_on` and change `body, remind_on, done`. A trigger keeps the
+  rules on every path: business vaults only (`not_business`), at most
+  `plan_limits.notes_per_person` each (20 on Free, 500 paid;
+  `notes_limit`), 2,000 characters, and a **reminder** only on a paid plan
+  (`plus_only`), on a day from today to five years on (`bad_date`).
+- **A note's reminder** is a `note` notification for its owner, made once by
+  `queue_note_reminders()` (pg_cron at three past every hour, so 034's run
+  at five past pushes it to their devices) from 9 in the morning, India
+  time, while the business is on a paid plan; the first line is its title.
+  A new date asks again. Tapping it opens My notes in that business.
+- **Usage counts**: `note_added` (whether it had a reminder, never what it
+  says) and `bill_marked_paid`.
+- Before 056 the screens say they aren't switched on yet, and the Plans
+  page's rows still show what the plans will bring.
+
+### Family or Business — the drawer's switch, and a business's colours
+
+- **The drawer has a Family | Business switch** under its header
+  (`ProfileDrawer.tsx`). The mode is the open vault's kind (`modeOf()` in
+  `family-context.tsx`), never a setting of its own, so nothing can
+  disagree with it; the personal vault belongs to Family. No server change:
+  it is which vaults the app shows.
+- **Home, Ask and Upload show only the mode's vaults** (`modeVaults`):
+  Business lists, asks across and saves to businesses alone; Family the
+  personal vault and families. Ask sends `family_ids` for them (`'all'`
+  when they are every vault), and in Business with one business there is
+  no "Search in" and Upload does not ask where. Home's expiry check still
+  runs for every vault. All documents, Notifications and Settings show
+  everything, as before.
+- **The switch goes back to the vault left in that mode**
+  (`accountKey.modeVaults`, on the device, forgotten with the account), else
+  the first of the mode, a family before the personal vault. Someone with
+  no business is taken to Create a business; creating one opens it, and so
+  Business mode. Manage Family's list of vaults still opens any vault.
+- **A business wears teal and gold** (`biz` in `design.ts`: primary
+  `#0F5C57`, secondary `#1A7A72`, tint `#E7F4F2`, accent `#B7791F`), a
+  family the app's navy. `useVaultTheme()` (`src/lib/vault-theme.ts`) is the
+  open vault's colours, and the shared pieces follow it: the top bar, back
+  arrow and header buttons, `settings-ui` cards and buttons, Home's header,
+  the tab bar and its Ask button, the drawer. Anything about a business
+  wears teal wherever it is listed, whichever mode is open
+  (`vaultTheme(family)`): its row in Manage Family, Create a business, its
+  documents on Home, a business's invitation, the vault picker, Upload's
+  buttons when saving to one, the creation screen when Business is picked,
+  Make this a business vault, and the business-only screens (Plans,
+  Overview, My notes, Delete this business). One place to change it: `biz`.
+- **Usage counts**: `mode_switched`, with the mode chosen.
 
 ## Edge Functions
 
@@ -2293,6 +2474,11 @@ rules sort the rest (`_shared/gmail-rules.ts`).
   is refused, and so is a file that does not fit, in the same words as an
   upload (`_shared/plan-text.ts`). The app sends a free family to the Plus
   page before it gets that far.
+- **It stops at the day's limit on documents added** (050; 100 a day on
+  Family Plus since 054). Before fetching anything, `gmail-import` checks the
+  person's count for the day and answers 429 `upload_limit`; a file refused
+  for it since goes back to the list, not to "failed". The app stops there
+  and leaves the rest ticked for tomorrow.
 
 ### PDF text — read by position, not by content-stream order
 
@@ -2525,7 +2711,11 @@ rule again once pinned chunks are mixed in.
 
   Colours are hex literals in older files; `color` in `design.ts` holds the
   same values: primary `#2A3D66`, secondary `#4A6491`, accent `#D4807B`,
-  background `#F8F9FC`, dark bg `#0D1117`, dark card `#161B22`.
+  background `#F8F9FC`, dark bg `#0D1117`, dark card `#161B22`. A business
+  has its own, `biz` (teal `#0F5C57`, gold `#B7791F`); a new screen takes
+  `useVaultTheme()` where it should follow the mode, and `vaultTheme(family)`
+  for a row about a particular vault (see
+  [Family or Business](#family-or-business--the-drawers-switch-and-a-businesss-colours)).
   `src/constants/theme.ts` is the untouched `create-expo-app` scaffold
   (generic `Colors`/`Fonts`/`Spacing`) and the AskLocker screens do **not**
   read from it — don't assume editing it changes anything.

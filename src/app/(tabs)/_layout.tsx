@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { DrawerProvider } from '../../lib/drawer-context';
 import ProfileDrawer from '../../components/ProfileDrawer';
 import { size } from '../../constants/design';
+import { useVaultTheme } from '../../lib/vault-theme';
 
 // The bar spans the screen; its three tabs keep to the app's 390px column.
 // Ask is the big round button in the middle: it sits on the bar's bottom
@@ -14,6 +15,8 @@ import { size } from '../../constants/design';
 function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   // Above an iPhone's home indicator; nothing on Android or the web.
   const { bottom } = useSafeAreaInsets();
+  // Business mode wears the business's colours (the drawer's switch).
+  const theme = useVaultTheme();
   return (
     <View style={[styles.tabBarOuter, { paddingBottom: bottom }]}>
       <View style={styles.tabBar}>
@@ -43,7 +46,7 @@ function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
                 accessibilityLabel="Ask"
               >
                 <LinearGradient
-                  colors={['#2A3D66', '#4A6491']}
+                  colors={theme.gradient}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 1 }}
                   style={styles.searchBtn}
@@ -56,7 +59,7 @@ function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
 
           const iconName = route.name === 'home' ? 'home' : 'upload';
           const label = route.name === 'home' ? 'Home' : 'Upload';
-          const color = isFocused ? '#2A3D66' : '#9CA3AF';
+          const color = isFocused ? theme.primary : '#9CA3AF';
 
           return (
             <TouchableOpacity

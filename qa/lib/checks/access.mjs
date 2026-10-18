@@ -276,6 +276,22 @@ const familyQuestionsJudge = (expect) => (outcome) => {
   }
   return judge(expect, outcome);
 };
+// A family vault made a business (054): only its admin sees what would
+// change, or makes the move; the rule itself is the server's. Skipped until 054.
+const businessVaultJudge = (expect) => (outcome) => {
+  if (outcome.missing || ['PGRST202'].includes(String(outcome.error?.code))) {
+    return ['skipped', 'migration 054 is not applied to DEV yet'];
+  }
+  return judge(expect, outcome);
+};
+// A business's overview and notes (056). Skipped until 056 is on DEV (no
+// such function, or no such table).
+const overviewJudge = (expect) => (outcome) => {
+  if (outcome.missing || missingTable(outcome.error) || ['PGRST202'].includes(String(outcome.error?.code))) {
+    return ['skipped', 'migration 056 is not applied to DEV yet'];
+  }
+  return judge(expect, outcome);
+};
 // Limits against abuse (050): each person's counts for the day are the
 // server's, and so is reading a document — no client reads or changes a
 // count, starts a read, or raises a plan's number. Skipped until 050 is on
@@ -1109,6 +1125,19 @@ export async function runAccessChecks(cfg, { a, b, anon, vaultA, vaultB, docsA }
     ['anon', "add up QA Vault A's questions this month (server-only)", familyQuestionsJudge('refused'), rpc(anon, 'family_questions_used', { p_family_id: A.family })],
     ['B', "add up QA Vault A's questions this month (server-only)", familyQuestionsJudge('refused'), rpc(b, 'family_questions_used', { p_family_id: A.family })],
     ['B', "ask which of account A's families has questions left (server-only)", familyQuestionsJudge('refused'), rpc(b, 'family_question_room', { p_user_id: A.user })],
+    ['anon', 'see what making QA Vault A a business would change', businessVaultJudge('refused'), rpc(anon, 'business_vault_preview', { p_family_id: A.family })],
+    ['anon', 'make QA Vault A a business vault', businessVaultJudge('refused'), rpc(anon, 'make_business_vault', { p_family_id: A.family })],
+    ['B', 'see what making QA Vault A a business would change', businessVaultJudge('refused'), rpc(b, 'business_vault_preview', { p_family_id: A.family })],
+    ['B', 'make QA Vault A a business vault', businessVaultJudge('refused'), rpc(b, 'make_business_vault', { p_family_id: A.family })],
+    ['B', 'ask what keeps QA Vault A from being a business (server-only)', businessVaultJudge('refused'), rpc(b, 'business_vault_blocker', { p_family_id: A.family })],
+    // A business's overview and notes (056): its members', and each note its owner's.
+    ['anon', "read QA Vault A's overview", overviewJudge('refused'), rpc(anon, 'business_overview', { p_family_id: A.family })],
+    ['B', "read QA Vault A's overview", overviewJudge('refused'), rpc(b, 'business_overview', { p_family_id: A.family })],
+    ['B', "mark a bill in QA Vault A paid", overviewJudge('refused'), rpc(b, 'set_bill_paid', { p_family_id: A.family, p_document_id: sacrificialId })],
+    ['B', "make everyone's note reminders (server-only)", overviewJudge('refused'), rpc(b, 'queue_note_reminders', {})],
+    ['anon', "read anyone's notes", overviewJudge('refused-or-empty'), () => anon.client.from('scratch_notes').select('id, body').limit(5)],
+    ['B', "read anyone else's notes", overviewJudge('refused-or-empty'), () => b.client.from('scratch_notes').select('id, body').neq('user_id', b.user.id).limit(5)],
+    ['B', 'write a note into QA Vault A', overviewJudge('refused'), () => b.client.from('scratch_notes').insert({ family_id: A.family, body: 'QA intrusion' })],
     ['B', "raise every plan's question limit", questionsJudge('refused'), onQuestions(() => b.client.from('plan_limits').update({ questions_per_month: 100000 }).eq('plan', 'free'))],
     // Limits against abuse (050): the day's counts, and reading a document.
     ['anon', "start reading one of account A's documents (server-only)", abuseJudge('refused'), rpc(anon, 'start_document_read', { p_family_id: A.family, p_document_id: sacrificialId, p_user_id: A.user })],

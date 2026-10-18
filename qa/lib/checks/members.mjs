@@ -315,6 +315,18 @@ export async function runMemberChecks(cfg, { a, b, vaultA }, results) {
     check('viewer-cannot-rename', 'A viewer cannot rename the family', fam?.name === vaultA.name, `name is "${fam?.name}"`);
     if (fam && fam.name !== vaultA.name) await a.client.from('families').update({ name: vaultA.name }).eq('id', vaultA.id);
 
+    // A family vault made a business (054): its admin's move, never a viewer's.
+    {
+      const { error: moveErr } = await b.client.rpc('make_business_vault', { p_family_id: vaultA.id });
+      if (moveErr && String(moveErr.code) === 'PGRST202') {
+        results.add('members', 'viewer-cannot-make-business', 'A viewer cannot make the family a business vault (054)', 'skipped', { why: 'migration 054 is not applied to DEV yet' });
+      } else {
+        const { data: kindRow } = await a.client.from('families').select('kind').eq('id', vaultA.id).single();
+        check('viewer-cannot-make-business', 'A viewer cannot make the family a business vault (054)',
+          refusedByAuth(moveErr) && (kindRow?.kind ?? 'family') === 'family', moveErr ? short(moveErr) : 'it went through');
+      }
+    }
+
     // Share links (036): a viewer may share only what they added or what is
     // theirs, never an admin's document.
     if (docs?.length) {

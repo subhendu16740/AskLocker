@@ -21,7 +21,7 @@ import { useFamily } from '../lib/family-context';
 import { fetchUseFor, saveUseFor, type UseFor } from '../lib/api';
 import { isBusinessVault, isPersonalVault } from '../lib/vaults';
 import { track } from '../lib/analytics';
-import { color, radius, shadow, size, space, type } from '../constants/design';
+import { biz, color, radius, shadow, size, space, type } from '../constants/design';
 
 const CHOICES: Array<{ key: UseFor; label: string; icon: 'users' | 'briefcase' | 'layers' }> = [
   { key: 'family', label: 'Family', icon: 'users' },
@@ -77,7 +77,7 @@ export function UseForOffer({ style }: { style?: StyleProp<ViewStyle> }) {
           </Text>
           <View style={styles.buttons}>
             <TouchableOpacity
-              style={styles.primary}
+              style={[styles.primary, other === 'business' && { backgroundColor: biz.primary }]}
               onPress={() => {
                 setAnswered(true);
                 track('use_for_chosen', { choice: 'both' });
@@ -108,7 +108,7 @@ export function UseForOffer({ style }: { style?: StyleProp<ViewStyle> }) {
           </Text>
           <View style={styles.buttons}>
             <TouchableOpacity
-              style={styles.primary}
+              style={[styles.primary, kind === 'business' && { backgroundColor: biz.primary }]}
               onPress={() => { setAnswered(true); setPicked(null); router.push(`/setup-family?kind=${kind}` as any); }}
               accessibilityRole="button"
             >
@@ -135,8 +135,8 @@ export function UseForOffer({ style }: { style?: StyleProp<ViewStyle> }) {
               onPress={() => choose(c.key)}
               accessibilityRole="button"
             >
-              <Feather name={c.icon} size={16} color={color.primary} />
-              <Text style={styles.choiceText}>{c.label}</Text>
+              <Feather name={c.icon} size={16} color={c.key === 'business' ? biz.primary : color.primary} />
+              <Text style={[styles.choiceText, c.key === 'business' && { color: biz.primary }]}>{c.label}</Text>
             </TouchableOpacity>
           ))}
         </View>

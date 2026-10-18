@@ -28,6 +28,7 @@ import type { Database } from '../../lib/database.types';
 import { ScreenHeader, PlusTag } from '../../components/screen-header';
 import { VaultDropdown, type VaultChoice } from '../../components/vault-sheet';
 import { isBusinessVault, isPersonalVault, splitVaults, vaultIcon, vaultName, vaultSubtitle } from '../../lib/vaults';
+import { vaultTheme } from '../../lib/vault-theme';
 import { color, radius, shadow, size, space, type } from '../../constants/design';
 import { categoryForAnalytics, track } from '../../lib/analytics';
 import { categoryOrder, suggestCategory } from '../../../supabase/functions/_shared/doc-category';
@@ -44,7 +45,7 @@ interface PickedFile {
 
 export default function UploadScreen() {
   const { user } = useAuth();
-  const { currentFamily, families, switchFamily } = useFamily();
+  const { currentFamily, families, modeVaults, mode, switchFamily } = useFamily();
   const { routeFor } = useFamilyPlan();
   // From a person's page: "Add a document for Nani".
   const { person } = useLocalSearchParams<{ person?: string }>();
@@ -52,16 +53,20 @@ export default function UploadScreen() {
   // personal vault, and that is where it goes. Someone in a family is asked
   // every time — their personal vault or one of their families — and nothing
   // is chosen for them: a private paper must never land in a shared vault by
-  // default. From a person's page, it is that person's vault.
-  const { personal, families: shared } = splitVaults(families);
+  // default. From a person's page, it is that person's vault. Only the
+  // vaults of the mode (the drawer's Family or Business): in Business, a
+  // business's records go to a business, asked when there are several.
+  const { personal, families: shared } = splitVaults(modeVaults.length ? modeVaults : families);
   const vaults = [...(personal ? [personal] : []), ...shared];
-  const askWhere = shared.length > 0 && vaults.length > 1;
+  const askWhere = mode === 'business' ? vaults.length > 1 : shared.length > 0 && vaults.length > 1;
   const [destination, setDestination] = useState<string | null>(person ? currentFamily?.id ?? null : null);
   const target = askWhere
     ? vaults.find((v) => v.family_id === destination) ?? null
     : vaults[0] ?? null;
   const targetFamily = target?.families ?? null;
   const toBusiness = isBusinessVault(targetFamily);
+  // The vault's own colours: a business's teal, a family's navy.
+  const uploadTheme = vaultTheme(targetFamily ?? currentFamily);
   // Everyone in that vault's family tree (you first); the members, before
   // migration 031. A business has no "whose document" (051).
   const familyOwners = useDocumentOwners(target?.family_id ?? null);
@@ -334,7 +339,7 @@ export default function UploadScreen() {
             <View style={styles.primaryActions}>
               <TouchableOpacity onPress={pickFromCamera} activeOpacity={0.85} style={styles.scanTouch}>
                 <LinearGradient
-                  colors={['#2A3D66', '#4A6491']}
+                  colors={uploadTheme.gradient}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 1 }}
                   style={styles.primaryBtn}
@@ -565,7 +570,7 @@ export default function UploadScreen() {
               accessibilityState={{ disabled: uploading || ocrRunning || (askWhere && !targetFamily) }}
             >
               <LinearGradient
-                colors={['#2A3D66', '#4A6491']}
+                colors={uploadTheme.gradient}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 0 }}
                 style={[styles.saveBtn, (uploading || (askWhere && !targetFamily)) && styles.saveBtnDisabled]}

@@ -52,7 +52,7 @@ type VoiceState = 'idle' | 'listening' | 'thinking' | 'speaking';
 
 export default function SearchScreen() {
   const { user } = useAuth();
-  const { currentFamily, members, families } = useFamily();
+  const { currentFamily, members, families, modeVaults, mode } = useFamily();
 
   // Where Ask searches (046): every vault this person is in — their personal
   // vault and each family — unless they pick one, which answers sooner.
@@ -68,13 +68,17 @@ export default function SearchScreen() {
     setSearchIn(key);
     if (user) storageSet(accountKey.askIn(user.id), key).catch(() => {});
   };
-  const severalVaults = families.length > 1;
-  const pickedVault = searchIn !== 'all' ? families.find((f) => f.family_id === searchIn) ?? null : null;
+  // Only the vaults of the mode (Family or Business, the drawer's switch):
+  // a business's questions search its records, a family's its papers.
+  const askable = modeVaults.length ? modeVaults : families;
+  const allLabel = mode === 'business' ? 'All my businesses' : 'All my vaults';
+  const severalVaults = askable.length > 1;
+  const pickedVault = searchIn !== 'all' ? askable.find((f) => f.family_id === searchIn) ?? null : null;
   const askAll = severalVaults && !pickedVault;
   const askFamily = pickedVault?.families ?? currentFamily;
   const searchInChoices: VaultChoice[] = [
-    { key: 'all', name: 'All my vaults', subtitle: 'Every document you can see', icon: 'layers' },
-    ...families.map((f): VaultChoice => ({
+    { key: 'all', name: allLabel, subtitle: 'Every document here you can see', icon: 'layers' },
+    ...askable.map((f): VaultChoice => ({
       key: f.family_id,
       name: vaultName(f.families),
       subtitle: isPersonalVault(f.families) ? 'Only you' : isBusinessVault(f.families) ? 'Business' : 'Family',
@@ -396,7 +400,7 @@ export default function SearchScreen() {
       const result = await ragSearch(askFamily.id, question, history, {
         language: voiceMode ? voiceLanguage : undefined,
         voice: wantVoice,
-        ...(askAll ? { vaults: 'all' as const } : {}),
+        ...(askAll ? { vaults: askable.length === families.length ? 'all' as const : askable.map((f) => f.family_id) } : {}),
       });
       setMessages((prev) =>
         prev.map((m) =>
@@ -553,7 +557,7 @@ export default function SearchScreen() {
           <View style={styles.searchInBar}>
             <VaultPill
               label="Search in"
-              value={pickedVault ? vaultName(pickedVault.families) : 'All my vaults'}
+              value={pickedVault ? vaultName(pickedVault.families) : allLabel}
               icon={pickedVault ? vaultIcon(pickedVault.families) : 'layers'}
               onPress={() => setSearchInOpen(true)}
             />
@@ -588,7 +592,7 @@ export default function SearchScreen() {
                   {voiceMode
                     ? t('empty_sub')
                     : askAll
-                      ? "I'll search all your vaults."
+                      ? (mode === 'business' ? "I'll search all your businesses." : "I'll search all your vaults.")
                       : pickedVault
                         ? `I'll search ${vaultName(pickedVault.families)}.`
                         : "I'll search all your documents."}

@@ -8,7 +8,10 @@ import {
   Modal, Pressable, ScrollView, Text, TouchableOpacity, View, StyleSheet, useWindowDimensions,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import { color, radius, size, space, type } from '../constants/design';
+import { biz, color, radius, size, space, type } from '../constants/design';
+
+/** A business (briefcase) wears its own colours; every other vault the family's. */
+const tone = (icon: VaultChoice['icon'] | undefined) => (icon === 'briefcase' ? biz.primary : color.primary);
 
 export interface VaultChoice {
   key: string;
@@ -38,14 +41,14 @@ export function VaultChoices({ choices, selected, onSelect }: {
             accessibilityState={{ selected: on }}
             accessibilityLabel={[c.name, c.subtitle].filter(Boolean).join(', ')}
           >
-            <View style={[styles.icon, on && styles.iconOn]}>
-              <Feather name={c.icon} size={16} color={on ? '#FFFFFF' : color.primary} />
+            <View style={[styles.icon, on && styles.iconOn, on && { backgroundColor: tone(c.icon) }]}>
+              <Feather name={c.icon} size={16} color={on ? '#FFFFFF' : tone(c.icon)} />
             </View>
             <View style={styles.text}>
               <Text style={styles.name} numberOfLines={1}>{c.name}</Text>
               {!!c.subtitle && <Text style={styles.subtitle} numberOfLines={1}>{c.subtitle}</Text>}
             </View>
-            <Feather name={on ? 'check-circle' : 'circle'} size={20} color={on ? color.primary : color.inputBorder} />
+            <Feather name={on ? 'check-circle' : 'circle'} size={20} color={on ? tone(c.icon) : color.inputBorder} />
           </TouchableOpacity>
         );
       })}
@@ -106,7 +109,7 @@ export function VaultDropdown({ choices, selected, onSelect, label, placeholder 
           accessibilityHint="Opens the list of vaults"
           accessibilityState={{ expanded: !!menu }}
         >
-          <View style={[styles.icon, !!chosen && styles.iconOn]}>
+          <View style={[styles.icon, !!chosen && styles.iconOn, !!chosen && { backgroundColor: tone(chosen.icon) }]}>
             <Feather name={chosen?.icon ?? 'archive'} size={16} color={chosen ? '#FFFFFF' : color.primary} />
           </View>
           <Text style={[styles.fieldText, !chosen && styles.fieldPlaceholder]} numberOfLines={1}>
@@ -132,14 +135,14 @@ export function VaultDropdown({ choices, selected, onSelect, label, placeholder 
                     accessibilityState={{ selected: on }}
                     accessibilityLabel={[c.name, c.subtitle].filter(Boolean).join(', ')}
                   >
-                    <View style={[styles.icon, on && styles.iconOn]}>
-                      <Feather name={c.icon} size={16} color={on ? '#FFFFFF' : color.primary} />
+                    <View style={[styles.icon, on && styles.iconOn, on && { backgroundColor: tone(c.icon) }]}>
+                      <Feather name={c.icon} size={16} color={on ? '#FFFFFF' : tone(c.icon)} />
                     </View>
                     <View style={styles.text}>
                       <Text style={styles.name} numberOfLines={1}>{c.name}</Text>
                       {!!c.subtitle && <Text style={styles.subtitle} numberOfLines={1}>{c.subtitle}</Text>}
                     </View>
-                    {on && <Feather name="check" size={18} color={color.primary} />}
+                    {on && <Feather name="check" size={18} color={tone(c.icon)} />}
                   </TouchableOpacity>
                 );
               })}
@@ -169,7 +172,7 @@ export function VaultPill({ label, value, icon, onPress, light = false }: {
       accessibilityRole="button"
       accessibilityLabel={`${label ? `${label} ` : ''}${value}. Change`}
     >
-      <Feather name={icon} size={14} color={light ? '#FFFFFF' : color.primary} />
+      <Feather name={icon} size={14} color={light ? '#FFFFFF' : tone(icon)} />
       <Text style={[styles.pillText, light && styles.pillTextLight]} numberOfLines={1}>
         {label ? <Text style={[styles.pillLabel, light && styles.pillTextLight]}>{label} </Text> : null}
         {value}

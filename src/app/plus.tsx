@@ -19,7 +19,7 @@ import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFamily } from '../lib/family-context';
 import { isBusinessVault, isPersonalVault, vaultName } from '../lib/vaults';
-import { forgetOnPlus, useFamilyPlan, usePaymentsStatus, type PlusFeature } from '../lib/family-plan';
+import { forgetOnPlus, useFamilyPlan, usePaymentsStatus, type BusinessFeature, type PlusFeature } from '../lib/family-plan';
 import { PaymentError, createPlusOrder, fetchPlanLimits, verifyPlusPayment } from '../lib/api';
 import { checkoutSupported, openCheckout } from '../lib/razorpay';
 import {
@@ -30,7 +30,8 @@ import { longDate } from '../lib/dates';
 import { ScreenHeader } from '../components/screen-header';
 import { TwelveMonthsPrice, YearlyPrice } from '../components/plus-price';
 import { Card, Muted, screenStyles } from '../components/settings-ui';
-import { color, radius, space, type } from '../constants/design';
+import { biz, color, radius, space, type } from '../constants/design';
+import { BUSINESS_THEME } from '../lib/vault-theme';
 import { track } from '../lib/analytics';
 
 type Cell = boolean | string;
@@ -99,10 +100,10 @@ const BROUGHT_BY: Record<PlusFeature, { icon: string; text: (name: string) => st
 
 const said = (cell: Cell) => (cell === true ? 'yes' : cell === false ? 'no' : cell);
 
-function CellView({ value, plus }: { value: Cell; plus?: boolean }) {
+function CellView({ value, plus, tone }: { value: Cell; plus?: boolean; tone?: string }) {
   if (value === true) return <Feather name="check" size={18} color="#16A34A" />;
   if (value === false) return <Feather name="minus" size={18} color="#9CA3AF" />;
-  return <Text style={[styles.cellText, plus && styles.cellTextPlus]}>{value}</Text>;
+  return <Text style={[styles.cellText, plus && styles.cellTextPlus, plus && !!tone && { color: tone }]}>{value}</Text>;
 }
 
 export default function PlusScreen() {
@@ -385,17 +386,21 @@ function FamilyPlus() {
 const PAID: readonly BusinessPlan[] = ['business_plus', 'business_pro', 'business_enterprise'];
 
 // A business's plans have a monthly number of questions, and more people as they go up.
-const BUSINESS_BROUGHT_BY: Record<PlusFeature, { icon: string; text: string }> = {
+const BUSINESS_BROUGHT_BY: Record<PlusFeature | BusinessFeature, { icon: string; text: string }> = {
   ...(Object.fromEntries(Object.entries(BROUGHT_BY).map(([k, v]) => [k, { icon: v.icon, text: v.text('every paid plan') }])) as
     Record<PlusFeature, { icon: string; text: string }>),
   questions: { icon: 'message-circle', text: 'More questions come with every paid plan.' },
   members: { icon: 'users', text: 'Room for more people comes with a bigger plan.' },
+  // The business's own (056).
+  overview: { icon: 'refresh-cw', text: 'Renewals and bills due come with every paid plan.' },
+  money: { icon: 'bar-chart-2', text: 'Money in and out comes with Pro and Enterprise.' },
+  notes: { icon: 'bell', text: 'Reminders on your notes come with every paid plan.' },
 };
 
 interface BusinessRow {
   label: string;
   cells: Record<BusinessPlan, Cell>;
-  feature?: PlusFeature;
+  feature?: PlusFeature | BusinessFeature;
 }
 
 function businessRows(limits: PlanLimits): BusinessRow[] {
@@ -409,6 +414,9 @@ function businessRows(limits: PlanLimits): BusinessRow[] {
     { label: '★ 30-day share links', cells: each(() => true), feature: 'links' },
     { label: '★ Expiry reminders', cells: each(() => true), feature: 'reminders' },
     { label: '★ Import from Gmail', cells: each(() => true), feature: 'gmail' },
+    { label: '★ Renewals and bills due', cells: each(() => true), feature: 'overview' },
+    { label: '★ Money in and out', cells: each((p) => p !== 'business_plus'), feature: 'money' },
+    { label: '★ Reminders on notes', cells: each(() => true), feature: 'notes' },
   ];
 }
 
@@ -417,7 +425,7 @@ function BusinessPlans() {
   const { currentFamily } = useFamily();
   const { plan, paidUntil, closed, trial, refresh } = useFamilyPlan();
   const [limits, setLimits] = useState<PlanLimits>(DEFAULT_PLAN_LIMITS);
-  const broughtBy = feature && feature in BUSINESS_BROUGHT_BY ? BUSINESS_BROUGHT_BY[feature as PlusFeature] : null;
+  const broughtBy = feature && feature in BUSINESS_BROUGHT_BY ? BUSINESS_BROUGHT_BY[feature as PlusFeature | BusinessFeature] : null;
   const onPlan = isBusinessPlan(plan) ? plan : null;
   const next = plan ? nextBusinessPlan(plan) : 'business_plus';
   const vault = currentFamily ? vaultName(currentFamily) : 'Your business';
@@ -437,14 +445,14 @@ function BusinessPlans() {
       <ScreenHeader title="Plans" fallback="/home" />
       <ScrollView contentContainerStyle={screenStyles.body}>
         {broughtBy && !onPlan && (
-          <View style={styles.brought} accessibilityLiveRegion="polite">
-            <Feather name={broughtBy.icon as any} size={16} color={color.primary} />
-            <Text style={styles.broughtText}>{broughtBy.text}</Text>
+          <View style={[styles.brought, { backgroundColor: biz.tint }]} accessibilityLiveRegion="polite">
+            <Feather name={broughtBy.icon as any} size={16} color={biz.primary} />
+            <Text style={[styles.broughtText, { color: biz.primary }]}>{broughtBy.text}</Text>
           </View>
         )}
 
-        <LinearGradient colors={['#2A3D66', '#4A6491']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.hero}>
-          <Text style={styles.heroTag}>★ Plans for your business</Text>
+        <LinearGradient colors={BUSINESS_THEME.gradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.hero}>
+          <Text style={[styles.heroTag, styles.heroTagBiz]}>★ Plans for your business</Text>
           <Text style={styles.heroTitle}>More space and more help for your team</Text>
           <View style={styles.heroCells}>
             {PAID.map((p) => (
@@ -478,8 +486,8 @@ function BusinessPlans() {
           </View>
         ) : plan === 'free' ? (
           <View style={styles.state}>
-            <Feather name="info" size={18} color={color.primary} />
-            <Text style={styles.stateText}>{vault} is on Free.</Text>
+            <Feather name="info" size={18} color={biz.primary} />
+            <Text style={[styles.stateText, { color: biz.primary }]}>{vault} is on Free.</Text>
           </View>
         ) : null}
 
@@ -487,7 +495,7 @@ function BusinessPlans() {
           <View style={[styles.row, styles.headRow]}>
             <Text style={[styles.label, styles.headText]}>What you get</Text>
             {PAID.map((p) => (
-              <Text key={p} style={[styles.value, styles.valueWide, styles.headText, styles.headPlus]}>{businessPlanName(p)}</Text>
+              <Text key={p} style={[styles.value, styles.valueWide, styles.headText, { color: biz.accent }]}>{businessPlanName(p)}</Text>
             ))}
           </View>
           {businessRows(limits).map((r) => {
@@ -496,7 +504,7 @@ function BusinessPlans() {
               <View key={r.label} style={[styles.row, pointed && styles.rowPointed]} accessible accessibilityLabel={`${r.label.replace('★ ', '')}: ${saidAll(r)}`}>
                 <Text style={styles.label}>{r.label}</Text>
                 {PAID.map((p) => (
-                  <View key={p} style={[styles.value, styles.valueWide]}><CellView value={r.cells[p]} plus /></View>
+                  <View key={p} style={[styles.value, styles.valueWide]}><CellView value={r.cells[p]} plus tone={biz.primary} /></View>
                 ))}
               </View>
             );
@@ -509,13 +517,13 @@ function BusinessPlans() {
             <Text style={[styles.label, styles.priceLabel]}>Price</Text>
             {PAID.map((p) => (
               <View key={p} style={[styles.value, styles.valueWide]}>
-                <Text style={[styles.cellText, styles.cellTextPlus]}>{businessAmount(p)}</Text>
+                <Text style={[styles.cellText, { color: biz.primary }]}>{businessAmount(p)}</Text>
                 <Text style={styles.cellPer}>a month</Text>
               </View>
             ))}
           </View>
           <Muted>
-            {`On Free: ${limits.members.free} people, ${formatBytes(limits.free)}, ${limits.questions.free ?? 20} questions each a month.`}
+            {`On Free: ${limits.members.free} people, ${formatBytes(limits.free)}, ${limits.questions.free ?? 20} questions each a month, ${limits.notesPerPerson.free ?? 20} notes each.`}
           </Muted>
         </Card>
 
@@ -526,7 +534,7 @@ function BusinessPlans() {
               {onPlan ? `Tell us, and we'll move you to ${businessPlanName(next)}.` : "Tell us which plan you want, and we'll set it up for you."}
             </Text>
             <TouchableOpacity
-              style={[styles.payBtn, styles.payBtnMain]}
+              style={[styles.payBtn, { backgroundColor: biz.primary }]}
               onPress={() => router.push('/settings/feedback' as any)}
               accessibilityRole="button"
             >
@@ -549,6 +557,7 @@ const styles = StyleSheet.create({
   broughtText: { ...type.label, flex: 1, color: color.primary },
   hero: { borderRadius: radius.card, padding: space.lg, gap: space.xs },
   heroTag: { fontSize: 12, lineHeight: 16, fontWeight: '700', color: '#FBD5D1', letterSpacing: 0.4 },
+  heroTagBiz: { color: '#F3DDAE' },
   heroTitle: { fontSize: 17, lineHeight: 23, fontWeight: '600', color: '#FFFFFF' },
   heroCells: { flexDirection: 'row', gap: space.sm, marginTop: space.sm },
   heroCell: {

@@ -25,7 +25,7 @@ function AuthGate() {
     if (seg === 's') return;
     // A route missing here sends a signed-in person to /home — which, for
     // gmail-import, would throw away the code Google just sent back.
-    const inProtectedRoute = seg === '(tabs)' || seg === 'document' || seg === 'family' || seg === 'settings' || seg === 'setup-family' || seg === 'notifications' || seg === 'gmail-import' || seg === 'reminders' || seg === 'saved-chats' || seg === 'family-tree' || seg === 'person' || seg === 'emergency' || seg === 'plus' || seg === 'documents' || seg === 'delete-business';
+    const inProtectedRoute = seg === '(tabs)' || seg === 'document' || seg === 'family' || seg === 'settings' || seg === 'setup-family' || seg === 'notifications' || seg === 'gmail-import' || seg === 'reminders' || seg === 'saved-chats' || seg === 'family-tree' || seg === 'person' || seg === 'emergency' || seg === 'plus' || seg === 'documents' || seg === 'delete-business' || seg === 'make-business' || seg === 'overview' || seg === 'notes';
 
     if (!session && inProtectedRoute) {
       router.replace('/login' as any);
@@ -94,6 +94,9 @@ export default function RootLayout() {
           <Stack.Screen name="family-tree" />
           <Stack.Screen name="person/[id]" />
           <Stack.Screen name="delete-business" />
+          <Stack.Screen name="make-business" />
+          <Stack.Screen name="overview" />
+          <Stack.Screen name="notes" />
         </Stack>
         {/* After the Stack, so it draws over every screen. Renders nothing
             in production. */}

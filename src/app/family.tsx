@@ -21,6 +21,7 @@ import { longDate } from '../lib/dates';
 import { isBusinessVault, isPersonalVault, vaultName, vaultSubtitle, vaultWord } from '../lib/vaults';
 import { color, radius, shadow, size, space, type } from '../constants/design';
 import { track } from '../lib/analytics';
+import { BUSINESS_THEME, useVaultTheme, vaultTheme } from '../lib/vault-theme';
 
 const relations = ['Father', 'Mother', 'Spouse', 'Son', 'Daughter', 'Brother', 'Sister', 'Other'];
 
@@ -62,6 +63,7 @@ export default function FamilyScreen() {
 
   const isAdmin = membership?.role === 'admin';
   const business = isBusinessVault(currentFamily);
+  const theme = useVaultTheme();
   const word = vaultWord(currentFamily);
   const [useFor, setUseFor] = useState<UseFor | 'skipped' | null>(null);
   useEffect(() => {
@@ -224,8 +226,8 @@ export default function FamilyScreen() {
       activeOpacity={0.8}
       accessibilityRole="button"
     >
-      <View style={styles.treeIcon}>
-        <Feather name={kind === 'business' ? 'briefcase' : 'plus'} size={16} color={color.primary} />
+      <View style={[styles.treeIcon, kind === 'business' && { backgroundColor: BUSINESS_THEME.tint }]}>
+        <Feather name={kind === 'business' ? 'briefcase' : 'plus'} size={16} color={kind === 'business' ? BUSINESS_THEME.primary : color.primary} />
       </View>
       <View style={styles.memberInfo}>
         <Text style={styles.treeTitle}>{kind === 'business' ? 'Create a business' : 'Create a family'}</Text>
@@ -249,11 +251,12 @@ export default function FamilyScreen() {
       <View style={styles.memberList}>
         {families.map((f) => {
           const isCurrent = f.family_id === currentFamily.id;
+          const rowTheme = vaultTheme(f.families);
           return (
             <TouchableOpacity
               key={f.family_id}
               onPress={() => switchFamily(f.family_id)}
-              style={[styles.familyRow, isCurrent && styles.familyRowCurrent]}
+              style={[styles.familyRow, isCurrent && { backgroundColor: rowTheme.primary }]}
               activeOpacity={0.8}
               accessibilityRole="button"
               accessibilityState={{ selected: isCurrent }}
@@ -261,7 +264,7 @@ export default function FamilyScreen() {
               <Feather
                 name={isPersonalVault(f.families) ? 'lock' : isBusinessVault(f.families) ? 'briefcase' : 'home'}
                 size={16}
-                color={isCurrent ? '#FFFFFF' : color.primary}
+                color={isCurrent ? '#FFFFFF' : rowTheme.primary}
               />
               <View style={styles.memberInfo}>
                 <Text style={[styles.familyRowName, isCurrent && styles.familyRowNameCurrent]}>{vaultName(f.families)}</Text>
@@ -425,7 +428,7 @@ export default function FamilyScreen() {
                 return (
                   <View key={m.id} style={styles.memberCard}>
                     <LinearGradient
-                      colors={isCurrentUser ? ['#D4807B', '#2A3D66'] : ['#2A3D66', '#4A6491']}
+                      colors={isCurrentUser ? [business ? '#B7791F' : '#D4807B', theme.primary] : theme.gradient}
                       start={{ x: 0, y: 0 }}
                       end={{ x: 1, y: 1 }}
                       style={styles.memberAvatar}
@@ -537,6 +540,19 @@ export default function FamilyScreen() {
 
         {!vaultList && createFamily}
 
+        {/* A small business that started here moves when it grows (054). */}
+        {!business && isAdmin && (
+          <TouchableOpacity
+            onPress={() => router.push({ pathname: '/make-business', params: { family: currentFamily.id } } as any)}
+            style={[styles.businessBtn, { borderColor: BUSINESS_THEME.primary, backgroundColor: BUSINESS_THEME.tint }]}
+            activeOpacity={0.8}
+            accessibilityRole="button"
+          >
+            <Feather name="briefcase" size={16} color={BUSINESS_THEME.primary} />
+            <Text style={[styles.businessBtnText, { color: BUSINESS_THEME.primary }]}>Make this a business vault</Text>
+          </TouchableOpacity>
+        )}
+
         {canLeave && (
           <TouchableOpacity onPress={handleLeave} style={styles.leaveBtn} activeOpacity={0.8}>
             <Feather name="log-out" size={16} color="#EF4444" />
@@ -621,6 +637,7 @@ export default function FamilyScreen() {
                     style={[
                       styles.relationChip,
                       selectedRelation === r && styles.relationChipSelected,
+                      selectedRelation === r && { backgroundColor: theme.primary, borderColor: theme.primary },
                     ]}
                   >
                     <Text style={[
@@ -659,7 +676,7 @@ export default function FamilyScreen() {
               disabled={adding}
             >
               <LinearGradient
-                colors={['#2A3D66', '#4A6491']}
+                colors={theme.gradient}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 0 }}
                 style={[styles.addMemberBtn, adding && { opacity: 0.7 }]}
@@ -695,6 +712,7 @@ export default function FamilyScreen() {
                 }}
                 style={[
                   styles.dialogConfirmBtn,
+                  { backgroundColor: theme.primary },
                   confirmDialog?.destructive !== false && styles.dialogConfirmBtnDestructive,
                 ]}
               >
@@ -838,7 +856,6 @@ const styles = StyleSheet.create({
     minHeight: size.row,
     ...shadow.card,
   },
-  familyRowCurrent: { backgroundColor: color.primary },
   familyRowName: type.label,
   familyRowNameCurrent: { color: '#FFFFFF' },
   familyRowRole: type.caption,
@@ -857,6 +874,20 @@ const styles = StyleSheet.create({
     minHeight: size.control,
   },
   leaveBtnText: { ...type.button, color: color.danger },
+  businessBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: space.sm,
+    marginHorizontal: space.lg,
+    marginTop: space.xl,
+    borderRadius: radius.control,
+    borderWidth: 1,
+    borderColor: color.inputBorder,
+    backgroundColor: color.surface,
+    minHeight: size.control,
+  },
+  businessBtnText: { ...type.button, color: color.primary },
   lastAdminNote: { ...type.caption, textAlign: 'center', marginTop: space.sm, marginHorizontal: space.lg },
   // Modal
   modalOverlay: {
