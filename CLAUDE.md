@@ -2053,7 +2053,9 @@ so storage policies live only in `019`.
   makes for a Razorpay payment — and refuses the business plans for a
   family. The payments function refuses to start Family Plus for a
   business (409 `business_plan`), so no business can pay ₹100 for 10 GB.
-  The Plans page (`/plus` in a business) says Ask us, which opens Feedback.
+  The Plans page (`/plus` in a business) compares Free beside Plus, Pro and
+  Enterprise, row by row (the owner's ask, 18 October 2026), and says Ask
+  us, which opens Feedback.
 - **A person's numbers are the best of their plans**, number by number:
   `person_plans()` (the plans of their vaults, and Free) feeds 049's
   `person_on_plus()` / `question_allowance()` and 050's
@@ -2248,8 +2250,11 @@ so storage policies live only in `019`.
   `#0F5C57`, secondary `#1A7A72`, tint `#E7F4F2`, accent `#B7791F`), a
   family the app's navy. `useVaultTheme()` (`src/lib/vault-theme.ts`) is the
   open vault's colours, and the shared pieces follow it: the top bar, back
-  arrow and header buttons, `settings-ui` cards and buttons, Home's header,
-  the tab bar and its Ask button, the drawer. Anything about a business
+  arrow and header buttons, `settings-ui` cards, buttons and On/Off, Home's
+  header, the tab bar and its Ask button, the drawer, the ★ Plus tag (gold
+  on a business), and every Settings screen (in Business mode Storage lists
+  Free and the business plans, not Family Plus, and each vault's bar keeps
+  its own colours). Anything about a business
   wears teal wherever it is listed, whichever mode is open
   (`vaultTheme(family)`): its row in Manage Family, Create a business, its
   documents on Home, a business's invitation, the vault picker, Upload's
