@@ -711,7 +711,7 @@ src/
       vaults.tsx             # Your vaults: Family vaults and Business vaults, open, create, Make it a business, Delete (057)
       delete-account.tsx     # Security › Delete account: shows what goes, asks for DELETE (029)
     document/[id].tsx        # document viewer; Share opens the share sheet (036, web only)
-    documents.tsx            # All documents (Home's document count, See all): every vault's documents, a vault filter, Delete one or several (Select)
+    documents.tsx            # All documents (Home's three counts, See all): tabs Documents, Family (Team) and Categories; a vault filter, a person's or a category's documents, Delete one or several (Select)
     gmail-import.tsx         # connect Gmail, review what it found, import (web only, ★ Family Plus)
     plus.tsx                 # Family Plus: what Plus gives, side by side with Free; every ★ opens it for a free family; pay for a month or a year (044, web only); a business sees Plans instead: Plus, Pro and Enterprise with their prices, and Ask us (051)
     s.tsx                    # what a share link opens: one document, for anyone with the link, no account (036)
@@ -759,6 +759,7 @@ tabs. `(tabs)` is a layout group, so routes are `/home`, `/search`, `/upload`.
 | `drawer-context.tsx` | Profile drawer open/close state |
 | `api.ts` | **All** Supabase queries — documents, search, upload, RAG, notifications, adding and leaving families, invitations, Gmail import, saved chats, share links, deleting your account, plans and storage limits (`fetchStorageStatus`, `fetchPlanLimits`; `uploadDocument` throws `StorageFullError` before a file that does not fit is sent, and `saveChat` `ChatStorageFullError` for a chat, 042), voice chats (`claimVoiceAnswer`, 041; `fetchVoiceStatus`, how many are left, 042), paying for Family Plus (`fetchPaymentsStatus`, whether this project takes payments, asked once a session; `createPlusOrder`, `verifyPlusPayment`, 044), questions this month (`fetchQuestionStatus`; `ragSearch`'s `questions` and `question_limit`, 049), the expiry date found in a new upload (`fetchDocumentExpiry`, for Upload's Plus offer), personal vaults and Ask across vaults (`ensurePersonalVault`; `ragSearch`'s `vaults` option, 046), businesses (`createNewFamily(…, kind)`, `previewBusinessDeletion`, `deleteBusiness`, `fetchUseFor` / `saveUseFor`, 051; `previewBusinessVault`, `makeBusinessVault`, 054; `fetchBusinessOverview`, `setBillPaid`, `fetchNotes`, `addNote`, `updateNote`, `deleteNote`, 056), and the Settings screens (profile, storage use, expiry dates, feedback) |
 | `overview.ts` | The overview's arithmetic (056), pure: `parseAmount()` ("1,18,000.00"), `formatRupees()` (lakhs and crores), `compactRupees()` for the axis, `monthlyTotals()`, `financialYearTotals()` (since 1 April), `daysFromToday()`, `whenText()` |
+| `document-groups.ts` | What Home's three counts and All documents' three tabs count, in one place: `peopleVault()` (whose people), `categoryGroups()`, `categoryCount()`, `categoryKey()`, the tab names (`DocumentsTab`) |
 | `dates.ts` | `parseDocumentDate()`: expiry dates exactly as ingest stores them (DD/MM/YYYY and kin, YYYY-MM-DD, "19 October 2026") |
 | `emergency.ts` | The emergency card's shape, blood groups (`bloodGroupLabel()`: "A−", "Bombay (hh)"), `telHref()`, and `cardProblem()` — the same checks and messages as `save_emergency_card()`, so the form can say what is wrong before saving |
 | `family-people.ts` | Whose a document can be: everyone in the tree, you first (`useDocumentOwners()`, members only before 031), and a person's expiry badge (`badgeFromExpiries()`) |
@@ -1880,15 +1881,27 @@ so storage policies live only in `019`.
   tagged with the vault it is in (a lock for the personal vault, people for a
   family) and opened there, like a source on Ask. There is no vault switcher
   on Home: the open vault — what the family tree, emergency cards and
-  Manage Family show — changes in Settings › Your vaults. Home asks
-  each vault for its newest documents and stats (`get_family_documents`,
-  `get_family_stats`, one call each per vault); a vault that cannot be read
-  leaves the others listed. With one vault the stats are as before
-  (documents, members or "Only you", categories); with several, the
-  documents in all of them and how many vaults — categories are counted per
-  vault, so a sum would count one twice.
-- **The document count opens All documents** (`src/app/documents.tsx`; so
-  does See all beside Recent Documents): every document in every vault,
+  Manage Family show — changes in Settings › Your vaults. Home reads every
+  document of the mode's vaults (`fetchAllDocuments`, per vault) for its
+  newest ones and its counts; a vault that cannot be read leaves the others
+  listed.
+- **Three counts, always, each one a link** (the owner's ask, 18 October
+  2026): Documents | Members | Categories. Documents and categories are the
+  mode's vaults together (a category counted once however many vaults use
+  it); Members is one vault's people, the open vault when it is shared,
+  else the mode's first shared one, else "Only you" (`peopleVault()` in
+  `src/lib/document-groups.ts`, which All documents uses too, so the two
+  always agree). Each opens All documents at its own tab
+  (`/documents?tab=documents|people|categories`).
+- **All documents has three tabs** (`src/app/documents.tsx`; See all beside
+  Recent Documents opens it too): **Documents**, **Family** (Team in a
+  business) and **Categories**, each with its count. Family lists that
+  vault's members, you first, with the documents marked as theirs (in a
+  business, Team counts what each person added), and Manage Family ›;
+  Categories lists what the documents are filed under, most first. Tapping
+  a person or a category shows their documents on the Documents tab, with a
+  chip to clear it. The screen wears the mode's colours. Documents is every
+  document in the mode's vaults,
   newest first, with a vault filter (`VaultDropdown`, All vaults first), and
   Delete — the bin on a row, or Select to tick several — on the documents
   the person added, and nowhere else: only whoever added a document deletes
