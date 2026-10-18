@@ -778,7 +778,7 @@ tabs. `(tabs)` is a layout group, so routes are `/home`, `/search`, `/upload`.
 | `speech-text.ts` | `toSpeech()`: strips markdown and spells out ID numbers before they are read aloud — and a number named as one ("train number 16782", "PNR: 4512", "PIN 751001", "नंबर 16782") digit by digit, from its digits; the screen keeps the digits |
 | `voice-languages.ts` | The language picker list and the few phrases the app itself says, per language |
 | `storage.ts` | Key-value cache: localStorage on web, AsyncStorage on native |
-| `database.types.ts` | Generated Supabase types, current to 057 (030, 052 and 055 changed nothing in them; 049's, 050's, 051's, 053's, 054's, 056's and 057's added by hand). Regenerate after every migration and re-append the hand-written block at the bottom (see the typecheck note) |
+| `database.types.ts` | Generated Supabase types, current to 057 (030, 052, 055 and 058 changed nothing in them; 049's, 050's, 051's, 053's, 054's, 056's and 057's added by hand). Regenerate after every migration and re-append the hand-written block at the bottom (see the typecheck note) |
 
 ---
 
@@ -905,8 +905,9 @@ DEV's test files and QA traffic use the same allowance as PROD's families
   paused. Each project also pays for its own server, about $10 a month, of
   which Pro includes $10: $25 with PROD alone in the organisation, about $35
   with DEV in it too. **No PROD business goes on a paid plan (051) before
-  this**: 25, 100 or 200 GB a business, and a few pilots could pass Pro's
-  100 GB (about $0.02 a GB a month beyond).
+  this**: 10, 25 or 100 GB a business (058; 25, 100 and 200 before, when
+  one full Pro business took Supabase Pro's whole 100 GB), about $0.02 a GB
+  a month beyond the 100 GB.
 
 ### Where the free tiers run out — worked out for 1,000 families
 
@@ -2017,23 +2018,24 @@ so storage policies live only in `019`.
   `_shared/plan-text.ts`, shown and never charged by the app. 051 makes
   two plans (Plus at 10 people, Pro at 50), as it went to DEV on 14
   October 2026; **052 makes them the three below**, so a project needs
-  both, in order. Without 052 the Plans page shows Plus and Pro with
-  051's numbers, and Enterprise from `DEFAULT_PLAN_LIMITS`, which
-  `set_family_plan` cannot give:
+  both, in order, and **058 sets their space** (the owner, 18 October
+  2026). Without 052 the Plans page shows Plus and Pro with 051's numbers,
+  and Enterprise from `DEFAULT_PLAN_LIMITS`, which `set_family_plan`
+  cannot give; without 058 it shows 052's space:
 
   | | Free | Plus (`business_plus`) | Pro (`business_pro`) | Enterprise (`business_enterprise`) |
   |---|---|---|---|---|
   | Price a month, + GST | — | ₹500 | ₹1,000 | ₹4,000 |
   | Price a year (eleven months), + GST | — | ₹5,500 | ₹11,000 | ₹44,000 |
   | People who sign in | 4 | 10 (5 before 054) | 15 | 50 |
-  | Space | 200 MB | 25 GB | 100 GB | 200 GB |
+  | Space | 200 MB | 10 GB (25 before 058) | 25 GB (100 before 058) | 100 GB (200 before 058) |
   | Questions each a month | 20 | 100 (fair use) | 100 | 100 |
   | Question tries a day each | 10 | 30 | 30 | 30 |
   | Uploads a day each | 50 | 300 | 300 | 300 |
   | Invitations a day | 20 | 20 | 20 | 50 |
 
   Every paid plan has voice with no limit, 30-day links, expiry reminders
-  and Gmail import; a year costs eleven months. Plus sells on space (25 GB
+  and Gmail import; a year costs eleven months. Plus sells on space (10 GB
   against 200 MB), questions (100 each against 20) and reminders, and
   since 054 on people too: 10, more than Family Plus's 8, so a shop that
   started on Family Plus has a reason to move. **Why these numbers** (13 October 2026,
@@ -2047,16 +2049,18 @@ so storage policies live only in `019`.
 
   | | Normal use | Heavy (half of every limit) | Every limit at once |
   |---|---|---|---|
-  | Plus, ₹500 / ₹5,500 (10 people) | ₹79: 81% / 80% | ₹183: 61% / 57% | ₹355: 26% / 20% |
-  | Pro, ₹1,000 / ₹11,000 | ₹133: 84% / 83% | ₹345: 63% / 60% | ₹670: 30% / 24% |
-  | Enterprise, ₹4,000 / ₹44,000 | ₹365: 88% / 87% | ₹925: 74% / 72% | ₹1,800: 52% / 48% |
+  | Plus, ₹500 / ₹5,500 (10 people, 10 GB) | ₹70: 84% / 82% | ₹160: 66% / 63% | ₹310: 36% / 30% |
+  | Pro, ₹1,000 / ₹11,000 (25 GB) | ₹88: 89% / 88% | ₹233: 74% / 72% | ₹445: 53% / 49% |
+  | Enterprise, ₹4,000 / ₹44,000 (100 GB) | ₹305: 90% / 89% | ₹775: 78% / 77% | ₹1,500: 60% / 57% |
 
   Normal is about half the people asking 30 questions a month, with a fifth
   of the space used. The owner set these prices on 17 October 2026 (₹999,
-  ₹1,999 and ₹4,499 before, which kept 57–77% at every limit). Enterprise
-  keeps about half even at every limit; Plus and Pro a quarter to a third,
-  since ten people asking 100 questions each cost ₹200 of Plus's ₹500 and
-  fifteen with 100 GB ₹670 of Pro's ₹1,000. With 5 people (051–053) Plus
+  ₹1,999 and ₹4,499 before, which kept 57–77% at every limit), and their
+  space on 18 October (058: with 052's 25, 100 and 200 GB, Plus kept 26% /
+  20% at every limit, Pro 30% / 24% and Enterprise 52% / 48%). Enterprise
+  keeps about 60% even at every limit, Pro about half and Plus about a
+  third, since ten people asking 100 questions each cost ₹200 of Plus's
+  ₹500. With 5 people (051–053) Plus
   kept 56% / 52% at every limit; 054 gave it 10, which the owner agreed to
   on 17 October 2026 with the funnel from Family Plus (below). Per person
   Plus is ₹50, Pro ₹67 and Enterprise ₹80, so a team of 50 pays more a
@@ -2065,7 +2069,7 @@ so storage policies live only in `019`.
   total. Cost follows people × questions, so those are the numbers to
   watch; storage is cheap. The fixed bills — Supabase Pro $25, Vercel Pro
   $20, HuggingFace PRO $9, about ₹5,200 a month — are covered by 13
-  businesses on Plus, 7 on Pro or 2 on Enterprise at normal use.
+  businesses on Plus, 6 on Pro or 2 on Enterprise at normal use.
 - **Given by hand only**, from the SQL editor, by name:
   `select set_family_plan('<vault id>', now() + interval '1 month', 'manual', null, 'business_plus');`
   (or `'business_pro'`, `'business_enterprise'`), or a demo, back to Free if they don't pay:
