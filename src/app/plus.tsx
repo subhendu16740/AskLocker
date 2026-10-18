@@ -256,7 +256,11 @@ function FamilyPlus() {
         ) : null}
 
         <Card style={styles.tableCard}>
-          <View style={[styles.row, styles.headRow]}>
+          {/* Family Plus is one plan, paid monthly or yearly: its border takes both columns. */}
+          {(plan === 'plus' || (plan === 'free' && !closed)) && (
+            <CurrentColumn from={plan === 'plus' ? 1 : 0} to={plan === 'plus' ? 2 : 0} count={3} width={60} tone={color.primary} tint="#F3F6FB" />
+          )}
+          <View style={[styles.row, styles.headRow, (plan === 'plus' || (plan === 'free' && !closed)) && styles.headRowTagged]}>
             <Text style={[styles.label, styles.headText]}>What you get</Text>
             <Text style={[styles.value, styles.headText]}>Free</Text>
             <View style={styles.value} accessible accessibilityLabel={`${name}, monthly`}>
@@ -385,6 +389,27 @@ function FamilyPlus() {
 
 const PAID: readonly BusinessPlan[] = ['business_plus', 'business_pro', 'business_enterprise'];
 // The table always compares Free beside the paid plans (the owner's ask, 18 October 2026).
+/**
+ * A border round the columns of the plan the vault is on, top to bottom, with
+ * "Current" at its head (the owner's ask, 18 October 2026). Drawn first, so it
+ * sits behind the rows; the value columns have fixed widths, so where a column
+ * sits is counted from the card's right edge.
+ */
+function CurrentColumn({ from, to, count, width, tone, tint }: {
+  from: number; to: number; count: number; width: number; tone: string; tint: string;
+}) {
+  const reach = 4;
+  const right = space.lg + (count - 1 - to) * (width + space.xs) - reach;
+  const span = (to - from + 1) * width + (to - from) * space.xs + 2 * reach;
+  return (
+    <View pointerEvents="none" style={[styles.current, { right, width: span, borderColor: tone, backgroundColor: tint }]}>
+      <View style={[styles.currentTag, { backgroundColor: tone }]}>
+        <Text style={styles.currentTagText}>Current</Text>
+      </View>
+    </View>
+  );
+}
+
 type BusinessColumn = 'free' | BusinessPlan;
 const COLUMNS: readonly BusinessColumn[] = ['free', ...PAID];
 const columnName = (c: BusinessColumn) => (c === 'free' ? 'Free' : businessPlanName(c));
@@ -450,6 +475,8 @@ function BusinessPlans() {
   }, [refresh, feature]));
 
   const saidAll = (r: BusinessRow) => COLUMNS.map((c) => `${columnName(c)} ${said(r.cells[c])}`).join(', ');
+  // The column of the plan it is on; none while unknown, or once a paid plan has ended (closed).
+  const currentColumn = onPlan ? COLUMNS.indexOf(onPlan) : plan === 'free' && !closed ? 0 : -1;
 
   return (
     <SafeAreaView style={screenStyles.safe} edges={['top']}>
@@ -503,7 +530,10 @@ function BusinessPlans() {
         ) : null}
 
         <Card style={styles.tableCard}>
-          <View style={[styles.row, styles.headRow]}>
+          {currentColumn >= 0 && (
+            <CurrentColumn from={currentColumn} to={currentColumn} count={COLUMNS.length} width={58} tone={biz.primary} tint="#F1F8F7" />
+          )}
+          <View style={[styles.row, styles.headRow, currentColumn >= 0 && styles.headRowTagged]}>
             <Text style={[styles.label, styles.headText]}>What you get</Text>
             {COLUMNS.map((c) => (
               <Text key={c} style={[styles.value, styles.valueBiz, styles.headBiz, styles.headText, c !== 'free' && { color: biz.accent }]}>{columnName(c)}</Text>
@@ -606,6 +636,11 @@ const styles = StyleSheet.create({
   },
   rowPointed: { backgroundColor: '#FFF7ED', marginHorizontal: -space.lg, paddingHorizontal: space.lg },
   headRow: { paddingTop: space.xs },
+  // Room above the column names for the current plan's "Current".
+  headRowTagged: { paddingTop: 28 },
+  current: { position: 'absolute', top: space.xs, bottom: space.xs, borderWidth: 2, borderRadius: radius.control, alignItems: 'center' },
+  currentTag: { marginTop: space.xs, borderRadius: radius.pill, paddingHorizontal: 6, paddingVertical: 1 },
+  currentTagText: { fontSize: 12, lineHeight: 16, fontWeight: '700', color: '#FFFFFF' },
   // Not uppercase like an overline: "MONTHLY" is wider than its column.
   headText: { fontSize: 12, lineHeight: 16, fontWeight: '600', color: color.textMuted },
   headPlus: { color: color.accent },
