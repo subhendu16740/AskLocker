@@ -5,26 +5,34 @@
 // Razorpay keys are set), any member pays here for a month or a year, and
 // each payment adds that time; until then the page says "Coming soon"
 // instead of offering a button that does nothing.
+//
+// A business (051) sees its own plans instead — Plus, Pro and Enterprise,
+// side by side with their prices before GST — and is never offered Family
+// Plus: its plans are set up with us (ask in Settings › Feedback), not
+// bought here. Nothing is ever removed from a business.
 
 import { useCallback, useState } from 'react';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFamily } from '../lib/family-context';
-import { useFamilyPlan, usePaymentsStatus, type PlusFeature } from '../lib/family-plan';
+import { isBusinessVault, isPersonalVault, vaultName } from '../lib/vaults';
+import { forgetOnPlus, useFamilyPlan, usePaymentsStatus, type BusinessFeature, type PlusFeature } from '../lib/family-plan';
 import { PaymentError, createPlusOrder, fetchPlanLimits, verifyPlusPayment } from '../lib/api';
 import { checkoutSupported, openCheckout } from '../lib/razorpay';
 import {
-  DEFAULT_PLAN_LIMITS, formatBytes, localCurrency, localPlusAmount, localPlusPrice, localPlusYearlyOffer,
-  localPlusYearlySaving, plusPrice, plusYearlyOffer, type PlanLimits,
+  CLOSED_MESSAGE, DEFAULT_PLAN_LIMITS, businessAmount, businessPlanName, formatBytes, isBusinessPlan, localCurrency, localPlusAmount,
+  localPlusPrice, localPlusYearlyOffer, localPlusYearlySaving, nextBusinessPlan, plusName, type BusinessPlan, type PlanLimits,
 } from '../lib/plans';
 import { longDate } from '../lib/dates';
 import { ScreenHeader } from '../components/screen-header';
 import { TwelveMonthsPrice, YearlyPrice } from '../components/plus-price';
 import { Card, Muted, screenStyles } from '../components/settings-ui';
-import { color, radius, space, type } from '../constants/design';
+import { biz, color, radius, space, type } from '../constants/design';
+import { BUSINESS_THEME } from '../lib/vault-theme';
+import { track } from '../lib/analytics';
 
 type Cell = boolean | string;
 
@@ -38,44 +46,77 @@ interface Row {
 
 // "10 each" (per person, 043), or ✓ for a plan with no limit on voice chats.
 const voiceCell = (n: number | null): Cell => (n == null ? true : `${n} each`);
+// "20 a month each" (049), or ✓ for a plan with no monthly limit.
+const questionsCell = (n: number | null): Cell => (n == null ? true : `${n} a month each`);
 
 function rows(limits: PlanLimits): Row[] {
-  return [
-    { label: 'Space for documents', free: formatBytes(limits.free), plus: formatBytes(limits.plus), feature: 'storage' },
-    { label: 'Members who sign in', free: String(limits.members.free), plus: String(limits.members.plus) },
-    { label: 'Add and scan documents, read in Indian languages too', free: true, plus: true },
-    { label: 'Ask about your documents', free: true, plus: true },
-    { label: 'Family tree and emergency cards', free: true, plus: true },
-    { label: 'Expiry and birthday reminders', free: true, plus: true },
-    { label: 'Share a document by link', free: true, plus: true },
+  const all: Array<Row | null> = [
+    { label: 'Space for a family', free: formatBytes(limits.free), plus: formatBytes(limits.plus), feature: 'storage' },
+    { label: 'Space in your personal vault', free: formatBytes(limits.freePersonal), plus: formatBytes(limits.plus) },
     {
-      label: '★ Voice chats: ask by voice, hear the answer', free: voiceCell(limits.voiceAnswers.free), plus: voiceCell(limits.voiceAnswers.plus),
+      label: limits.members.plus > limits.members.free ? '★ Members who sign in' : 'Members who sign in',
+      free: String(limits.members.free), plus: String(limits.members.plus), feature: 'members',
+    },
+    { label: 'Add and scan documents, Indian languages too', free: true, plus: true },
+    // Before 049 nobody's questions are counted, on either plan.
+    limits.questions.free == null
+      ? { label: 'Ask about your documents', free: true, plus: true }
+      : {
+        label: '★ Questions', free: questionsCell(limits.questions.free),
+        // 053: one number the whole family shares; before it, fair use for each person.
+        plus: limits.familyQuestions != null ? `${limits.familyQuestions} a month for the family` : questionsCell(limits.questions.plus),
+        feature: 'questions',
+      },
+    { label: 'Family tree and emergency cards', free: true, plus: true },
+    { label: 'Birthday reminders', free: true, plus: true },
+    // 049 also makes a 30-day link part of Plus; before it, every plan has them.
+    limits.questions.free == null
+      ? { label: 'Share a document by link', free: true, plus: true }
+      : { label: '★ Share links', free: 'Up to 7 days', plus: 'Up to 30 days', feature: 'links' },
+    {
+      label: '★ Voice chats', free: voiceCell(limits.voiceAnswers.free), plus: voiceCell(limits.voiceAnswers.plus),
       feature: 'voice',
     },
-    { label: '★ Reminders page: every expiry date in one list', free: false, plus: true, feature: 'reminders' },
-    { label: '★ Import documents from Gmail', free: false, plus: true, feature: 'gmail' },
+    {
+      label: '★ Expiry reminders', free: false, plus: true,
+      feature: 'reminders',
+    },
+    { label: '★ Import from Gmail', free: false, plus: true, feature: 'gmail' },
   ];
+  return all.filter((r): r is Row => r !== null);
 }
 
-const BROUGHT_BY: Record<PlusFeature, { icon: string; text: string }> = {
-  reminders: { icon: 'clock', text: 'The Reminders page is part of Family Plus.' },
-  gmail: { icon: 'mail', text: 'Import from Gmail is part of Family Plus.' },
-  storage: { icon: 'hard-drive', text: 'More space for documents and saved chats is part of Family Plus.' },
-  voice: { icon: 'mic', text: 'Asking by voice and hearing every answer, with no limit, is part of Family Plus.' },
+// Which feature brought them here; "Family Plus", or "Plus" in a business (051),
+// where Pro has it too.
+const BROUGHT_BY: Record<PlusFeature, { icon: string; text: (name: string) => string }> = {
+  reminders: { icon: 'clock', text: (n) => `Expiry reminders come with ${n}.` },
+  gmail: { icon: 'mail', text: (n) => `Import from Gmail comes with ${n}.` },
+  storage: { icon: 'hard-drive', text: (n) => `More space comes with ${n}.` },
+  voice: { icon: 'mic', text: (n) => `Voice chats with no limit come with ${n}.` },
+  questions: { icon: 'message-circle', text: (n) => `More questions come with ${n}.` },
+  members: { icon: 'users', text: (n) => `Room for more members comes with ${n}.` },
+  links: { icon: 'link', text: (n) => `30-day share links come with ${n}.` },
 };
 
 const said = (cell: Cell) => (cell === true ? 'yes' : cell === false ? 'no' : cell);
 
-function CellView({ value, plus }: { value: Cell; plus?: boolean }) {
+function CellView({ value, plus, tone }: { value: Cell; plus?: boolean; tone?: string }) {
   if (value === true) return <Feather name="check" size={18} color="#16A34A" />;
   if (value === false) return <Feather name="minus" size={18} color="#9CA3AF" />;
-  return <Text style={[styles.cellText, plus && styles.cellTextPlus]}>{value}</Text>;
+  return <Text style={[styles.cellText, plus && styles.cellTextPlus, plus && !!tone && { color: tone }]}>{value}</Text>;
 }
 
 export default function PlusScreen() {
+  const { currentFamily } = useFamily();
+  return isBusinessVault(currentFamily) ? <BusinessPlans /> : <FamilyPlus />;
+}
+
+function FamilyPlus() {
   const { feature } = useLocalSearchParams<{ feature?: string }>();
   const { currentFamily } = useFamily();
-  const { plan, paidUntil, removalAt, refresh } = useFamilyPlan();
+  const { plan, paidUntil, removalAt, closed, trial, refresh } = useFamilyPlan();
+  const name = plusName(false);
+  const paid = plan === 'plus';
   const [limits, setLimits] = useState<PlanLimits>(DEFAULT_PLAN_LIMITS);
   const monthly = localPlusPrice('monthly');
   // "₹1,100 a year instead of ₹1,200": what a screen reader hears for <YearlyPrice />.
@@ -84,12 +125,15 @@ export default function PlusScreen() {
 
   useFocusEffect(useCallback(() => {
     let cancelled = false;
+    track('plus_viewed', { feature: feature && feature in BROUGHT_BY ? feature : 'none' });
     refresh(true);
     fetchPlanLimits().then((l) => { if (!cancelled) setLimits(l); });
     return () => { cancelled = true; };
-  }, [refresh]));
+  }, [refresh, feature]));
 
-  const familyName = currentFamily?.name;
+  const familyName = currentFamily ? vaultName(currentFamily) : undefined;
+  // What this vault may keep on Free (048): a personal vault less than a family.
+  const freeHere = isPersonalVault(currentFamily) ? limits.freePersonal : limits.free;
 
   // ─── Paying (044) ───────────────────────────────────────
   const payments = usePaymentsStatus();
@@ -103,20 +147,23 @@ export default function PlusScreen() {
     setPaying(period);
     setPayNote(null);
     try {
+      track('pay_started', { period, currency });
       const order = await createPlusOrder(currentFamily.id, period, currency);
       const result = await openCheckout(order);
       if (result.status === 'closed' || result.status === 'unsupported') return;
       if (result.status === 'failed') {
-        setPayNote({ tone: 'error', text: `${result.reason} Nothing was charged for Family Plus.` });
+        setPayNote({ tone: 'error', text: `${result.reason} You weren't charged.` });
         return;
       }
-      setPayNote({ tone: 'info', text: 'Payment received. Switching on Family Plus…' });
+      setPayNote({ tone: 'info', text: `Payment received. Switching on ${name}…` });
       try {
         const { paidUntil } = await verifyPlusPayment(result);
+        track('payment_done', { period, currency });
         await refresh(true);
+        forgetOnPlus();
         setPayNote({
           tone: 'ok',
-          text: `Thank you! ${familyName ?? 'Your family'} has Family Plus until ${longDate(new Date(paidUntil))}.`,
+          text: `Thank you! ${familyName ?? 'Your family'} has ${name} until ${longDate(new Date(paidUntil))}.`,
         });
       } catch (err) {
         if (err instanceof PaymentError && err.status === 'not_paid') {
@@ -127,9 +174,9 @@ export default function PlusScreen() {
         // through switches Plus on even when this check could not finish.
         setPayNote({
           tone: 'info',
-          text: "We're confirming your payment with Razorpay. If it went through, Family Plus switches on within a few minutes — there's no need to pay again.",
+          text: `We're still confirming your payment. If it went through, ${name} turns on in a few minutes. You don't need to pay again.`,
         });
-        setTimeout(() => { refresh(true); }, 30_000);
+        setTimeout(() => { refresh(true); forgetOnPlus(); }, 30_000);
       }
     } catch (err) {
       setPayNote({ tone: 'error', text: err instanceof Error ? err.message : 'Something went wrong. Please try again.' });
@@ -140,28 +187,38 @@ export default function PlusScreen() {
 
   return (
     <SafeAreaView style={screenStyles.safe} edges={['top']}>
-      <ScreenHeader title="Family Plus" fallback="/home" />
+      <ScreenHeader title={name} fallback="/home" />
       <ScrollView contentContainerStyle={screenStyles.body}>
-        {broughtBy && plan !== 'plus' && (
+        {broughtBy && !paid && (
           <View style={styles.brought} accessibilityLiveRegion="polite">
             <Feather name={broughtBy.icon as any} size={16} color={color.primary} />
-            <Text style={styles.broughtText}>{broughtBy.text}</Text>
+            <Text style={styles.broughtText}>{broughtBy.text(name)}</Text>
           </View>
         )}
 
         <LinearGradient colors={['#2A3D66', '#4A6491']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.hero}>
-          <Text style={styles.heroTag}>★ Family Plus</Text>
-          <Text style={styles.heroTitle}>More space and more help, for the whole family</Text>
-          <Text style={styles.heroPrice} accessibilityLabel={monthly}>
-            {localPlusAmount('monthly')}
-            <Text style={styles.heroPer}> a month</Text>
-          </Text>
-          <View style={styles.heroYearRow}>
-            <Text style={styles.heroYear} accessibilityLabel={`or ${yearlyOffer}`}>
-              or <YearlyPrice onDark />
-            </Text>
-            <View style={styles.heroSave}>
-              <Text style={styles.heroSaveText}>{localPlusYearlySaving()}</Text>
+          <Text style={styles.heroTag}>★ {name}</Text>
+          <Text style={styles.heroTitle}>More space and more help for your family</Text>
+          <View style={styles.heroCells}>
+            <View style={styles.heroCell} accessible accessibilityLabel={`Monthly, ${monthly}`}>
+              <Text style={styles.heroCellLabel}>Monthly</Text>
+              {/* As tall as the crossed-out price, so ₹100 sits level with ₹1,100. */}
+              <View style={styles.heroWasSpace} />
+              <Text style={styles.heroAmount}>{localPlusAmount('monthly')}</Text>
+              <Text style={styles.heroPer}>a month</Text>
+            </View>
+            <View
+              style={styles.heroCell}
+              accessible
+              accessibilityLabel={`Yearly, ${yearlyOffer}, ${localPlusYearlySaving()}`}
+            >
+              <Text style={styles.heroCellLabel}>Yearly</Text>
+              <TwelveMonthsPrice onDark style={styles.heroWas} />
+              <Text style={styles.heroAmount}>{localPlusAmount('yearly')}</Text>
+              <Text style={styles.heroPer}>a year</Text>
+              <View style={styles.heroSave}>
+                <Text style={styles.heroSaveText}>{localPlusYearlySaving()}</Text>
+              </View>
             </View>
           </View>
           <Text style={styles.heroNote}>
@@ -169,20 +226,26 @@ export default function PlusScreen() {
           </Text>
         </LinearGradient>
 
-        {plan === 'plus' ? (
+        {paid ? (
           <View style={[styles.state, styles.statePlus]}>
             <Feather name="check-circle" size={18} color="#15803D" />
             <Text style={[styles.stateText, { color: '#15803D' }]}>
-              {familyName ?? 'Your family'} has Family Plus{paidUntil ? `, until ${longDate(new Date(paidUntil))}` : ''}.
+              {familyName ?? 'Your family'} has {name}
+              {trial ? ' on trial' : ''}{paidUntil ? `, until ${longDate(new Date(paidUntil))}` : ''}.
             </Text>
+          </View>
+        ) : plan === 'free' && closed ? (
+          <View style={[styles.state, styles.stateEnded]}>
+            <Feather name="alert-triangle" size={18} color="#B91C1C" />
+            <Text style={[styles.stateText, { color: '#B91C1C' }]}>{CLOSED_MESSAGE}</Text>
           </View>
         ) : plan === 'free' && removalAt ? (
           <View style={[styles.state, styles.stateEnded]}>
             <Feather name="alert-triangle" size={18} color="#B91C1C" />
             <Text style={[styles.stateText, { color: '#B91C1C' }]}>
               Family Plus has ended for {familyName ?? 'your family'}. On {longDate(new Date(removalAt))}, the newest
-              documents above {formatBytes(limits.free)} will be removed, unless Family Plus is renewed or documents are
-              deleted to get under {formatBytes(limits.free)}.
+              documents over {formatBytes(freeHere)} will be removed. Renew, or delete documents to get under{' '}
+              {formatBytes(freeHere)}.
             </Text>
           </View>
         ) : plan === 'free' ? (
@@ -196,23 +259,23 @@ export default function PlusScreen() {
           <View style={[styles.row, styles.headRow]}>
             <Text style={[styles.label, styles.headText]}>What you get</Text>
             <Text style={[styles.value, styles.headText]}>Free</Text>
-            <View style={styles.value} accessible accessibilityLabel="Family Plus, monthly">
+            <View style={styles.value} accessible accessibilityLabel={`${name}, monthly`}>
               <Text style={[styles.headText, styles.headPlus]}>★ Plus</Text>
               <Text style={[styles.headText, styles.headPlus]}>Monthly</Text>
             </View>
-            <View style={styles.value} accessible accessibilityLabel="Family Plus, yearly">
+            <View style={styles.value} accessible accessibilityLabel={`${name}, yearly`}>
               <Text style={[styles.headText, styles.headPlus]}>★ Plus</Text>
               <Text style={[styles.headText, styles.headPlus]}>Yearly</Text>
             </View>
           </View>
           {rows(limits).map((r) => {
-            const pointed = !!broughtBy && r.feature === feature && plan !== 'plus';
+            const pointed = !!broughtBy && r.feature === feature && !paid;
             return (
               <View
                 key={r.label}
                 style={[styles.row, pointed && styles.rowPointed]}
                 accessible
-                accessibilityLabel={`${r.label.replace('★ ', '')}: Free ${said(r.free)}, Family Plus ${said(r.plus)}`}
+                accessibilityLabel={`${r.label.replace('★ ', '')}: Free ${said(r.free)}, ${name} ${said(r.plus)}`}
               >
                 <Text style={styles.label}>{r.label}</Text>
                 <View style={styles.value}><CellView value={r.free} /></View>
@@ -224,7 +287,7 @@ export default function PlusScreen() {
           <View
             style={[styles.row, styles.priceRow]}
             accessible
-            accessibilityLabel={`Price: Free costs nothing. Family Plus monthly, ${monthly}. Family Plus yearly, ${yearlyOffer}.`}
+            accessibilityLabel={`Price: Free costs nothing. ${name} monthly, ${monthly}. ${name} yearly, ${yearlyOffer}.`}
           >
             <Text style={[styles.label, styles.priceLabel]}>Price</Text>
             <Text style={[styles.value, styles.cellText]}>Free</Text>
@@ -244,9 +307,9 @@ export default function PlusScreen() {
 
         {payments?.available && (
           <Card style={styles.payCard}>
-            <Text style={styles.payTitle}>{plan === 'plus' ? 'Add more time' : 'Get Family Plus'}</Text>
+            <Text style={styles.payTitle}>{plan === 'plus' ? 'Add more time' : `Get ${name}`}</Text>
             {!checkoutSupported ? (
-              <Text style={styles.payFine}>Paying for Family Plus is on the AskLocker web app for now.</Text>
+              <Text style={styles.payFine}>For now, you can pay on the AskLocker web app.</Text>
             ) : !canPayHere ? (
               <Text style={styles.payFine}>Paying from outside India is coming soon.</Text>
             ) : (
@@ -256,7 +319,7 @@ export default function PlusScreen() {
                   onPress={() => pay('yearly')}
                   disabled={!!paying}
                   accessibilityRole="button"
-                  accessibilityLabel={`Pay ${localPlusAmount('yearly')} for a year of Family Plus, ${localPlusYearlySaving()}`}
+                  accessibilityLabel={`Pay ${localPlusAmount('yearly')} for a year of ${name}, ${localPlusYearlySaving()}`}
                 >
                   {paying === 'yearly' ? <ActivityIndicator color="#FFFFFF" /> : (
                     <>
@@ -270,15 +333,15 @@ export default function PlusScreen() {
                   onPress={() => pay('monthly')}
                   disabled={!!paying}
                   accessibilityRole="button"
-                  accessibilityLabel={`Pay ${localPlusAmount('monthly')} for a month of Family Plus`}
+                  accessibilityLabel={`Pay ${localPlusAmount('monthly')} for a month of ${name}`}
                 >
                   {paying === 'monthly' ? <ActivityIndicator color={color.primary} /> : (
                     <Text style={styles.payBtnTextOther}>Pay {localPlusAmount('monthly')} for 1 month</Text>
                   )}
                 </TouchableOpacity>
                 <Text style={styles.payFine}>
-                  By UPI, card or net banking, through Razorpay. Nothing renews by itself:{' '}
-                  {plan === 'plus' ? 'the time is added to what is left.' : 'you pay again only when you want more time.'}
+                  Pay by UPI, card or net banking through Razorpay. Nothing renews by itself.
+                  {plan === 'plus' ? ' New time is added to what you have left.' : ''}
                 </Text>
               </>
             )}
@@ -293,51 +356,194 @@ export default function PlusScreen() {
           </Card>
         )}
 
-        {plan !== 'plus' && (
+        {!paid && (
           !payments || payments.available ? null : (
             <View style={styles.soon}>
               <Text style={styles.soonTag}>Coming soon</Text>
               <Text
                 style={styles.soonText}
-                accessibilityLabel={`Family Plus can't be bought in the app yet. When it can, it is ${monthly} or ${yearlyOffer} for the whole family.`}
+                accessibilityLabel={`You can't buy ${name} yet. It will be ${monthly} or ${yearlyOffer} for the whole family.`}
               >
-                Family Plus can't be bought in the app yet. When it can, it is {monthly} or <YearlyPrice /> for the
-                whole family.
+                You can't buy {name} yet. It will be {monthly} or <YearlyPrice /> for the whole family.
               </Text>
             </View>
           )
         )}
 
-        <Card>
-          <View style={styles.point}>
-            <Feather name="users" size={16} color={color.primary} />
-            <Text style={styles.pointText}>
-              One plan covers the whole family: up to {limits.members.plus} members sign in, and everyone can be in
-              the family tree, with or without an account.
+        <Muted>
+          {limits.questions.free != null && limits.familyQuestions == null
+            ? `Fair use on Plus: up to ${limits.questionsFairUse} questions a person each month.\n`
+            : ''}
+          {`If Plus ends and a vault is over its free space, the newest documents over it are removed after ${limits.graceDays} days.`}
+        </Muted>
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
+// ─── A business's plans (051) ─────────────────────────────────────
+
+const PAID: readonly BusinessPlan[] = ['business_plus', 'business_pro', 'business_enterprise'];
+
+// A business's plans have a monthly number of questions, and more people as they go up.
+const BUSINESS_BROUGHT_BY: Record<PlusFeature | BusinessFeature, { icon: string; text: string }> = {
+  ...(Object.fromEntries(Object.entries(BROUGHT_BY).map(([k, v]) => [k, { icon: v.icon, text: v.text('every paid plan') }])) as
+    Record<PlusFeature, { icon: string; text: string }>),
+  questions: { icon: 'message-circle', text: 'More questions come with every paid plan.' },
+  members: { icon: 'users', text: 'Room for more people comes with a bigger plan.' },
+  // The business's own (056).
+  overview: { icon: 'refresh-cw', text: 'Renewals and bills due come with every paid plan.' },
+  money: { icon: 'bar-chart-2', text: 'Money in and out comes with Pro and Enterprise.' },
+  notes: { icon: 'bell', text: 'Reminders on your notes come with every paid plan.' },
+};
+
+interface BusinessRow {
+  label: string;
+  cells: Record<BusinessPlan, Cell>;
+  feature?: PlusFeature | BusinessFeature;
+}
+
+function businessRows(limits: PlanLimits): BusinessRow[] {
+  const each = (pick: (p: BusinessPlan) => Cell) =>
+    Object.fromEntries(PAID.map((p) => [p, pick(p)])) as Record<BusinessPlan, Cell>;
+  return [
+    { label: '★ People', cells: each((p) => String(limits.business[p].members)), feature: 'members' },
+    { label: 'Space', cells: each((p) => formatBytes(limits.business[p].storage)), feature: 'storage' },
+    { label: '★ Each person\'s questions', cells: each((p) => `${limits.business[p].questionsFairUse} a month`), feature: 'questions' },
+    { label: '★ Voice chats', cells: each(() => true), feature: 'voice' },
+    { label: '★ 30-day share links', cells: each(() => true), feature: 'links' },
+    { label: '★ Expiry reminders', cells: each(() => true), feature: 'reminders' },
+    { label: '★ Import from Gmail', cells: each(() => true), feature: 'gmail' },
+    { label: '★ Renewals and bills due', cells: each(() => true), feature: 'overview' },
+    { label: '★ Money in and out', cells: each((p) => p !== 'business_plus'), feature: 'money' },
+    { label: '★ Reminders on notes', cells: each(() => true), feature: 'notes' },
+  ];
+}
+
+function BusinessPlans() {
+  const { feature } = useLocalSearchParams<{ feature?: string }>();
+  const { currentFamily } = useFamily();
+  const { plan, paidUntil, closed, trial, refresh } = useFamilyPlan();
+  const [limits, setLimits] = useState<PlanLimits>(DEFAULT_PLAN_LIMITS);
+  const broughtBy = feature && feature in BUSINESS_BROUGHT_BY ? BUSINESS_BROUGHT_BY[feature as PlusFeature | BusinessFeature] : null;
+  const onPlan = isBusinessPlan(plan) ? plan : null;
+  const next = plan ? nextBusinessPlan(plan) : 'business_plus';
+  const vault = currentFamily ? vaultName(currentFamily) : 'Your business';
+
+  useFocusEffect(useCallback(() => {
+    let cancelled = false;
+    track('plus_viewed', { feature: feature && feature in BUSINESS_BROUGHT_BY ? feature : 'none' });
+    refresh(true);
+    fetchPlanLimits().then((l) => { if (!cancelled) setLimits(l); });
+    return () => { cancelled = true; };
+  }, [refresh, feature]));
+
+  const saidAll = (r: BusinessRow) => PAID.map((p) => `${businessPlanName(p)} ${said(r.cells[p])}`).join(', ');
+
+  return (
+    <SafeAreaView style={screenStyles.safe} edges={['top']}>
+      <ScreenHeader title="Plans" fallback="/home" />
+      <ScrollView contentContainerStyle={screenStyles.body}>
+        {broughtBy && !onPlan && (
+          <View style={[styles.brought, { backgroundColor: biz.tint }]} accessibilityLiveRegion="polite">
+            <Feather name={broughtBy.icon as any} size={16} color={biz.primary} />
+            <Text style={[styles.broughtText, { color: biz.primary }]}>{broughtBy.text}</Text>
+          </View>
+        )}
+
+        <LinearGradient colors={BUSINESS_THEME.gradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.hero}>
+          <Text style={[styles.heroTag, styles.heroTagBiz]}>★ Plans for your business</Text>
+          <Text style={styles.heroTitle}>More space and more help for your team</Text>
+          <View style={styles.heroCells}>
+            {PAID.map((p) => (
+              <View
+                key={p}
+                style={[styles.heroCell, styles.heroCellTight]}
+                accessible
+                accessibilityLabel={`${businessPlanName(p)}, ${limits.business[p].members} people, ${businessAmount(p)} a month plus GST`}
+              >
+                <Text style={styles.heroCellLabel}>{businessPlanName(p)}</Text>
+                <Text style={styles.heroAmountTight}>{businessAmount(p)}</Text>
+                <Text style={styles.heroPer}>{limits.business[p].members} people</Text>
+              </View>
+            ))}
+          </View>
+          <Text style={styles.heroNote}>A month, plus GST. Pay for a year and get 1 month free.</Text>
+        </LinearGradient>
+
+        {onPlan ? (
+          <View style={[styles.state, styles.statePlus]}>
+            <Feather name="check-circle" size={18} color="#15803D" />
+            <Text style={[styles.stateText, { color: '#15803D' }]}>
+              {vault} has {businessPlanName(onPlan)}{trial ? ' on trial' : ''}
+              {paidUntil ? `, until ${longDate(new Date(paidUntil))}` : ''}.
             </Text>
           </View>
-          <View style={styles.point}>
-            <Feather name="clock" size={16} color={color.primary} />
-            <Text style={styles.pointText}>
-              If Family Plus ends while your family holds more than the free {formatBytes(limits.free)}, it has{' '}
-              {limits.graceDays} days to renew, or to delete documents to get under {formatBytes(limits.free)}. After
-              that, the newest documents above {formatBytes(limits.free)} are removed. We remind you when it ends, a
-              week before and the day before.
-            </Text>
+        ) : plan === 'free' && closed ? (
+          <View style={[styles.state, styles.stateEnded]}>
+            <Feather name="alert-triangle" size={18} color="#B91C1C" />
+            <Text style={[styles.stateText, { color: '#B91C1C' }]}>{CLOSED_MESSAGE}</Text>
           </View>
-          <View style={styles.point}>
-            <Feather name="globe" size={16} color={color.primary} />
-            <Text
-              style={styles.pointText}
-              accessibilityLabel={`In India: ${plusPrice('inr')} or ${plusYearlyOffer('inr')}. Elsewhere: ${plusPrice('usd')} or ${plusYearlyOffer('usd')}.`}
-            >
-              In India: {plusPrice('inr')} or <YearlyPrice currency="inr" />.{'\n'}
-              Elsewhere: {plusPrice('usd')} or <YearlyPrice currency="usd" />.
-            </Text>
+        ) : plan === 'free' ? (
+          <View style={styles.state}>
+            <Feather name="info" size={18} color={biz.primary} />
+            <Text style={[styles.stateText, { color: biz.primary }]}>{vault} is on Free.</Text>
           </View>
+        ) : null}
+
+        <Card style={styles.tableCard}>
+          <View style={[styles.row, styles.headRow]}>
+            <Text style={[styles.label, styles.headText]}>What you get</Text>
+            {PAID.map((p) => (
+              <Text key={p} style={[styles.value, styles.valueWide, styles.headText, { color: biz.accent }]}>{businessPlanName(p)}</Text>
+            ))}
+          </View>
+          {businessRows(limits).map((r) => {
+            const pointed = !!broughtBy && r.feature === feature && !onPlan;
+            return (
+              <View key={r.label} style={[styles.row, pointed && styles.rowPointed]} accessible accessibilityLabel={`${r.label.replace('★ ', '')}: ${saidAll(r)}`}>
+                <Text style={styles.label}>{r.label}</Text>
+                {PAID.map((p) => (
+                  <View key={p} style={[styles.value, styles.valueWide]}><CellView value={r.cells[p]} plus tone={biz.primary} /></View>
+                ))}
+              </View>
+            );
+          })}
+          <View
+            style={[styles.row, styles.priceRow]}
+            accessible
+            accessibilityLabel={`Price a month, plus GST: ${PAID.map((p) => `${businessPlanName(p)} ${businessAmount(p)}`).join(', ')}.`}
+          >
+            <Text style={[styles.label, styles.priceLabel]}>Price</Text>
+            {PAID.map((p) => (
+              <View key={p} style={[styles.value, styles.valueWide]}>
+                <Text style={[styles.cellText, { color: biz.primary }]}>{businessAmount(p)}</Text>
+                <Text style={styles.cellPer}>a month</Text>
+              </View>
+            ))}
+          </View>
+          <Muted>
+            {`On Free: ${limits.members.free} people, ${formatBytes(limits.free)}, ${limits.questions.free ?? 20} questions each a month, ${limits.notesPerPerson.free ?? 20} notes each.`}
+          </Muted>
         </Card>
 
-        <Muted>Reminders under the bell and on your devices reach every family, Free or Plus.</Muted>
+        {next && (
+          <Card style={styles.payCard}>
+            <Text style={styles.payTitle}>{onPlan ? `Move to ${businessPlanName(next)}` : 'Get a plan'}</Text>
+            <Text style={styles.payFine}>
+              {onPlan ? `Tell us, and we'll move you to ${businessPlanName(next)}.` : "Tell us which plan you want, and we'll set it up for you."}
+            </Text>
+            <TouchableOpacity
+              style={[styles.payBtn, { backgroundColor: biz.primary }]}
+              onPress={() => router.push('/settings/feedback' as any)}
+              accessibilityRole="button"
+            >
+              <Text style={styles.payBtnText}>Ask us</Text>
+            </TouchableOpacity>
+          </Card>
+        )}
+
+        <Muted>If a paid plan ends, every record stays. Adding new ones waits until it is renewed.</Muted>
       </ScrollView>
     </SafeAreaView>
   );
@@ -351,12 +557,25 @@ const styles = StyleSheet.create({
   broughtText: { ...type.label, flex: 1, color: color.primary },
   hero: { borderRadius: radius.card, padding: space.lg, gap: space.xs },
   heroTag: { fontSize: 12, lineHeight: 16, fontWeight: '700', color: '#FBD5D1', letterSpacing: 0.4 },
+  heroTagBiz: { color: '#F3DDAE' },
   heroTitle: { fontSize: 17, lineHeight: 23, fontWeight: '600', color: '#FFFFFF' },
-  heroPrice: { fontSize: 28, lineHeight: 34, fontWeight: '700', color: '#FFFFFF', marginTop: space.sm },
-  heroPer: { fontSize: 15, fontWeight: '500', color: '#DCE3F0' },
-  heroYearRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: space.sm },
-  heroYear: { fontSize: 15, lineHeight: 20, fontWeight: '600', color: '#FFFFFF' },
-  heroSave: { borderRadius: radius.pill, paddingHorizontal: space.sm, paddingVertical: 2, backgroundColor: '#FBD5D1' },
+  heroCells: { flexDirection: 'row', gap: space.sm, marginTop: space.sm },
+  heroCell: {
+    flex: 1, alignItems: 'flex-start', borderRadius: radius.control, padding: space.md,
+    backgroundColor: 'rgba(255, 255, 255, 0.12)', borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.18)',
+  },
+  heroCellLabel: { fontSize: 12, lineHeight: 16, fontWeight: '600', color: '#DCE3F0' },
+  heroWas: { fontSize: 13, lineHeight: 18, marginTop: space.xs },
+  heroWasSpace: { height: 18, marginTop: space.xs },
+  heroAmount: { fontSize: 24, lineHeight: 30, fontWeight: '700', color: '#FFFFFF' },
+  // Three prices in a row on a 360-wide phone (051).
+  heroCellTight: { padding: space.sm },
+  heroAmountTight: { fontSize: 20, lineHeight: 26, fontWeight: '700', color: '#FFFFFF' },
+  heroPer: { fontSize: 13, lineHeight: 18, color: '#DCE3F0' },
+  heroSave: {
+    borderRadius: radius.pill, paddingHorizontal: space.sm, paddingVertical: 2, marginTop: space.sm,
+    backgroundColor: '#FBD5D1',
+  },
   heroSaveText: { fontSize: 12, lineHeight: 16, fontWeight: '700', color: '#8A3B35' },
   heroNote: { fontSize: 13, lineHeight: 18, color: '#DCE3F0' },
   state: {
@@ -379,6 +598,8 @@ const styles = StyleSheet.create({
   headPlus: { color: color.accent },
   label: { ...type.body, flex: 1, fontSize: 14, lineHeight: 20 },
   value: { width: 60, alignItems: 'center', textAlign: 'center' },
+  // "Enterprise" is wider than 60 (051).
+  valueWide: { width: 70 },
   cellText: { fontSize: 14, lineHeight: 20, fontWeight: '600', color: color.textBody, textAlign: 'center' },
   cellTextPlus: { color: color.primary },
   cellWas: { fontSize: 12, lineHeight: 16, color: color.textMuted, textAlign: 'center' },
@@ -408,6 +629,4 @@ const styles = StyleSheet.create({
   },
   soonTag: { fontSize: 12, lineHeight: 16, fontWeight: '700', color: color.accent, textTransform: 'uppercase', letterSpacing: 0.6 },
   soonText: { ...type.body, fontSize: 14, lineHeight: 20, color: color.primary },
-  point: { flexDirection: 'row', alignItems: 'flex-start', gap: space.sm },
-  pointText: { ...type.body, flex: 1, fontSize: 14, lineHeight: 20 },
 });

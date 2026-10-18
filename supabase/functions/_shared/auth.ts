@@ -83,6 +83,92 @@ export async function requireFamilyMember(
   return { ok: true, member };
 }
 
+/** One vault the caller is in: a family, their personal vault (046), or a business (051). */
+export interface Vault {
+  familyId: string;
+  role: string;
+  name: string;
+  schema: string;
+  isPersonal: boolean;
+  /** 'business' for a business vault (051); 'family' otherwise, and before 051. */
+  kind: 'family' | 'business';
+}
+
+type FamilyRow = { id: string; name: string; storage_namespace: string; is_personal: boolean | null; kind?: string | null };
+
+/**
+ * Vault rows with their kind. Before 051 there is no kind column, and naming
+ * it fails the whole select: ask again without it, and every vault is a family.
+ */
+export async function selectVaultRows(supabase: SupabaseClient, ids: string[]): Promise<{ rows: FamilyRow[]; error: string | null }> {
+  const withKind = await supabase.from('families').select('id, name, storage_namespace, is_personal, kind').in('id', ids);
+  const answer = withKind.error && (withKind.error.code === '42703' || /kind/.test(withKind.error.message))
+    ? await supabase.from('families').select('id, name, storage_namespace, is_personal').in('id', ids)
+    : withKind;
+  return { rows: (answer.data ?? []) as FamilyRow[], error: answer.error?.message ?? null };
+}
+
+export const vaultKind = (row: { kind?: string | null }): 'family' | 'business' =>
+  row.kind === 'business' ? 'business' : 'family';
+
+export type VaultsResult =
+  | { ok: true; userId: string; vaults: Vault[] }
+  | { ok: false; response: Response };
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * The caller's vaults, for a request that names several (or all of them):
+ * Ask, across a person's personal vault and families. Every vault asked for
+ * must be one the caller is in, or the whole request is refused. Nothing is
+ * dropped quietly: a request that names someone else's vault is a request to
+ * read it. `wanted` 'all' is every vault they are in, oldest membership first.
+ */
+export async function requireVaults(
+  req: Request,
+  supabase: SupabaseClient,
+  wanted: string[] | 'all',
+): Promise<VaultsResult> {
+  const caller = await requireUser(req, supabase);
+  if (!caller.ok) return caller;
+  const userId = caller.userId;
+
+  if (wanted !== 'all' && (wanted.length === 0 || wanted.some((id) => !UUID.test(id)))) {
+    return deny(400, 'Name the vaults to search, or all of them');
+  }
+
+  const { data: rows, error: memErr } = await supabase
+    .from('family_members')
+    .select('family_id, role, joined_at')
+    .eq('user_id', userId)
+    .order('joined_at', { ascending: true });
+  if (memErr) {
+    console.error('[auth] membership lookup failed:', memErr.message);
+    return deny(500, 'Could not verify access');
+  }
+  const memberships = (rows ?? []) as Array<{ family_id: string; role: string }>;
+  if (wanted !== 'all' && wanted.some((id) => !memberships.some((m) => m.family_id === id))) {
+    return deny(403, 'You are not a member of one of these vaults');
+  }
+  const ids = wanted === 'all' ? memberships.map((m) => m.family_id) : [...new Set(wanted)];
+  if (ids.length === 0) return { ok: true, userId, vaults: [] };
+
+  const { rows: families, error: famErr } = await selectVaultRows(supabase, ids);
+  if (famErr) {
+    console.error('[auth] family lookup failed:', famErr);
+    return deny(500, 'Could not verify access');
+  }
+  const byId = new Map(families.map((f) => [f.id, f]));
+  const vaults = ids.flatMap((id): Vault[] => {
+    const f = byId.get(id);
+    const m = memberships.find((x) => x.family_id === id);
+    return f && m
+      ? [{ familyId: id, role: m.role, name: f.name, schema: f.storage_namespace, isPersonal: f.is_personal === true, kind: vaultKind(f) }]
+      : [];
+  });
+  return { ok: true, userId, vaults };
+}
+
 export type UserResult =
   | { ok: true; userId: string }
   | { ok: false; response: Response };

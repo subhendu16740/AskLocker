@@ -12,11 +12,12 @@ import { router, useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../lib/auth';
 import { useFamily } from '../../lib/family-context';
+import { isPersonalVault, vaultName } from '../../lib/vaults';
 import {
   fetchPlanLimits, fetchStorageStatus, fetchStorageUsage, type FamilyPlanStatus, type FamilyStorage,
 } from '../../lib/api';
 import {
-  DEFAULT_PLAN_LIMITS, FREE_STORAGE_BYTES, PLUS_FOR_SALE, formatBytes, localPlusPrice, localPlusPrices,
+  CLOSED_MESSAGE, DEFAULT_PLAN_LIMITS, PLUS_FOR_SALE, businessPlanName, formatBytes, isBusinessPlan, localPlusPrice, localPlusPrices,
   localPlusYearlyOffer, storageFullMessage, storageLevel, type PlanLimits, type StorageLevel,
 } from '../../lib/plans';
 import { longDate } from '../../lib/dates';
@@ -31,7 +32,10 @@ const documents = (n: number) => `${n} ${n === 1 ? 'document' : 'documents'}`;
 const BAR: Record<StorageLevel, string> = { ok: color.secondary, nearly: '#D97706', full: color.danger };
 
 function planName(status: FamilyPlanStatus | null): string {
-  return status?.plan === 'plus' ? 'Family Plus' : 'Free';
+  if (isBusinessPlan(status?.plan)) return `${businessPlanName(status.plan)}${status.trial ? ', trial' : ''}`;
+  if (status?.plan === 'plus') return `Family Plus${status.trial ? ', trial' : ''}`;
+  // A business whose paid plan ended (051): every record stays, nothing can be added.
+  return status?.closed ? 'Plan ended' : 'Free';
 }
 
 export default function StorageScreen() {
@@ -49,7 +53,7 @@ export default function StorageScreen() {
     if (!user) return;
     let cancelled = false;
     setError(null);
-    const list = families.map((f) => ({ id: f.families.id, name: f.families.name }));
+    const list = families.map((f) => ({ id: f.families.id, name: vaultName(f.families) }));
     Promise.all([
       fetchStorageUsage(list, user.id),
       Promise.all(list.map((f) => fetchStorageStatus(f.id).catch(() => null))),
@@ -61,11 +65,13 @@ export default function StorageScreen() {
         setPlans(Object.fromEntries(list.map((f, i) => [f.id, statuses[i]])));
         setLimits(l);
       })
-      .catch((err) => { if (!cancelled) { setUsage([]); setError(err?.message ?? 'Could not add up your documents.'); } });
+      .catch((err) => { if (!cancelled) { setUsage([]); setError(err?.message ?? "Couldn't add up your storage."); } });
     return () => { cancelled = true; };
   }, [user?.id, familyKey]));
 
   const price = localPlusPrices();
+  // Which vaults are personal (046), for the free limit before the server says (048).
+  const personalIds = new Set(families.filter((f) => isPersonalVault(f.families)).map((f) => f.families.id));
   const yourBytes = usage?.reduce((sum, f) => sum + f.yourBytes, 0) ?? 0;
   const yourDocs = usage?.reduce((sum, f) => sum + f.yourDocuments, 0) ?? 0;
 
@@ -84,10 +90,15 @@ export default function StorageScreen() {
 
             <Card>
               <CardTitle icon="hard-drive">Plans</CardTitle>
-              <Body>Each family's documents share its plan's space. Every plan has a limit.</Body>
+              <Body>
+                Documents and saved chats share each vault's space. Every plan has a limit.
+              </Body>
               <View style={styles.planRows}>
                 <View style={styles.planRow}>
-                  <Text style={styles.planRowName}>Free</Text>
+                  <View style={styles.planRowText}>
+                    <Text style={styles.planRowName}>Free</Text>
+                    <Text style={styles.planRowPrice}>{formatBytes(limits.freePersonal)} for your personal vault</Text>
+                  </View>
                   <Text style={styles.planRowSize}>{formatBytes(limits.free)}</Text>
                 </View>
                 <View style={styles.planRow}>
@@ -105,8 +116,8 @@ export default function StorageScreen() {
               </View>
               {payments && !payments.available && (
                 <View style={styles.plusRow}>
-                  <PlusTag link />
-                  <Text style={styles.plusText}>Family Plus can't be bought in the app yet. Coming soon.</Text>
+                  <PlusTag link name="Family Plus" />
+                  <Text style={styles.plusText}>Family Plus is coming soon.</Text>
                 </View>
               )}
               <TouchableOpacity style={styles.compare} onPress={() => router.push('/plus' as any)} accessibilityRole="link">
@@ -115,16 +126,16 @@ export default function StorageScreen() {
               </TouchableOpacity>
             </Card>
 
-            <Text style={styles.sectionTitle}>Your families</Text>
-            {usage.length === 0 && <Muted>You are not in a family yet.</Muted>}
+            <Text style={styles.sectionTitle}>Your vaults</Text>
+            {usage.length === 0 && <Muted>You're not in a family yet.</Muted>}
             {usage.map((f) => {
               const status = plans[f.familyId] ?? null;
               // As the server counts it once 038 is applied; the documents' sizes before.
               const used = status ? status.usedBytes : f.bytes;
-              const limit = status ? status.limitBytes : FREE_STORAGE_BYTES;
+              const limit = status ? status.limitBytes : personalIds.has(f.familyId) ? limits.freePersonal : limits.free;
               const level = storageLevel(used, limit);
               const percent = Math.min(100, Math.round((used / limit) * 100));
-              const isPlus = status?.plan === 'plus';
+              const isPlus = !!status && status.plan !== 'free';
               return (
                 <Card key={f.familyId}>
                   <View style={styles.familyRow}>
@@ -163,14 +174,19 @@ export default function StorageScreen() {
                     {used >= limit ? 'No space left' : `${formatBytes(limit - used)} left`}
                     {' · '}{documents(f.documents)}
                   </Muted>
-                  <Muted>You added {formatBytes(f.yourBytes)} of it ({documents(f.yourDocuments)}).</Muted>
-                  {!!status?.chatsBytes && <Muted>Saved chats take {formatBytes(status.chatsBytes)} of it.</Muted>}
-                  {level !== 'ok' && (
+                  <Muted>You added {formatBytes(f.yourBytes)} ({documents(f.yourDocuments)}).</Muted>
+                  {!!status?.chatsBytes && <Muted>Saved chats use {formatBytes(status.chatsBytes)}.</Muted>}
+                  {status?.closed && (
+                    <View style={[styles.note, styles.noteFull]}>
+                      <Text style={[styles.noteText, styles.noteTextFull]}>{CLOSED_MESSAGE}</Text>
+                    </View>
+                  )}
+                  {level !== 'ok' && !status?.closed && (
                     <View style={[styles.note, level === 'full' ? styles.noteFull : styles.noteNearly]}>
                       <Text style={[styles.noteText, level === 'full' ? styles.noteTextFull : styles.noteTextNearly]}>
                         {!status
                           // Before 038: said, not kept.
-                          ? `This family has used ${level === 'full' ? 'all of' : 'most of'} its free ${formatBytes(limit)}.`
+                          ? `This ${personalIds.has(f.familyId) ? 'vault' : 'family'} has used ${level === 'full' ? 'all of' : 'most of'} its free ${formatBytes(limit)}.`
                           : level === 'full'
                             ? storageFullMessage(status, 0, {
                                 limits,
@@ -179,11 +195,12 @@ export default function StorageScreen() {
                                 removalOn: status.removalAt ? longDate(new Date(status.removalAt)) : undefined,
                                 forSale: payments?.available ?? PLUS_FOR_SALE,
                               })
-                            : `Nearly full: ${formatBytes(limit - used)} left. When it is full, new documents and saved chats can't be added.`}
+                            : "Nearly full. When it's full, you can't add documents or save chats."}
                       </Text>
-                      {!isPlus && (
+                      {/* A business can move up a plan until Enterprise (051). */}
+                      {(!isPlus || (status?.business && status.plan !== 'business_enterprise')) && (
                         <TouchableOpacity onPress={() => router.push(plusPage('storage') as any)} accessibilityRole="link">
-                          <Text style={[styles.noteLink, level === 'full' ? styles.noteTextFull : styles.noteTextNearly]}>See Family Plus ›</Text>
+                          <Text style={[styles.noteLink, level === 'full' ? styles.noteTextFull : styles.noteTextNearly]}>See {status?.business ? 'plans' : 'Family Plus'} ›</Text>
                         </TouchableOpacity>
                       )}
                     </View>
@@ -200,7 +217,7 @@ export default function StorageScreen() {
               </Muted>
             </Card>
 
-            <Muted>Sizes are of the files as they were added, and saved chats count too. Deleting a document or a saved chat frees its space.</Muted>
+            <Muted>Saved chats count too. Delete a document or chat to free space.</Muted>
           </>
         )}
       </ScrollView>

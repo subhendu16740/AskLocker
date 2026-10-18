@@ -1,30 +1,35 @@
 # AskLocker
 
-A secure, AI-powered family document vault built with React Native. AskLocker helps families organize, store, and instantly retrieve important documents using natural language search.
+An AI-powered family document vault built with React Native. AskLocker helps families organize, store, and instantly retrieve important documents using natural language search.
 
 ## Vision
 
 Every family manages dozens of critical documents — passports, insurance policies, property deeds, medical records, tax filings. These documents are scattered across drawers, folders, email attachments, and phone galleries. When you need one urgently, finding it becomes stressful and time-consuming.
 
-AskLocker brings all your family's important documents into one secure, shared vault. Upload a document, and the app automatically extracts key details — names, dates, policy numbers, expiry dates. Need something? Just ask: *"Show me Dad's passport"* or *"When does Mom's health insurance expire?"* — and get instant answers powered by AI.
+AskLocker brings all your family's important documents into one shared vault. Upload a document, and the app automatically extracts key details — names, dates, policy numbers, expiry dates. Need something? Just ask: *"Show me Dad's passport"* or *"When does Mom's health insurance expire?"* — and get instant answers powered by AI.
+
+## Privacy, plainly
+
+Documents are not end-to-end encrypted. They travel over https and are stored on Supabase's encrypted disks, and in the app only a family's members can open its documents. But the app's servers read each document's text to search it, the people who run AskLocker can technically open stored documents, and parts of the text go to outside services: HuggingFace (search data), Groq (answers) and OCR.space (scanned PDFs, photos from Gmail). Settings › Privacy in the app says the same.
 
 ## Key Features
 
 ### Implemented
 
-- **Family Vault Creation** — Create a private family vault and add family members to it
+- **Family Vault Creation** — Create a family vault and invite family members to it
 - **Role-Based Access** — Only admins add and remove members and change roles; viewers have read access
 - **Member Management** — Add a member by the email they sign in with (no invitations or requests to join), promote to admin, remove members; anyone can switch between their families or leave one
-- **Secure Authentication** — Email/password sign-up, Google OAuth, biometric login UI
+- **Sign-in** — Google, then fingerprint sign-in (a passkey) on the web; test builds also take an email and password
 - **Home Dashboard** — At-a-glance stats (documents, members, categories), recent documents, quick actions
 - **Document Viewer** — View document details with metadata, category, and owner info
 - **Search Interface** — Category-based browsing and keyword search across documents
-- **Saved Chats** — Save chat on Ask keeps a conversation; the clock at the top right lists them to carry on or delete. Only you can see them, and they go if you leave the family
+- **Saved Chats** — Save chat on Ask keeps a conversation; the clock at the top right lists them to carry on or delete. Nobody else in the family can see them, and they go if you leave it
 - **Upload Flow** — Multi-step upload with source selection, metadata tagging, and owner assignment
-- **Import from Gmail** ★ (web) — Connect your own Gmail; AskLocker lists the attachments that look like documents, and imports the ones you tick. Only you see what it finds; disconnecting makes it forget
+- **Import from Gmail** ★ (web) — Connect your own Gmail; AskLocker lists the attachments that look like documents, and imports the ones you tick. What it finds is shown to you, not your family; disconnecting makes it forget
 - **Menu Drawer** — Slides in from the left from the name button on Home: Home, Manage Family, Reminders ★ and Settings, with Sign Out
-- **Reminders** ★ — Every document with an expiry date, soonest first. ★ Family Plus marks what the coming paid plan will add (reminders 90, 30 and 7 days ahead)
-- **Settings** — Profile (name and phone), Security (password, sign out everywhere), Notifications on/off, Storage (each family's use of its free 1 GB, and what you added; more space ★), Privacy, Help & FAQ with feedback, and About (version and release date)
+- **Reminders** ★ — Every document with an expiry date, soonest first, and reminders 90, 30 and 7 days ahead and on the day, under the bell and on your devices. Both are part of ★ Family Plus
+- **Family Plus** ★ — The paid plan (₹100 a month or ₹1,100 a year): 10 GB, questions with no monthly limit (20 a month for each person on Free), voice chats with no limit (10 each on Free), up to 8 members who sign in (4 on Free), share links that last 30 days (7 on Free), expiry reminders and Import from Gmail. Every ★ opens the Plus page for a free family
+- **Settings** — Profile (name and phone), Security (password, sign out everywhere), Notifications on/off, Storage (each vault's use of its free space — 200 MB for a family, 100 MB for your personal vault — and what you added; more space ★), Privacy, Help & FAQ with feedback, and About (version and release date)
 - **One Top Bar Everywhere** — A back arrow at the top left of every screen, with the title beside it, that works even after a refresh; one compact type and size scale (`src/constants/design.ts`) across the app
 - **23 Document Categories** — Pre-configured categories including Passport, Driving License, Health Insurance, Property Deed, Tax Return, Birth Certificate, and more
 - **In-App Confirmation Dialogs** — Custom modal dialogs for destructive actions

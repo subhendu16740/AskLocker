@@ -1,11 +1,15 @@
 import { supabase } from './supabase';
+import { accountKey, storageGet, storageSet } from './storage';
 import { longDate, parseDocumentDate } from './dates';
 import { isSaveable, mimeTypeFor, unsupportedFileMessage } from './file-types';
+import { parseAmount, readDate, type MoneyRow } from './overview';
 import type { Gender, KinLink, KinPerson } from '../../supabase/functions/_shared/kinship';
+import { parseAllowance, type QuestionAllowance } from '../../supabase/functions/_shared/questions';
 import { isBloodGroup, type EmergencyCard, type EmergencyCardInput, type EmergencyContact } from './emergency';
 import {
-  DEFAULT_PLAN_LIMITS, PLUS_FOR_SALE, chatStorageFullMessage, fits, localPlusPrices, storageFullMessage,
-  type PlanLimits, type PlanName, type StorageRoom,
+  DEFAULT_PLAN_LIMITS, MAX_FILE_BYTES, PLUS_FOR_SALE, chatStorageFullMessage, deviceTimeZone, fileTooLargeMessage, fits,
+  limitHint, localPlusPrices, setPayerCurrency, storageFullMessage, type BusinessPlan, type BusinessPlanLimits, type PlanLimits,
+  type PlanName, type StorageRoom,
 } from './plans';
 import type {
   FamilyWithMembership,
@@ -55,21 +59,73 @@ export async function fetchUserFamilies(userId: string): Promise<FamilyWithMembe
     })) as unknown as FamilyWithMembership[];
 }
 
+/**
+ * A new family, or (051) a business. A family is made with the four
+ * arguments that have always existed, so it works on any database; a
+ * business names p_kind, which a database before 051 does not know — that
+ * says so, rather than quietly making a family.
+ */
 export async function createNewFamily(
   userId: string,
   name: string,
   description?: string,
   icon?: string,
+  kind: 'family' | 'business' = 'family',
 ): Promise<string> {
   const { data, error } = await supabase.rpc('create_family', {
     p_user_id: userId,
     p_family_name: name,
     p_description: description ?? undefined,
     p_family_icon: icon ?? undefined,
+    ...(kind === 'business' ? { p_kind: 'business' } : {}),
   });
 
-  if (error) throw error;
+  if (error) {
+    if (kind === 'business' && (error.code === 'PGRST202' || /could not find the function/i.test(error.message))) {
+      throw new Error("Business vaults aren't switched on yet.");
+    }
+    throw error;
+  }
   return data as string;
+}
+
+export type UseFor = 'family' | 'business' | 'both';
+
+const USE_FOR = new Set<UseFor>(['family', 'business', 'both']);
+
+/**
+ * What this person said they would use AskLocker for (051): on their own
+ * users row, so a new device knows; on the device before 051. Null: not
+ * answered. 'skipped' on this device: they tapped Not now.
+ */
+export async function fetchUseFor(userId: string): Promise<UseFor | 'skipped' | null> {
+  const { data, error } = await supabase.from('users').select('use_for').eq('id', userId).maybeSingle();
+  const saved = !error ? (data as { use_for?: string | null } | null)?.use_for : null;
+  if (saved && USE_FOR.has(saved as UseFor)) return saved as UseFor;
+  const here = await storageGet(accountKey.useFor(userId));
+  return here === 'skipped' || USE_FOR.has(here as UseFor) ? (here as UseFor | 'skipped') : null;
+}
+
+/** Keeps the answer: on the users row where 051 is applied, and on this device either way. */
+export async function saveUseFor(userId: string, choice: UseFor | 'skipped'): Promise<void> {
+  await storageSet(accountKey.useFor(userId), choice);
+  if (choice === 'skipped') return;
+  const { error } = await supabase.from('users').update({ use_for: choice }).eq('id', userId);
+  if (error) console.warn('[use-for] kept on this device only (is 051 applied?):', error.message);
+}
+
+/**
+ * The signed-in person's personal vault (046): a family of one, for them
+ * alone, made the first time it is asked for. Null where 046 is not applied:
+ * the app then works as before, with families only.
+ */
+export async function ensurePersonalVault(): Promise<string | null> {
+  const { data, error } = await supabase.rpc('ensure_personal_vault');
+  if (error) {
+    if (error.code === 'PGRST202' || error.code === '42883' || /could not find the function/i.test(error.message)) return null;
+    throw error;
+  }
+  return (data as string | null) ?? null;
 }
 
 // ─── Family Members ──────────────────────────────────────────────
@@ -173,11 +229,16 @@ function resolveAliases(
 
 export interface RagSearchResult {
   answer: string;
-  sources: { id: string; file_name: string; file_type: string; category_name: string | null }[];
+  /** `family_id`: the vault each is in (046), so the app opens it there. Older servers send none. */
+  sources: { id: string; file_name: string; file_type: string; category_name: string | null; family_id?: string; family_name?: string }[];
   /** BCP-47 tag the answer was written in — the client picks the matching voice. */
   answer_language?: string;
   /** true when `answer` did not come from the model (rate limit, outage). */
   degraded?: boolean;
+  /** This month's questions are used up (049): `answer` says so, and nothing was searched. */
+  question_limit?: boolean;
+  /** Where the asker's questions stand this month (049), as question_status() says; read with parseAllowance(). */
+  questions?: unknown;
   retry_after_seconds?: number;
   /** What the server actually did — shown under follow-up answers. */
   debug?: {
@@ -190,6 +251,8 @@ export interface RagSearchResult {
     /** Passages that survived reranking — same unit as candidate_count. */
     kept_count?: number;
     kept_docs: string[];
+    /** The documents the answer said it used, which the source chips show; null when it did not say. */
+    used_docs?: string[] | null;
     /** Groq models that actually ran each step. Missing = the step didn't run. */
     models?: { answer?: string; condense?: string; rerank?: string };
     /** false means the retriever was given the raw follow-up, not a rewrite. */
@@ -202,6 +265,12 @@ export interface RagSearchResult {
     translate_error?: string;
     /** The family's chunk vectors are still being rebuilt: keyword-only for now. */
     index_rebuilding?: boolean;
+    /** Which vaults' indexes are being rebuilt, when there are any (046). */
+    rebuilding_family_ids?: string[];
+    /** Asked across several vaults (046): each vault, and what it gave. */
+    vaults?: { family_id: string; name: string; retrieved_docs: string[]; index_rebuilding?: boolean }[];
+    /** Vaults past the server's limit, not searched. */
+    vaults_skipped?: string[];
     /** False means the question was searched by keywords alone. */
     embedded?: boolean;
     /** Why embedding failed, when it did. */
@@ -285,6 +354,12 @@ export interface RagSearchOptions {
   language?: string;
   /** The answer will be read aloud: ask for short plain sentences, no markdown. */
   voice?: boolean;
+  /**
+   * Which vaults to search (046): 'all' of the asker's — their personal vault
+   * and every family — or these. Omitted, `familyId` alone. `familyId` is
+   * always sent too, so a server without 046 still searches that one vault.
+   */
+  vaults?: 'all' | string[];
 }
 
 export async function ragSearch(
@@ -298,6 +373,7 @@ export async function ragSearch(
       family_id: familyId,
       query,
       history,
+      ...(options.vaults === 'all' ? { scope: 'all' } : options.vaults?.length ? { family_ids: options.vaults } : {}),
       ...(options.language ? { language: options.language } : {}),
       ...(options.voice ? { voice: true } : {}),
     },
@@ -415,13 +491,17 @@ export async function addFamilyMember(
     case 'invalid_email':
       return { status: 'invalid_email' };
     case 'family_full':
-      return { status: 'full', message: body.error ?? 'This family has no room for another member.' };
+      return { status: 'full', message: body.error ?? 'This family is full.' };
+    case 'personal_vault':
+      return { status: 'unavailable', message: body.error ?? "You can't invite anyone to a personal vault." };
+    case 'invite_limit':   // 20 a day from a family, 3 to one person (050)
+      return { status: 'unavailable', message: body.error ?? 'This family has sent all its invitations for today. Try again tomorrow.' };
     case 'needs_migration':
-      return { status: 'unavailable', message: body.error ?? 'Adding members is not available yet.' };
+      return { status: 'unavailable', message: body.error ?? "Adding members isn't available yet." };
   }
   // The gateway's own 404: this project does not have the function yet.
   if (httpStatus === 404) {
-    return { status: 'unavailable', message: 'Adding members is not available on this server yet.' };
+    return { status: 'unavailable', message: "Adding members isn't available yet." };
   }
   throw new Error(body?.error ?? error.message);
 }
@@ -467,22 +547,24 @@ export async function linkPersonToAccount(familyId: string, personId: string, em
     case 'invalid_email':
       return { status: 'invalid_email' };
     case 'needs_migration':
-      return { status: 'unavailable', message: 'Linking someone to their account is not switched on yet.' };
+      return { status: 'unavailable', message: "Linking accounts isn't available yet." };
     case 'tree_rule': {
       // The tree's own rule, as the database words it: "Someone can have at most two parents in the tree."
-      const rule = body.error ?? 'the family tree does not allow it.';
-      return { status: 'refused', message: `These two can't be joined into one: ${rule.charAt(0).toLowerCase()}${rule.slice(1)}` };
+      const rule = body.error ?? "the family tree doesn't allow it.";
+      return { status: 'refused', message: `These two can't be joined because ${rule.charAt(0).toLowerCase()}${rule.slice(1)}` };
     }
     case 'already_linked':
     case 'already_member':
     case 'already_invited':
     case 'no_person':
     case 'family_full':
-      return { status: 'refused', message: body.error ?? 'This person could not be linked.' };
+    case 'personal_vault':
+    case 'invite_limit':
+      return { status: 'refused', message: body.error ?? "Couldn't link this person." };
   }
   // The gateway's own 404: this project does not have link-account yet.
   if (httpStatus === 404) {
-    return { status: 'unavailable', message: 'Linking someone to their account is not switched on yet.' };
+    return { status: 'unavailable', message: "Linking accounts isn't available yet." };
   }
   throw new Error(body?.error ?? error.message);
 }
@@ -498,6 +580,8 @@ export interface Invitation {
   id: string;
   familyId: string;
   familyName: string;
+  /** 'business' for a business (051); 'family' otherwise, and before 051. */
+  familyKind: 'family' | 'business';
   invitedByName: string | null;
   /** The tree entry they would be, when the invitation came from a link. */
   personName: string | null;
@@ -516,6 +600,7 @@ export async function fetchMyInvitations(): Promise<Invitation[]> {
     id: row.id,
     familyId: row.family_id,
     familyName: row.family_name,
+    familyKind: (row as { family_kind?: string | null }).family_kind === 'business' ? 'business' : 'family',
     invitedByName: row.invited_by_name ?? null,
     personName: row.person_name ?? null,
     role: row.role,
@@ -673,7 +758,7 @@ async function gmailInvoke<T>(fn: string, body: Record<string, unknown>): Promis
     | null;
   // The gateway's own 404: the function is not deployed to this project.
   if (httpStatus === 404 && !payload?.status) {
-    throw new GmailApiError('unavailable', 'Gmail import is not available on this server yet.');
+    throw new GmailApiError('unavailable', "Gmail import isn't available yet.");
   }
   throw new GmailApiError(payload?.status ?? 'error', payload?.error ?? error.message, {
     retryAfter: payload?.retry_after,
@@ -762,7 +847,7 @@ export async function leaveFamily(familyId: string, userId: string): Promise<voi
     .select('id');
 
   if (error) throw error;
-  if (!data?.length) throw new Error('You are not a member of this family.');
+  if (!data?.length) throw new Error("You're not in this family.");
 }
 
 // ─── Document Upload ────────────────────────────────────────────
@@ -789,6 +874,8 @@ export async function uploadDocument(params: UploadDocumentParams): Promise<stri
   // Refused before anything is stored. The bucket takes only these types, and
   // a type the database cannot hold used to fail AFTER the file was uploaded.
   if (!isSaveable(fileType)) throw new Error(unsupportedFileMessage(fileType));
+  // And only files up to 10 MB (050): said in words, before the upload.
+  if (fileSizeBytes > MAX_FILE_BYTES) throw new Error(fileTooLargeMessage(fileSizeBytes));
 
   // Every plan has a storage limit (038). Asked first, with this file's size,
   // so the person hears why; the bucket refuses a full family either way.
@@ -810,12 +897,12 @@ export async function uploadDocument(params: UploadDocumentParams): Promise<stri
     // The bucket's policy refuses a family at its limit (038): say so in words.
     if (/row-level security|policy/i.test(storageErr.message)) {
       const now = await fetchStorageStatus(familyId).catch(() => null);
-      if (now && now.usedBytes >= now.limitBytes) {
+      if (now && (now.closed || now.usedBytes >= now.limitBytes)) {
         await fetchPaymentsStatus();
         throw new StorageFullError(now, fileSizeBytes);
       }
     }
-    throw new Error(`Storage upload failed: ${storageErr.message}`);
+    throw new Error(`Couldn't upload the file. ${storageErr.message}`);
   }
 
   // 2. Insert document record via RPC (into family schema)
@@ -834,7 +921,9 @@ export async function uploadDocument(params: UploadDocumentParams): Promise<stri
     // The file is in Storage already. With no document pointing at it, nobody
     // would ever see it, count it or delete it, so take it back out.
     await supabase.storage.from('documents').remove([storagePath]).catch(() => undefined);
-    throw new Error(`Document insert failed: ${insertErr.message}`);
+    // A limit (050: the day's documents, say) is written for the person.
+    if (limitHint(insertErr)) throw new Error(insertErr.message);
+    throw new Error(`Couldn't save the document. ${insertErr.message}`);
   }
 
   const docId = data as string;
@@ -871,7 +960,7 @@ export async function deleteDocument(
     p_document_id: documentId,
     p_user_id: userId,
   });
-  if (error) throw new Error(`Delete failed: ${error.message}`);
+  if (error) throw new Error(`Couldn't delete it. ${error.message}`);
 
   // 2. Remove file from storage (best-effort)
   await supabase.storage.from('documents').remove([storagePath]);
@@ -891,7 +980,7 @@ export async function updateDocument(
     p_category_id: updates.categoryId ?? undefined,
     p_belongs_to_member: updates.belongsToMember ?? undefined,
   });
-  if (error) throw new Error(`Update failed: ${error.message}`);
+  if (error) throw new Error(`Couldn't save your changes. ${error.message}`);
 }
 
 // ─── Document Signed URLs ──────────────────────────────────────
@@ -904,7 +993,7 @@ export async function getDocumentSignedUrl(
     .from('documents')
     .createSignedUrl(storagePath, expiresIn);
 
-  if (error) throw new Error(`Signed URL failed: ${error.message}`);
+  if (error) throw new Error(`Couldn't open the file. ${error.message}`);
   return data.signedUrl;
 }
 
@@ -931,6 +1020,8 @@ export type MakeShareOutcome =
   | { status: 'made'; link: ShareLink; token: string }
   /** Not theirs to share, or the document is gone, in the database's own words. */
   | { status: 'refused'; message: string }
+  /** A 30-day link from a vault on Free (049), in the database's own words. */
+  | { status: 'plus_only'; message: string }
   /** Migration 036 is not applied here. */
   | { status: 'unavailable' };
 
@@ -953,6 +1044,9 @@ export async function createShareLink(
   });
   if (error) {
     if (isMissingMigration(error)) return { status: 'unavailable' };
+    if ((error as { hint?: string }).hint === 'plus_only') return { status: 'plus_only', message: error.message };
+    // 20 links that still work, for one document (050).
+    if ((error as { hint?: string }).hint === 'share_limit') return { status: 'refused', message: error.message };
     if (error.code === '42501' || error.code === '22023') return { status: 'refused', message: error.message };
     throw error;
   }
@@ -1025,7 +1119,7 @@ export async function openSharedDocument(token: string): Promise<SharedDocument 
     if (body?.status === 'gone') return 'gone';
     // 503: 036 not applied; a bare 404: the function is not deployed here yet.
     if (body?.status === 'needs_migration' || (httpStatus === 404 && !body?.status)) return 'unavailable';
-    throw new Error('Could not open this link. Please try again.');
+    throw new Error("Couldn't open this link. Try again.");
   }
   return {
     fileName: data.file_name,
@@ -1039,12 +1133,18 @@ export async function openSharedDocument(token: string): Promise<SharedDocument 
 
 // ─── Notifications ───────────────────────────────────────────────
 
-export async function fetchUnreadNotificationCount(userId: string): Promise<number> {
-  const { count, error } = await supabase
+/**
+ * Unread notifications, leaving out those of `exceptVaults`: the vaults of
+ * the other mode, Family or Business, whose news is not shown in this one.
+ */
+export async function fetchUnreadNotificationCount(userId: string, exceptVaults: string[] = []): Promise<number> {
+  let query = supabase
     .from('notifications')
     .select('*', { count: 'exact', head: true })
     .eq('user_id', userId)
     .eq('is_read', false);
+  if (exceptVaults.length) query = query.not('family_id', 'in', `(${exceptVaults.join(',')})`);
+  const { count, error } = await query;
 
   if (error) throw error;
   return count ?? 0;
@@ -1136,11 +1236,6 @@ export async function updateProfile(userId: string, profile: Profile): Promise<{
   return { familySees: true };
 }
 
-export async function changePassword(newPassword: string): Promise<void> {
-  const { error } = await supabase.auth.updateUser({ password: newPassword });
-  if (error) throw error;
-}
-
 /**
  * Ends every session this account has, on every device, this one included —
  * and their notifications with them (034): a lost phone must not go on
@@ -1156,8 +1251,8 @@ export async function signOutEverywhere(): Promise<void> {
   if (error) throw error;
 }
 
-/** Every document in a family, a page at a time. */
-async function fetchAllDocuments(familyId: string): Promise<FamilyDocumentRow[]> {
+/** Every document in a family, newest first, a page at a time (also All documents' list). */
+export async function fetchAllDocuments(familyId: string): Promise<FamilyDocumentRow[]> {
   const PAGE = 200;
   const all: FamilyDocumentRow[] = [];
   for (let offset = 0; offset < PAGE * 50; offset += PAGE) {
@@ -1218,11 +1313,12 @@ export async function fetchStorageUsage(
 
 // ─── Plans and storage limits (038) ──────────────────────────────
 //
-// Every plan has a storage limit: Free 1 GB, Family Plus 10 GB (039;
-// public.plan_limits). The server keeps it — the documents bucket refuses a
-// new file once a family is at its limit — and these say where a family
-// stands, so the app can tell people before it refuses them. They read 038's
-// shape too (a period beside each plan), so the app works either side of 039.
+// Every plan has a storage limit: on Free a family 200 MB and a personal
+// vault 100 MB, on Family Plus 10 GB (039, 048; public.plan_limits). The
+// server keeps it — the documents bucket refuses a new file once a vault is at
+// its limit — and these say where a vault stands, so the app can tell people
+// before it refuses them. They read 038's shape too (a period beside each
+// plan), so the app works either side of 039.
 
 export interface FamilyPlanStatus extends StorageRoom {
   /** When a Plus plan's paid time ends; null on Free. */
@@ -1234,6 +1330,8 @@ export interface FamilyPlanStatus extends StorageRoom {
   removalAt: string | null;
   /** How much of usedBytes is saved chats (042); 0 before. */
   chatsBytes: number;
+  /** The plan running now was switched on for a demo (051). */
+  trial: boolean;
 }
 
 /** A family's plan, its limit and what its files (and, since 042, saved chats) add up to; null before 038. */
@@ -1250,31 +1348,53 @@ export async function fetchStorageStatus(familyId: string): Promise<FamilyPlanSt
     paidUntil: row.paid_until ?? null,
     limitBytes: Number(row.limit_bytes),
     usedBytes: Number(row.used_bytes),
-    // Before 040 the row has no removal_at, and before 042 no chats_bytes.
+    // Before 040 the row has no removal_at, before 042 no chats_bytes, and
+    // before 048 no personal (the words then say "your family", as they did).
     removalAt: (row as { removal_at?: string | null }).removal_at ?? null,
     chatsBytes: Number((row as { chats_bytes?: number | null }).chats_bytes ?? 0),
+    personal: (row as { personal?: boolean | null }).personal === true,
+    // 051: a business, whether its adding is closed, whether this is a trial.
+    business: (row as { business?: boolean | null }).business === true,
+    closed: (row as { closed?: boolean | null }).closed === true,
+    trial: (row as { trial?: boolean | null }).trial === true,
   };
 }
 
 // Each set of columns arrived with a migration (040: grace_days; 041:
-// max_members and voice_answers). A column that is not there yet fails the
-// whole select, so each one missing asks again with the set before it.
+// max_members and voice_answers; 048: personal_storage_bytes; 049:
+// questions_per_month and questions_fair_use; 050: question_tries_per_day,
+// uploads_per_day and families_per_person; 051: invites_per_day and
+// businesses_per_person, and the business plans' rows; 053:
+// family_questions_per_month; 054: vaults_per_person; 056: notes_per_person). A column that is not there yet
+// fails the whole select, so each one missing asks again with the set before it.
 const PLAN_LIMIT_COLUMNS = [
+  'plan, storage_bytes, grace_days, max_members, voice_answers, personal_storage_bytes, questions_per_month, questions_fair_use, question_tries_per_day, uploads_per_day, families_per_person, invites_per_day, businesses_per_person, family_questions_per_month, vaults_per_person, notes_per_person',
+  'plan, storage_bytes, grace_days, max_members, voice_answers, personal_storage_bytes, questions_per_month, questions_fair_use, question_tries_per_day, uploads_per_day, families_per_person, invites_per_day, businesses_per_person, family_questions_per_month, vaults_per_person',
+  'plan, storage_bytes, grace_days, max_members, voice_answers, personal_storage_bytes, questions_per_month, questions_fair_use, question_tries_per_day, uploads_per_day, families_per_person, invites_per_day, businesses_per_person, family_questions_per_month',
+  'plan, storage_bytes, grace_days, max_members, voice_answers, personal_storage_bytes, questions_per_month, questions_fair_use, question_tries_per_day, uploads_per_day, families_per_person, invites_per_day, businesses_per_person',
+  'plan, storage_bytes, grace_days, max_members, voice_answers, personal_storage_bytes, questions_per_month, questions_fair_use, question_tries_per_day, uploads_per_day, families_per_person',
+  'plan, storage_bytes, grace_days, max_members, voice_answers, personal_storage_bytes, questions_per_month, questions_fair_use',
+  'plan, storage_bytes, grace_days, max_members, voice_answers, personal_storage_bytes',
   'plan, storage_bytes, grace_days, max_members, voice_answers',
   'plan, storage_bytes, grace_days',
   'plan, storage_bytes',
 ] as const;
 
-/** What each plan allows, as the database says; 039–041's numbers before 038. */
+/** What each plan allows, as the database says; 039–048's numbers before 038. */
 export async function fetchPlanLimits(): Promise<PlanLimits> {
   type Row = {
     plan: string; storage_bytes: number; grace_days?: number | null;
     max_members?: number | null; voice_answers?: number | null;
+    personal_storage_bytes?: number | null;
+    questions_per_month?: number | null; questions_fair_use?: number | null;
+    question_tries_per_day?: number | null; uploads_per_day?: number | null; families_per_person?: number | null;
+    invites_per_day?: number | null; businesses_per_person?: number | null;
+    family_questions_per_month?: number | null; vaults_per_person?: number | null; notes_per_person?: number | null;
   };
   let answer: { data: unknown; error: { message?: string } | null } = { data: null, error: null };
   for (const columns of PLAN_LIMIT_COLUMNS) {
     answer = await supabase.from('plan_limits').select(columns);
-    if (!answer.error || !/grace_days|max_members|voice_answers/.test(answer.error.message ?? '')) break;
+    if (!answer.error || !/grace_days|max_members|voice_answers|personal_storage_bytes|questions_per_month|questions_fair_use|question_tries_per_day|uploads_per_day|families_per_person|invites_per_day|businesses_per_person|family_questions_per_month|vaults_per_person|notes_per_person/.test(answer.error.message ?? '')) break;
   }
   const rows = (answer.data ?? []) as Row[];
   if (answer.error || !rows.length) return DEFAULT_PLAN_LIMITS;
@@ -1295,12 +1415,92 @@ export async function fetchPlanLimits(): Promise<PlanLimits> {
     if (!row || !('voice_answers' in row)) return DEFAULT_PLAN_LIMITS.voiceAnswers[plan];
     return row.voice_answers == null ? null : Number(row.voice_answers);
   };
+  // Questions a month (049): NULL is a real answer (no monthly limit); a row
+  // without the column is a database before 049, which keeps no limit at all.
+  const questions = (plan: 'free' | 'plus') => {
+    const row = rows.find((r) => r.plan === plan);
+    if (!row || !('questions_per_month' in row)) return null;
+    return row.questions_per_month == null ? null : Number(row.questions_per_month);
+  };
+  const fairUse = rows.find((r) => r.plan === 'plus')?.questions_fair_use;
+  // The family's shared month (053): NULL is a real answer (no family number);
+  // a row without the column is a database before 053, which keeps none.
+  const plusRow = rows.find((r) => r.plan === 'plus');
+  const familyQuestions = plusRow && 'family_questions_per_month' in plusRow
+    ? (plusRow.family_questions_per_month == null ? null : Number(plusRow.family_questions_per_month))
+    : null;
+  // The day's numbers (050): NULL is a real answer (no limit); a row without
+  // the column is a database before 050, which keeps none.
+  const perDay = (plan: 'free' | 'plus', column: 'question_tries_per_day' | 'uploads_per_day') => {
+    const row = rows.find((r) => r.plan === plan);
+    if (!row || !(column in row)) return null;
+    return row[column] == null ? null : Number(row[column]);
+  };
+  // Invitations a day (051); before it, 20 for every vault (050).
+  const invites = (plan: 'free' | 'plus') => {
+    const n = rows.find((r) => r.plan === plan)?.invites_per_day;
+    return n ? Number(n) : DEFAULT_PLAN_LIMITS.invitesPerDay[plan];
+  };
+  // A business's plans (051): their rows, or 051's numbers before it.
+  const businessPlan = (plan: BusinessPlan): BusinessPlanLimits => {
+    const row = rows.find((r) => r.plan === plan);
+    const d = DEFAULT_PLAN_LIMITS.business[plan];
+    if (!row) return d;
+    const perDay = (v: number | null | undefined, fallback: number | null) =>
+      v === undefined ? fallback : v == null ? null : Number(v);
+    return {
+      storage: Number(row.storage_bytes),
+      members: row.max_members ? Number(row.max_members) : d.members,
+      questionsFairUse: row.questions_fair_use ? Number(row.questions_fair_use) : d.questionsFairUse,
+      questionTriesPerDay: perDay(row.question_tries_per_day, d.questionTriesPerDay),
+      uploadsPerDay: perDay(row.uploads_per_day, d.uploadsPerDay),
+      invitesPerDay: row.invites_per_day ? Number(row.invites_per_day) : d.invitesPerDay,
+    };
+  };
+  const free = of('free', DEFAULT_PLAN_LIMITS.free);
+  // A personal vault's own number (048), where the plan has one; before 048
+  // the server keeps one limit for every vault, so that one.
+  const freeRow = rows.find((r) => r.plan === 'free');
+  const freePersonal = freeRow?.personal_storage_bytes != null ? Number(freeRow.personal_storage_bytes) : free;
   return {
-    free: of('free', DEFAULT_PLAN_LIMITS.free),
+    free,
+    freePersonal,
     plus: of('plus', DEFAULT_PLAN_LIMITS.plus),
     graceDays: grace ? Number(grace) : DEFAULT_PLAN_LIMITS.graceDays,
     members: { free: members('free'), plus: members('plus') },
     voiceAnswers: { free: voice('free'), plus: voice('plus') },
+    questions: { free: questions('free'), plus: questions('plus') },
+    questionsFairUse: fairUse ? Number(fairUse) : DEFAULT_PLAN_LIMITS.questionsFairUse,
+    familyQuestions,
+    questionTriesPerDay: { free: perDay('free', 'question_tries_per_day'), plus: perDay('plus', 'question_tries_per_day') },
+    uploadsPerDay: { free: perDay('free', 'uploads_per_day'), plus: perDay('plus', 'uploads_per_day') },
+    familiesPerPerson: freeRow && 'families_per_person' in freeRow
+      ? (freeRow.families_per_person == null ? null : Number(freeRow.families_per_person))
+      : null,
+    // Before 051 a business counts with the families.
+    businessesPerPerson: freeRow && 'businesses_per_person' in freeRow
+      ? (freeRow.businesses_per_person == null ? null : Number(freeRow.businesses_per_person))
+      : 0,
+    // Before 054 there is no combined number: one of each kind.
+    vaultsPerPerson: freeRow && 'vaults_per_person' in freeRow
+      ? (freeRow.vaults_per_person == null ? null : Number(freeRow.vaults_per_person))
+      : null,
+    // Before 056 there are no notes; the numbers they would have.
+    notesPerPerson: {
+      free: freeRow && 'notes_per_person' in freeRow
+        ? (freeRow.notes_per_person == null ? null : Number(freeRow.notes_per_person)) : DEFAULT_PLAN_LIMITS.notesPerPerson.free,
+      paid: (() => {
+        const row = rows.find((r) => r.plan === 'business_plus');
+        return row && 'notes_per_person' in row
+          ? (row.notes_per_person == null ? null : Number(row.notes_per_person)) : DEFAULT_PLAN_LIMITS.notesPerPerson.paid;
+      })(),
+    },
+    invitesPerDay: { free: invites('free'), plus: invites('plus') },
+    business: {
+      business_plus: businessPlan('business_plus'),
+      business_pro: businessPlan('business_pro'),
+      business_enterprise: businessPlan('business_enterprise'),
+    },
   };
 }
 
@@ -1322,9 +1522,12 @@ export interface PaymentsStatus {
   /** Razorpay's public key id, for the checkout. */
   keyId: string | null;
   currencies: PaymentCurrency[];
+  /** What this person pays in, as the server decided; null before it could. */
+  currency: PaymentCurrency | null;
 }
 
-const PAYMENTS_OFF: PaymentsStatus = { available: false, keyId: null, currencies: [] };
+const PAYMENTS_OFF: PaymentsStatus = { available: false, keyId: null, currencies: [], currency: null };
+const asCurrency = (c: unknown): PaymentCurrency | null => (c === 'INR' || c === 'USD' ? c : null);
 let paymentsKnown: PaymentsStatus | null = null;
 let paymentsAsking: Promise<PaymentsStatus> | null = null;
 
@@ -1332,7 +1535,9 @@ let paymentsAsking: Promise<PaymentsStatus> | null = null;
 export function fetchPaymentsStatus(): Promise<PaymentsStatus> {
   if (paymentsKnown) return Promise.resolve(paymentsKnown);
   paymentsAsking ??= (async () => {
-    const { data, error } = await supabase.functions.invoke('payments', { body: { action: 'status' } });
+    const { data, error } = await supabase.functions.invoke('payments', {
+      body: { action: 'status', time_zone: deviceTimeZone() },
+    });
     if (error) {
       // Not deployed here is an answer; offline is not, and is asked again next time.
       if ((error as { context?: Response })?.context?.status === 404) paymentsKnown = PAYMENTS_OFF;
@@ -1341,7 +1546,10 @@ export function fetchPaymentsStatus(): Promise<PaymentsStatus> {
     const currencies = Array.isArray(data?.currencies)
       ? (data.currencies as unknown[]).filter((c): c is PaymentCurrency => c === 'INR' || c === 'USD')
       : [];
-    paymentsKnown = { available: data?.available === true, keyId: data?.key_id ?? null, currencies };
+    const currency = asCurrency(data?.currency);
+    // Prices everywhere follow the server's choice from here on.
+    setPayerCurrency(currency);
+    paymentsKnown = { available: data?.available === true, keyId: data?.key_id ?? null, currencies, currency };
     return paymentsKnown;
   })().catch(() => PAYMENTS_OFF).finally(() => { paymentsAsking = null; });
   return paymentsAsking;
@@ -1365,10 +1573,13 @@ export interface PlusOrder {
 /** A payment the server would not start or confirm, with a sentence for the person. */
 export class PaymentError extends Error {
   status: string;
-  constructor(status: string, message: string) {
+  /** wrong_currency: the currency this person pays in. */
+  currency: PaymentCurrency | null;
+  constructor(status: string, message: string, currency: PaymentCurrency | null = null) {
     super(message);
     this.name = 'PaymentError';
     this.status = status;
+    this.currency = currency;
   }
 }
 
@@ -1376,11 +1587,11 @@ async function paymentsInvoke<T>(body: Record<string, unknown>): Promise<T> {
   const { data, error } = await supabase.functions.invoke('payments', { body });
   if (!error) return data as T;
   const httpStatus = (error as { context?: Response })?.context?.status;
-  const payload = (await readFunctionError(error)) as { status?: string; error?: string } | null;
+  const payload = (await readFunctionError(error)) as { status?: string; error?: string; currency?: unknown } | null;
   if (httpStatus === 404 && !payload?.status) {
-    throw new PaymentError('not_configured', 'Paying for Family Plus is not switched on yet.');
+    throw new PaymentError('not_configured', "Paying for Family Plus isn't available yet.");
   }
-  throw new PaymentError(payload?.status ?? 'error', payload?.error ?? 'Something went wrong. Please try again.');
+  throw new PaymentError(payload?.status ?? 'error', payload?.error ?? 'Something went wrong. Try again.', asCurrency(payload?.currency));
 }
 
 /** Starts paying for a month or a year of Family Plus for the family. */
@@ -1388,7 +1599,14 @@ export async function createPlusOrder(familyId: string, period: 'monthly' | 'yea
   const r = await paymentsInvoke<{
     order_id: string; amount: number; currency: PaymentCurrency; key_id: string; description: string;
     prefill?: { email?: string; name?: string };
-  }>({ action: 'order', family_id: familyId, period, currency });
+  }>({ action: 'order', family_id: familyId, period, currency, time_zone: deviceTimeZone() }).catch((err) => {
+    // The server pays this person in the other currency: show its prices from now on.
+    if (err instanceof PaymentError && err.status === 'wrong_currency' && err.currency) {
+      setPayerCurrency(err.currency);
+      if (paymentsKnown) paymentsKnown = { ...paymentsKnown, currency: err.currency };
+    }
+    throw err;
+  });
   return {
     orderId: r.order_id, amount: r.amount, currency: r.currency, keyId: r.key_id,
     description: r.description, prefill: r.prefill ?? {},
@@ -1450,6 +1668,22 @@ export async function fetchVoiceStatus(familyId: string): Promise<VoiceStatus | 
   return { limit: n(r.limit), used: n(r.used), left: n(r.left) };
 }
 
+// ─── Questions each month (049) ──────────────────────────────────
+//
+// On the free plan each person asks 20 questions a month; on Family Plus
+// the family shares 200 a month (053; fair use of 500 each before). rag-search counts
+// each question before it answers, gives it back when no answer came, and
+// says where the count stands in its response; question_status() says the
+// same without asking anything. Before 049, or offline, nothing is counted
+// and Ask says nothing about it.
+
+/** How many questions the person asking has this month, or null when that cannot be told. */
+export async function fetchQuestionStatus(): Promise<QuestionAllowance | null> {
+  const { data, error } = await supabase.rpc('question_status');
+  if (error) return null;
+  return parseAllowance(data);
+}
+
 /** The family's storage is full, in words the person can act on. */
 export class StorageFullError extends Error {
   room: StorageRoom;
@@ -1506,6 +1740,18 @@ export async function fetchExpiringDocuments(familyId: string): Promise<Expiring
     });
   }
   return found.sort((a, b) => a.expiry.getTime() - b.expiry.getTime());
+}
+
+/**
+ * The expiry date read from one document, once ingest has extracted it, or
+ * null. Upload uses it to offer Family Plus's reminders for that date (049).
+ */
+export async function fetchDocumentExpiry(familyId: string, documentId: string): Promise<Date | null> {
+  const doc = await fetchDocumentById(familyId, documentId);
+  return (doc?.metadata ?? [])
+    .filter((m) => m.key === 'expiry_date')
+    .map((m) => parseDocumentDate(m.value))
+    .find((d): d is Date => d !== null) ?? null;
 }
 
 export type FeedbackTopic = 'problem' | 'idea' | 'question' | 'other';
@@ -1572,7 +1818,11 @@ function chatForStorage(messages: SavedChatMessage[]): SavedChatMessage[] {
       role: m.role,
       text: m.text.slice(0, SAVED_CHAT_MAX_TEXT),
       ...(m.sources?.length
-        ? { sources: m.sources.slice(0, 10).map(({ id, file_name, file_type, category_name }) => ({ id, file_name, file_type, category_name })) }
+        ? {
+            sources: m.sources.slice(0, 10).map(({ id, file_name, file_type, category_name, family_id, family_name }) => ({
+              id, file_name, file_type, category_name, ...(family_id ? { family_id, family_name } : {}),
+            })),
+          }
         : {}),
     }));
 }
@@ -1614,7 +1864,7 @@ export class ChatStorageFullError extends Error {
   constructor(room: FamilyPlanStatus | null, serverMessage?: string) {
     super(room
       ? chatStorageFullMessage(room, { price: localPlusPrices(), forSale: plusForSale() })
-      : serverMessage ?? 'There is no room to save this chat: your family\'s storage is full.');
+      : serverMessage ?? "No room to save this chat. Your family's storage is full.");
     this.name = 'ChatStorageFullError';
     this.room = room;
   }
@@ -1685,15 +1935,20 @@ export interface AccountDeletionFamily {
   yourDocuments: number;
   /** Deleted with the account, rather than left. */
   deleted: boolean;
+  /** 'business' for a business (051). */
+  kind: 'family' | 'business';
+  /** A business whose last admin this person is: the account cannot go until it has another admin, or is deleted (051). */
+  blocked: boolean;
 }
 
 /**
- * `unavailable` (the function or migration 029 is not on this server yet) or
- * `error`, with a sentence for the person.
+ * `unavailable` (the function or migration 029 is not on this server yet),
+ * `blocked` (the last admin of a business, 051) or `error`, with a sentence
+ * for the person.
  */
 export class AccountDeletionError extends Error {
-  status: 'unavailable' | 'error';
-  constructor(status: 'unavailable' | 'error', message: string) {
+  status: 'unavailable' | 'blocked' | 'error';
+  constructor(status: 'unavailable' | 'blocked' | 'error', message: string) {
     super(message);
     this.status = status;
   }
@@ -1706,7 +1961,10 @@ async function deleteAccountInvoke<T>(body: Record<string, unknown>): Promise<T>
   const payload = (await readFunctionError(error)) as { status?: string; error?: string } | null;
   // The gateway's own 404 (not deployed here), or the database update missing.
   if ((httpStatus === 404 && !payload?.status) || payload?.status === 'needs_migration') {
-    throw new AccountDeletionError('unavailable', 'Deleting your account from the app is not switched on yet.');
+    throw new AccountDeletionError('unavailable', payload?.error ?? "Deleting your account in the app isn't available yet.");
+  }
+  if (payload?.status === 'business_admin') {
+    throw new AccountDeletionError('blocked', payload.error ?? "You're the last admin of a business. Make someone else an admin, or delete the business, first.");
   }
   throw new AccountDeletionError('error', payload?.error ?? error.message);
 }
@@ -1717,6 +1975,7 @@ export async function previewAccountDeletion(): Promise<AccountDeletionFamily[]>
     families: Array<{
       family_id: string; name: string; role: string; other_members: number;
       document_count: number; your_documents: number; deleted: boolean;
+      kind?: string; blocked?: boolean;
     }>;
   }>({ action: 'preview' });
   return (families ?? []).map((f) => ({
@@ -1727,7 +1986,286 @@ export async function previewAccountDeletion(): Promise<AccountDeletionFamily[]>
     documentCount: f.document_count,
     yourDocuments: f.your_documents,
     deleted: f.deleted,
+    kind: f.kind === 'business' ? 'business' : 'family',
+    blocked: f.blocked === true,
   }));
+}
+
+/**
+ * What deleting a vault would take: its documents, and who loses it. Any
+ * admin may look; only its owner (its creator while an admin, else its
+ * longest-standing admin, 057) may delete, and `ownerName` says who that is.
+ */
+export interface BusinessDeletion {
+  familyId: string;
+  name: string;
+  otherMembers: string[];
+  documentCount: number;
+  canDelete: boolean;
+  ownerName: string | null;
+}
+
+export async function previewBusinessDeletion(familyId: string): Promise<BusinessDeletion> {
+  const { business } = await deleteAccountInvoke<{
+    business: {
+      family_id: string; name: string; other_members: string[]; document_count: number;
+      can_delete?: boolean; owner_name?: string | null;
+    };
+  }>({ action: 'business_preview', family_id: familyId });
+  return {
+    familyId: business.family_id,
+    name: business.name,
+    otherMembers: business.other_members ?? [],
+    documentCount: business.document_count ?? 0,
+    // A delete-account from before 057 says nothing: 051's functions decide.
+    canDelete: business.can_delete !== false,
+    ownerName: business.owner_name ?? null,
+  };
+}
+
+/** Delete a business, its records and files, for everyone. The name must be typed. There is no undo. */
+export async function deleteBusiness(familyId: string, typedName: string): Promise<{ filesDeleted: number }> {
+  const result = await deleteAccountInvoke<{ files_deleted: number }>({
+    action: 'delete_business',
+    family_id: familyId,
+    confirm_name: typedName,
+  });
+  return { filesDeleted: result.files_deleted ?? 0 };
+}
+
+/** What deleting a family vault would take (057): the same as a business's. */
+export type FamilyDeletion = BusinessDeletion;
+
+export async function previewFamilyDeletion(familyId: string): Promise<FamilyDeletion> {
+  const { family } = await deleteAccountInvoke<{
+    family: {
+      family_id: string; name: string; can_delete: boolean; owner_name: string | null;
+      other_members: string[]; document_count: number;
+    };
+  }>({ action: 'family_preview', family_id: familyId });
+  return {
+    familyId: family.family_id,
+    name: family.name,
+    canDelete: family.can_delete === true,
+    ownerName: family.owner_name ?? null,
+    otherMembers: family.other_members ?? [],
+    documentCount: family.document_count ?? 0,
+  };
+}
+
+/** Delete a family vault, its documents and files, for everyone in it. Its owner only; the name must be typed. */
+export async function deleteFamilyVault(familyId: string, typedName: string): Promise<{ filesDeleted: number }> {
+  const result = await deleteAccountInvoke<{ files_deleted: number }>({
+    action: 'delete_family',
+    family_id: familyId,
+    confirm_name: typedName,
+  });
+  return { filesDeleted: result.files_deleted ?? 0 };
+}
+
+// ─── Making a family vault a business (054) ──────────────────────
+//
+// A small business may start in a family vault and move when it grows: an
+// admin makes it a business vault, keeping every document, member and link.
+// One way only. The server decides (business_vault_preview,
+// make_business_vault, the caller from the session) and says why not in its
+// own words: Family Plus still paid up, more than a free business keeps, a
+// personal vault. Before 054 neither function exists, and the screen says
+// the move isn't switched on yet.
+
+export type BusinessVaultBlocker = 'personal_vault' | 'already_business' | 'plan_active' | 'storage_over' | 'missing';
+
+export interface BusinessVaultPreview {
+  allowed: boolean;
+  reason: BusinessVaultBlocker | null;
+  /** The server's words for why not; null when allowed. */
+  message: string | null;
+  documents: number;
+  members: number;
+  /** People a free business may have; above it nobody is removed, nobody new is invited. */
+  freeMembers: number;
+  /** What goes: emergency cards, people in the tree without an account, the tree's links. */
+  cards: number;
+  people: number;
+  links: number;
+}
+
+export class BusinessVaultUnavailable extends Error {}
+
+const missingFunction = (error: { code?: string; message?: string }) =>
+  error.code === 'PGRST202' || error.code === '42883' || /could not find the function/i.test(error.message ?? '');
+
+export async function previewBusinessVault(familyId: string): Promise<BusinessVaultPreview> {
+  const { data, error } = await supabase.rpc('business_vault_preview', { p_family_id: familyId });
+  if (error) {
+    if (missingFunction(error)) throw new BusinessVaultUnavailable("Making a family vault a business isn't switched on yet.");
+    throw error;
+  }
+  const r = (data ?? {}) as Record<string, unknown>;
+  const n = (v: unknown) => (typeof v === 'number' ? v : Number(v ?? 0)) || 0;
+  return {
+    allowed: r.allowed === true,
+    reason: (r.reason as BusinessVaultBlocker | null) ?? null,
+    message: typeof r.message === 'string' ? r.message : null,
+    documents: n(r.documents),
+    members: n(r.members),
+    freeMembers: n(r.free_members),
+    cards: n(r.cards),
+    people: n(r.people),
+    links: n(r.links),
+  };
+}
+
+/** Make the family vault a business vault. One way: there is no undo. */
+export async function makeBusinessVault(familyId: string): Promise<void> {
+  const { error } = await supabase.rpc('make_business_vault', { p_family_id: familyId });
+  if (error) {
+    if (missingFunction(error)) throw new BusinessVaultUnavailable("Making a family vault a business isn't switched on yet.");
+    throw error;
+  }
+}
+
+// ─── Business overview and notes (056) ───────────────────────────
+//
+// What a business's papers say, as far as its plan goes: counts on every
+// plan, renewals and bills due on Business Plus, money in and out on Pro
+// and Enterprise. The server decides what to send (business_overview); the
+// app reads the dates and amounts as ingest stored them. Notes are each
+// person's own (scratch_notes: RLS on the owner), and a reminder on one is
+// for a paid plan, which the server keeps. Before 056 neither exists, and
+// the screens say they aren't switched on yet.
+
+export type OverviewTier = 'free' | 'plus' | 'pro';
+
+export interface OverviewRenewal {
+  documentId: string;
+  fileName: string;
+  category: string | null;
+  expiry: Date;
+}
+
+export interface OverviewBill {
+  documentId: string;
+  fileName: string;
+  category: string | null;
+  /** Null when the due date could not be read. */
+  due: Date | null;
+  amount: number | null;
+  invoiceNumber: string | null;
+  /** A sales invoice: money owed to the business, not by it. */
+  collect: boolean;
+}
+
+export interface BusinessOverview {
+  tier: OverviewTier;
+  counts: { renewals: number; expired: number; bills: number; invoices: number; documents: number };
+  renewals: OverviewRenewal[] | null;
+  bills: OverviewBill[] | null;
+  money: MoneyRow[] | null;
+}
+
+export class FeatureUnavailable extends Error {}
+
+export async function fetchBusinessOverview(familyId: string): Promise<BusinessOverview> {
+  const { data, error } = await supabase.rpc('business_overview', { p_family_id: familyId });
+  if (error) {
+    if (missingFunction(error)) throw new FeatureUnavailable("The overview isn't switched on yet.");
+    throw error;
+  }
+  type Raw = {
+    tier?: string;
+    counts?: Record<string, number>;
+    renewals?: { document_id: string; file_name: string; category: string | null; expiry_date: string }[] | null;
+    bills?: { document_id: string; file_name: string; category: string | null; due_date: string | null; total_amount: string | null; invoice_number: string | null }[] | null;
+    money?: { kind: 'in' | 'out'; invoice_date: string | null; total_amount: string | null; created_at: string }[] | null;
+  };
+  const r = (data ?? {}) as Raw;
+  const n = (k: string) => Number(r.counts?.[k] ?? 0) || 0;
+  return {
+    tier: r.tier === 'pro' || r.tier === 'plus' ? r.tier : 'free',
+    counts: { renewals: n('renewals'), expired: n('expired'), bills: n('bills'), invoices: n('invoices'), documents: n('documents') },
+    renewals: r.renewals
+      ? r.renewals
+        .map((x) => ({ documentId: x.document_id, fileName: x.file_name, category: x.category, expiry: parseDocumentDate(x.expiry_date) }))
+        .filter((x): x is OverviewRenewal => x.expiry !== null)
+      : null,
+    bills: r.bills
+      ? r.bills.map((x) => ({
+        documentId: x.document_id,
+        fileName: x.file_name,
+        category: x.category,
+        due: x.due_date ? parseDocumentDate(x.due_date) : null,
+        amount: parseAmount(x.total_amount),
+        invoiceNumber: x.invoice_number,
+        collect: x.category === 'Sales Invoices',
+      }))
+      : null,
+    money: r.money
+      ? r.money.map((x) => ({ kind: x.kind, date: readDate(x.invoice_date, new Date(x.created_at)), amount: parseAmount(x.total_amount) }))
+      : null,
+  };
+}
+
+/** Mark a bill paid (or not paid again): it leaves bills due. A paid plan's. */
+export async function setBillPaid(familyId: string, documentId: string, paid = true): Promise<void> {
+  const { error } = await supabase.rpc('set_bill_paid', { p_family_id: familyId, p_document_id: documentId, p_paid: paid });
+  if (error) {
+    if (missingFunction(error)) throw new FeatureUnavailable("Bills due aren't switched on yet.");
+    throw error;
+  }
+}
+
+export interface Note {
+  id: string;
+  body: string;
+  /** "2026-10-21", or null. */
+  remindOn: string | null;
+  done: boolean;
+  createdAt: string;
+}
+
+const NOTE_COLUMNS = 'id, body, remind_on, done, created_at';
+type NoteRow = { id: string; body: string; remind_on: string | null; done: boolean; created_at: string };
+const toNote = (r: NoteRow): Note => ({ id: r.id, body: r.body, remindOn: r.remind_on, done: r.done, createdAt: r.created_at });
+const notesUnavailable = () => new FeatureUnavailable("Notes aren't switched on yet.");
+
+/** Your own notes in a business, open ones first. */
+export async function fetchNotes(familyId: string): Promise<Note[]> {
+  const { data, error } = await supabase
+    .from('scratch_notes')
+    .select(NOTE_COLUMNS)
+    .eq('family_id', familyId)
+    .order('created_at', { ascending: false })
+    .limit(1000);
+  if (error) {
+    if (isMissingMigration(error)) throw notesUnavailable();
+    throw error;
+  }
+  return ((data ?? []) as NoteRow[]).map(toNote);
+}
+
+export async function addNote(familyId: string, body: string, remindOn: string | null): Promise<Note> {
+  const { data, error } = await supabase
+    .from('scratch_notes')
+    .insert({ family_id: familyId, body, remind_on: remindOn })
+    .select(NOTE_COLUMNS)
+    .single();
+  if (error) {
+    if (isMissingMigration(error)) throw notesUnavailable();
+    throw error;
+  }
+  return toNote(data as NoteRow);
+}
+
+export async function updateNote(id: string, patch: { body?: string; remind_on?: string | null; done?: boolean }): Promise<Note> {
+  const { data, error } = await supabase.from('scratch_notes').update(patch).eq('id', id).select(NOTE_COLUMNS).single();
+  if (error) throw error;
+  return toNote(data as NoteRow);
+}
+
+export async function deleteNote(id: string): Promise<void> {
+  const { error } = await supabase.from('scratch_notes').delete().eq('id', id);
+  if (error) throw error;
 }
 
 /** Delete the signed-in account, as the preview described. There is no undo. */
@@ -1880,7 +2418,7 @@ export async function updateFamilyPerson(personId: string, details: PersonDetail
 export async function setFamilyPersonNickname(personId: string, nickname: string): Promise<void> {
   const { error } = await supabase.rpc('set_family_person_nickname', { p_person_id: personId, p_nickname: nickname.trim() });
   if (error) {
-    if (String(error.code) === 'PGRST202') throw new Error('Nicknames are not switched on yet.');
+    if (String(error.code) === 'PGRST202') throw new Error("Nicknames aren't available yet.");
     throw error;
   }
 }

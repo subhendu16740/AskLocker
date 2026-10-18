@@ -13,9 +13,11 @@
 import { TouchableOpacity, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { color, size } from '../constants/design';
+import { size } from '../constants/design';
+import { useVaultTheme } from '../lib/vault-theme';
 
 export function BackButton({ fallback = '/home' }: { fallback?: string }) {
+  const theme = useVaultTheme();
   const goBack = () => {
     if (router.canGoBack()) router.back();
     else router.replace(fallback as any);
@@ -29,7 +31,7 @@ export function BackButton({ fallback = '/home' }: { fallback?: string }) {
       accessibilityRole="button"
       accessibilityLabel="Go back"
     >
-      <Feather name="arrow-left" size={size.icon} color={color.primary} />
+      <Feather name="arrow-left" size={size.icon} color={theme.primary} />
     </TouchableOpacity>
   );
 }

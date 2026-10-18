@@ -8,8 +8,10 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as WebBrowser from 'expo-web-browser';
+import { useAuth } from '../../lib/auth';
 import { useFamily } from '../../lib/family-context';
 import { useDocumentOwners } from '../../lib/family-people';
+import { canDeleteDocument, isBusinessVault } from '../../lib/vaults';
 import {
   fetchDocumentById, getDocumentSignedUrl, deleteDocument,
   updateDocument, fetchCategories,
@@ -19,9 +21,11 @@ import type { FamilyDocumentDetailRow } from '../../lib/database.types';
 import { ScreenHeader } from '../../components/screen-header';
 import { ShareSheet } from '../../components/share-sheet';
 import { color, radius, shadow, size, space, type } from '../../constants/design';
+import { categoryForAnalytics, track } from '../../lib/analytics';
 
 // Share makes a link that expires (036) for the web app's /s page, which
 // only the web app knows the address of: not offered in the phone app yet.
+// Delete is shown only to the person who added the document (047).
 const actions = [
   ...(Platform.OS === 'web' ? [{ icon: 'share-2', label: 'Share', bg: '#EFF6FF', color: '#2563EB' }] as const : []),
   { icon: 'download', label: 'Download', bg: '#F0FDF4', color: '#16A34A' },
@@ -40,6 +44,27 @@ function formatDate(dateStr: string): string {
   });
 }
 
+// What ingest found (_shared/metadata.ts), in words; anything else as its key.
+const META_LABELS: Record<string, string> = {
+  expiry_date: 'Expiry date',
+  date_of_birth: 'Date of birth',
+  issue_date: 'Issue date',
+  passport_number: 'Passport number',
+  pan_number: 'PAN',
+  aadhaar_number: 'Aadhaar',
+  driving_license_number: 'Driving licence',
+  policy_number: 'Policy number',
+  holder_name: 'Name',
+  amount: 'Amount',
+  phone_number: 'Phone',
+  // A business's papers (051)
+  gstin: 'GSTIN',
+  invoice_number: 'Invoice number',
+  invoice_date: 'Invoice date',
+  total_amount: 'Total',
+  due_date: 'Due date',
+};
+
 function formatBytes(bytes: number | null): string {
   if (!bytes) return 'Unknown';
   if (bytes < 1024) return `${bytes} B`;
@@ -48,9 +73,18 @@ function formatBytes(bytes: number | null): string {
 }
 
 export default function DocumentViewerScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
-  const { currentFamily } = useFamily();
-  const owners = useDocumentOwners();
+  const { id, family } = useLocalSearchParams<{ id: string; family?: string }>();
+  const { currentFamily: openFamily, families } = useFamily();
+  // The vault the document is in (046): the one the link names, when this
+  // person is in it — Ask finds documents in all of their vaults, and Upload
+  // can save into any of them — and otherwise the open one. Opened in its own
+  // vault, without switching: the open vault, and a chat on Ask, stay as they are.
+  const currentFamily = (family ? families.find((f) => f.family_id === family)?.families : undefined) ?? openFamily;
+  const vault = families.find((f) => f.family_id === currentFamily?.id) ?? null;
+  // A business has no "whose document" (051).
+  const familyOwners = useDocumentOwners(currentFamily?.id ?? null);
+  const owners = isBusinessVault(currentFamily) ? [] : familyOwners;
+  const { user } = useAuth();
   const [doc, setDoc] = useState<FamilyDocumentDetailRow | null>(null);
   const [loading, setLoading] = useState(true);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -75,6 +109,11 @@ export default function DocumentViewerScreen() {
       .catch((err) => console.error('Doc fetch error:', err))
       .finally(() => setLoading(false));
   }, [currentFamily?.id, id]);
+
+  // What kinds of documents people come back to: its category, nothing else.
+  useEffect(() => {
+    if (doc?.id) track('document_opened', { category: categoryForAnalytics({ name: doc.category_name }) });
+  }, [doc?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!doc?.storage_path) return;
@@ -114,25 +153,25 @@ export default function DocumentViewerScreen() {
       setActionLoading(true);
       try {
         const { data: { user } } = await supabase.auth.getUser();
-        if (!user) throw new Error('Not authenticated');
+        if (!user) throw new Error("You're signed out. Sign in again.");
         await deleteDocument(currentFamily.id, doc.id, user.id, doc.storage_path);
         // Opened from a link there is no history, and staying on a document
         // that no longer exists is the worst place to be left.
         if (router.canGoBack()) router.back();
         else router.replace('/home' as any);
       } catch (err: any) {
-        Alert.alert('Delete failed', err.message || 'Could not delete document.');
+        Alert.alert('Delete failed', err.message || "Couldn't delete this document. Try again.");
       } finally {
         setActionLoading(false);
       }
     };
 
     if (Platform.OS === 'web') {
-      if (confirm(`Delete "${doc.file_name}"? This cannot be undone.`)) doDelete();
+      if (confirm(`Delete "${doc.file_name}"? This can't be undone.`)) doDelete();
     } else {
       Alert.alert(
         'Delete Document',
-        `Delete "${doc.file_name}"? This cannot be undone.`,
+        `Delete "${doc.file_name}"? This can't be undone.`,
         [{ text: 'Cancel', style: 'cancel' }, { text: 'Delete', style: 'destructive', onPress: doDelete }],
       );
     }
@@ -159,7 +198,7 @@ export default function DocumentViewerScreen() {
     setActionLoading(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Not authenticated');
+      if (!user) throw new Error("You're signed out. Sign in again.");
       const updates: { fileName?: string; categoryId?: string; belongsToMember?: string } = {};
       if (editName && editName !== doc.file_name) updates.fileName = editName;
       if (editCategoryId && editCategoryId !== doc.category_id) updates.categoryId = editCategoryId;
@@ -173,7 +212,7 @@ export default function DocumentViewerScreen() {
       }
       setEditVisible(false);
     } catch (err: any) {
-      Alert.alert('Update failed', err.message || 'Could not update document.');
+      Alert.alert('Update failed', err.message || "Couldn't save your changes. Try again.");
     } finally {
       setActionLoading(false);
     }
@@ -210,6 +249,11 @@ export default function DocumentViewerScreen() {
       </SafeAreaView>
     );
   }
+
+  // Only the person who added a document can delete it, admins included
+  // (047) — and in a business any admin too (051); the server refuses
+  // anyone else, so nobody else is offered it.
+  const addedByMe = canDeleteDocument(vault, doc.uploaded_by, user?.id);
 
   const infoRows = [
     { label: 'Uploaded', value: formatDate(doc.created_at) },
@@ -334,7 +378,7 @@ export default function DocumentViewerScreen() {
               <Text style={[styles.cardTitle, styles.cardTitleLater]}>Extracted Data</Text>
               {doc.metadata.map((m, idx) => (
                 <View key={idx} style={[styles.infoRow, idx > 0 && styles.infoRowBorder]}>
-                  <Text style={styles.infoLabel}>{m.key.replace(/_/g, ' ')}</Text>
+                  <Text style={styles.infoLabel}>{META_LABELS[m.key] ?? m.key.replace(/_/g, ' ')}</Text>
                   <Text style={styles.infoValue}>{m.value}</Text>
                 </View>
               ))}
@@ -345,7 +389,7 @@ export default function DocumentViewerScreen() {
 
       {/* Sticky Action Bar */}
       <View style={styles.actionBar}>
-        {actions.map((action, idx) => (
+        {actions.filter((action) => action.label !== 'Delete' || addedByMe).map((action, idx) => (
           <TouchableOpacity
             key={idx}
             style={styles.actionItem}

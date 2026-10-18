@@ -4,6 +4,9 @@
 // reading a PDF is the expensive part — so the app calls this once per
 // ticked file and shows progress. For each:
 //
+//   0. stop at the person's limit of documents a day (050), before anything
+//      is fetched: 429 upload_limit, and the file stays on the list for
+//      tomorrow (the app keeps the rest ticked)
 //   1. claim the item (its owner only, and not while already importing)
 //   2. look the part up in Gmail again: attachment ids change on every
 //      fetch, so none was stored
@@ -23,7 +26,8 @@ import { requireFamilyMember } from '../_shared/auth.ts';
 import { ingestDocument } from '../_shared/ingest.ts';
 import { sha256Hex } from '../_shared/gmail-crypto.ts';
 import { MAX_IMPORT_BYTES, attachmentParts, sniffType, storageFileName } from '../_shared/gmail-rules.ts';
-import { fits, storageFullMessage, type StorageRoom } from '../_shared/plan-text.ts';
+import { fits, isBusinessPlan, storageFullMessage, type StorageRoom } from '../_shared/plan-text.ts';
+import { MAX_FILE_BYTES, fileTooLargeMessage } from '../_shared/limits.ts';
 import { GmailError, accessTokenFor, getAttachment, getMessage } from '../_shared/gmail.ts';
 
 const supabase = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
@@ -36,6 +40,26 @@ const CONTENT_TYPES = { pdf: 'application/pdf', jpg: 'image/jpeg', png: 'image/p
 /** A failure the person can act on, shown on the item. */
 class ImportProblem extends Error {}
 
+/**
+ * Today's limit on documents added (050), asked before anything is fetched.
+ * Gmail imports count like any upload, and past the limit every file would
+ * be downloaded, stored and then refused, one by one. Null: there is room,
+ * or the count cannot be read (before 050), and insert_family_document()
+ * decides as always. Gmail import is for vaults on Plus, so its words are
+ * Plus's, as the database writes them.
+ */
+async function uploadLimitReached(userId: string): Promise<string | null> {
+  const [{ data: limit, error: limitErr }, { data: day, error: dayErr }] = await Promise.all([
+    supabase.rpc('person_daily_limit', { p_user_id: userId, p_what: 'uploads' }),
+    supabase.rpc('usage_day'),
+  ]);
+  if (limitErr || dayErr || typeof limit !== 'number' || !day) return null;
+  const { data: row } = await supabase
+    .from('daily_usage').select('uploads').eq('user_id', userId).eq('day', day).maybeSingle();
+  if (((row as { uploads?: number } | null)?.uploads ?? 0) < limit) return null;
+  return `You have reached today's limit of ${limit} documents. You can add more tomorrow.`;
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
@@ -47,6 +71,10 @@ Deno.serve(async (req) => {
     const auth = await requireFamilyMember(req, supabase, family_id, { upload: true });
     if (!auth.ok) return auth.response;
     const userId = auth.member.userId;
+
+    // 0. Room for one more today? The rest wait for tomorrow, still ticked.
+    const reached = await uploadLimitReached(userId);
+    if (reached) return json(429, { status: 'upload_limit', error: reached });
 
     // 1. Claim it: the owner's, found or failed before, not imported already
     //    — or left 'importing' by an attempt that died over five minutes ago.
@@ -61,7 +89,7 @@ Deno.serve(async (req) => {
       .select('id, message_id, part_id, file_name')
       .maybeSingle();
     if (!item) {
-      return json(409, { status: 'not_available', error: 'This file is already imported or being imported, or is not yours to import.' });
+      return json(409, { status: 'not_available', error: 'This file is already imported or being imported.' });
     }
     claimedId = item.id;
 
@@ -70,7 +98,7 @@ Deno.serve(async (req) => {
       .select('refresh_token_enc, expired_at')
       .eq('user_id', userId)
       .maybeSingle();
-    if (!conn) throw new ImportProblem('Gmail is not connected any more.');
+    if (!conn) throw new ImportProblem('Gmail is no longer connected. Connect it again.');
     if (conn.expired_at) throw new GmailError('Gmail access has expired', 401, 'expired');
 
     // 2–3. Find the part again and download it.
@@ -78,11 +106,11 @@ Deno.serve(async (req) => {
     const message = await getMessage(token, item.message_id);
     const part = attachmentParts(message.payload).find((p) => p.partId === item.part_id);
     if (!part) throw new ImportProblem('This attachment is no longer in Gmail.');
-    if (part.size > MAX_IMPORT_BYTES) throw new ImportProblem(`Larger than ${MAX_IMPORT_BYTES / (1024 * 1024)} MB — too big to import.`);
+    if (part.size > MAX_IMPORT_BYTES) throw new ImportProblem(`Files over ${MAX_IMPORT_BYTES / (1024 * 1024)} MB can't be imported.`);
 
     const bytes = await getAttachment(token, item.message_id, part.attachmentId);
     const kind = sniffType(bytes);
-    if (!kind) throw new ImportProblem('This file is not really a PDF or a photo, whatever its name says.');
+    if (!kind) throw new ImportProblem("This file isn't really a PDF or a photo.");
     const sha = await sha256Hex(bytes);
 
     // 4. The same file already imported into this family: point at it.
@@ -103,26 +131,35 @@ Deno.serve(async (req) => {
       return json(200, { status: 'duplicate', document_id: twin.document_id });
     }
 
-    // 5. Family Plus, and room for it (038, 039). Import from Gmail is part of
+    // 5. A file the bucket takes (050: 10 MB), refused here in words before
+    //    it is stored, rather than by Storage after.
+    if (bytes.length > MAX_FILE_BYTES) throw new ImportProblem(fileTooLargeMessage(bytes.length));
+
+    // 6. Family Plus, and room for it (038, 039). Import from Gmail is part of
     //    Family Plus, and every plan has a storage limit, which the bucket's
     //    policy keeps for uploads from the app; the service role passes no
     //    policy, so both are checked here. Before 038 there is nothing to
     //    ask, and nothing is checked, as before.
+    //    A business (051) on any of its paid plans imports too.
     const { data: rooms } = await supabase.rpc('family_storage_status', { p_family_id: family_id });
-    const r = (rooms as Array<{ plan: string; limit_bytes: number; used_bytes: number }> | null)?.[0];
+    const r = (rooms as Array<{ plan: string; limit_bytes: number; used_bytes: number; personal?: boolean; business?: boolean }> | null)?.[0];
     if (r) {
-      if (r.plan !== 'plus') {
-        throw new ImportProblem('Import from Gmail is part of Family Plus. Settings › Family Plus shows what it includes.');
+      if (r.plan === 'free') {
+        throw new ImportProblem(r.business
+          ? 'Import from Gmail comes with every paid plan.'
+          : 'Import from Gmail comes with Family Plus. See Settings › Family Plus.');
       }
       const room: StorageRoom = {
-        plan: 'plus',
+        plan: isBusinessPlan(r.plan) ? r.plan : 'plus',
         limitBytes: Number(r.limit_bytes),
         usedBytes: Number(r.used_bytes),
+        personal: r.personal === true,    // 048; absent before it
+        business: r.business === true,    // 051; absent before it
       };
       if (!fits(room, bytes.length)) throw new ImportProblem(storageFullMessage(room, bytes.length));
     }
 
-    // 6. Store, record, ingest — the same three steps as an upload.
+    // 7. Store, record, ingest — the same three steps as an upload.
     const { data: family } = await supabase.from('families').select('storage_namespace').eq('id', family_id).single();
     if (!family?.storage_namespace) throw new ImportProblem('This family has no storage folder.');
     const storagePath = `${family.storage_namespace}/${Date.now()}_${storageFileName(item.file_name, kind)}`;
@@ -144,6 +181,13 @@ Deno.serve(async (req) => {
     });
     if (insertErr || !documentId) {
       await supabase.storage.from('documents').remove([storagePath]);
+      if (insertErr?.hint === 'upload_limit') {
+        // The day's limit, reached since the check above: not this file's
+        // fault, so it goes back to the list for tomorrow, not "failed".
+        await supabase.from('gmail_import_items').update({ status: 'found', error: null }).eq('id', item.id);
+        claimedId = null;
+        return json(429, { status: 'upload_limit', error: insertErr.message });
+      }
       throw new ImportProblem(`Could not add the document: ${insertErr?.message ?? 'no id returned'}`);
     }
 
@@ -158,12 +202,12 @@ Deno.serve(async (req) => {
     let chunks = 0;
     let unreadable: string | undefined;
     try {
-      const result = await ingestDocument(supabase, { familyId: family_id, documentId, storagePath });
+      const result = await ingestDocument(supabase, { familyId: family_id, namespace: family.storage_namespace, documentId, storagePath });
       chunks = result.chunks;
-      if (result.empty) unreadable = result.reason ?? 'No text could be read from this file';
+      if (result.empty) unreadable = result.reason ?? "We couldn't read any text in this file.";
     } catch (err) {
       console.error('[gmail-import] ingestion failed:', err);
-      unreadable = 'Saved, but reading it failed; it will be retried when the search index is rebuilt.';
+      unreadable = "We couldn't read it yet. We'll try again later.";
     }
 
     return json(200, { status: 'imported', document_id: documentId, chunks, ...(unreadable ? { unreadable } : {}) });

@@ -14,6 +14,7 @@ import { Feather } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFamily } from '../lib/family-context';
+import { vaultName } from '../lib/vaults';
 import { listSavedChats, deleteSavedChat, isMissingMigration, type SavedChatSummary } from '../lib/api';
 import { longDate } from '../lib/dates';
 import { ScreenHeader } from '../components/screen-header';
@@ -36,8 +37,8 @@ export default function SavedChatsScreen() {
         if (cancelled) return;
         setChats([]);
         setProblem(isMissingMigration(err)
-          ? 'Saving chats is not switched on yet.'
-          : err?.message ?? 'Could not load your saved chats.');
+          ? "Saving chats isn't available yet."
+          : err?.message ?? "Couldn't load your saved chats.");
       });
     return () => { cancelled = true; };
   }, [currentFamily?.id]));
@@ -54,7 +55,7 @@ export default function SavedChatsScreen() {
       setChats((list) => (list ?? []).filter((c) => c.id !== confirming.id));
       setConfirming(null);
     } catch (err: any) {
-      setProblem(err?.message ?? 'Could not delete this chat.');
+      setProblem(err?.message ?? "Couldn't delete this chat. Try again.");
       setConfirming(null);
     } finally {
       setDeleting(false);
@@ -84,7 +85,7 @@ export default function SavedChatsScreen() {
                 <Feather name="bookmark" size={24} color="#9CA3AF" />
                 <Text style={styles.emptyTitle}>No saved chats yet</Text>
                 <Text style={styles.emptyText}>
-                  On Ask, tap Save chat under a conversation to keep it here.
+                  On Ask, tap Save chat to keep a conversation here.
                 </Text>
               </View>
             )}
@@ -113,7 +114,7 @@ export default function SavedChatsScreen() {
                       onPress={() => setConfirming(chat)}
                       activeOpacity={0.6}
                       accessibilityRole="button"
-                      accessibilityLabel={`Delete the chat "${chat.title}"`}
+                      accessibilityLabel={`Delete "${chat.title}"`}
                     >
                       <Feather name="trash-2" size={18} color="#9CA3AF" />
                     </TouchableOpacity>
@@ -124,8 +125,8 @@ export default function SavedChatsScreen() {
 
             {!problem && (
               <Text style={styles.footnote}>
-                Only you can see your saved chats. They are deleted if you leave
-                {currentFamily ? ` ${currentFamily.name}` : ' this family'}.
+                Nobody in your family sees your saved chats, not even admins. They're deleted if you leave
+                {currentFamily ? ` ${vaultName(currentFamily)}` : ' this family'}.
               </Text>
             )}
           </>
@@ -137,7 +138,7 @@ export default function SavedChatsScreen() {
           <Pressable style={styles.dialog} onPress={() => {}}>
             <Text style={styles.dialogTitle}>Delete this chat?</Text>
             <Text style={styles.dialogText} numberOfLines={3}>“{confirming?.title}”</Text>
-            <Text style={styles.dialogText}>Your documents are not touched.</Text>
+            <Text style={styles.dialogText}>Your documents aren't affected.</Text>
             <View style={styles.dialogButtons}>
               <TouchableOpacity
                 style={styles.cancelBtn}

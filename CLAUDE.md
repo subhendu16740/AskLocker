@@ -84,7 +84,46 @@ Four things will mislead you if you assume otherwise:
    no client reads or writes them, and only `apply_plan_payment`, service
    role only, turns a payment into Family Plus; 045's nicknames are read
    with the tree and written only through `set_family_person_nickname`, by
-   an admin or the person themselves).
+   an admin or the person themselves; 046's personal vaults are their
+   owner's alone — made only by `ensure_personal_vault()`, one per person,
+   and triggers refuse any other membership or invitation, on every path;
+   047's documents, and their files in Storage, are deleted only by whoever
+   added them, admins included; 048's free space differs by vault, 200 MB a
+   family and 100 MB a personal vault, and expiry reminders are made only
+   for vaults on Plus, both kept by the server; 049's question counts,
+   `question_usage`, are the server's alone — written only by
+   `claim_question` and `release_question`, service role only — and a
+   30-day share link, and members five to eight, are for vaults on Plus;
+   050's counts for the day, `daily_usage`, are the server's alone — written
+   only through `claim_daily()`, service role only — a document is added only
+   with its file there in its own vault's folder, the server reads a file
+   only from its document's own row (`start_document_read()`, service role
+   only), and the limits on what one account can add are kept by the
+   database: see [Limits against abuse](#limits-against-abuse--one-account-cannot-use-up-what-everyone-shares-050);
+   051's vault kind, `families.kind`, is set only by `create_family()` and
+   written by no client, your own `users.use_for` has its own grant, and a
+   plan is given (`set_family_plan`) and a business deleted
+   (`business_deletion_plan`, `purge_business`) only by the server: see
+   [Business vaults](#business-vaults--a-pilot-for-small-businesses-051);
+   053's family count of questions is the server's alone
+   (`family_questions_used`, `family_question_room`, service role only): see
+   [Family Plus shares its month](#family-plus-shares-its-month--200-questions-for-the-whole-family-053);
+   054's one change of kind, a family vault to a business, is made only by
+   `make_business_vault()`, an admin's, the caller from `auth.uid()`, and the
+   rule it asks (`business_vault_blocker`) is service role only: see
+   [A family vault becomes a business](#a-family-vault-becomes-a-business--one-free-vault-and-the-move-054);
+   056's notes, `scratch_notes`, are their owner's alone — RLS on the owner,
+   three columns to insert and three to change, a trigger keeping the rest —
+   the overview (`business_overview`) is a member's and carries only what
+   the plan covers, a bill is marked paid only through `set_bill_paid`, and
+   note reminders are the server's (`queue_note_reminders`, service role
+   only): see [Business overview and notes](#business-overview-and-notes--what-a-businesss-papers-say-056);
+   057's deleting a vault, family or business, is its owner's alone,
+   through the delete-account function, and its functions (`family_owner`,
+   `family_deletion_plan`, `purge_family_vault`, and 051's
+   `business_deletion_plan` and `purge_business`, which ask for the owner
+   too) are service role only: see
+   [Your vaults](#your-vaults--in-settings-and-a-vault-deleted-by-its-owner-057)).
    **A new writable
    column needs its own `GRANT` in a migration.** Nobody joins a family
    without saying yes: only an admin asks a person in, through the
@@ -109,7 +148,7 @@ npm run web                    # dev server, web  (expo start --web)
 npm start                      # dev server, pick platform interactively
 npm run android                # native Android (needs emulator/device)
 
-npm run build                  # static web export -> dist/
+npm run build                  # static web export -> dist/ (always with a cleared bundler cache: see Deployment)
 npm run typecheck              # tsc --noEmit
 ```
 
@@ -134,12 +173,19 @@ errors**) and `npm run build` are the local gates.
 at 03:10 IST, and on pushes that change `qa/`. It uploads synthetic SPECIMEN
 documents to its own vault (QA Vault A, account A), asks questions about
 them, and checks the answers on facts and sources, never wording. It also
-runs the 023 sweep and the 024 DEV/PROD fingerprint, 149 access probes (a
+runs the 023 sweep and the 024 DEV/PROD fingerprint, 166 access probes (a
 logged-out visitor and a second account must be refused everywhere, Gmail
 import's endpoints, the family tree and its nicknames, emergency cards, linking,
-notification devices, share links, invitations and plans included; a share
+notification devices, share links, invitations, plans and personal vaults
+included — nobody else sees or is invited to one, and Ask across vaults
+searches only the asker's own; a share
 link must open without an account, and stop once it is turned off; nobody
-can give a family Plus, raise a limit, read another family's storage, end
+can give a family Plus, raise a limit, read another family's storage, read
+or count anyone's questions this month (and a free vault cannot make a
+30-day link), read or change anyone's counts for the day, have another
+vault's file read into their own (050: neither by adding a document for it
+nor by sending its address to ingest-document; a document already read is
+not read again, and a second free family is refused), end
 its Plus or start, run or close a removal, use up or read another
 family's voice chats, add up its saved chats, pay for another family,
 confirm a payment never made, or report one to the Razorpay webhook
@@ -147,12 +193,30 @@ without Razorpay's signature; DEV holds only Razorpay's test keys),
 the membership model (the second account is invited, not added: it sees
 nothing of the vault until it says yes, the admin cannot say yes for it, a
 no removes the invitation and a yes makes it a viewer, who must not be able
-to escalate or share an admin's document, becomes a person in the family
+to escalate, or share or delete an admin's document, and whose own document
+only it can delete, file and all (047), becomes a person in the family
 tree, writes only its own emergency card and nickname, must be able to leave, and is
 linked to an entry in the tree both ways: merged at once while a member,
 invited back as it after leaving),
+business vaults (051: a stranger reads nothing of QA Business A, no client
+changes a vault's kind or gives a plan, an admin deletes anyone's record and
+file there and a viewer only their own, its last admin can neither leave nor
+step down, payments refuses it Family Plus, and in one rolled-back block on
+DEV deleting A's account is refused, a Pro trial gives A Pro's numbers and
+ends back on Free, a paid Plus ends closed with nothing removed, Family Plus
+is refused for a business and a business plan for a family, QA Vault A's
+Family Plus starts and ends as before, on Family Plus a family that has
+used its month's questions is refused (053), QA Vault A cannot become a
+business while on Family Plus and can once it ends, staying on Free with
+everyone in it, B (on Free, with QA Vault B) is refused a free business
+(054) and creates one once it is in a family on Family Plus (055); neither
+a stranger nor a viewer can make QA Vault A a business; on Free the
+overview gives counts and a note takes no reminder, a teammate cannot read,
+change or delete someone's note, and on Pro the overview has money in and
+out and a note's reminder reaches its owner (056); nobody but its owner
+deletes a vault, and only the server calls 057's functions),
 a question asked by relation ("my mother's passport"), and the full upload → ingest →
-expiry-notification pipeline, the reminder made once however often Home asks. By hand only, suite `languages` asks 12
+expiry-notification pipeline, the reminder made once however often Home asks (on Family Plus; QA Vault A is on Free, where 048 makes none, and that is checked), and that each answered question is counted once (049; account A's monthly count is started again before it asks; each run also starts A's and B's counts for the day again, and QA Vault A's and QA Business A's invitations, `qa/lib/dev-day.mjs`, since one run invites B three times). By hand only, suite `languages` asks 12
 questions about documents in eight more Indian languages — two of them
 photos OCR'd the way the web app does it, with Tesseract — which is about
 43% of the free Groq day on its own. See `qa/README.md`.
@@ -222,7 +286,7 @@ changed *nothing* until someone pastes it into the SQL editor.
 | `supabase/functions/**` | **GitHub Actions**, automatically | `main` → PROD, `dev` → DEV; `workflow_dispatch` for either by hand |
 | `supabase/migrations/**` | **you** | paste into the SQL editor |
 | Edge Function secrets | **you** | `secrets set`, per project |
-| Storage buckets | **you** | dashboard only — no CLI, no migration |
+| Storage buckets | **you** | dashboard only — no CLI, no migration (050 sets the file limit by SQL where it may, and says so where it may not) |
 | Vercel env vars | **you** | dashboard, then **redeploy** |
 
 **Order still matters within a release:** the migration goes first, the Edge
@@ -334,6 +398,24 @@ Copy `.env.example` to `.env`. Every variable is documented there.
 - `EXPO_PUBLIC_SUPABASE_URL`
 - `EXPO_PUBLIC_SUPABASE_ANON_KEY`
 
+and, optional, by `src/lib/google-button.web.ts` — Google's own sign-in
+button (see [Signing in](#signing-in--google-only-with-googles-own-button-where-it-is-set-up)):
+
+- `EXPO_PUBLIC_GOOGLE_CLIENT_ID` — the sign-in OAuth client's id (public, like
+  the anon key; the same client the Supabase Google provider uses)
+- `EXPO_PUBLIC_GOOGLE_WEB_ORIGINS` — the web addresses in that client's
+  Authorized JavaScript origins, comma-separated
+
+and, optional, by `src/lib/analytics.ts` — usage counts (see Usage counts
+under [Conventions](#conventions)). Production builds send to AskLocker's
+own PostHog project (EU Cloud, project 300863) without them: its key is
+public by design and lives in `analytics.ts`, used only where
+`isProduction`. Set these only to send elsewhere or from a test build:
+
+- `EXPO_PUBLIC_POSTHOG_KEY` — a PostHog project's API key (`phc_…`; public,
+  like the anon key). Wins over the built-in one.
+- `EXPO_PUBLIC_POSTHOG_HOST` — `https://eu.i.posthog.com` unless set
+
 The `EXPO_PUBLIC_` prefix means *publicly visible in the shipped bundle*.
 Never put a secret behind it. The anon key is safe there because Row-Level
 Security, not secrecy, is the access boundary. Because they are build-time,
@@ -367,9 +449,17 @@ Web build is hosted on **Vercel** as a static SPA. Config lives in
 | | |
 |---|---|
 | Install | `npm ci` |
-| Build | `npx expo export --platform web` |
+| Build | `npx expo export --platform web --clear` |
 | Output | `dist` |
 | Node | 22.x |
+
+**Every build clears the bundler cache (`--clear`), on purpose.** Expo writes
+each `EXPO_PUBLIC_*` value into the code when Metro transforms a file, and
+Metro keeps transformed files in its cache (`/tmp/metro-cache`) — keyed on the
+file, not on the value. A build after changing a value could therefore ship
+the old one: measured here, a build made with no Google settings still
+carried the client id of the build before it. `vercel.json` and
+`npm run build` both pass `--clear`; do the same for any build by hand.
 
 **The SPA rewrite in `vercel.json` is mandatory.** expo-router's web output
 defaults to `single`, so the export emits exactly one `index.html` and no
@@ -391,11 +481,169 @@ because the bundle was built against a different project URL.
 via `supabase functions deploy <name>`. A preview pointed at DEV runs DEV's
 copies, so DEV needs its own secrets and its own `documents` storage bucket.
 
-**Google OAuth on previews:** `src/lib/auth.tsx` sends
-`redirectTo: window.location.origin`, and every preview gets a fresh
-subdomain. Supabase → Authentication → URL Configuration must contain a
-wildcard redirect URL, or Google sign-in fails on previews while working in
-production.
+### Signing in — Google only, with Google's own button where it is set up
+
+- **Google is the way in** (since 7 October 2026). The login screen is one
+  button: signing in with Google the first time makes the account, so there
+  is no sign-up form, no password and no email to confirm, and Settings ›
+  Security sets no password. After that, on a device where it is turned on,
+  a fingerprint signs the person in instead (see
+  [Fingerprint sign-in](#fingerprint-sign-in--a-passkey-after-google-once)).
+- **Test builds also take an email and password.** Wherever `isProduction`
+  is false — DEV, previews, an unknown project, the same builds that show
+  the badge — the login screen has a "Test builds only" form under Google
+  (`password-sign-in.tsx`: sign in, or create a test account), for QA's
+  accounts and for testing with several accounts. `signInWithPassword` and
+  `signUpWithPassword` in `auth.tsx` exist for it alone. Production never
+  shows it.
+- **An account made earlier with email and password opens with Google, same
+  email.** Supabase links a new Google identity to the existing account with
+  the same verified email (automatic identity linking), so its families and
+  documents stay. Security tells such an account so while it is still signed
+  in. An address that is not a Google account can become one (Google lets
+  anyone make an account with their own email), or the account is deleted
+  by hand (see [Deleting your account](#deleting-your-account--at-once-nothing-kept-029-030)).
+- **Keep the Email provider on in DEV.** QA signs its test accounts in with
+  passwords through the API (`qa/lib/supabase.mjs`), and the test form needs
+  it. On PROD nothing uses it: switching it off (Authentication › Sign In
+  / Providers › Email) stops anyone making a password account through the
+  API — once nobody signs in with a password alone (an `email` identity and
+  no `google` one in `auth.identities`). Checked on PROD on 9 October 2026:
+  nobody did, anonymous sign-ins were off and Confirm email on. Keep "Allow
+  new users to sign up" on in both: a first Google sign-in makes the
+  account, so turning it off would shut out every new family.
+- **There is always a way in.** A spinner holds the place of Google's button
+  until Google draws it; if Google's script cannot be loaded — blocked,
+  unreachable, or not there after 10 seconds — the login falls back to the
+  redirect sign-in (`drawFailed` in `google-sign-in.tsx`). That button is a
+  plain "Continue with Google" with Google's G (`assets/images/google-g.png`).
+- **The redirect sign-in names Supabase, not AskLocker.**
+  `signInWithOAuth` sends the person through
+  `<project>.supabase.co/auth/v1/callback`, so Google's account chooser
+  says "to continue to yrcmdixqgvmhqxejvlor.supabase.co". An app name typed
+  into Google Cloud does not change it: Google shows a name only after it
+  verifies the brand, which takes owning every address in the flow, and
+  nobody here owns supabase.co.
+- **On the web, where it is set up, the login screen draws Google's own
+  button** (Google Identity Services, `src/lib/google-button.web.ts`, from
+  `src/components/google-sign-in.tsx`). Nothing passes through Supabase's
+  address: Google hands the page an ID token, and
+  `supabase.auth.signInWithIdToken({ provider: 'google', token, nonce })`
+  checks it — Google's signature, that it is for this client, and the nonce
+  — and signs the person in, making the account the first time, exactly as
+  the redirect did. So Google names the app's own address, and "AskLocker"
+  with its logo once the brand is verified.
+- **The nonce is two values on purpose.** Google is given the SHA-256 (hex)
+  of a fresh random value and puts it in the token; Supabase is given the
+  raw value, hashes it and compares, so a token cannot be replayed. Each
+  attempt gets a new one: after a refusal the button is drawn again.
+- **Only where Google was told the address.** Google refuses an origin
+  missing from the client's Authorized JavaScript origins, so the button is
+  used only when `EXPO_PUBLIC_GOOGLE_CLIENT_ID` is set **and** the page's
+  origin is in `EXPO_PUBLIC_GOOGLE_WEB_ORIGINS`. Everywhere else — a
+  preview's fresh subdomain, a build without the settings, the phone app
+  (`google-button.ts` is a stand-in) — it is the redirect sign-in, as before.
+  The Supabase Google provider must list the same client id (Authentication
+  › Providers › Google › Client IDs), or Supabase refuses the token.
+- **The list is read however it was typed** (`parseOrigins()`): commas,
+  spaces, `;` or new lines between the addresses, quotes around them, with
+  or without `https://` (`http://` for localhost) or a path — each becomes
+  an origin as Google compares them. Quotes around the client id are
+  dropped too.
+- **The login page says which sign-in it uses, and why**, once in the
+  browser's console: `[Google sign-in] Google's own button, for
+  https://asklocker.com`, or the redirect and the reason — no client id in
+  this build (set it for that Vercel environment, then redeploy), or this
+  address missing from the list, with the list the build has
+  (`googleButtonReason()`).
+- **The redirect still needs its wildcard.** It sends
+  `redirectTo: window.location.origin`, and every preview gets a fresh
+  subdomain, so Supabase → Authentication → URL Configuration must contain
+  a wildcard redirect URL, or Google sign-in fails on previews while working
+  in production.
+- **To show "AskLocker" instead of an address**: Google's brand
+  verification, free — a public home page and privacy policy on a domain
+  verified in Search Console, both linked from the OAuth consent screen.
+
+### Fingerprint sign-in — a passkey, after Google once
+
+- **Sign in with Google once; after that a fingerprint or face signs you in**
+  (since 7 October 2026) — no Google, no password. Settings › Security ›
+  Fingerprint sign-in, or Home's offer (`lock-offer.tsx`), per device and per
+  account, off until turned on. It is a **Supabase Auth passkey**
+  (`registerPasskey()` / `signInWithPasskey()`, `src/lib/app-lock.tsx`): the
+  device keeps the private half and checks the person — fingerprint, face or
+  its own PIN — and Supabase keeps the public half and checks the device's
+  signature before it hands out a session. Nothing about a finger or a face
+  leaves the device. Passkeys need supabase-js 2.105 or later (2.117 here,
+  where they are on by default).
+- **Once on, on that device:** the login screen shows "Sign in with
+  fingerprint" above Google (`fingerprint-sign-in.tsx`; shown while
+  `deviceKey.passkeysHere` lists anyone who turned it on there), and
+  AskLocker locks when it is opened already signed in and when it comes back
+  after 5 minutes out of sight (`LOCK_AFTER_MS`). The lock screen
+  (`app-lock-screen.tsx`, a Modal over everything, with the rest of the page
+  inert) unlocks with the same passkey sign-in — so unlocking needs the
+  internet, like the rest of AskLocker; it tries once by itself and keeps a
+  big Unlock button, because older iPhones start the check only from a tap. `accountKey.appLock` holds the passkey's id, and `forgetAccount()`
+  clears both keys.
+- **A synced passkey is one passkey on several devices.** Google Password
+  Manager and iCloud Keychain carry a passkey to the person's other phones
+  and computers. Turning it on where one already is makes no second one
+  (the browser refuses, `ERROR_AUTHENTICATOR_PREVIOUSLY_REGISTERED`): that
+  device uses the one it has, and its entry says so (`passkeyId: null`).
+  Turning it off deletes the passkey at Supabase (`auth.passkey.delete`)
+  only on the device that made it — which ends it on the others too — and
+  elsewhere only stops it there.
+- **It checks itself** (`entryStillWorks()`, `auth.passkey.list`), once each
+  time the entry is read and each time it locks: the passkey deleted
+  (turned off on the device that made it) or the project's passkeys switched
+  off, and it is off here too and unlocks, since nothing could open that
+  lock; a check that cannot be made (offline) keeps the lock. Still working,
+  and the device lists the account again, so a failed sign-in that stopped
+  the button (below) is undone at the next sign-in.
+- **Each project must have passkeys switched on** — Supabase › Authentication
+  › Passkeys: Enable, Relying Party display name `AskLocker`, RP ID and
+  origins. PROD: RP ID `asklocker.com`, origins `https://asklocker.com,
+  https://www.asklocker.com`. DEV: RP ID and origin the dev branch's own
+  address, `family-vault-git-dev-subhendu16740.vercel.app` (a preview's fresh
+  address cannot be listed, so previews have Google and the test form only).
+  Changing an RP ID later makes every passkey on it useless. Where passkeys
+  are off, turning it on says "not switched on for AskLocker yet"
+  (`passkey_disabled`); on an address that is not an origin, "not set up for
+  this address". **Switch them on in PROD before the release that carries
+  this**, as a migration goes before its function.
+- **Never simply missing.** On the web, Settings › Security always shows the
+  card: the switch where the device can check a person, otherwise why not
+  and what to do (`lockSupport()` → `lockUnavailableText()`): `no-webauthn`,
+  usually a page open inside another app (WhatsApp, Gmail…) instead of
+  Chrome or Safari; `no-device-check`, no screen lock, fingerprint, Windows
+  Hello or Touch ID; `insecure`, not https. The browser's console says it
+  once (`[Fingerprint sign-in] …`). Errors are said in words
+  (`passkeyErrorText()`): cancelled, took too long, turned off elsewhere —
+  a sign-in with a passkey Supabase no longer has, or with passkeys switched
+  off, stops the login screen offering the button; whose passkey it was is
+  not known there, so it stops for every account on the device until each
+  signs in again.
+- **The lock guards the screen; the passkey guards the account.** A
+  signed-in session stays in the browser's storage, so developer tools get
+  past the lock; signing in, though, needs the passkey's signature, which
+  Supabase checks. Google stays a way in: "Use Google instead" on the lock
+  screen signs out, and any fresh sign-in opens AskLocker without the lock
+  for that visit (the redirect sign-in comes back as a new page load, so
+  `noteSignInStarted()` marks it in sessionStorage and `takeFreshSignIn()`
+  reads it, 15 minutes at most).
+- **Its first version (subhendu16740/FamilyVault#68, #69) was a lock only**,
+  with a key kept on the device and nothing at Supabase: it unlocked a
+  signed-in AskLocker but could not sign anyone in, so after signing out it
+  was Google again. Such an entry (`{ id }` in `accountKey.appLock`) is
+  dropped when read, and its key let go (`forgetLockKey()`).
+- **A shared document (`/s`) is never behind the lock.**
+- **The phone app's `app-lock-device.ts` is a stand-in** until EAS builds
+  exist: it needs Supabase's two-step passkey API with a native passkey
+  library (and Associated Domains / Digital Asset Links files), and
+  `expo-local-authentication` for the lock. Settings does not offer it there
+  meanwhile.
 
 ### Native (not yet set up)
 
@@ -437,10 +685,14 @@ src/
     _layout.tsx              # root Stack + AuthGate
     index.tsx                # redirect -> /onboarding or /home
     onboarding.tsx           # 3-slide intro
-    login.tsx                # email/password + Google OAuth
-    setup-family.tsx         # first-time vault creation
+    login.tsx                # Google; the first sign-in makes the account (google-sign-in.tsx: Google's own button on the web where set up); "Sign in with fingerprint" first where turned on (fingerprint-sign-in.tsx); test builds add email and password (password-sign-in.tsx)
+    setup-family.tsx         # creating a vault: Family or Business at the top (051), and the first one
     notifications.tsx        # expiry alerts, uploads, invites, Family Plus
-    family.tsx               # Manage Family: members, invitations (Pending approval), leaving    (NOT a tab)
+    family.tsx               # Manage Family: the open vault's members, invitations (Pending approval), leaving; the personal vault's own page (046); Manage team for a business (051). No vaults: they are in Settings › Your vaults    (NOT a tab)
+    delete-vault.tsx         # Delete a family or a business, its owner only (057): what goes and who loses it, type its name
+    make-business.tsx        # Make this a business vault: what stays, changes and goes, for an admin of a family vault (054)
+    overview.tsx             # a business's Overview (drawer): counts; renewals and bills due on Plus; money in and out on Pro (056)
+    notes.tsx                # My notes (drawer, in a business): each person's own notes, reminders on a paid plan (056)
     family-tree.tsx          # the family tree: everyone, and how they are related (031)
     person/[id].tsx          # one person: their relation to you, emergency card, documents, expiry dates, link to their account (033)
     emergency/               # emergency cards (032), in the drawer
@@ -453,16 +705,18 @@ src/
       index.tsx              # the list; every row opens a screen
       profile.tsx  security.tsx  notifications.tsx  privacy.tsx   # notifications: the switch, and this device (034)
       storage.tsx  help.tsx  feedback.tsx  about.tsx   # storage: each family's plan, and how much of its space is used (038, 039)
+      vaults.tsx             # Your vaults: Family vaults and Business vaults, open, create, Make it a business, Delete (057)
       delete-account.tsx     # Security › Delete account: shows what goes, asks for DELETE (029)
     document/[id].tsx        # document viewer; Share opens the share sheet (036, web only)
+    documents.tsx            # All documents (Home's document count, See all): every vault's documents, a vault filter, Delete one or several (Select)
     gmail-import.tsx         # connect Gmail, review what it found, import (web only, ★ Family Plus)
-    plus.tsx                 # Family Plus: what Plus gives, side by side with Free; every ★ opens it for a free family; pay for a month or a year (044, web only)
+    plus.tsx                 # Family Plus: what Plus gives, side by side with Free; every ★ opens it for a free family; pay for a month or a year (044, web only); a business sees Plans instead: Plus, Pro and Enterprise with their prices, and Ask us (051)
     s.tsx                    # what a share link opens: one document, for anyone with the link, no account (036)
     +html.tsx                # custom HTML shell, web only
     (tabs)/
-      _layout.tsx            # custom tab bar (CustomTabBar)
+      _layout.tsx            # custom tab bar (CustomTabBar): full width; the round Ask button (size.ask) sits on its bottom edge and rises above it
       home.tsx  search.tsx  upload.tsx
-  components/                # shared UI, incl. ProfileDrawer, ShareSheet (036) and InvitationCards (037)
+  components/                # shared UI, incl. ProfileDrawer, ShareSheet (036), InvitationCards (037), the vault dropdown and sheet (vault-sheet.tsx, 046), GoogleSignIn, FingerprintSignIn, PasswordSignIn (test builds), AppLockScreen, LockOffer and UseForOffer (051)
   constants/design.ts        # the one type/size/spacing scale every screen uses
   constants/theme.ts         # create-expo-app scaffold, largely unused
   hooks/                     # use-color-scheme, use-theme
@@ -472,6 +726,7 @@ src/
 supabase/
   functions/                 # Deno Edge Functions (NOT typechecked by tsconfig)
   migrations/                # SQL — incomplete, see Database
+  queries/                   # read-only queries to paste into the SQL editor (document-categories.sql)
 
 public/                      # copied to the web build's root: sw.js (shows notifications), manifest, icons
 qa/                          # end-to-end QA against DEV (own package.json)
@@ -492,27 +747,34 @@ tabs. `(tabs)` is a layout group, so routes are `/home`, `/search`, `/upload`.
 | File | Role |
 |---|---|
 | `supabase.ts` | Client init. AsyncStorage for session persistence on native only. |
-| `auth.tsx` | `AuthProvider`: session, signIn, signUp, signInWithGoogle, signOut |
-| `family-context.tsx` | `FamilyProvider`: currentFamily, members, membership, needsFamily |
+| `auth.tsx` | `AuthProvider`: session, signInWithGoogle (the redirect), signInWithGoogleToken (Google's own button's ID token), signOut. Google is the only way in; `signInWithPassword` / `signUpWithPassword` serve only the test builds' form |
+| `app-lock.tsx` | Fingerprint sign-in (`AppLockProvider`, `useAppLock()`): a Supabase passkey — turning it on and off (`registerPasskey`, `passkey.delete`), signing in with it (`signIn`, the login screen's button), the lock (opened signed in; back after `LOCK_AFTER_MS`) and unlocking with it, checking the passkey is still there (`entryStillWorks()`), and errors in words (`passkeyErrorText()`). What the device can do is `app-lock-device.ts` / `app-lock-device.web.ts`; the screen, `components/app-lock-screen.tsx`. See [Fingerprint sign-in](#fingerprint-sign-in--a-passkey-after-google-once) |
+| `family-context.tsx` | `FamilyProvider`: currentFamily, members, membership, needsFamily; `families` is every vault, the personal one included, which it makes the first time it sees an account without one (`ensurePersonalVault()`, 046); `mode` (Family or Business, the open vault's kind), `modeVaults` and `setMode()` for the drawer's switch |
+| `vault-theme.ts` | A vault's colours: `useVaultTheme()` (the open vault's, so the mode's), `vaultTheme(family)`, `FAMILY_THEME` and `BUSINESS_THEME` (design.ts's `biz`) |
+| `vaults.ts` | Personal vault, family or business (046, 051): `vaultName()` ("Personal vault" everywhere), `isBusinessVault()`, `vaultWord()`, `vaultIcon()`, `splitVaults()`, `vaultSubtitle()`, `canDeleteDocument()` (whoever added it, or any admin in a business) |
+| `family-only.ts` | `useFamilyOnly()`: the family tree, a person's page and emergency cards send a business to Manage team (051) |
 | `drawer-context.tsx` | Profile drawer open/close state |
-| `api.ts` | **All** Supabase queries — documents, search, upload, RAG, notifications, adding and leaving families, invitations, Gmail import, saved chats, share links, deleting your account, plans and storage limits (`fetchStorageStatus`, `fetchPlanLimits`; `uploadDocument` throws `StorageFullError` before a file that does not fit is sent, and `saveChat` `ChatStorageFullError` for a chat, 042), voice chats (`claimVoiceAnswer`, 041; `fetchVoiceStatus`, how many are left, 042), paying for Family Plus (`fetchPaymentsStatus`, whether this project takes payments, asked once a session; `createPlusOrder`, `verifyPlusPayment`, 044), and the Settings screens (profile, password, storage use, expiry dates, feedback) |
+| `api.ts` | **All** Supabase queries — documents, search, upload, RAG, notifications, adding and leaving families, invitations, Gmail import, saved chats, share links, deleting your account, plans and storage limits (`fetchStorageStatus`, `fetchPlanLimits`; `uploadDocument` throws `StorageFullError` before a file that does not fit is sent, and `saveChat` `ChatStorageFullError` for a chat, 042), voice chats (`claimVoiceAnswer`, 041; `fetchVoiceStatus`, how many are left, 042), paying for Family Plus (`fetchPaymentsStatus`, whether this project takes payments, asked once a session; `createPlusOrder`, `verifyPlusPayment`, 044), questions this month (`fetchQuestionStatus`; `ragSearch`'s `questions` and `question_limit`, 049), the expiry date found in a new upload (`fetchDocumentExpiry`, for Upload's Plus offer), personal vaults and Ask across vaults (`ensurePersonalVault`; `ragSearch`'s `vaults` option, 046), businesses (`createNewFamily(…, kind)`, `previewBusinessDeletion`, `deleteBusiness`, `fetchUseFor` / `saveUseFor`, 051; `previewBusinessVault`, `makeBusinessVault`, 054; `fetchBusinessOverview`, `setBillPaid`, `fetchNotes`, `addNote`, `updateNote`, `deleteNote`, 056), and the Settings screens (profile, storage use, expiry dates, feedback) |
+| `overview.ts` | The overview's arithmetic (056), pure: `parseAmount()` ("1,18,000.00"), `formatRupees()` (lakhs and crores), `compactRupees()` for the axis, `monthlyTotals()`, `financialYearTotals()` (since 1 April), `daysFromToday()`, `whenText()` |
 | `dates.ts` | `parseDocumentDate()`: expiry dates exactly as ingest stores them (DD/MM/YYYY and kin, YYYY-MM-DD, "19 October 2026") |
 | `emergency.ts` | The emergency card's shape, blood groups (`bloodGroupLabel()`: "A−", "Bombay (hh)"), `telHref()`, and `cardProblem()` — the same checks and messages as `save_emergency_card()`, so the form can say what is wrong before saving |
 | `family-people.ts` | Whose a document can be: everyone in the tree, you first (`useDocumentOwners()`, members only before 031), and a person's expiry badge (`badgeFromExpiries()`) |
-| `plans.ts` | What each plan allows (038–043): the limits as 039–043 set them — storage, 4 members, and 10 voice chats for each person on Free (`DEFAULT_PLAN_LIMITS`, used only when the database cannot be asked), Family Plus's prices, monthly and yearly (`PLUS_PRICE`; `localPlusPrice()` / `localPlusPrices()` show rupees in India, dollars elsewhere, by the device's time zone; the yearly one against twelve months, crossed out, and the months it saves: `plusTwelveMonths()`, `plusYearlySaving()`), `storageLevel()`, and the words for a full vault (`storageFullMessage()`; for a chat, `chatStorageFullMessage()`), which live in `supabase/functions/_shared/plan-text.ts` so Gmail import says the same. Whether Plus can be bought is the payments function's answer (044: `usePaymentsStatus()`, `plusForSale()`); `PLUS_FOR_SALE` (false) is only what the words assume before it answers |
-| `family-plan.ts` | Is the current family on Family Plus? `useFamilyPlan()` (from `family_storage_status()`, kept a minute per family): `isFree`, and `routeFor(feature, route)`, which sends a free family to `/plus?feature=…` instead of a starred feature. Unknown (before 038, offline) gates nothing. `usePaymentsStatus()`: can Family Plus be bought here (044) |
+| `plans.ts` | What each plan allows (038–048): the limits as 039–048 set them — storage (on Free 200 MB for a family and 100 MB for a personal vault, `freePersonal`; 10 GB on Plus), 4 members on Free and 8 on Plus, 10 voice chats and 20 questions a month for each person on Free (049; on Plus 200 a month the whole family shares, `familyQuestions`, 053) (`DEFAULT_PLAN_LIMITS`, used only when the database cannot be asked), Family Plus's prices, monthly and yearly (`PLUS_PRICE`; `localPlusPrice()` / `localPlusPrices()` show rupees in India, dollars elsewhere, by the device's time zone; the yearly one against twelve months, crossed out, and the months it saves: `plusTwelveMonths()`, `plusYearlySaving()`), `storageLevel()`, and the words for a full vault (`storageFullMessage()`; for a chat, `chatStorageFullMessage()`), which live in `supabase/functions/_shared/plan-text.ts` so Gmail import says the same; 050's file limit and the words for its refusals (`MAX_FILE_BYTES`, `fileTooLargeMessage()`, `limitHint()`, `QUESTION_INPUT_MAX`) come from `_shared/limits.ts`. Whether Plus can be bought is the payments function's answer (044: `usePaymentsStatus()`, `plusForSale()`); `PLUS_FOR_SALE` (false) is only what the words assume before it answers |
+| `family-plan.ts` | Is the current family on Family Plus? `useFamilyPlan()` (from `family_storage_status()`, kept a minute per family): `isFree`, `closed` and `trial` (051), and `routeFor(feature, route)`, which sends a free family to `/plus?feature=…` instead of a starred feature. Unknown (before 038, offline) gates nothing. `usePaymentsStatus()`: can Family Plus be bought here (044). `useOnPlus()`: is the signed-in person on Plus in any vault (from `question_status()`, a minute, shared; `forgetOnPlus()` after paying), for the ★ before their name |
 | `file-types.ts` | What a picked file is (`detectFileType()`: MIME type, then name, never a web `blob:` uri) and whether the vault can keep it (PDF, JPG, PNG) |
 | `app-info.ts` | Version, release date and commit (stamped into `extra` by `app.config.ts` at build time), and the support contact Help shows |
 | `ocr.ts` | Platform-split OCR with progress callback; reads the person's chosen languages |
 | `ocr-languages.ts` | The document-language picker list, and `resolveOcrLanguages()` which always appends English |
+| `analytics.ts` | Usage counts with PostHog (production builds only): `track(event, props)`, typed by `AnalyticsEvents` so only named events and properties can be sent; a random id per device (`deviceKey.analyticsId`), the Privacy switch (`analyticsOn`, `setAnalyticsOn`), `categoryForAnalytics()` (built-in names only), `screenName()` (the route, never an id). Screen views come from `components/analytics-tracker.tsx` in the root layout. Off in every build but production |
 | `razorpay.ts` / `razorpay.web.ts` | Paying for Family Plus (044): on the web, Razorpay's own checkout window (`openCheckout`; checkout.js is loaded the first time someone pays, and card and UPI details go to Razorpay, never to us); the phone app's file is a stand-in until EAS builds exist. Types in `razorpay-types.ts` |
+| `google-button.ts` / `google-button.web.ts` | Google's own sign-in button on the web (Google Identity Services): `googleButtonAvailable()` (a client id is set and this origin is in `EXPO_PUBLIC_GOOGLE_WEB_ORIGINS`), `renderGoogleButton()` (loads Google's script once, a fresh nonce each time). The phone app's file says no, so it keeps the redirect sign-in. Types in `google-button-types.ts`; see [Signing in](#signing-in--google-only-with-googles-own-button-where-it-is-set-up) |
 | `push.ts` / `push.web.ts` | Notifications on this device (034): on the web, Web Push through `public/sw.js` (`loadPushStatus`, `turnOnPush`, `turnOffPush`, `sendTestPush`, and `forgetPushOnThisDevice` on sign-out); the phone app's file is a stand-in until EAS builds exist. Types in `push-types.ts` |
 | `preferences.tsx` | `PreferencesProvider`: voice toggle + language, document languages. Cached locally, stored on `public.users`; reads and writes fall back to the older column set so an unapplied migration degrades one setting rather than all of them |
 | `speech.ts` | Voice: `listen`/`stopListening` (platform-split recogniser) and `speak`/`stopSpeaking` (expo-speech), in the voice chosen for the language on this device (`voicesFor`, `chooseVoice`: Settings › Accessibility › Voice, kept per language in `storage.ts`, not per account), or the best match |
 | `speech-text.ts` | `toSpeech()`: strips markdown and spells out ID numbers before they are read aloud — and a number named as one ("train number 16782", "PNR: 4512", "PIN 751001", "नंबर 16782") digit by digit, from its digits; the screen keeps the digits |
 | `voice-languages.ts` | The language picker list and the few phrases the app itself says, per language |
 | `storage.ts` | Key-value cache: localStorage on web, AsyncStorage on native |
-| `database.types.ts` | Generated Supabase types, current to 045 (030 changed nothing in them). Regenerate after every migration and re-append the hand-written block at the bottom (see the typecheck note) |
+| `database.types.ts` | Generated Supabase types, current to 057 (030, 052 and 055 changed nothing in them; 049's, 050's, 051's, 053's, 054's, 056's and 057's added by hand). Regenerate after every migration and re-append the hand-written block at the bottom (see the typecheck note) |
 
 ---
 
@@ -528,6 +790,8 @@ src/hooks/use-color-scheme.ts      /  use-color-scheme.web.ts
 src/lib/speech-recognition.ts      /  speech-recognition.web.ts
 src/lib/push.ts                    /  push.web.ts
 src/lib/razorpay.ts                /  razorpay.web.ts
+src/lib/google-button.ts           /  google-button.web.ts
+src/lib/app-lock-device.ts         /  app-lock-device.web.ts
 src/app/+html.tsx                     (web only — HTML shell, @font-face; NOT used by the single-page export)
 public/sw.js                          (web only — the service worker that shows notifications)
 src/global.css                        (web only)
@@ -578,7 +842,8 @@ Supabase, cloud-hosted. Three layers:
   invitations, document_categories, notifications, audit_logs, feedback,
   saved_chats, family_people, family_links, family_emergency_cards,
   push_subscriptions, reminders_sent, push_config, document_shares,
-  family_invites, plan_limits, family_plans, member_usage, plan_payments.
+  family_invites, plan_limits, family_plans, member_usage, plan_payments,
+  question_usage, daily_usage, scratch_notes.
   RLS enabled.
 - **Layer 2 (private)** — one isolated schema per family (`family_<short_uuid>`)
   holding documents, document_metadata, document_chunks, expiry_alerts,
@@ -589,6 +854,97 @@ Supabase, cloud-hosted. Three layers:
 File blobs live in a Supabase Storage bucket named `documents`. **The bucket is
 not created by any migration** — it was made by hand in the dashboard and must
 be created manually in any new project.
+
+### The Supabase plan — Free, one organisation, DEV and PROD together
+
+Both projects are in one Supabase organisation, on the Free plan, and **most
+of what the Free plan allows is counted per organisation, not per project**:
+DEV's test files and QA traffic use the same allowance as PROD's families
+(Supabase's billing docs, checked 7 October 2026):
+
+| | Free plan | Counted |
+|---|---|---|
+| Files (Storage) | 1 GB | per organisation: DEV and PROD together |
+| Database | 500 MB | per project; past it the database turns read-only |
+| Egress (data sent out) | 5 GB a month | per organisation |
+| Edge Function calls | 500,000 a month | per organisation |
+| Monthly active users | 50,000 | per organisation |
+
+- **Going over is not a bill, it is a stop.** Supabase emails, allows a grace
+  period, then may restrict every project in the organisation: paused,
+  read-only, or 402 on every request. 048's limits keep each vault in bounds,
+  and 050's one family a person on Free keeps one account to about 300 MB,
+  but nothing keeps all the vaults together under 1 GB: at 048's free limits
+  that is about five full families or ten full personal vaults, less what DEV
+  keeps (64 MB, 141 files, on 7 October 2026).
+- **The database fills with vaults, not only documents.** Every vault is a
+  schema of its own (Layer 2): 20 tables and indexes, about 250 KB with
+  nothing in it (184 KB of relations and about 70 KB of catalog rows,
+  measured on DEV), and every account gets a personal vault the first time
+  it signs in. A document adds about 30–50 KB of text, passages and vectors,
+  and a long one, like a tax return, up to about 1 MB. So 500 MB holds about
+  1,800 empty vaults, or about 150 families of three with 30 documents each.
+  Past it the database is read-only, and signing in writes to it too.
+- **Two free projects per person, in any organisations.** Moving DEV to an
+  organisation of its own (DEV's Project Settings › General › Transfer
+  project; no GitHub integration or log drain may be connected) gives PROD
+  the whole 1 GB and 5 GB, still free. A transfer keeps the project's address
+  and keys, so nothing in the app, Vercel or the workflows changes.
+- **A free project with too little use over 7 days is paused**, after a
+  warning email a week before; Resume project in the dashboard brings it
+  back, within 90 days.
+- **Free has no backup to restore**, and Storage files are in no backup on
+  any plan. Supabase advises a regular `db dump`, kept off-site — never in
+  this public repository.
+- **Pro is $25 a month for the organisation**: 100 GB of files, 8 GB of
+  database per project, 250 GB egress, daily backups kept 7 days, never
+  paused. Each project also pays for its own server, about $10 a month, of
+  which Pro includes $10: $25 with PROD alone in the organisation, about $35
+  with DEV in it too. **No PROD business goes on a paid plan (051) before
+  this**: 25, 100 or 200 GB a business, and a few pilots could pass Pro's
+  100 GB (about $0.02 a GB a month beyond).
+
+### Where the free tiers run out — worked out for 1,000 families
+
+Every outside service is on a free tier, and each runs out at its own size.
+Worked out on 7 October 2026 for a family of three (four vaults with their
+personal ones), 30 documents of DEV's average 463 KB, about 20 documents
+opened a month and two questions a week:
+
+| What | Free allowance | Runs out at about |
+|---|---|---|
+| Search vectors (HuggingFace) | $0.10 of credit a month; no pay-as-you-go on a free account | already: DEV's is used up (402), and search falls back to keywords |
+| Files (Supabase) | 1 GB, shared with DEV | 70 families |
+| Answers (Groq) | 200K tokens a day and 8K a minute per model, per Groq organisation; a question is ~9K, mostly the judge on `gpt-oss-20b` | 25 questions a day for everyone, one a minute: 80 families |
+| Database (Supabase) | 500 MB per project | 150 families; 1,800 vaults even empty |
+| Data sent out (Supabase) | 5 GB a month (another 5 GB from its cache), shared with DEV | 400 families |
+| Scanned PDFs (OCR.space) | 25,000 a month, 500 a day per IP address, 1 MB and 3 pages a file | the file limits, at any size |
+| Users, function calls, push | 50,000 users and 500,000 calls a month | not at 1,000 families |
+
+Over Supabase's allowance the whole organisation can be restricted (see
+above); over Groq's, an answer says the AI service is rate limited. Not
+about size, but true already:
+
+- **Vercel's free Hobby plan is for non-commercial use only**, and taking
+  payments counts as commercial: Vercel Pro (about $20 a month a member) or
+  a host whose free plan allows it.
+- **Google sign-in must be "In production"** in the sign-in project's
+  Google Cloud console: an app in Testing signs in only its test users, at
+  most 100.
+- **Gmail import stays at 100 users ever** until Google verifies the
+  restricted scope, which needs a paid security assessment.
+- **The free database server is small**: Nano, up to 0.5 GB of memory, a
+  shared CPU, 60 connections. 1,000 families are about 4,000 vaults and
+  80,000 tables and indexes.
+
+What costs nothing, and moves a limit without removing it: DEV in an
+organisation of its own; a personal vault's schema made when something is
+first saved to it; Supabase's built-in `gte-small` embedding model, which
+runs inside Edge Functions with no outside service (384 dimensions like the
+column, but English only, and every stored vector re-made); fewer or shorter
+passages for the judge. Files and answers for 1,000 families need paid
+plans by then: Supabase Pro, and Groq's paid tier at about a tenth of a
+rupee a question.
 
 ### The migration gap — closed, and checked properly this time
 
@@ -689,11 +1045,14 @@ so storage policies live only in `019`.
   limit, which **the server enforces** — see
   [Plans and storage limits](#plans-and-storage-limits--every-plan-has-a-limit-038-039).
   Before 038 it adds up `file_size_bytes` from `get_family_documents` and
-  shows the free 1 GB, unenforced. Mind the platform underneath: the
-  Supabase organisation is on the **Free plan, which holds 1 GB of files per
-  project in total**, all families together — PROD needs Pro (100 GB
-  included, then about $0.02/GB a month) before 1 GB a family can hold for
-  more than one family, and before anyone is given Plus. **Reminders** reads each document's
+  shows the free limit, unenforced. Mind the platform underneath: the
+  Supabase organisation is on the **Free plan, which holds 1 GB of files for
+  the whole organisation** — every vault, and DEV's test files too — about
+  five full families or ten full personal vaults at 048's free limits (see
+  [The Supabase plan](#the-supabase-plan--free-one-organisation-dev-and-prod-together)).
+  PROD needs Pro (100 GB
+  included, then about $0.02/GB a month) past that, and before anyone is
+  given Plus's 10 GB. **Reminders** reads each document's
   details for its `expiry_date` — one call per document, fine for a family's
   papers; a large vault would want one query for it.
 - **About**'s release date is stamped by `app.config.ts` when the bundle is
@@ -740,7 +1099,13 @@ so storage policies live only in `019`.
   account-deletion policy, which also wants a web link — the web app's
   `/settings/delete-account` is that page). Settings › Security › Delete
   account shows, family by family, what goes and what stays, and asks for
-  DELETE to be typed. There is no waiting period and no copy kept.
+  DELETE to be typed. There is no waiting period and the app keeps no
+  copy. Short-lived copies in Supabase's backups and logs expire on their
+  own, and what went to HuggingFace, Groq or OCR.space is under their
+  policies, so the screens never say "nothing is kept" (see
+  [Conventions](#conventions)).
+- **A business never goes with an account** (051): its last admin is told to
+  hand it on or delete it first, and the delete is refused until then.
 - **A family goes with the account when nobody would be left to manage it**:
   the person is its last admin, or its last member. It goes whole — rows,
   schema, index state, files — and its other members lose it; the screen
@@ -797,7 +1162,7 @@ so storage policies live only in `019`.
   confirmed, not deleted, not anonymous — and writes a `family_invites` row,
   an `invite` notification (on their devices too, 034) and an audit row, in
   one transaction. No such account → the admin is told to ask them to sign
-  up, and nothing is created.
+  in to AskLocker once with Google, using that email, and nothing is created.
 - **Answering:** the person sees which family asked and who
   (`get_my_invitations()`), on Home and in Manage Family
   (`invitation-cards.tsx`), and nothing of its documents. Accept
@@ -819,8 +1184,8 @@ so storage policies live only in `019`.
   **Link to their AskLocker account** for admins: `link-account` →
   `invite_family_person_account()`, service role only. See
   [Family tree](#family-tree--people-not-accounts-031).
-- **At most 4 members a family, on every plan** (041; `plan_limits.max_members`,
-  changed in the Table editor). Members are the people who sign in; the
+- **At most 4 members a family on Free, 8 on Family Plus** (041, 049;
+  `plan_limits.max_members`, changed in the Table editor). Members are the people who sign in; the
   family tree has no limit, so a grandmother who will never sign in is in
   the tree and does not count. An invitation waiting for its answer holds a
   place. Two triggers keep it, so every way in obeys it, the older functions
@@ -835,8 +1200,11 @@ so storage policies live only in `019`.
   keeps everyone and invites again once it is below. Manage Family shows
   "3 of 4 members" and, once the places are taken, a note instead of Add.
 - **Leaving needs nobody's permission.** The person sees every family they
-  are in under Manage Family and can leave any of them
-  (`family_members_delete_self`). The last admin cannot leave.
+  are in under Settings › Your vaults, and leaves the open one in Manage
+  Family
+  (`family_members_delete_self`). The last admin cannot leave: the app
+  hides Leave, and for a business (051) a trigger refuses it too. For a
+  family it is still only the app's rule.
 - **The default family never changes by itself.** `fetchUserFamilies()` is
   oldest membership first and the chosen family is remembered per device
   (`switchFamily()`), so joining somewhere never swaps the vault a person
@@ -990,7 +1358,9 @@ so storage policies live only in `019`.
   each day that someone did. Now the database's own clock does it: `pg_cron`
   (free on every plan) runs `run_reminders()` at five past every hour. From
   9 in the morning, India time, `queue_expiry_reminders()` makes each
-  document's reminders for every member: 90, 30 and 7 days before (each
+  document's reminders for every member of a vault on **Family Plus** (048;
+  a vault on Free gets none, and nothing is recorded, so moving to Plus
+  brings each document's current stage at the next run): 90, 30 and 7 days before (each
   expiry alert's `alert_days_before`) and on the day, until three days after.
   `reminders_sent` remembers each (document, expiry date, stage), so each
   goes once, the runs after the first find nothing, and a renewed date
@@ -1049,7 +1419,9 @@ so storage policies live only in `019`.
 - **For a tax accountant, a visa agent, an insurance agent**: someone who
   needs one document, once, and has no account. The document page's Share
   (web only) opens `share-sheet.tsx`: who it is for (optional), 1, 7 or 30
-  days, Make a link. The link is shown once, with Copy link and the
+  days — 30 only on Family Plus (049: `create_document_share()` refuses it
+  for a vault on Free with HINT `plus_only`, and the sheet's ★ 30 days opens
+  the Plus page for one) — Make a link. The link is shown once, with Copy link and the
   browser's own Send it…; under it the family sees every working link for
   that document, who made it and how often it was opened. Whoever made a
   link, or an admin, turns it off. Before 036 Share sent the file's raw
@@ -1082,8 +1454,9 @@ so storage policies live only in `019`.
 
 ### Plans and storage limits — every plan has a limit (038, 039)
 
-- **What a family may keep, never unlimited**: Free 1 GB in total (not a
-  monthly allowance), Family Plus 10 GB — in India ₹100 a month or ₹1,100 a
+- **What a vault may keep, never unlimited**: on Free, a family 200 MB and a
+  personal vault 100 MB, in total (048; 1 GB for every vault before it; not
+  a monthly allowance), Family Plus 10 GB for either — in India ₹100 a month or ₹1,100 a
   year, elsewhere $10 a month or $110 a year. A year costs eleven months,
   and ₹1,100 stays under the ₹2,000 above which UPI charges merchants 0.4%.
   The yearly price is shown as a discount on twelve months at the monthly
@@ -1095,7 +1468,10 @@ so storage policies live only in `019`.
   pins the prices, and that a year costs a whole number of months. Screen
   readers skip the crossed-out price and hear "₹1,100 a year instead of
   ₹1,200" (`plusYearlyOffer()`, in each `accessibilityLabel`). The Plus
-  page compares Free, Plus Monthly and Plus Yearly side by side.
+  page compares Free, Plus Monthly and Plus Yearly side by side; its banner
+  shows the two prices as two cells, Monthly and Yearly, and under the table
+  it says only what the table cannot: fair use on questions, and what
+  happens when Plus ends.
   Storage is the one cost that keeps growing after a month is paid for, so
   no plan is open-ended. 038 had two Plus plans (5 GB
   monthly, 10 GB yearly); 039 made them one, so how a family pays never
@@ -1115,6 +1491,7 @@ so storage policies live only in `019`.
   [Paying for Family Plus](#paying-for-family-plus--razorpay-a-month-or-a-year-at-a-time-044)),
   **and can still be given by hand**:
   `select set_family_plan('<family id>', now() + interval '1 month');`
+  (a family's only paid plan; a business names its own, 051)
   (or `interval '1 year'` for a yearly plan — the same plan, a longer
   `paid_until`)
   in the SQL editor (`paid_until` says how long; there is no period).
@@ -1135,7 +1512,7 @@ so storage policies live only in `019`.
   Settings, the policy and Gmail import count the same bytes. A policy
   cannot see the size of the file arriving, so the last file may take a
   family past its limit by that one file (the bucket refuses files over
-  50 MB). The app asks first, with the file's size (`uploadDocument` throws
+  10 MB since 050; 50 MB before). The app asks first, with the file's size (`uploadDocument` throws
   `StorageFullError`), so the person reads what is left and what to do, not
   a policy error. Gmail import uploads as the service role, which no policy
   stops, so it asks `family_storage_status()` itself before storing.
@@ -1167,14 +1544,15 @@ so storage policies live only in `019`.
 - **Starred features are for Plus families, and each one leads to the Plus
   page.** `/plus` (`src/app/plus.tsx`) shows what Plus gives side by side
   with Free, the price where the person is, and the family's own plan. For a
-  free family, tapping a ★ feature — the Reminders page in the drawer, From
+  free family, tapping a ★ feature — Reminders in the drawer, From
   Gmail on Upload, the voice-chat strip on Ask — opens `/plus?feature=…`, which says which feature brought
   them there and marks its row; the screens redirect there too, after a
   refresh or from a link (Gmail import not while Google is handing back a
   connection). A ★ tag drawn on its own (`<PlusTag link />`), Settings ›
   Family Plus, Storage and a full vault's dialog open it as well. Gmail
-  import also refuses a free family on the server. The reminders themselves
-  — under the bell and on devices — reach every family. Where Plus cannot be
+  import also refuses a free family on the server, and the server makes
+  expiry reminders only for a vault on Plus (048). Birthday reminders reach
+  every family. Where Plus cannot be
   bought (no Razorpay keys on the project, 044), the page says "Coming soon"
   rather than showing a button that does nothing.
 - **Voice chats: 10 for each person on Free, then Family Plus** (041–043;
@@ -1201,7 +1579,161 @@ so storage policies live only in `019`.
   `/plus?feature=voice`. Listening and reading are the device's own, so this
   is the app's rule to keep; when the server cannot be asked (before 041,
   offline) voice works.
-- **Not built yet:** a limit on questions per plan.
+- **Questions: 20 a month for each person on Free; on Family Plus 200 a
+  month the whole family shares** (049, 053; see [What Plus adds](#questions-members-and-links--what-family-plus-adds-049)
+  and [Family Plus shares its month](#family-plus-shares-its-month--200-questions-for-the-whole-family-053)).
+
+### Questions, members and links — what Family Plus adds (049)
+
+- **A question is the most expensive thing AskLocker does** (about 9,000
+  tokens, and Groq's free day is about 25 questions for everyone), so each
+  person has a monthly allowance: `plan_limits.questions_per_month`, 20 on
+  Free, NULL on Plus — no monthly limit, up to a fair-use ceiling,
+  `questions_fair_use`, 500 a month for one person (200 since 053, with 200
+  for the whole family, below), which the Plus page and
+  Help say plainly. A month is a calendar month in India time
+  (`question_month()`); the count starts again on the 1st.
+- **A person is on Plus for questions when any vault they are in is on
+  Plus** (`person_on_plus()`): everyone in a Plus family asks without a
+  limit, in every vault, their personal one included. Counted per person,
+  across every vault, not per family.
+- **The server keeps it.** rag-search counts one through
+  `claim_question(user)` before any AI step runs — one statement, so two
+  questions at once cannot both take the last — and gives it back through
+  `release_question(user)` when no answer came of it: nothing found,
+  nothing relevant, a degraded answer (Groq busy or down), an error. Both
+  take a user id, so both are service role only; rag-search passes the
+  caller from the session. Refused, it answers `question_limit: true` with
+  the reason as the answer (`questionLimitMessage()`, English and Hindi,
+  `_shared/questions.ts`), so an older app shows it as an answer; every
+  answer carries `questions`, the count as `question_status()` gives it.
+  Before 049 the claim finds no function and nothing is counted.
+- **Ask says so once few are left**: a strip when 5 or fewer remain on Free
+  (or fair use is near on Plus), "3 of 20 free questions left this month",
+  with Family Plus ›; at 0, when the count starts again. A limit answer is
+  said aloud in voice mode but, like an apology, never counted as a voice
+  chat. `question_status()` (from `auth.uid()`) is the count without asking.
+- **QA's account A asks as a person on Free**, so a run starts A's count for
+  the month again before asking — on DEV only, A's row only, through the
+  Management API — and checks afterwards that each answered question was
+  counted once. Without the token, questions past 20 are deferred.
+- **Members: up to 8 on Plus** (`max_members` 4 → 8 for Plus, only where it
+  was still 4). 041's triggers read the family's plan, so nothing else
+  changed; when Plus ends nobody is removed, and a family above 4 invites
+  again once it is below. Manage Family's full note offers Plus's number.
+- **Share links: 30 days on Plus.** Free keeps 1 and 7 days; links made
+  before stay.
+- **Plus is offered where it is felt**: after an upload in a free vault that
+  found a future expiry date ("It expires on 12 March 2027. ★ With Family
+  Plus, everyone gets reminders…", `fetchDocumentExpiry()`), on Ask when
+  questions run low, in Manage Family when it is full, and on the share
+  sheet's ★ 30 days. Each opens `/plus?feature=…` (`reminders`,
+  `questions`, `members`, `links`), which marks its row.
+
+### Family Plus shares its month — 200 questions for the whole family (053)
+
+- **One number for the family, not one each.** 049 gave every person in a
+  vault on Family Plus a fair-use ceiling of 500 questions a month: a family
+  of 8 could ask 4,000, about ₹800 of AI a month on Groq's paid tier against
+  the ₹100 it pays. Since 053 everyone in the family shares 200 a month
+  (`plan_limits.family_questions_per_month`, a row to change in the Table
+  editor; NULL is no family number, which every other plan has), and one
+  person's fair use is the same 200, so one person may use the family's
+  whole month. A normal family asks about 45. The owner set it on 17
+  October 2026; with it, Family Plus keeps about 28% a month (21% on a
+  year) even when a family uses everything, and about 87% at normal use.
+- **Nothing new is counted.** `family_questions_used()` adds up the
+  members' own counts (049's `question_usage`) for the month, so a question
+  given back to its asker (`release_question`, when no answer came) is given
+  back to the family too. 049 counts per person, not per vault: a member's
+  questions count wherever they asked them, their personal vault included,
+  and someone who leaves takes their count with them.
+- **The server keeps it.** `claim_question()` checks the family after the
+  day's try (050): of the person's vaults on a plan with a family number,
+  the one with the most left (`family_question_room()`), its row locked
+  while it counts, so two members asking at once cannot both take the last
+  one. Used up, it refuses with reason `family` and gives the try back —
+  unless the person is also on a business plan, whose own 100 still count
+  (051's best of their plans). Both helpers take ids, so both are service
+  role only. `question_status()` adds `family_limit`, `family_used` and
+  `family_left`, and `left` is the smaller of the person's and the family's.
+- **What people see.** Ask says nothing until 50 or fewer are left for the
+  family, then "20 of 200 family questions left this month"; at 0, "Your
+  family has used its 200 questions for this month. They start again on 1
+  November." (English and Hindi, `_shared/questions.ts`). The Plus page's
+  Questions row reads "200 a month for the family", and Help says so.
+  Before 053 the app reads the plan without the column (no family number)
+  and the server keeps 049's fair use.
+
+### Limits against abuse — one account cannot use up what everyone shares (050)
+
+- **Everything AskLocker runs on is a free allowance shared by every family**
+  (see [The Supabase plan](#the-supabase-plan--free-one-organisation-dev-and-prod-together)
+  and [Where the free tiers run out](#where-the-free-tiers-run-out--worked-out-for-1000-families)).
+  A review on 9 October 2026 found one free account could use up each of
+  them on purpose, and one hole. 050 closes the hole and keeps every limit
+  in the database, so every way in obeys it — the app, an old app, Gmail
+  import, a script with the public key.
+- **The hole: a file read into the wrong vault.** `insert_family_document()`
+  took any file address, and `ingest-document` read whatever address it was
+  sent, with the service role. Anyone who had once seen another family's
+  address — a member who has left (Home listed it), anyone sent a share link
+  (it is in the link's download URL) — could add a document to their own
+  vault "for" that address and have its text read in, so Ask answered from
+  it after their access had ended. Now a document is added only with its
+  file already there, in its own vault's folder, held by no other document,
+  at the size Storage measured (HINT `bad_path`, `no_file`), and the server
+  reads only the address on the document's own row, inside the vault's
+  folder — `ingest-document`, the pipeline and the rebuild all check. On DEV
+  no document pointed outside its folder (checked 9 October 2026).
+- **Per person, per day (India time), in `daily_usage`**, counted only by
+  `claim_daily()` (service role): documents added (`plan_limits.uploads_per_day`,
+  50 on Free, 100 on Plus since 054, 500 before; HINT `upload_limit`), documents the server reads
+  (twice that, `start_document_read()`), and questions tried
+  (`question_tries_per_day`, 10 on Free, 50 on Plus since 054, 100 before). A try counts whether
+  or not an answer came: 049 gives back a question that found nothing or
+  met a busy AI service, but the judge had already spent its tokens, so
+  asking nonsense on repeat, or many questions at once, used to cost the
+  asker nothing and Groq's day for everyone. `claim_question()` counts the
+  try first and refuses with `reason: 'tries'` (said in English and Hindi,
+  `questionLimitMessage()`); a refused month gives the try back. Plus is the
+  person's, as for 049's questions: any vault they are in on Plus.
+- **On Free, one family a person creates**, besides their personal vault
+  (`plan_limits.families_per_person`, HINT `family_limit`): without it one
+  account made 200 MB families as often as it liked, and five of them are
+  the whole organisation's 1 GB. A family on Plus does not count, so paying
+  for one lets a person create another. Create a family says so on the
+  screen, with Family Plus › (an alert shows nothing on the web). Since
+  054 it is one vault in all, a family or a business.
+- **The same on every plan** — each is a row in the shared 500 MB database,
+  which turns read-only when full: 50 saved chats a person in a vault
+  (`chat_limit`), 10 feedback messages a day (`feedback_limit`), 300 people
+  in a family tree (`tree_full`; a member always fits), the newest 10
+  devices a person (the oldest let go, nothing refused), 20 working links a
+  document (`share_limit`), 100 opens a link (then it reads as gone: each
+  open hands out download addresses, and downloads are the organisation's
+  5 GB a month), and 20 invitations a day from a family, 3 of them to the
+  same person (`invite_limit`, counted from `audit_logs`' `invite_sent`:
+  withdrawing and asking again rang a stranger's phone each time). The app
+  shows each refusal in the database's own words (`limitHint()`).
+- **Text and questions are cut to size**: a document keeps at most 500,000
+  characters, the text the app sends at most 20,000 plus the file's bytes,
+  and a question 1,000 characters (Ask's box takes 500).
+- **10 MB a file** (50 MB before): the bucket's limit, which 050 sets by SQL
+  where its role may (else a notice says to set it in Storage › documents ›
+  Edit bucket), the app's check when a file is picked and at Save, and Gmail
+  import's (`MAX_FILE_BYTES`, `fileTooLargeMessage()`).
+- **Payments**: tapping Pay again within the hour reuses the unpaid order.
+- **What no limit here stops**: anyone with the public key can call the
+  functions or read their own files in a loop — 500,000 calls and 5 GB of
+  downloads a month for the whole organisation. Every free Supabase app has
+  this; Supabase's own sign-in rate limits and its warning email before it
+  restricts anything are the protection. A person can also make several
+  Google accounts, each with its own personal vault and counts.
+- **QA's own accounts are on Free too**, so each run starts A's and B's
+  counts for the day, and QA Vault A's invitations, again on DEV
+  (`qa/lib/dev-day.mjs`, through the Management API; without the token a
+  second run in a day may meet the limits).
 
 ### Paying for Family Plus — Razorpay, a month or a year at a time (044)
 
@@ -1215,6 +1747,21 @@ so storage policies live only in `019`.
   no subscription, no mandate, no stored card. Anyone in the family can pay.
   Razorpay keeps 2% plus GST of each payment (about ₹2.36 of ₹100, ₹26 of
   ₹1,100) and charges nothing else — no setup or yearly fee.
+- **The server says who pays in rupees** (`payerCurrency()`,
+  `_shared/razorpay.ts`): rupees only when the connection comes from India
+  (Cloudflare's `CF-IPCountry` header, which Supabase's gateway passes to
+  the functions and a client cannot set) and the device's time zone, which
+  the app sends, agrees; everyone else pays in dollars. So an NRI abroad
+  cannot get ₹100 by setting the phone to India time, and someone in India
+  sees rupees. `status` answers the currency (with `currency_from`:
+  `connection`, or `time_zone` when the header is missing, and the caller's
+  `country`), the app shows prices in it from then on (`setPayerCurrency()`
+  in `plans.ts`; the time zone guesses until it answers), and `order`
+  refuses any other currency with 409 `wrong_currency` and the right one,
+  before Razorpay is asked. Nothing is kept. What no rule stops: a parent
+  in India paying ₹100 for a family that includes an NRI, or a VPN with the
+  phone set to India time. A $ order can only be paid by a card issued
+  abroad (Razorpay's rule), which costs 3% plus GST instead of 2%.
 - **The server sets the price and checks the payment.** `payments`'s
   `order` takes a member's family and a month or a year, never an amount:
   it makes a Razorpay order at `PLUS_PRICE`'s price and keeps it in
@@ -1257,6 +1804,494 @@ so storage policies live only in `019`.
   a mandate: UPI Autopay or a saved card); a reminder before Plus ends that
   leads straight to paying; the phone app's checkout.
 
+### Personal vaults, and asking across vaults (046)
+
+- **Every account has a personal vault**: a family of one (`families.is_personal`)
+  that nobody else can see, be invited to or join. The app makes it the
+  first time it sees an account without one (`ensure_personal_vault()`, the
+  caller from `auth.uid()`; `FamilyProvider`), so it is an existing member's
+  newest membership and never becomes the vault they see by itself; for
+  someone in no family it is the only one. One per person: a unique index on
+  `families(created_by) WHERE is_personal`, and the calls for one person are
+  serialised, so two tabs make one vault. Before 046 the call finds no
+  function and the app carries on with families only.
+- **Nobody else joins one.** Triggers on `family_members` and `family_invites`
+  (`personal_vault_stays_personal()`) refuse a membership for anyone but its
+  owner and any invitation at all — every path in: add-member, link-account,
+  accepting, the older functions kept from 025 and 033 — with HINT
+  `personal_vault`, which add-member and link-account answer as 409
+  `personal_vault`, in the database's words. Not 42501: they read that as
+  "only an admin". The "vault becomes shared" lines in the older functions
+  are never reached for a personal vault, because the insert before them is
+  refused first. Manage Family shows a personal vault its own page (no Add,
+  no members), and a person's page there offers no account to link.
+- **Otherwise it is a family like any other**: its own schema, storage limit
+  (Free 100 MB, half a family's, 048) and plan, its own family tree (a document can still be marked
+  as Mom's), and it goes with the account (029: its last admin and only member).
+  "Personal vault" is its name on every screen (`vaultName()`, `src/lib/vaults.ts`),
+  whatever its row says.
+- **Upload asks where a document goes** whenever there is a choice: someone in
+  no family saves to their personal vault without a question; someone in a
+  family is asked every time — personal vault or one of their families, in
+  the "Where should this go?" dropdown (`VaultDropdown`,
+  `src/components/vault-sheet.tsx`: a field, and the vaults dropping down
+  under it in a Modal placed by measuring the field, or above it near the
+  bottom of the screen) — and
+  nothing is chosen for them (a private paper must never land in a shared
+  vault by default), except from a person's page, which is that person's
+  vault. **A category is suggested, never defaulted**
+  (`suggestCategory()`, `_shared/doc-category.ts`, pinned by the
+  self-test): from the file's name and the text read off a photo, the
+  built-in category it most likely is ("Passport_Asha.pdf" → Passport) is
+  picked with "Picked from the file", and nothing at all when nothing
+  says, so a document is never filed as whatever came first. Until
+  October 2026 Upload pre-picked the first category in the list, "Bank
+  Statements", and showed only the first 12, so Passport and PAN Card could
+  not be picked; now the vault's own list shows (a business's for a
+  business, 051), a family's common ten first, twelve at most, the rest
+  behind More, and tapping the chosen one clears it. "Whose document" follows the chosen vault's tree
+  (`useDocumentOwners(familyId)`), and Save names the vault ("Save to
+  Personal vault").
+- **Ask searches every vault by default** (`scope: 'all'`), or the one picked
+  under "Search in", which answers sooner; the choice is kept on the device
+  (`accountKey.askIn`). rag-search checks the asker is in EVERY vault named
+  (`requireVaults()`, `_shared/auth.ts`: one vault someone else's and the whole
+  request is refused, 403), searches each as one always was — its own tree,
+  index state and capped retrieval — and takes their candidates in turn
+  (`takeInTurn()`, `_shared/vaults.ts`), so the judge's 15 places are shared out,
+  not won by the vault with the most documents. The judge and the answer run
+  once: a question across three vaults costs the Groq budget what one does.
+  One embedding per distinct text; at most 10 vaults (oldest memberships).
+  Clients always send `family_id` as well, so a rag-search older than 046
+  searches that one vault and nothing breaks.
+- **A source opens in its own vault**: each source carries `family_id`, and the
+  document viewer opens `/document/[id]?family=…` there — its share sheet,
+  owners and actions included — without switching the open vault, so a chat
+  on Ask survives the visit.
+- **Home lists every vault's newest documents together**, newest first, each
+  tagged with the vault it is in (a lock for the personal vault, people for a
+  family) and opened there, like a source on Ask. There is no vault switcher
+  on Home: the open vault — what the family tree, emergency cards and
+  Manage Family show — changes in Settings › Your vaults. Home asks
+  each vault for its newest documents and stats (`get_family_documents`,
+  `get_family_stats`, one call each per vault); a vault that cannot be read
+  leaves the others listed. With one vault the stats are as before
+  (documents, members or "Only you", categories); with several, the
+  documents in all of them and how many vaults — categories are counted per
+  vault, so a sum would count one twice.
+- **The document count opens All documents** (`src/app/documents.tsx`; so
+  does See all beside Recent Documents): every document in every vault,
+  newest first, with a vault filter (`VaultDropdown`, All vaults first), and
+  Delete — the bin on a row, or Select to tick several — on the documents
+  the person added, and nowhere else: only whoever added a document deletes
+  it, admins included (047, below). `deleteDocument()` deletes the row
+  (`delete_family_document`), then the file, so the vault's space is freed.
+  One confirmation for one or many, in the app's own dialog; a document
+  already gone counts as deleted; what was refused is said in words. It is
+  in the AuthGate's list of signed-in routes — a route missing there sends
+  a signed-in person Home.
+
+### Deleting a document — only the person who added it (047)
+
+(In a business, any admin too: see [Business vaults](#business-vaults--a-pilot-for-small-businesses-051).)
+
+- **Whoever added a document deletes it; nobody else does, not even an
+  admin.** `delete_family_document` (047) refuses anyone else with 42501,
+  "only the person who added it can delete it". Until 047 an admin
+  (`can_delete`) could delete any document; `can_delete` now decides
+  nothing about documents. The app offers Delete only on your own: the bin
+  and Select on All documents, the Delete action on a document's page.
+- **The file goes by the same rule.** 019's storage delete policy let any
+  member delete any file in the family's folder through the Storage API —
+  a viewer refused by the function could still empty an admin's document of
+  its file. 047 adds `document_file_deletable(name)` to that policy: a
+  member deletes a file only when no document holds it (its document was
+  just deleted — the app deletes the row first, then the file — or its
+  upload never became a document) or only documents they added hold it.
+  The server's own removals (029's account deletion, 040's removal after
+  Plus) use the service role and are not affected.
+- **What someone who has gone added stays, and nobody can delete it.**
+  `documents.uploaded_by` keeps the id of a member who left, was removed or
+  deleted their account, and nobody else matches it, so their documents go
+  only with the family (or come back to them if they are invited back).
+  Leave family, Remove member and Delete account all say so first.
+- Before 047 is applied the app already hides Delete on other people's
+  documents, but an admin's call would still go through: apply it to both
+  projects before the release that carries this.
+
+### Free space by vault, and expiry reminders on Plus (048)
+
+- **Free is 200 MB for a family and 100 MB for a personal vault**; Family
+  Plus is 10 GB for either. Before 048 Free was 1 GB for every vault, which
+  Supabase's Free plan (1 GB for the whole organisation, DEV included) could not
+  hold past the first full one. `plan_limits.personal_storage_bytes` is a
+  personal vault's own number on a plan (NULL: the family number), and
+  `vault_storage_bytes(family, plan)` is the one place a vault's limit is
+  read: `family_storage_status()` (so the upload policy, Settings › Storage
+  and Gmail import), the saved-chat trigger, and 040's countdown and
+  removal. Both numbers are rows to change in the Table editor.
+- **Lowering it deletes nothing.** A vault that was always free and holds
+  more than its new limit keeps everything and adds nothing — no document,
+  no saved chat — until it is under it. Only a vault whose Plus ends is ever
+  cleaned up (040), and now down to its own free limit.
+- **`family_storage_status()` says `personal`**, so the words say "your
+  personal vault", never "your family", for one (`StorageRoom.personal` in
+  `_shared/plan-text.ts`). Notices write sizes with `size_text()`: "200 MB",
+  "1.5 GB".
+- **Expiry reminders are part of Family Plus.** `queue_family_expiry_reminders()`
+  — which the hourly clock and Home's call both use — makes nothing for a
+  vault on Free and records nothing, so moving to Plus brings each
+  document's current stage at the next run; when Plus ends they stop.
+  Birthday reminders (035) stay for every family, and so do invitations and
+  plan notices on devices. The Plus page has one ★ row for expiry
+  reminders and the Reminders page; its expiry notice now names AskLocker.
+- **Every client path works either side of it**: `fetchPlanLimits()` asks for
+  `personal_storage_bytes` and falls back without it (one limit for every
+  vault, as the server then keeps), and a status without `personal` reads as
+  a family. QA's upload check expects no reminder on a free vault once
+  `family_storage_status()` has `personal`, and one before.
+
+### Business vaults — a pilot for small businesses (051)
+
+- **A business is a vault with `families.kind = 'business'`** — its own
+  schema, folder, plan, limits, invitations, share links, Ask across vaults
+  — for 3–5 pilot businesses (shops, clinics, CA offices, small traders).
+  `create_family(…, p_kind)` sets it when the vault is made; no client
+  writes it afterwards (025's column grants), and a personal vault is
+  always a family (a CHECK). Before 051 there is no column: every row reads
+  as a family, and the app asks again without it where it names it.
+- **Family vaults keep every rule they had.** A business changes four, all
+  kept by the server:
+  1. **An admin deletes any document, and its file** (`delete_family_document`,
+     `document_file_deletable`); everyone else only what they added (047).
+  2. **A business always keeps an admin.** A trigger on `family_members`
+     (`business_keeps_an_admin`) refuses its last admin leaving, being
+     removed or stepping down (HINT `last_admin`), on every path; the app
+     hides Leave too. Deleting that person's account is refused
+     (`account_deletion_plan.blocked`; delete-account answers 409
+     `business_admin` before touching anything) until someone else is an
+     admin or the business is deleted. **A business never goes with an
+     account**: only its owner, typing its name, deletes it (any admin
+     before 057; Settings › Your vaults › Delete → delete-account's
+     `business_preview` / `delete_business` → 057's `family_deletion_plan`,
+     `purge_family_vault`, service role only; files first, then 029's
+     `purge_family`).
+  3. **Nothing is ever removed when a plan ends.** `queue_plan_notices()`
+     sends one notice and settles a business at once; it is never a clean-up
+     candidate, `plan_take_excess` refuses it. A **paid** plan that ends
+     keeps every record and adds nothing until renewed
+     (`family_storage_status().closed`: `family_storage_has_room` is false,
+     so the bucket refuses a file, and `fits()` is false, so the app says
+     why). A **trial** (`source = 'trial'`) that ends puts it back on Free.
+  4. **No family features**: no birthday reminders (the server), and the
+     app hides the family tree, emergency cards and the "whose document"
+     picker; rag-search does not read a business's tree, so "Sharma" there
+     is a supplier, not an uncle. 031's trigger still makes a
+     `family_people` row per member; other code relies on it.
+- **Plans — a business has its own three, never Family Plus.** It starts
+  on Free (200 MB, 4 members, the free limits) and moves to one of three,
+  told apart by people and space. Rows in `plan_limits` to change in the
+  Table editor; the prices, before GST, are `BUSINESS_PRICE` in
+  `_shared/plan-text.ts`, shown and never charged by the app. 051 makes
+  two plans (Plus at 10 people, Pro at 50), as it went to DEV on 14
+  October 2026; **052 makes them the three below**, so a project needs
+  both, in order. Without 052 the Plans page shows Plus and Pro with
+  051's numbers, and Enterprise from `DEFAULT_PLAN_LIMITS`, which
+  `set_family_plan` cannot give:
+
+  | | Free | Plus (`business_plus`) | Pro (`business_pro`) | Enterprise (`business_enterprise`) |
+  |---|---|---|---|---|
+  | Price a month, + GST | — | ₹500 | ₹1,000 | ₹4,000 |
+  | Price a year (eleven months), + GST | — | ₹5,500 | ₹11,000 | ₹44,000 |
+  | People who sign in | 4 | 10 (5 before 054) | 15 | 50 |
+  | Space | 200 MB | 25 GB | 100 GB | 200 GB |
+  | Questions each a month | 20 | 100 (fair use) | 100 | 100 |
+  | Question tries a day each | 10 | 30 | 30 | 30 |
+  | Uploads a day each | 50 | 300 | 300 | 300 |
+  | Invitations a day | 20 | 20 | 20 | 50 |
+
+  Every paid plan has voice with no limit, 30-day links, expiry reminders
+  and Gmail import; a year costs eleven months. Plus sells on space (25 GB
+  against 200 MB), questions (100 each against 20) and reminders, and
+  since 054 on people too: 10, more than Family Plus's 8, so a shop that
+  started on Family Plus has a reason to move. **Why these numbers** (13 October 2026,
+  ₹96 to the dollar): a question costs about ₹0.20 on Groq's paid tier
+  (the judge's ~8K tokens in on `gpt-oss-20b`, the answer on
+  `gpt-oss-120b`) and a try with no answer about ₹0.10; a GB kept about ₹3
+  a month (₹2 for the file past Pro's 100 GB, ₹1 for its text and vectors
+  in the database); Razorpay 2% + GST if they pay through it. What one
+  business costs us a month before Razorpay, and what is kept after it, a
+  month / a year (a year is eleven months' price for twelve months' use):
+
+  | | Normal use | Heavy (half of every limit) | Every limit at once |
+  |---|---|---|---|
+  | Plus, ₹500 / ₹5,500 (10 people) | ₹79: 81% / 80% | ₹183: 61% / 57% | ₹355: 26% / 20% |
+  | Pro, ₹1,000 / ₹11,000 | ₹133: 84% / 83% | ₹345: 63% / 60% | ₹670: 30% / 24% |
+  | Enterprise, ₹4,000 / ₹44,000 | ₹365: 88% / 87% | ₹925: 74% / 72% | ₹1,800: 52% / 48% |
+
+  Normal is about half the people asking 30 questions a month, with a fifth
+  of the space used. The owner set these prices on 17 October 2026 (₹999,
+  ₹1,999 and ₹4,499 before, which kept 57–77% at every limit). Enterprise
+  keeps about half even at every limit; Plus and Pro a quarter to a third,
+  since ten people asking 100 questions each cost ₹200 of Plus's ₹500 and
+  fifteen with 100 GB ₹670 of Pro's ₹1,000. With 5 people (051–053) Plus
+  kept 56% / 52% at every limit; 054 gave it 10, which the owner agreed to
+  on 17 October 2026 with the funnel from Family Plus (below). Per person
+  Plus is ₹50, Pro ₹67 and Enterprise ₹80, so a team of 50 pays more a
+  head than one of 15. These
+  are each business's own costs; the fixed bills below come out of the
+  total. Cost follows people × questions, so those are the numbers to
+  watch; storage is cheap. The fixed bills — Supabase Pro $25, Vercel Pro
+  $20, HuggingFace PRO $9, about ₹5,200 a month — are covered by 13
+  businesses on Plus, 7 on Pro or 2 on Enterprise at normal use.
+- **Given by hand only**, from the SQL editor, by name:
+  `select set_family_plan('<vault id>', now() + interval '1 month', 'manual', null, 'business_plus');`
+  (or `'business_pro'`, `'business_enterprise'`), or a demo, back to Free if they don't pay:
+  `select set_family_plan('<vault id>', now() + interval '14 days', 'trial', null, 'business_pro');`.
+  A business has no default plan, so `set_family_plan` refuses it Family
+  Plus and a call naming no plan — which is what `apply_plan_payment()`
+  makes for a Razorpay payment — and refuses the business plans for a
+  family. The payments function refuses to start Family Plus for a
+  business (409 `business_plan`), so no business can pay ₹100 for 10 GB.
+  The Plans page (`/plus` in a business) says Ask us, which opens Feedback.
+- **A person's numbers are the best of their plans**, number by number:
+  `person_plans()` (the plans of their vaults, and Free) feeds 049's
+  `person_on_plus()` / `question_allowance()` and 050's
+  `person_daily_limit()`. No plan is best at everything — Family Plus has
+  200 questions a family (053; 500 each before), the business plans 100
+  each — so joining a business never lowers
+  what a Family Plus member had. Voice follows the vault asked in, as
+  before. Expiry reminders and 30-day links come with any paid plan.
+  `plan_limits.invites_per_day` replaces 050's fixed 20, and
+  `businesses_per_person` (1 on Free) counts businesses apart from
+  families. Since 054 `vaults_per_person` (1 on Free) counts both
+  together, so a person on Free has one free family or one free business
+  besides their personal vault; vaults made before stay.
+- **No PROD business goes on a paid plan before PROD is on Supabase Pro**, and
+  Groq and HuggingFace are paid: one active business can use up Groq's
+  whole free day (about 25 questions, for everyone). A business on Free has
+  Free's limits, so demos fit the free tiers. The app cannot give the plan;
+  only the SQL editor can.
+- **What a person said they use AskLocker for** (`users.use_for`, family,
+  business or both, its own column grant; the device before 051): asked
+  once on Home of someone whose only vault is their personal vault
+  (`UseForOffer`), sent to usage counts (`use_for_chosen`). It decides which
+  Create comes first in Manage Family, and nothing else.
+- **An account made before 051 finds it too.** Someone in a family and no
+  business (or the other way round) who never answered is offered the other
+  kind once on Home, "Have a business too?", with Create and Not now;
+  creating one saves "both". Create a family and Create a business sit
+  under Manage Family's "Your vaults", where they move between vaults, not
+  at the foot of the member list.
+- **Business papers**: business categories (`document_categories.audience`:
+  Sales Invoices, Purchase Bills, GST Returns, Contracts & Agreements,
+  Licences & Registrations, Bank & Loans, Business Insurance, Employee
+  Records, Payroll, Lease & Property, Tax (ITR/TDS), and Other for both).
+  Upload shows the vault's own list first and pre-selects a suggestion from
+  the file's name and OCR text (`_shared/doc-category.ts`, the vault's list
+  only), and nothing when nothing says, as for a family. Ingest stores a GSTIN only when its mod-36 check character is right,
+  an invoice's number, date, total and due date, and a licence's "Valid up
+  to" as an expiry date, so it reaches the reminders (`_shared/metadata.ts`).
+- **Words follow the kind**: "business", "team", "records", Manage team, a
+  briefcase icon, "(business)" on an invitation, Plus not Family Plus
+  (`plusName()`), in the app and in the server's notices and refusals.
+- **Not built (Phase 2)**: folders with member access lists, a log of who
+  opened what, export as a zip, self-serve Business checkout with GST
+  invoices, an Employees area, business terms and a DPA, and a review of
+  schema-per-vault at thousands of vaults. The owner's tiers for the
+  business ideas (17 October 2026), the simpler on Plus, the heaviest on
+  Pro: renewals and bills due, reminders on notes, a duplicate-bill alert
+  and a Monday summary on Plus; money in and out, a CA pack (the month's
+  invoices and bills, sent to the accountant), a directory of parties by
+  GSTIN and a staff papers checklist on Pro. 056 builds the first two of
+  each kind that need no new reading: the overview and notes.
+
+### A family vault becomes a business — one free vault, and the move (054)
+
+- **A small business may start in a family vault.** Family Plus costs ₹100
+  and a business plan ₹500, so a shop may pick the family one. The owner
+  chose to let it (17 October 2026), as a way in: the 200-question cap
+  (053) keeps such a shop's cost under about ₹70 a month, so it still pays,
+  and the move to a business is one tap when it grows.
+- **Make this a business vault** (Settings › Your vaults › Make it a business, an admin of a family vault;
+  `src/app/make-business.tsx`): `business_vault_preview()` says what stays,
+  what changes and what goes, then `make_business_vault()` sets
+  `families.kind` to business. Both take the caller from `auth.uid()` and
+  refuse anyone but an admin (42501); the rule they share,
+  `business_vault_blocker()`, takes an id and is service role only. One way
+  only: a business keeps its records when people leave (051), and turning
+  back would undo that.
+- **Everything stays**: documents, members, invitations, share links, saved
+  chats, the members' own tree entries. Business rules apply from then on.
+  The other members get a `member` notification ("… made Sharma Stores a
+  business vault"), which opens Manage Family.
+- **What only a family uses goes**, because a business's members are its
+  team, and RLS lets every member read the tree and the cards: emergency
+  cards, the tree's links, people in the tree without an account (their
+  documents stay, unmarked; an invitation to be one of them goes, with its
+  notification), and every member's birth date, gender and nickname.
+- **Refused, with the server's own words and a HINT the app does not need**:
+  a personal vault (`personal_vault`), a business already
+  (`already_business`), Family Plus still paid up (`plan_active`: "Family
+  Plus runs until 12 November 2026…"; what was paid for is not lost), and a
+  vault holding more than a free business keeps (`storage_over`, 200 MB). A
+  business is never cleaned up (051), so without that last check one month
+  of Family Plus could buy 10 GB kept free for ever. Both send the person
+  to Feedback ("ask us"): we move it by hand with a business plan. An ended
+  plan row is deleted, since a business whose paid plan ended reads as
+  closed; the new business starts on Free. A family above Free's 4 members
+  keeps everyone and invites again once below.
+- **On Free, one vault in all** (`plan_limits.vaults_per_person`, 1), a
+  family or a business, besides the personal vault; 050's and 051's
+  per-kind numbers are still checked within it. Paid vaults do not count;
+  vaults made before stay (QA's account A has one of each). The creation
+  screen says so above the form, and a refusal (`family_limit`) names it.
+- **Someone on a paid plan is not on Free** (055). 054 counted only the
+  vaults a person created, so a member of a family on Family Plus that
+  someone else pays for, with a free family of their own, was refused a
+  business ("On Free, you can create one family or one business"), found
+  on DEV on 17 October 2026. Now the combined number applies only to a
+  person in no vault on a paid plan (Family Plus or a business plan,
+  theirs or not); everyone keeps the per-kind numbers, one free family and
+  one free business. The new business starts on Business Free. The
+  creation screen hides its "On Free" line from someone on Plus
+  (`useOnPlus()`). A member of a Plus family gets two free vaults, not
+  one: bounded, and what the owner asked for.
+- **The numbers that make the move pay**, only where still the old ones:
+  Family Plus 100 documents a day (was 500) and 50 question tries a day
+  (was 100), which no family comes near and a busy office does; one
+  person's Family Plus fair use 200 where a project had 150; Business Plus
+  10 people (was 5), more than Family Plus's 8.
+- **The two 053s.** Another chat wrote `053_family_plus_family_sized.sql`
+  (branch `claude/relaxed-pasteur-itakll`, never merged): Family Plus fair
+  use 150, 100 uploads and 50 tries a day. It was applied to DEV on 17
+  October 2026 by mistake for this repo's 053. 054 records its two daily
+  numbers and sets the fair use back to the family's 200; its Gmail change
+  (import stops at the day's limit) came over too. That branch's 053 must
+  not be merged.
+- **Usage counts**: `vault_made_business`, no properties: how many shops
+  that started on Family Plus grew into a business.
+- Before 054 the preview finds no function and the screen says the move
+  isn't switched on yet; creating keeps 051's one of each.
+
+### Business overview and notes — what a business's papers say (056)
+
+- **Overview** (drawer › Overview, in a business; `src/app/overview.tsx`):
+  four counts on every plan (renewals in 90 days, expired in the last 30,
+  bills with a due date, invoices and bills), then, as far as the plan
+  goes — on Business Plus, **renewals** (each document's latest expiry date,
+  30 days back to 90 ahead, soonest first) and **bills due** (to pay, and to
+  collect from sales invoices; late, due within a week, later; **Mark
+  paid**); on Pro and Enterprise, **money in and out** (Sales Invoices in,
+  Purchase Bills out, by the invoice's own date or when it was added,
+  the last six months as bars, and the total since 1 April). A locked card
+  shows its count and opens Plans (`/plus?feature=overview` or `money`).
+  `business_overview()` (the caller from `auth.uid()`, a member, a business)
+  sends only what the plan covers, so the gate is the server's.
+- **Read, not checked.** Dates and amounts are what ingest stored (051's
+  `invoice_date`, `due_date`, `total_amount`, the expiry alerts), read with
+  `dates.ts` and `overview.ts`; the screen says so, and each row opens its
+  document. Money counts only documents filed under Sales Invoices or
+  Purchase Bills, and says how many had no total it could read. Nothing is
+  sent to an AI service for it: no question is used, nothing costs a token.
+- **A bill paid** leaves bills due: `set_bill_paid()` writes
+  `document_metadata` 'paid_on' (the day, India time), any member on a paid
+  plan, undoable, in `audit_logs`. Nothing else knows a bill was paid.
+- **The chart's colours** are `#3E6BB0` (in) and `#C9625A` (out), checked
+  with the dataviz skill's validator for colour-blind separation and
+  contrast on white; a legend names them, every month is a button that
+  reads its two numbers, and the line above the bars says the chosen month.
+- **My notes** (drawer › My notes, in a business; `src/app/notes.tsx`): each
+  person's scratchpad. `scratch_notes` has RLS on its owner, like saved chats
+  (028), and a foreign key to the membership, so leaving deletes them;
+  nobody else reads them, not even an admin. Clients insert `family_id,
+  body, remind_on` and change `body, remind_on, done`. A trigger keeps the
+  rules on every path: business vaults only (`not_business`), at most
+  `plan_limits.notes_per_person` each (20 on Free, 500 paid;
+  `notes_limit`), 2,000 characters, and a **reminder** only on a paid plan
+  (`plus_only`), on a day from today to five years on (`bad_date`).
+- **A note's reminder** is a `note` notification for its owner, made once by
+  `queue_note_reminders()` (pg_cron at three past every hour, so 034's run
+  at five past pushes it to their devices) from 9 in the morning, India
+  time, while the business is on a paid plan; the first line is its title.
+  A new date asks again. Tapping it opens My notes in that business.
+- **Usage counts**: `note_added` (whether it had a reminder, never what it
+  says) and `bill_marked_paid`.
+- Before 056 the screens say they aren't switched on yet, and the Plans
+  page's rows still show what the plans will bring.
+
+### Family or Business — the drawer's switch, and a business's colours
+
+- **The drawer has a Family | Business switch** under its header
+  (`ProfileDrawer.tsx`). The mode is the open vault's kind (`modeOf()` in
+  `family-context.tsx`), never a setting of its own, so nothing can
+  disagree with it; the personal vault belongs to Family. No server change:
+  it is which vaults the app shows.
+- **Home, Ask and Upload show only the mode's vaults** (`modeVaults`):
+  Business lists, asks across and saves to businesses alone; Family the
+  personal vault and families. Ask sends `family_ids` for them (`'all'`
+  when they are every vault), and in Business with one business there is
+  no "Search in" and Upload does not ask where. Home's expiry check still
+  runs for every vault.
+- **A business never shows a family's documents, nor the other way round**
+  (the owner's ask, 18 October 2026). There is no fallback to every vault:
+  All documents lists the mode's vaults ("All businesses" in Business), and
+  Notifications and the bell leave out the news of the other mode's vaults
+  (`otherModeVaultIds`; an invitation, or a vault since left, shows in
+  both). Only Settings shows every vault: Storage, and Your vaults.
+- **The switch goes back to the vault left in that mode**
+  (`accountKey.modeVaults`, on the device, forgotten with the account), else
+  the first of the mode, a family before the personal vault. Someone with
+  no business is taken to Create a business; creating one opens it, and so
+  Business mode. Settings › Your vaults opens any vault, of either kind.
+- **A business wears teal and gold** (`biz` in `design.ts`: primary
+  `#0F5C57`, secondary `#1A7A72`, tint `#E7F4F2`, accent `#B7791F`), a
+  family the app's navy. `useVaultTheme()` (`src/lib/vault-theme.ts`) is the
+  open vault's colours, and the shared pieces follow it: the top bar, back
+  arrow and header buttons, `settings-ui` cards and buttons, Home's header,
+  the tab bar and its Ask button, the drawer. Anything about a business
+  wears teal wherever it is listed, whichever mode is open
+  (`vaultTheme(family)`): its row in Manage Family, Create a business, its
+  documents on Home, a business's invitation, the vault picker, Upload's
+  buttons when saving to one, the creation screen when Business is picked,
+  Make this a business vault, and the business-only screens (Plans,
+  Overview, My notes, Delete this business). One place to change it: `biz`.
+- **Usage counts**: `mode_switched`, with the mode chosen.
+
+### Your vaults — in Settings, and a vault deleted by its owner (057)
+
+- **Settings › Your vaults** (`src/app/settings/vaults.tsx`) lists every vault
+  the person is in, in two sections, Family vaults (the personal vault
+  first) and Business vaults, each in its own colours, and the kind they
+  said they use AskLocker for first (051's `use_for`). Tapping one opens it.
+  Under an admin's vault: **Make it a business** (a family, 054) and
+  **Delete**. Each section ends with Create a family / Create a business.
+  The owner asked for it on 18 October 2026, so that **Manage Family only
+  manages people**: the open vault's members, invitations and leaving. Its
+  vault list, Create links, Make this a business vault and Delete this
+  business all moved here; a personal vault's page links here.
+- **Only a vault's owner deletes it, family or business** (the owner's
+  rule, 18 October 2026). A family was deleted only with its last admin's
+  account (029), and a business by any of its admins (051). Now the
+  **owner** deletes either on purpose (`delete-vault.tsx`): the creator
+  while an admin of it, else its longest-standing admin (`family_owner()`,
+  the person 029 hands `created_by` to; "family" is the table's word for
+  every vault). Not any admin: since 047 an admin cannot delete another
+  member's documents one by one, so a second admin cannot delete them all
+  at once either. Another admin's screen says who the owner is. The screen
+  names who loses it and asks for its name; the delete-account function
+  checks the owner and the name, removes the files, then
+  `purge_family_vault()` re-checks both and runs 029's `purge_family()`.
+  Everyone else in it gets a `member` notification in their own personal
+  vault ("Das family was deleted"), since a notification in the vault would
+  go with it. A personal vault is never deleted here (HINT
+  `personal_vault`). 051's `business_deletion_plan()` and
+  `purge_business()` ask for the owner too, so a delete-account from before
+  057 cannot let another admin delete a business.
+- **Usage counts**: `family_deleted` and `business_deleted`, no properties.
+- Before 057, Delete on a family says deleting a family vault is not
+  switched on yet, and a business's Delete goes 051's way (any admin).
+
 ## Edge Functions
 
 `supabase/functions/` — Deno, excluded from `tsconfig.json` (they use remote
@@ -1275,7 +2310,14 @@ so storage policies live only in `019`.
   before any of that — Postgres refuses a NUL, and PDF.js emits one per glyph
   it cannot map — and `extractMetadata()` lives in `_shared/metadata.ts`.
   Both are pure (`ingest.ts` reads secrets at load time), so the QA self-test
-  imports them directly.
+  imports them directly. **It reads only the document's own file (050)**:
+  the address comes from the document's row (`start_document_read()`), never
+  the request, and only inside the vault's folder (`inVaultFolder()`,
+  `_shared/limits.ts`, which the pipeline and the rebuild check too); a
+  document already read, or found unreadable, is not read again (409
+  `already_read`); the app's text is cut to what a file of that size could
+  hold (`providedTextLimit()`). Answers 400 `bad_path`, 404
+  `no_document`/`no_file`, 409 `already_read`, 429 `read_limit`.
 - **`reembed-index`** — rebuilds one family's chunk vectors on the current
   embedding model, in batches, resuming from a cursor in
   `public.family_embedding_state`. Any member may read progress; only an admin
@@ -1286,7 +2328,17 @@ so storage policies live only in `019`.
   ingest) → retrieves chunks via `rag_retrieve_chunks`, which blends semantic
   distance and full-text rank 0.7/0.3 → sends chunks + query to Groq → returns
   answer plus source document references. If embedding fails the RPC falls back
-  to keyword-only rather than erroring.
+  to keyword-only rather than erroring. **Across vaults (046)**: `scope: 'all'`
+  or `family_ids` searches several of the asker's vaults, every one checked;
+  see [Personal vaults](#personal-vaults-and-asking-across-vaults-046).
+  A business vault's tree is not read, so relations are not resolved there
+  (051).
+  **Each question is counted (049)** for the asker before any AI step runs,
+  and given back when no answer comes of it; past the month's allowance it
+  answers `question_limit` without searching. Since 050 each try counts for
+  the day too, and is never given back, and a question is cut to 1,000
+  characters. See
+  [What Plus adds](#questions-members-and-links--what-family-plus-adds-049).
   **Tickets speak in codes** (`_shared/tickets.ts`, pure, pinned by the
   self-test). An Indian Railways ticket never says "seat": the berth is
   "CNF/B4/17 UB" under Booking Status, so "what's my seat number?" found
@@ -1297,6 +2349,18 @@ so storage policies live only in `019`.
   RAC and waitlist too). And when a vault has too few documents to fill
   the judge's 15 places, the same documents fill them past the per-document
   cap, so a family's only ticket is read whole.
+  **Sources are what the answer used.** The answer model sees the passages
+  numbered (`[Passage 1 | Document: …]`) and ends with one line, `USED: 1, 3`
+  or `USED: none`, which `splitUsedPassages()` (`_shared/used-passages.ts`,
+  pure, pinned by the self-test) takes off before the answer is shown or
+  read aloud; the source chips are the documents of those passages
+  (`passagesUsed()`). Before, they were every document sent to the model —
+  and when the judge rejects every passage, its fallback sends them all: a
+  question about a Delhi hotel answered from the booking also listed a bank
+  statement. No line, or numbers that point nowhere, and every passage sent
+  is a source, as before; `none` shows no chips. `debug.used_docs` says what
+  was used, and the line under an answer shows "answer used 1 doc" when that
+  is fewer than were kept.
   **Groq models are resolved at runtime** by `_shared/groq.ts`: each role
   (answer, condense, rerank) has a preference list, a secret of the role's name
   (`GROQ_MODEL`, `GROQ_CONDENSE_MODEL`, `GROQ_RERANK_MODEL`) always goes first,
@@ -1336,7 +2400,9 @@ so storage policies live only in `019`.
 - **`add-member`** — a family admin invites a person who already has an
   account, by email: checks the caller is an admin, then calls
   `invite_family_member()` (037) as the service role. Answers 200 `invited`,
-  404 `no_account`, 409 `already_member` or `already_invited`, and 503
+  404 `no_account`, 409 `already_member`, `already_invited` or
+  `personal_vault` (046: nobody is invited to one), 429 `invite_limit` (050:
+  20 a day from a family, 3 to the same person; `link-account` too), and 503
   `needs_migration` where 037 is not applied; see
   [Membership](#membership--an-admin-invites-only-a-yes-joins-025-037).
   It replaced `invite-member`, which the deploy workflow deletes from each
@@ -1349,8 +2415,8 @@ so storage policies live only in `019`.
   member: an invitation to be that person) or `merged` (already a member:
   the two entries are one now), 404 `no_account`/`no_person`, 409
   `already_linked`, `already_member`, `already_invited` (someone else is
-  asked to be that person) or `tree_rule` (with the rule's own words), and
-  503 `needs_migration` where 037 is not applied.
+  asked to be that person), `tree_rule` (with the rule's own words) or
+  `personal_vault` (046), and 503 `needs_migration` where 037 is not applied.
 - **`push`** — notifications on devices (034; see
   [Reminders](#reminders--once-per-stage-on-every-device-that-asks-034)):
   `key` and `test` for a signed-in person, `send` for the hourly clock (open
@@ -1360,7 +2426,8 @@ so storage policies live only in `019`.
   [Share links](#share-links--one-document-for-someone-outside-the-family-036)):
   the link's secret in, its SHA-256 looked up by `open_document_share()`,
   two five-minute signed addresses out (view and download). 404 `gone` for
-  a link that expired, was turned off, lost its document or its maker — or
+  a link that expired, was turned off, was opened 100 times (050), lost its
+  document or its maker — or
   never existed, so the answer tells a guesser nothing; 503
   `needs_migration` where 036 is not applied.
 - **`plans`** — when Family Plus ends (040; see
@@ -1373,10 +2440,14 @@ so storage policies live only in `019`.
   applied.
 - **`payments`** — paying for Family Plus (044; see
   [Paying for Family Plus](#paying-for-family-plus--razorpay-a-month-or-a-year-at-a-time-044)):
-  `status` for anyone (does this project take payments, and Razorpay's
-  public key id), `order` and `verify` for a member of the family. Answers
-  400 `bad_request`, `bad_signature` or `currency`, 401/403, 402
-  `not_paid`, 404 `no_order`, 502 `razorpay` (Razorpay said no), and 503
+  `status` for anyone (does this project take payments, Razorpay's
+  public key id, and which currency this person pays in), `order` and
+  `verify` for a member of the family. `order` refuses a currency other
+  than the server's choice, and hands back the same unpaid order for an
+  hour (same person, family and price, 050), rather than making another at
+  Razorpay on every tap, and refuses a business (051). Answers 400
+  `bad_request`, `bad_signature` or `currency`, 401/403, 402 `not_paid`,
+  404 `no_order`, 409 `wrong_currency` or `business_plan`, 502 `razorpay` (Razorpay said no), and 503
   `not_configured` without the keys or `needs_migration` where 044 is not
   applied.
 - **`razorpay-webhook`** — Razorpay reporting a payment (044). Deployed
@@ -1385,8 +2456,14 @@ so storage policies live only in `019`.
   `mismatch`; 401 `bad_signature`; 503 `not_configured` without
   `RAZORPAY_WEBHOOK_SECRET`; 500 on a passing fault, which Razorpay retries.
 - **`delete-account`** — a person deletes their own account: `preview`
-  lists what would go, `delete` with `confirm: 'DELETE'` does it; see
-  [Deleting your account](#deleting-your-account--at-once-nothing-kept-029).
+  lists what would go, `delete` with `confirm: 'DELETE'` does it (409
+  `business_admin` while they are a business's last admin, 051), and an
+  owner deletes their vault, a business (`business_preview`,
+  `delete_business`) or a family (`family_preview`, `delete_family`), each
+  with `confirm_name` (057; the previews tell another admin who the owner
+  is; 403 for anyone else, 409 `personal_vault`, or `business` / `family`
+  for the other kind's action; before 057 a business goes 051's way); see
+  [Deleting your account](#deleting-your-account--at-once-nothing-kept-029-030).
   503 `needs_migration` where 029 is not applied.
 - **`gmail-connect`**, **`gmail-callback`**, **`gmail-scan`**,
   **`gmail-import`** — Gmail import; see [below](#gmail-import--your-own-mailbox-your-tick-026).
@@ -1449,6 +2526,11 @@ rules sort the rest (`_shared/gmail-rules.ts`).
   is refused, and so is a file that does not fit, in the same words as an
   upload (`_shared/plan-text.ts`). The app sends a free family to the Plus
   page before it gets that far.
+- **It stops at the day's limit on documents added** (050; 100 a day on
+  Family Plus since 054). Before fetching anything, `gmail-import` checks the
+  person's count for the day and answers 429 `upload_limit`; a file refused
+  for it since goes back to the list, not to "failed". The app stops there
+  and leaves the rest ticked for tomorrow.
 
 ### PDF text — read by position, not by content-stream order
 
@@ -1568,7 +2650,9 @@ neither calls HuggingFace directly. Three things matter:
   `reembed-index` for every family.** The search screen starts that rebuild
   by itself when an answer reports `debug.index_rebuilding`, so nobody has to
   find the Settings row for search to work; Settings › Search remains the
-  manual route and the place errors are shown in full. **`rag-search` also
+  manual route and the place errors are shown in full — and it shows only
+  when it needs the person (an update an admin can start, one running, or
+  documents that could not be read), never as "Up to date". **`rag-search` also
   starts one server-side**, after its response, whenever it sees a stale
   index — the client path depends on the browser having the current bundle,
   and a stale one leaves the vault with no vectors indefinitely. The work is
@@ -1671,13 +2755,19 @@ rule again once pinned chunks are mixed in.
     (`overline`, uppercase) 12. Nothing in the app is smaller than 12.
   - **Controls:** buttons and text fields 44 tall (Apple's smallest touch
     target), list rows 56, selection chips 40, icon boxes 32, icons 24 in a
-    bar and 16 in a row.
+    bar and 16 in a row. The tab bar is 64 tall and its round Ask button 76
+    (`size.tabBar`, `size.ask`), so the button rises 12 above the bar; a tab
+    with something at its foot keeps that clear (Ask's question box does).
   - **Spacing** 4/8/12/16/24, screen gutter 16; **radius** 12 for controls
     and list rows, 16 for cards.
 
   Colours are hex literals in older files; `color` in `design.ts` holds the
   same values: primary `#2A3D66`, secondary `#4A6491`, accent `#D4807B`,
-  background `#F8F9FC`, dark bg `#0D1117`, dark card `#161B22`.
+  background `#F8F9FC`, dark bg `#0D1117`, dark card `#161B22`. A business
+  has its own, `biz` (teal `#0F5C57`, gold `#B7791F`); a new screen takes
+  `useVaultTheme()` where it should follow the mode, and `vaultTheme(family)`
+  for a row about a particular vault (see
+  [Family or Business](#family-or-business--the-drawers-switch-and-a-businesss-colours)).
   `src/constants/theme.ts` is the untouched `create-expo-app` scaffold
   (generic `Colors`/`Fonts`/`Spacing`) and the AskLocker screens do **not**
   read from it — don't assume editing it changes anything.
@@ -1706,16 +2796,81 @@ rule again once pinned chunks are mixed in.
 - **A row or button that opens nothing is not shown.** Settings once listed
   six rows with an arrow that went nowhere, and the document viewer had a
   menu button with no menu. Add the control when its screen exists.
-- **★ Family Plus marks what only Plus families get** (`<PlusTag />`):
-  10 GB instead of 1 GB, voice chats with no limit (on Free, each person
-  has 10), the Reminders page (in the drawer) and Import from
+- **Never promise more privacy than AskLocker gives.** Documents are not
+  end-to-end encrypted:
+  - Anyone with the Supabase dashboard or the service role key — the people
+    who run AskLocker — can open every file and read every document's text.
+  - The servers read that text to search it.
+  - Parts of it go to outside services: HuggingFace (every passage, and
+    every question, for search), Groq (the passages an answer is written
+    from, and the chat) and OCR.space (scanned PDFs, photos imported from
+    Gmail). PostHog gets usage counts, and never any of it.
+
+  So no screen, notification, README or store listing says "secure",
+  "safe", "private and isolated", "100% private", "only you can see it" or
+  "nothing is kept". Say what the app does instead: "in AskLocker, only your
+  family can open…", "nobody else using AskLocker can open it", "just for
+  you". Settings › Privacy says all of this plainly and names the outside
+  services. It must stay true of the code and of the people who run
+  AskLocker, so change it with any change to sharing, search, OCR,
+  embeddings, voice, Gmail import, payments or usage counts. The app made such claims until
+  7 October 2026.
+- **Usage counts — PostHog, named events only.** Which screens are opened
+  and which actions are taken (a document added, a question asked, a link
+  made, Plus paid for), so the team can see what is used. **What kinds of
+  documents** families keep and come back to is the main thing it watches:
+  `document_added` (the category, and `category_source`: Upload's
+  suggestion kept, changed, picked with none, or no category),
+  `document_opened` and `document_used_in_answer` (each source an answer
+  used, once per document), all by category only. Only through
+  `track()` in `src/lib/analytics.ts`, whose `AnalyticsEvents` lists every
+  event and every property: adding one means changing that list, where a
+  reviewer sees it. Never a document, file name, question, answer, person's
+  or family's name, email or id: a category only by its built-in name
+  (`categoryForAnalytics()`, a family's own is "Other"), a screen only as
+  its route (`/document/[id]`). Sent straight to PostHog's `/batch/` API —
+  no SDK, so no automatic capture of taps or text and no screen recording,
+  which would show document names — with a random id per device (not the
+  account), `$process_person_profile: false` and `$geoip_disable: true`;
+  the PostHog project discards the internet address (a project setting).
+  On in production builds only (`isProduction`, from the Supabase URL; the
+  project's key is in `analytics.ts`, `EXPO_PUBLIC_POSTHOG_KEY` overrides
+  it) and off on a device where Settings › Privacy's switch is off. The
+  PostHog project (AskLocker, EU Cloud) discards IP addresses and has
+  autocapture, recordings, heatmaps and surveys off; its time zone is
+  India's. Settings › Privacy names
+  PostHog in builds that send. How many documents each category has is a
+  query, not an event: `supabase/queries/document-categories.sql` counts
+  category ids across every vault and reads nothing else.
+- **Copy is short and plain** (since 10 October 2026, when the owner said
+  the app's text read as AI-written and every screen was cut by half or
+  more). A screen intro is one sentence, a card one or two, a Help answer
+  two or three, an error what happened and what to do. Talk to the person
+  as "you", in plain words; steps are imperatives ("Tap Share, then Make a
+  link"). No em-dash asides, semicolons or colon-then-explanation, no
+  account of how the server works or why a limit exists, no lists of every
+  edge case, and none of "just for you", "simply", "please note". Numbers
+  always come from the constants, never typed in. Explanations belong in
+  this file, not on a screen.
+- **★ Family Plus marks what only Plus families get** (`<PlusTag />`; in a
+  business it reads ★ Plus, `plusName()`, 051):
+  10 GB instead of 200 MB (100 MB for a personal vault), 200 questions a
+  month the whole family shares (053; on Free, each person has 20 a month, 049), voice chats with
+  no limit (on Free, each person has 10), up to 8 members (4 on Free),
+  share links that last 30 days (7 on Free), expiry reminders and the
+  Reminders page (in the drawer, 048) and Import from
   Gmail (on Upload) — ₹100 a month or ₹1,100 a year in India, $10 or $110
   elsewhere, paid for on the Plus page with Razorpay (044), or given by
   hand. For a free family a starred feature opens the
   Family Plus page, Free and Plus side by side (`/plus`); a new starred
   feature must do the same, through `useFamilyPlan().routeFor()` and a
   redirect in its own screen, and get a row on that page. Each shows the tag
-  where you find it, and Help's FAQ names all four. Every plan, Free
+  where you find it, and Help's FAQ names them all. A person on Plus (any
+  vault they are in, 049's `person_on_plus()`) has a ★ after their own name
+  — the drawer, Home, Settings, Manage Family (`useOnPlus()` from
+  `question_status()`, `<PlusStar />`) — and in Manage Family every member
+  of a family on Plus has one; never another member's Plus through some
+  other family, which is not theirs to see. Every plan, Free
   included, has a storage limit the server keeps (see
   [Plans and storage limits](#plans-and-storage-limits--every-plan-has-a-limit-038-039)).
 - **Never give a web panel `flex` for its width.** On react-native-web

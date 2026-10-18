@@ -7,6 +7,9 @@ import { AuthProvider, useAuth } from '../lib/auth';
 import { FamilyProvider } from '../lib/family-context';
 import { PreferencesProvider } from '../lib/preferences';
 import { EnvBadge } from '../components/env-badge';
+import { AnalyticsTracker } from '../components/analytics-tracker';
+import { AppLockProvider } from '../lib/app-lock';
+import { AppLockScreen } from '../components/app-lock-screen';
 
 function AuthGate() {
   const { session, loading: authLoading } = useAuth();
@@ -22,7 +25,7 @@ function AuthGate() {
     if (seg === 's') return;
     // A route missing here sends a signed-in person to /home — which, for
     // gmail-import, would throw away the code Google just sent back.
-    const inProtectedRoute = seg === '(tabs)' || seg === 'document' || seg === 'family' || seg === 'settings' || seg === 'setup-family' || seg === 'notifications' || seg === 'gmail-import' || seg === 'reminders' || seg === 'saved-chats' || seg === 'family-tree' || seg === 'person' || seg === 'emergency' || seg === 'plus';
+    const inProtectedRoute = seg === '(tabs)' || seg === 'document' || seg === 'family' || seg === 'settings' || seg === 'setup-family' || seg === 'notifications' || seg === 'gmail-import' || seg === 'reminders' || seg === 'saved-chats' || seg === 'family-tree' || seg === 'person' || seg === 'emergency' || seg === 'plus' || seg === 'documents' || seg === 'delete-vault' || seg === 'make-business' || seg === 'overview' || seg === 'notes';
 
     if (!session && inProtectedRoute) {
       router.replace('/login' as any);
@@ -70,6 +73,7 @@ export default function RootLayout() {
 
   return (
     <AuthProvider>
+      <AppLockProvider>
       <PreferencesProvider>
       <FamilyProvider>
         <AuthGate />
@@ -82,18 +86,28 @@ export default function RootLayout() {
           <Stack.Screen name="family" />
           <Stack.Screen name="settings" />
           <Stack.Screen name="document/[id]" />
+          <Stack.Screen name="documents" />
           <Stack.Screen name="notifications" />
           <Stack.Screen name="gmail-import" />
           <Stack.Screen name="reminders" />
           <Stack.Screen name="saved-chats" />
           <Stack.Screen name="family-tree" />
           <Stack.Screen name="person/[id]" />
+          <Stack.Screen name="delete-vault" />
+          <Stack.Screen name="make-business" />
+          <Stack.Screen name="overview" />
+          <Stack.Screen name="notes" />
         </Stack>
         {/* After the Stack, so it draws over every screen. Renders nothing
             in production. */}
         <EnvBadge />
+        {/* Which screens are opened, where usage counts are on (analytics.ts). */}
+        <AnalyticsTracker />
+        {/* The fingerprint or face lock, over everything when it is up. */}
+        <AppLockScreen />
       </FamilyProvider>
       </PreferencesProvider>
+      </AppLockProvider>
     </AuthProvider>
   );
 }

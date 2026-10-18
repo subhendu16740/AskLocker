@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import {
   View, Text, TouchableOpacity, ScrollView,
   StyleSheet, useColorScheme, ActivityIndicator,
@@ -12,9 +12,15 @@ import { useFamily } from '../../lib/family-context';
 import { useDrawer } from '../../lib/drawer-context';
 import { fetchRecentDocuments, fetchFamilyStats, fetchUnreadNotificationCount, checkExpiryNotifications } from '../../lib/api';
 import { usePreferences } from '../../lib/preferences';
+import { useOnPlus } from '../../lib/family-plan';
+import { PlusStar } from '../../components/screen-header';
 import { InvitationCards } from '../../components/invitation-cards';
+import { LockOffer } from '../../components/lock-offer';
+import { UseForOffer } from '../../components/use-for-offer';
+import { isBusinessVault, isPersonalVault, vaultIcon, vaultName } from '../../lib/vaults';
+import { useVaultTheme, vaultTheme } from '../../lib/vault-theme';
 import type { FamilyDocumentRow } from '../../lib/database.types';
-import { color, radius, shadow, size, space, type } from '../../constants/design';
+import { biz, color, radius, shadow, size, space, type } from '../../constants/design';
 
 
 function getTimeGreeting(): string {
@@ -52,19 +58,48 @@ function getRelativeTime(dateStr: string): string {
   return `${Math.floor(days / 30)} month${Math.floor(days / 30) > 1 ? 's' : ''} ago`;
 }
 
+/** "1 Document", "2 Documents". */
+function count(n: number, one: string, many: string): string {
+  return `${n} ${n === 1 ? one : many}`;
+}
+
+/** How many of the newest documents Home lists, from all vaults together. */
+const RECENT = 8;
+
+/** A document in the list, with the vault it is in (046). */
+interface RecentDoc extends FamilyDocumentRow {
+  familyId: string;
+  vault: string;
+  personalVault: boolean;
+  /** The vault's icon: a lock, a briefcase (051) or people. */
+  vaultIcon: 'lock' | 'briefcase' | 'users';
+  /** A business vault: its documents wear the business's colours. */
+  business: boolean;
+}
+
 export default function HomeScreen() {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
   const { user } = useAuth();
-  const { currentFamily, refreshFamilies } = useFamily();
+  const onPlus = useOnPlus();
+  // Home lists the newest documents from every vault of the mode together
+  // (046; Family or Business, the drawer's switch), each tagged with the
+  // vault it is in, and opens each in its own vault.
+  const { families, modeVaults, mode, refreshFamilies, otherModeVaultIds } = useFamily();
+  const theme = useVaultTheme();
+  // Only the mode's vaults, never a fallback to every vault: a business never shows a family's documents.
+  const shown = modeVaults;
+  const familyKey = `${mode}:` + shown.map((f) => `${f.family_id}:${vaultName(f.families)}`).join('|');
   const { openDrawer } = useDrawer();
   // Settings › Notifications off: the bell stays, its count does not.
   const { notificationsEnabled } = usePreferences();
 
-  const [recentDocs, setRecentDocs] = useState<FamilyDocumentRow[]>([]);
-  const [stats, setStats] = useState({ doc_count: 0, member_count: 0, category_count: 0 });
+  const [recentDocs, setRecentDocs] = useState<RecentDoc[]>([]);
+  const [stats, setStats] = useState({ docs: 0, members: 0, categories: 0 });
   const [loading, setLoading] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  // Only the latest load is shown: one started before a vault appeared may finish after it.
+  const loads = useRef(0);
 
   const displayName =
     user?.user_metadata?.display_name ||
@@ -73,31 +108,54 @@ export default function HomeScreen() {
   const initial = displayName.charAt(0).toUpperCase();
 
   const loadData = useCallback(() => {
-    if (!currentFamily || !user) {
-      // No family yet: they may have joined one since sign-in — and the bell
-      // still counts, since an invitation to join one is a notification.
-      if (user) {
-        refreshFamilies().catch(() => {});
-        fetchUnreadNotificationCount(user.id).then(setUnreadCount).catch(() => {});
-      }
+    if (!user) return;
+    // The bell counts with or without a vault: an invitation to join a family is a notification.
+    // The other mode's news is left out: a business never shows a family's, nor the other way round.
+    fetchUnreadNotificationCount(user.id, otherModeVaultIds).then(setUnreadCount).catch(() => {});
+    if (families.length === 0) {
+      // No vault yet: the personal one is on its way (046), or they joined a family since sign-in.
+      refreshFamilies().catch(() => {});
       setLoading(false);
       return;
     }
+    const vaults = shown;
+    const load = ++loads.current;
     setLoading(true);
     Promise.all([
-      fetchRecentDocuments(currentFamily.id, 5),
-      fetchFamilyStats(currentFamily.id),
-      fetchUnreadNotificationCount(user.id),
-      checkExpiryNotifications(currentFamily.id).catch(() => 0),
+      // One vault that cannot be read leaves the others' documents on the list.
+      Promise.all(vaults.map((v) => fetchRecentDocuments(v.family_id, RECENT).catch((err) => {
+        console.error('[Home] documents of', v.family_id, err);
+        return [] as FamilyDocumentRow[];
+      }))),
+      Promise.all(vaults.map((v) => fetchFamilyStats(v.family_id).catch(() => null))),
     ])
-      .then(([docs, s, unread]) => {
-        setRecentDocs(docs);
-        setStats(s);
-        setUnreadCount(unread);
+      .then(([lists, vaultStats]) => {
+        if (load !== loads.current) return;
+        setRecentDocs(
+          lists
+            .flatMap((docs, i) => docs.map((d) => ({
+              ...d,
+              familyId: vaults[i].family_id,
+              vault: vaultName(vaults[i].families),
+              personalVault: isPersonalVault(vaults[i].families),
+              vaultIcon: vaultIcon(vaults[i].families),
+              business: isBusinessVault(vaults[i].families),
+            })))
+            .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+            .slice(0, RECENT),
+        );
+        setStats({
+          docs: vaultStats.reduce((sum, st) => sum + Number(st?.doc_count ?? 0), 0),
+          members: Number(vaultStats[0]?.member_count ?? 0),
+          categories: Number(vaultStats[0]?.category_count ?? 0),
+        });
       })
       .catch((err) => console.error('[Home] fetch error:', err))
-      .finally(() => setLoading(false));
-  }, [currentFamily?.id, user?.id, refreshFamilies]);
+      .finally(() => { if (load === loads.current) setLoading(false); });
+    // Each vault's expiry reminders, as Home has always asked: made once, however often (034),
+    // and only for a vault on Family Plus (048) — the server decides, so Free asks too.
+    families.forEach((v) => { checkExpiryNotifications(v.family_id).catch(() => 0); });
+  }, [familyKey, user?.id, refreshFamilies]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Re-fetch when screen gains focus (e.g. after deleting a document)
   useFocusEffect(
@@ -111,7 +169,7 @@ export default function HomeScreen() {
       <ScrollView showsVerticalScrollIndicator={false} stickyHeaderIndices={[0]}>
         {/* Gradient Header */}
         <LinearGradient
-          colors={['#2A3D66', '#4A6491']}
+          colors={theme.gradient}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={styles.header}
@@ -124,7 +182,12 @@ export default function HomeScreen() {
                 </TouchableOpacity>
                 <View>
                   <Text style={styles.greeting}>{getTimeGreeting()}</Text>
-                  <Text style={styles.headerTitle}>{displayName}</Text>
+                  <Text
+                    style={styles.headerTitle}
+                    accessibilityLabel={onPlus ? `${displayName}, Family Plus` : undefined}
+                  >
+                    {displayName}{onPlus && <PlusStar onDark />}
+                  </Text>
                 </View>
               </View>
               <TouchableOpacity
@@ -158,20 +221,58 @@ export default function HomeScreen() {
         {/* Invitations to join a family (037): answered here, the first place anyone looks */}
         <InvitationCards style={styles.invites} />
 
+        {/* What they will use AskLocker for, asked once of someone new (051) */}
+        <UseForOffer style={styles.invites} />
+
+        {/* The fingerprint or face lock, offered once where the device can check one */}
+        <LockOffer style={styles.invites} />
+
         {/* Stats Bar */}
         <View style={styles.section}>
-          <View style={[styles.statsBar, isDark && styles.statsBarDark]}>
-            <Text style={[styles.statText, isDark && styles.statTextDark]}>{stats.doc_count} Documents</Text>
+          <View style={[styles.statsBar, { backgroundColor: theme.tint }, isDark && styles.statsBarDark]}>
+            {/* Opens All documents: every vault's documents, a vault filter, and Delete */}
+            <TouchableOpacity
+              style={styles.statLink}
+              onPress={() => router.push('/documents' as any)}
+              hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel={`${count(stats.docs, 'document', 'documents')}. See all documents`}
+            >
+              <Text style={[styles.statText, styles.statLinkText, { color: theme.primary }, isDark && styles.statTextDark]}>{count(stats.docs, 'Document', 'Documents')}</Text>
+              <Feather name="chevron-right" size={14} color={isDark ? '#4A6491' : theme.primary} />
+            </TouchableOpacity>
             <Text style={styles.statDivider}>|</Text>
-            <Text style={[styles.statText, isDark && styles.statTextDark]}>{stats.member_count} Members</Text>
-            <Text style={styles.statDivider}>|</Text>
-            <Text style={[styles.statText, isDark && styles.statTextDark]}>{stats.category_count} Categories</Text>
+            {shown.length > 1 ? (
+              // Several vaults: what they hold together, and in how many.
+              <Text style={[styles.statText, { color: theme.primary }, isDark && styles.statTextDark]}>{count(shown.length, 'Vault', 'Vaults')}</Text>
+            ) : (
+              <>
+                <Text style={[styles.statText, { color: theme.primary }, isDark && styles.statTextDark]}>
+                  {isPersonalVault(shown[0]?.families) ? 'Only you' : count(stats.members, 'Member', 'Members')}
+                </Text>
+                <Text style={styles.statDivider}>|</Text>
+                <Text style={[styles.statText, { color: theme.primary }, isDark && styles.statTextDark]}>{count(stats.categories, 'Category', 'Categories')}</Text>
+              </>
+            )}
           </View>
         </View>
 
         {/* Recent Documents */}
         <View style={[styles.section, styles.sectionBottom]}>
-          <Text style={[styles.sectionTitle, isDark && styles.textLight]}>Recent Documents</Text>
+          <View style={styles.sectionHead}>
+            <Text style={[styles.sectionTitle, styles.sectionTitleInRow, isDark && styles.textLight]}>Recent Documents</Text>
+            {recentDocs.length > 0 && (
+              <TouchableOpacity
+                onPress={() => router.push('/documents' as any)}
+                style={styles.seeAll}
+                accessibilityRole="button"
+                accessibilityLabel="See all documents"
+              >
+                <Text style={[styles.seeAllText, { color: theme.primary }]}>See all</Text>
+              </TouchableOpacity>
+            )}
+          </View>
 
           {loading ? (
             <ActivityIndicator size="small" color="#2A3D66" style={{ marginTop: 20 }} />
@@ -179,19 +280,22 @@ export default function HomeScreen() {
             <View style={styles.emptyState}>
               <Feather name="file-plus" size={32} color="#D1D5DB" />
               <Text style={styles.emptyTitle}>No documents yet</Text>
-              <Text style={styles.emptySubtitle}>Upload your first document to get started</Text>
+              <Text style={styles.emptySubtitle}>Upload one to get started</Text>
             </View>
           ) : (
             <View style={styles.docList}>
               {recentDocs.map((doc) => (
                 <TouchableOpacity
-                  key={doc.id}
+                  key={`${doc.familyId}:${doc.id}`}
                   style={[styles.docCard, isDark && styles.docCardDark]}
-                  onPress={() => router.push(`/document/${doc.id}` as any)}
+                  // Opened in its own vault, whichever is open elsewhere in the app.
+                  onPress={() => router.push({ pathname: '/document/[id]', params: { id: doc.id, family: doc.familyId } } as any)}
                   activeOpacity={0.8}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${doc.file_name}, in ${doc.vault}`}
                 >
                   <LinearGradient
-                    colors={['#2A3D66', '#4A6491']}
+                    colors={vaultTheme(doc.business ? { kind: 'business' } : null).gradient}
                     start={{ x: 0, y: 0 }}
                     end={{ x: 1, y: 1 }}
                     style={styles.docIcon}
@@ -208,13 +312,18 @@ export default function HomeScreen() {
                           <Text style={styles.categoryBadgeText}>{doc.category_name}</Text>
                         </View>
                       )}
-                      {doc.member_name && (
-                        <Text style={styles.docOwner}>
-                          {doc.member_relationship ? `${doc.member_relationship} · ` : ''}{doc.member_name}
-                        </Text>
-                      )}
-                      <Text style={styles.docDot}>·</Text>
-                      <Text style={styles.docDate}>{getRelativeTime(doc.created_at)}</Text>
+                      {/* The vault it is in: a lock for the personal vault, a briefcase for a business, people for a family */}
+                      <View style={[styles.vaultTag, isDark && styles.vaultTagDark, doc.business && !isDark && styles.vaultTagBiz]}>
+                        <Feather name={doc.vaultIcon} size={12} color={isDark ? '#9DB4E0' : doc.business ? biz.primary : color.primary} />
+                        <Text style={[styles.vaultTagText, isDark && styles.vaultTagTextDark, doc.business && !isDark && styles.vaultTagTextBiz]} numberOfLines={1}>{doc.vault}</Text>
+                      </View>
+                      {/* One piece of text, so it wraps whole: never a dot left at the end of a line */}
+                      <Text style={styles.docDate}>
+                        {doc.member_name
+                          ? `${doc.member_relationship ? `${doc.member_relationship} · ` : ''}${doc.member_name} · `
+                          : ''}
+                        {getRelativeTime(doc.created_at)}
+                      </Text>
                     </View>
                   </View>
                 </TouchableOpacity>
@@ -319,6 +428,12 @@ const styles = StyleSheet.create({
   },
   statsBarDark: { backgroundColor: '#161B22', borderWidth: 1, borderColor: '#30363D' },
   statText: { ...type.caption, color: color.primary, fontWeight: '500' },
+  statLink: { flexDirection: 'row', alignItems: 'center', gap: 2 },
+  statLinkText: { textDecorationLine: 'underline' },
+  sectionHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: space.sm },
+  sectionTitleInRow: { marginBottom: 0 },
+  seeAll: { minHeight: size.control, justifyContent: 'center', paddingHorizontal: space.xs },
+  seeAllText: { ...type.button, color: color.primary },
   statTextDark: { color: '#4A6491' },
   statDivider: { color: '#9CA3AF' },
   emptyState: {
@@ -357,8 +472,23 @@ const styles = StyleSheet.create({
   docMeta: { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' },
   categoryBadge: { borderRadius: radius.pill, paddingHorizontal: 8, paddingVertical: 1 },
   categoryBadgeText: { ...type.meta, color: '#FFFFFF', fontWeight: '600' },
-  docOwner: type.meta,
-  docDot: type.meta,
+  vaultTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    maxWidth: 170,
+    borderRadius: radius.pill,
+    paddingHorizontal: 8,
+    paddingVertical: 1,
+    backgroundColor: color.tint,
+    borderWidth: 1,
+    borderColor: '#D6E2F5',
+  },
+  vaultTagDark: { backgroundColor: '#1C2433', borderColor: '#30363D' },
+  vaultTagBiz: { backgroundColor: biz.tint, borderColor: '#BFE3DE' },
+  vaultTagTextBiz: { color: biz.primary },
+  vaultTagText: { ...type.meta, color: color.primary, fontWeight: '600', flexShrink: 1 },
+  vaultTagTextDark: { color: '#9DB4E0' },
   docDate: type.meta,
   textLight: { color: '#E6EDF3' },
 });

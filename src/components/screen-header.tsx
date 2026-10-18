@@ -7,7 +7,11 @@ import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { BackButton } from './back-button';
+import { useFamily } from '../lib/family-context';
+import { isBusinessVault } from '../lib/vaults';
+import { plusName } from '../lib/plans';
 import { color, size, space, type } from '../constants/design';
+import { useVaultTheme } from '../lib/vault-theme';
 
 export function ScreenHeader({
   title, subtitle, fallback, right, titleLines = 1,
@@ -19,11 +23,13 @@ export function ScreenHeader({
   /** 2 where the title is a name the person must be able to read in full. */
   titleLines?: number;
 }) {
+  // Business mode wears the business's colours (the drawer's switch).
+  const theme = useVaultTheme();
   return (
     <View style={styles.bar}>
       <BackButton fallback={fallback} />
       <View style={styles.titles}>
-        <Text style={styles.title} numberOfLines={titleLines} accessibilityRole="header">{title}</Text>
+        <Text style={[styles.title, { color: theme.primary }]} numberOfLines={titleLines} accessibilityRole="header">{title}</Text>
         {!!subtitle && <Text style={styles.subtitle} numberOfLines={1}>{subtitle}</Text>}
       </View>
       {right}
@@ -38,6 +44,7 @@ export function HeaderActions({ children }: { children: ReactNode }) {
 
 /** An icon-only action at the right of the bar, drawn like the back arrow. */
 export function HeaderIconButton({ icon, label, onPress }: { icon: string; label: string; onPress: () => void }) {
+  const theme = useVaultTheme();
   return (
     <TouchableOpacity
       onPress={onPress}
@@ -46,17 +53,18 @@ export function HeaderIconButton({ icon, label, onPress }: { icon: string; label
       accessibilityRole="button"
       accessibilityLabel={label}
     >
-      <Feather name={icon as any} size={size.icon} color={color.primary} />
+      <Feather name={icon as any} size={size.icon} color={theme.primary} />
     </TouchableOpacity>
   );
 }
 
 /** A small labelled action at the right of the bar: "Add", "Save". */
 export function HeaderButton({ icon, label, onPress }: { icon?: string; label: string; onPress: () => void }) {
+  const theme = useVaultTheme();
   return (
     <TouchableOpacity
       onPress={onPress}
-      style={styles.textButton}
+      style={[styles.textButton, { backgroundColor: theme.primary }]}
       activeOpacity={0.8}
       hitSlop={{ top: 4, bottom: 4 }}
       accessibilityRole="button"
@@ -72,11 +80,14 @@ export function HeaderButton({ icon, label, onPress }: { icon?: string; label: s
  * the Family Plus page (Free and Plus side by side); without, it is only a
  * mark, for a tag inside something that is already tappable.
  */
-export function PlusTag({ link = false }: { link?: boolean }) {
+export function PlusTag({ link = false, name: fixedName }: { link?: boolean; name?: string }) {
+  // In a business (051) it is called Plus, unless the screen speaks of every vault.
+  const { currentFamily } = useFamily();
+  const name = fixedName ?? plusName(isBusinessVault(currentFamily));
   const tag = (
-    <View style={styles.plusTag} accessibilityLabel="Part of Family Plus, the paid plan">
+    <View style={styles.plusTag} accessibilityLabel={`Part of ${name}, the paid plan`}>
       <Text style={styles.plusStar}>★</Text>
-      <Text style={styles.plusText}>Family Plus</Text>
+      <Text style={styles.plusText}>{name}</Text>
     </View>
   );
   if (!link) return tag;
@@ -86,11 +97,19 @@ export function PlusTag({ link = false }: { link?: boolean }) {
       activeOpacity={0.7}
       hitSlop={{ top: 10, bottom: 10, left: 6, right: 6 }}
       accessibilityRole="link"
-      accessibilityLabel="Family Plus: see what it includes"
+      accessibilityLabel={`${name}: see what it includes`}
     >
       {tag}
     </TouchableOpacity>
   );
+}
+
+/**
+ * " ★" after the name of someone on Family Plus, inside the name's own Text.
+ * Hidden from screen readers: the name's Text says "Family Plus" instead.
+ */
+export function PlusStar({ onDark = false }: { onDark?: boolean }) {
+  return <Text style={[styles.nameStar, onDark && styles.nameStarOnDark]} aria-hidden> ★</Text>;
 }
 
 const styles = StyleSheet.create({
@@ -137,4 +156,6 @@ const styles = StyleSheet.create({
   },
   plusStar: { fontSize: 12, color: color.accent },
   plusText: { fontSize: 12, fontWeight: '600', color: color.primary },
+  nameStar: { color: color.accent },
+  nameStarOnDark: { color: '#FBD5D1' },
 });

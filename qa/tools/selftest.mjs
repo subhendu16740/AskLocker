@@ -15,12 +15,17 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { getDocument } from 'pdfjs-serverless';
 import { reconstructLayout } from '../../supabase/functions/_shared/pdf-text.ts';
-import { extractMetadata, parseFlexibleDate } from '../../supabase/functions/_shared/metadata.ts';
+import { extractMetadata, parseFlexibleDate, gstinCheckChar, isValidGstin } from '../../supabase/functions/_shared/metadata.ts';
 import { cleanText } from '../../supabase/functions/_shared/text.ts';
 import { ticketCodeNotes, ticketSearchTerms } from '../../supabase/functions/_shared/tickets.ts';
 import { digitsFromWords, restoreCodes } from '../../supabase/functions/_shared/numbers.ts';
+import { takeInTurn, uniqueRelatives } from '../../supabase/functions/_shared/vaults.ts';
+import { passagesUsed, splitUsedPassages } from '../../supabase/functions/_shared/used-passages.ts';
 import { toSpeech } from '../../src/lib/speech-text.ts';
-import { acceptedCurrencies, hmacSha256Hex, paymentSignatureOk, plusOrderAmount, plusOrderDescription, sameText, webhookSignatureOk, ORDER_ID, PAYMENT_ID } from '../../supabase/functions/_shared/razorpay.ts';
+import {
+  BUILT_IN_CATEGORIES, BUSINESS_CATEGORIES, FAMILY_CATEGORIES, SUGGESTED_CATEGORIES, categoryOrder, countedCategory, suggestCategory,
+} from '../../supabase/functions/_shared/doc-category.ts';
+import { acceptedCurrencies, connectionCountry, hmacSha256Hex, payerCurrency, payerCurrencyMessage, paymentSignatureOk, plusOrderAmount, plusOrderDescription, sameText, webhookSignatureOk, ORDER_ID, PAYMENT_ID } from '../../supabase/functions/_shared/razorpay.ts';
 import { createHmac } from 'node:crypto';
 import {
   attachmentParts, classifyAttachment, allowedReturnOrigin, sniffType, storageFileName, senderDomain,
@@ -31,7 +36,10 @@ import {
 import { buildGraph, relationTo, relationLabel, relativesForPrompt, relativesNamedIn, buildForest, shortName, siblingsSharingParents } from '../../supabase/functions/_shared/kinship.ts';
 import { encryptPayload, vapidAuthorization, generateVapidKeys, isPushServiceEndpoint, MAX_PLAINTEXT } from '../../supabase/functions/_shared/webpush.ts';
 import { phoneLooksRight, cardProblem, cardIsEmpty, emptyCard, bloodGroupLabel, bloodGroupSpoken, telHref } from '../../src/lib/emergency.ts';
-import { DEFAULT_PLAN_LIMITS, PLUS_FOR_SALE, PLUS_PRICE, chatStorageFullMessage, fits, formatBytes, plusAmount, plusPrice, plusPrices, plusTwelveMonths, plusYearlyOffer, plusYearlySaving, storageFullMessage } from '../../supabase/functions/_shared/plan-text.ts';
+import { allowanceJson, givenBack, parseAllowance, questionLimitMessage, questionsLeftText, resetDay } from '../../supabase/functions/_shared/questions.ts';
+import { MAX_DOCUMENT_TEXT, MAX_FILE_BYTES, QUESTION_INPUT_MAX, MAX_QUESTION_CHARS, fileTooLargeMessage, inVaultFolder, limitHint, providedTextLimit } from '../../supabase/functions/_shared/limits.ts';
+import { MAX_IMPORT_BYTES } from '../../supabase/functions/_shared/gmail-rules.ts';
+import { BUSINESS_PLANS, BUSINESS_PRICE, CLOSED_MESSAGE, DEFAULT_PLAN_LIMITS, PLUS_FOR_SALE, PLUS_PRICE, businessAmount, businessPrice, businessYearPrice, chatStorageFullMessage, fits, formatBytes, isBusinessPlan, nextBusinessPlan, planLabel, plusName, plusAmount, plusPrice, plusPrices, plusTwelveMonths, plusYearlyOffer, plusYearlySaving, storageFullMessage } from '../../supabase/functions/_shared/plan-text.ts';
 import { mentionsDate, mentionsAmount, mentionsPhone, mentionsText, refuses, devanagariShare, scriptShare, hasMarkdown } from '../lib/match.mjs';
 import { judgeAnswer } from '../lib/checks/ask.mjs';
 import { vehicleInsurance } from '../lib/tiny-pdf.mjs';
@@ -46,6 +54,24 @@ function test(name, fn) {
     .then(() => { passed++; })
     .catch((err) => failures.push(`${name}: ${err.message}`));
 }
+
+await test('asking across vaults: each vault\'s best first, in turn (046)', () => {
+  assert.deepEqual(takeInTurn([[1, 2, 3], ['a'], ['x', 'y']]), [1, 'a', 'x', 2, 'y', 3]);
+  assert.deepEqual(takeInTurn([[], [1, 2]]), [1, 2]);
+  assert.deepEqual(takeInTurn([]), []);
+  // A family's long tax return cannot push a personal vault's one passage
+  // out of the judge's fifteen places: it comes second, not sixteenth.
+  const taxReturn = Array.from({ length: 40 }, (_, i) => `tax-${i}`);
+  const merged = takeInTurn([taxReturn, ['passport']]);
+  assert.equal(merged[1], 'passport');
+  assert.equal(merged.length, 41);
+});
+
+await test('the same relative named in two vaults\' trees is one note (046)', () => {
+  const said = (term, name) => ({ term, name, label: 'Mother', personId: `${name}-id` });
+  const notes = uniqueRelatives([said('mom', 'Meena Rao'), said('mom', 'Meena Rao'), said('mom', 'Meena R.'), said('nani', 'Kamala Verma')]);
+  assert.deepEqual(notes.map((n) => `${n.term}=${n.name}`), ['mom=Meena Rao', 'mom=Meena R.', 'nani=Kamala Verma']);
+});
 
 await test('dates in every common form', () => {
   for (const s of ['on 19/07/2033', 'on 19-07-2033', '19.7.2033', 'expires 19 July 2033.', '19th July, 2033', 'July 19, 2033', '2033-07-19', '19 जुलाई 2033 को', '१९/०७/२०३३']) {
@@ -238,6 +264,31 @@ await test('numbers stay in digits on the screen, and are read out digit by digi
   for (const plain of ['Seat number 17, coach B4, upper berth.', 'The fee is ₹18500.', 'It expires in 2027.', 'There is no 2027 renewal.']) {
     assert.equal(toSpeech(plain), plain, plain);
   }
+});
+
+await test('sources: only the passages the answer says it used', () => {
+  // The answer ends with "USED: …"; the line is taken off and the chips come from it.
+  const hotel = splitUsedPassages('आप होटल Luxe 8 Stayz में ठहरेंगे। बुकिंग आईडी NH90000000000000 है।\nUSED: 1');
+  assert.equal(hotel.answer, 'आप होटल Luxe 8 Stayz में ठहरेंगे। बुकिंग आईडी NH90000000000000 है।');
+  assert.deepEqual(hotel.used, [1]);
+  assert.deepEqual(passagesUsed(['booking', 'bank statement'], hotel.used), ['booking'], 'the bank statement is not a source');
+  // However the model writes it: same line, bold, "and", other scripts' digits, "none".
+  assert.deepEqual(splitUsedPassages('Your hotel is Luxe 8 Stayz. USED: 2, 3'), { answer: 'Your hotel is Luxe 8 Stayz.', used: [2, 3] });
+  assert.deepEqual(splitUsedPassages('Answer.\n**USED:** 1 and 3.').used, [1, 3]);
+  assert.deepEqual(splitUsedPassages('Answer.\nUsed passages: 2').used, [2]);
+  assert.deepEqual(splitUsedPassages('उत्तर।\nUSED: १ और ३'), { answer: 'उत्तर।', used: [1, 3] });
+  assert.deepEqual(splitUsedPassages("I couldn't find that.\nUSED: none"), { answer: "I couldn't find that.", used: [] });
+  assert.deepEqual(splitUsedPassages('Answer.\nUSED: 1\nNote: dates are in IST.'), { answer: 'Answer.\n\nNote: dates are in IST.', used: [1] });
+  // No line: every passage sent stays a source, as before. Words are not the line.
+  for (const plain of ['Just an answer.', 'This is the policy you used: the Harrier one.', 'Here is what I used:',
+    'Used: 2019 Honda City, 40,000 km']) {
+    assert.deepEqual(splitUsedPassages(plain), { answer: plain, used: null }, plain);
+  }
+  assert.deepEqual(passagesUsed(['a', 'b'], null), ['a', 'b']);
+  assert.deepEqual(passagesUsed(['a', 'b'], []), [], 'none: no chips');
+  assert.deepEqual(passagesUsed(['a', 'b', 'c'], [3, 1]), ['c', 'a']);
+  assert.deepEqual(passagesUsed(['a', 'b'], [9]), ['a', 'b'], 'numbers that point nowhere say nothing');
+  assert.deepEqual(passagesUsed(['a', 'b'], [2, 9]), ['b']);
 });
 
 await test('cleanText makes extracted text storable', () => {
@@ -616,15 +667,36 @@ await test('every suite stays inside its Groq budget', () => {
   assert.equal(seen.size, groups, 'consecutive days cover every rotation group');
 });
 
-await test('plans: every limit is finite, and a full vault says why and what to do (038–042)', () => {
+await test('plans: every limit is finite, and a full vault says why and what to do (038–048)', () => {
   const GB = 1024 ** 3, MB = 1024 ** 2;
-  // What 039–041 leave in plan_limits: one row per plan, Plus ten times
-  // Free, 30 days after Plus ends before anything above Free goes, 4 members
-  // on every plan, and 10 voice chats for each person on Free (043).
+  // What 039–048 leave in plan_limits: one row per plan; Free 200 MB for a
+  // family and 100 MB for a personal vault (048), Plus 10 GB for either;
+  // 30 days after Plus ends before anything above Free goes, 4 members on
+  // Free and 8 on Plus (049), 10 voice chats for each person on Free (043),
+  // and 20 questions a month for each person on Free, none on Plus up to
+  // fair use (049), and on Plus 200 a month the whole family shares (053).
+  // A business (051) has its own plans. On Free a person creates one vault
+  // in all, a family or a business (054), and Family Plus adds 100
+  // documents and 50 question tries a day.
   assert.deepEqual(DEFAULT_PLAN_LIMITS, {
-    free: GB, plus: 10 * GB, graceDays: 30,
-    members: { free: 4, plus: 4 },
+    free: 200 * MB, freePersonal: 100 * MB, plus: 10 * GB, graceDays: 30,
+    members: { free: 4, plus: 8 },
     voiceAnswers: { free: 10, plus: null },
+    questions: { free: 20, plus: null },
+    questionsFairUse: 200,
+    familyQuestions: 200,
+    questionTriesPerDay: { free: 10, plus: 50 },
+    uploadsPerDay: { free: 50, plus: 100 },
+    familiesPerPerson: 1,
+    businessesPerPerson: 1,
+    vaultsPerPerson: 1,
+    notesPerPerson: { free: 20, paid: 500 },
+    invitesPerDay: { free: 20, plus: 20 },
+    business: {
+      business_plus: { storage: 25 * GB, members: 10, questionsFairUse: 100, questionTriesPerDay: 30, uploadsPerDay: 300, invitesPerDay: 20 },
+      business_pro: { storage: 100 * GB, members: 15, questionsFairUse: 100, questionTriesPerDay: 30, uploadsPerDay: 300, invitesPerDay: 20 },
+      business_enterprise: { storage: 200 * GB, members: 50, questionsFairUse: 100, questionTriesPerDay: 30, uploadsPerDay: 300, invitesPerDay: 50 },
+    },
   });
   assert.deepEqual(PLUS_PRICE, { monthly: { inr: 100, usd: 10 }, yearly: { inr: 1100, usd: 110 } });
   // The Plus page says what a year saves in months ("1 month free"): a year
@@ -652,37 +724,47 @@ await test('plans: every limit is finite, and a full vault says why and what to 
   assert.equal(formatBytes(2048), '2 KB');
   assert.equal(formatBytes(1.25 * MB), '1.3 MB');
   assert.equal(formatBytes(250 * MB), '250 MB');
+  assert.equal(formatBytes(DEFAULT_PLAN_LIMITS.free), '200 MB');
+  assert.equal(formatBytes(DEFAULT_PLAN_LIMITS.freePersonal), '100 MB');
   assert.equal(formatBytes(GB), '1 GB');
   assert.equal(formatBytes(1.5 * GB), '1.5 GB');
   const free = { plan: 'free', limitBytes: GB, usedBytes: GB - 2 * MB };
   assert.ok(fits(free, 2 * MB), 'a file that exactly fills the space fits');
   assert.ok(!fits(free, 3 * MB));
   const tooBig = storageFullMessage(free, 3 * MB);
-  assert.match(tooBig, /^This file is 3 MB, and your family has 2 MB left of 1 GB on the free plan\./);
-  assert.match(tooBig, /Delete documents you no longer need/);
+  assert.match(tooBig, /^This file is 3 MB, but your family has only 2 MB left\./);
+  assert.match(tooBig, /Delete documents you don't need/);
   const full = storageFullMessage({ ...free, usedBytes: GB + 10 * MB }, 0, { price: plusPrice('inr') });
-  assert.match(full, /^Your family's storage is full: 1\.01 GB used of 1 GB on the free plan\./);
+  assert.match(full, /^Your family's storage is full, with 1\.01 GB of 1 GB used\./);
   // Until Plus can be bought, nothing offers to sell it.
   if (!PLUS_FOR_SALE) {
-    assert.match(full, /Family Plus, coming soon, gives 10 GB for ₹100 a month\.$/);
+    assert.match(full, /Family Plus is coming soon, with 10 GB for ₹100 a month\.$/);
     assert.doesNotMatch(full, /move to/);
   }
-  assert.match(storageFullMessage({ ...free, usedBytes: GB }, 0, { price: plusPrices('inr') }), /gives 10 GB for ₹100 a month or ₹1,100 a year\.$/);
+  assert.match(storageFullMessage({ ...free, usedBytes: GB }, 0, { price: plusPrices('inr') }), /with 10 GB for ₹100 a month or ₹1,100 a year\.$/);
   // The server cannot tell where the person is, so it names no price.
-  assert.match(storageFullMessage({ ...free, usedBytes: GB }), /gives 10 GB\.$/);
+  assert.match(storageFullMessage({ ...free, usedBytes: GB }), /with 10 GB\.$/);
   const plus = storageFullMessage({ plan: 'plus', limitBytes: 10 * GB, usedBytes: 10 * GB }, 0, { price: plusPrice('usd') });
-  assert.equal(plus, "Your family's storage is full: 10 GB used of 10 GB on Family Plus. Delete documents you no longer need to make room.");
+  assert.equal(plus, "Your family's storage is full, with 10 GB of 10 GB used. Delete documents you don't need to make room.");
   // Plus has ended and the family holds more than Free: the day it loses the excess, and how to keep it.
   const ended = storageFullMessage({ plan: 'free', limitBytes: GB, usedBytes: 3 * GB }, 0, { price: plusPrice('inr'), removalOn: '3 Nov 2026' });
-  assert.equal(ended, "Your family's storage is full: 3 GB used of 1 GB on the free plan. Family Plus has ended: on 3 Nov 2026, the newest documents above 1 GB will be removed, unless it is renewed or you delete documents to get under 1 GB.");
+  assert.equal(ended, "Your family's storage is full, with 3 GB of 1 GB used. Family Plus has ended. On 3 Nov 2026, the newest documents over 1 GB will be removed. Renew, or delete documents to get under 1 GB.");
   // Saved chats take the family's storage too (042): on the free plan a chat
   // with no room needs Family Plus; on Plus, room is made by deleting.
   const chatFree = chatStorageFullMessage({ plan: 'free', limitBytes: GB, usedBytes: GB }, { price: plusPrices('inr') });
-  assert.match(chatFree, /^There is no room to save this chat: your family has used 1 GB of its 1 GB\. Saving more needs Family Plus/);
+  assert.match(chatFree, /^There's no room to save this chat\. Your family has used 1 GB of 1 GB\. .*Family Plus/);
   assert.match(chatFree, /10 GB for ₹100 a month or ₹1,100 a year\./);
-  if (!PLUS_FOR_SALE) assert.match(chatFree, /Family Plus, coming soon: .*Until then, delete documents you no longer need\.$/);
+  if (!PLUS_FOR_SALE) assert.match(chatFree, /Family Plus is coming soon, with .*Until then, delete documents you don't need\.$/);
   assert.equal(chatStorageFullMessage({ plan: 'plus', limitBytes: 10 * GB, usedBytes: 10 * GB }, { price: plusPrice('usd') }),
-    'There is no room to save this chat: your family has used 10 GB of its 10 GB. Delete documents or saved chats you no longer need to make room.');
+    "There's no room to save this chat. Your family has used 10 GB of 10 GB. Delete documents or saved chats you don't need to make room.");
+  // A personal vault (048) is "your personal vault", never "your family".
+  const mine = { plan: 'free', limitBytes: 100 * MB, usedBytes: 99 * MB, personal: true };
+  assert.match(storageFullMessage(mine, 3 * MB), /^This file is 3 MB, but your personal vault has only 1 MB left\./);
+  assert.match(storageFullMessage({ ...mine, usedBytes: 100 * MB }), /^Your personal vault is full, with 100 MB of 100 MB used\./);
+  assert.match(chatStorageFullMessage({ ...mine, usedBytes: 100 * MB }), /^There's no room to save this chat\. Your personal vault has used 100 MB of 100 MB\./);
+  for (const text of [storageFullMessage(mine, 3 * MB), storageFullMessage({ ...mine, usedBytes: 100 * MB }), chatStorageFullMessage(mine)]) {
+    assert.doesNotMatch(text, /your family/i, 'a personal vault is not called a family');
+  }
 });
 
 await test('razorpay: the server sets the price, and only Razorpay\'s signature makes a payment count (044)', async () => {
@@ -717,6 +799,87 @@ await test('razorpay: the server sets the price, and only Razorpay\'s signature 
   assert.ok(PAYMENT_ID.test('pay_Specimen000001') && !PAYMENT_ID.test('pay_ bad'));
 });
 
+await test('categories: Upload suggests one from the file, never a default, and counts only built-in names', async () => {
+  assert.equal(FAMILY_CATEGORIES.length, 23);
+  assert.equal(BUSINESS_CATEGORIES.length, 11);
+  assert.equal(new Set(BUILT_IN_CATEGORIES).size, 34, 'a family\'s 23 and a business\'s 11, "Other" shared');
+  const cases = [
+    ['Passport_Asha_Verma.pdf', null, 'Passport'],
+    ['scan_1.jpg', 'Government of India  Aadhaar  1234 5678 9012  Asha Verma', 'National ID / Aadhaar'],
+    ['IMG_2031.jpg', 'INCOME TAX DEPARTMENT  GOVT. OF INDIA  Permanent Account Number Card  ABCDE1234F', 'PAN Card'],
+    ['photo.jpg', 'INCOME TAX DEPARTMENT  ASHA VERMA  ABCDE1234F', 'PAN Card'],
+    ['ITR-V_2026.pdf', null, 'Tax Returns'],
+    ['ack.pdf', 'Acknowledgement Number 1234  Assessment Year 2026-27  PAN ABCDE1234F', 'Tax Returns'],
+    ['health_policy_verma.pdf', null, 'Health Insurance'],
+    ['Car insurance 2026.pdf', null, 'Vehicle Insurance'],
+    ['ticket.pdf', 'ELECTRONIC RESERVATION SLIP  PNR 4512345678', 'Visa / Travel Docs'],
+    ['scan.jpg', 'VISA  Type: Tourist  Passport No. Z1234567', 'Visa / Travel Docs'],
+    ['statement.pdf', 'Your VISA card statement  Bank statement for September', 'Bank Statements'],
+    ['rate ticket.pdf', null, null],
+    ['visa_application.pdf', 'Passport No. Z1234567', 'Visa / Travel Docs'],
+    ['electricity_bill_sept.pdf', null, 'Utility Bills'],
+    ['Rent Agreement Flat 4B.pdf', null, 'Property Documents'],
+    ['Discharge Summary.pdf', null, 'Medical Records'],
+    ['fixed_deposit_receipt.pdf', null, 'Bank Statements'],
+    ['gas_booking_receipt.jpg', null, 'Utility Bills'],
+    ['Salary slip Aug.pdf', null, 'Employment Letters'],
+    ['Class 10 marksheet.jpg', null, 'Educational Certificates'],
+    ['IMG_2031.jpg', null, null],
+    ['resume.pdf', null, null],
+    ['policy.pdf', null, null],
+    ['citrus_farm.pdf', null, null],
+    ['', '', null],
+  ];
+  for (const [name, text, want] of cases) {
+    assert.equal(suggestCategory({ fileName: name, text, audience: 'family' }), want, `${name} / ${text}`);
+  }
+  // Counting: built-in names as they are; a family's own category never by name.
+  assert.equal(countedCategory('Passport'), 'Passport');
+  assert.equal(countedCategory('Passport', true), 'Passport');
+  assert.equal(countedCategory('Passport', false), 'Other');
+  assert.equal(countedCategory("Mom's reports", false), 'Other');
+  assert.equal(countedCategory('Something new'), 'Other');
+  assert.equal(countedCategory(null), 'None');
+  assert.equal(countedCategory('GST Returns', true), 'GST Returns', 'a business\'s built-in names count too');
+  // Upload's order: the common ones, then other built-ins, then a business's,
+  // then a vault's own, "Other" last.
+  assert.ok(categoryOrder('Passport') < categoryOrder('Medical Records'));
+  assert.ok(categoryOrder('Medical Records') < categoryOrder('Voter ID'));
+  assert.ok(categoryOrder('Voter ID') < categoryOrder('Sales Invoices'));
+  assert.ok(categoryOrder('Sales Invoices') < categoryOrder('Tax (ITR/TDS)'));
+  assert.ok(categoryOrder('Tax (ITR/TDS)') < categoryOrder(''));
+  assert.ok(categoryOrder('') < categoryOrder('Other'));
+});
+
+await test('razorpay: the server picks rupees or dollars from where the payer connects, not from a setting', async () => {
+  // Cloudflare's header: two letters; "XX" (unknown) and junk are no country.
+  assert.equal(connectionCountry('IN'), 'IN');
+  assert.equal(connectionCountry(' us '), 'US');
+  assert.equal(connectionCountry('XX'), null);
+  assert.equal(connectionCountry('T1'), 'T1');
+  assert.equal(connectionCountry(''), null);
+  assert.equal(connectionCountry(null), null);
+  assert.equal(connectionCountry('India'), null);
+  // In India, with India's time zone (or none sent): rupees.
+  assert.equal(payerCurrency('IN', 'Asia/Kolkata'), 'INR');
+  assert.equal(payerCurrency('IN', 'Asia/Calcutta'), 'INR');
+  assert.equal(payerCurrency('IN', undefined), 'INR');
+  // Abroad: dollars, even with the phone set to India time (an NRI's trick).
+  assert.equal(payerCurrency('US', 'Asia/Kolkata'), 'USD');
+  assert.equal(payerCurrency('AE', 'Asia/Dubai'), 'USD');
+  assert.equal(payerCurrency('T1', 'Asia/Kolkata'), 'USD');
+  // In India with another time zone: dollars (both must say India).
+  assert.equal(payerCurrency('IN', 'America/New_York'), 'USD');
+  // No country: the time zone alone, as the app always did; neither: no opinion.
+  assert.equal(payerCurrency(null, 'Asia/Kolkata'), 'INR');
+  assert.equal(payerCurrency(null, 'Europe/London'), 'USD');
+  assert.equal(payerCurrency(null, undefined), null);
+  assert.equal(payerCurrency(null, ''), null);
+  assert.equal(payerCurrency(null, 42), null);
+  assert.equal(payerCurrencyMessage('USD'), 'From where you are, Family Plus is $10 a month or $110 a year.');
+  assert.equal(payerCurrencyMessage('INR'), 'In India, Family Plus is ₹100 a month or ₹1,100 a year.');
+});
+
 await test('the languages suite: by hand only, every language, half a day at most', () => {
   const languages = selectQuestions(questions, 'languages', 1);
   assert.equal(languages.length, 12);
@@ -741,9 +904,261 @@ await test('the languages suite: by hand only, every language, half a day at mos
   }
 });
 
+await test('questions each month: the count, and the words when they are used up (049)', () => {
+  // As claim_question() answers on Free: no `left`, worked out from the ceiling.
+  const free = parseAllowance({ allowed: false, used: 20, limit: 20, ceiling: 20, plus: false, resets_on: '2026-11-01' });
+  assert.deepEqual(free, { used: 20, limit: 20, ceiling: 20, left: 0, plus: false, resetsOn: '2026-11-01' });
+  assert.equal(questionLimitMessage(free),
+    "You've used your 20 free questions for this month. They start again on 1 November. Family Plus gives your family more.");
+  assert.match(questionLimitMessage(free, 'hi-IN'), /20 मुफ़्त सवाल/);
+  assert.match(questionLimitMessage(free, 'hi-IN'), /1 नवंबर/);
+  assert.equal(questionsLeftText(free), "You've used your 20 free questions this month");
+  // A few left: said, with the plan's number.
+  const few = parseAllowance({ used: 17, limit: 20, ceiling: 20, left: 3, plus: false, resets_on: '2026-11-01' });
+  assert.equal(questionsLeftText(few), '3 of 20 free questions left this month');
+  // Plus: nothing said until fair use is near; then its own words.
+  const plus = parseAllowance({ used: 12, limit: null, ceiling: 500, left: 488, plus: true, resets_on: '2026-11-01' });
+  assert.equal(questionsLeftText(plus), null);
+  const plusFull = parseAllowance({ allowed: false, used: 500, limit: null, ceiling: 500, plus: true, resets_on: '2026-12-01' });
+  assert.equal(questionLimitMessage(plusFull),
+    "You've reached the fair-use limit of 500 questions this month. They start again on 1 December.");
+  // Family Plus (053): the family's 200 shared; said once 50 or fewer are left.
+  const family = parseAllowance({ used: 40, limit: null, ceiling: 200, left: 20, plus: true, resets_on: '2026-11-01',
+    family_limit: 200, family_used: 180, family_left: 20 });
+  assert.deepEqual(family, { used: 40, limit: null, ceiling: 200, left: 20, plus: true, resetsOn: '2026-11-01',
+    familyLimit: 200, familyUsed: 180, familyLeft: 20 });
+  assert.equal(questionsLeftText(family), '20 of 200 family questions left this month');
+  assert.equal(questionsLeftText({ ...family, familyUsed: 100, familyLeft: 100, left: 100 }), null);
+  const familyFull = parseAllowance({ allowed: false, reason: 'family', used: 40, limit: null, ceiling: 200, plus: true,
+    resets_on: '2026-11-01', family_limit: 200, family_used: 200, family_left: 0 });
+  assert.equal(familyFull.reason, 'family');
+  assert.equal(questionLimitMessage(familyFull), "Your family has used its 200 questions for this month. They start again on 1 November.");
+  assert.match(questionLimitMessage(familyFull, 'hi-IN'), /परिवार के इस महीने के 200 सवाल/);
+  assert.equal(questionsLeftText({ ...familyFull, left: 0 }), 'Your family has used its 200 questions this month');
+  // Given back: to the person and to the family.
+  assert.deepEqual(givenBack(family), { ...family, used: 39, familyUsed: 179, familyLeft: 21, left: 21 });
+  assert.deepEqual(parseAllowance(allowanceJson(family)), family);
+  // A question given back: one fewer used, one more left; never below zero.
+  assert.deepEqual(givenBack(few), { ...few, used: 16, left: 4 });
+  assert.equal(givenBack({ ...few, used: 0, left: 20 }).used, 0);
+  // What rag-search sends is what the app reads back.
+  assert.deepEqual(parseAllowance(allowanceJson(few)), few);
+  // Before 049, or anything else: not an allowance.
+  assert.equal(parseAllowance(null), null);
+  assert.equal(parseAllowance({ allowed: true }), null);
+  assert.equal(resetDay('2027-01-01'), '1 January');
+  assert.equal(resetDay('soon'), null);
+});
+
+await test('limits against abuse (050): a vault reads only its own folder, and the words for each limit', () => {
+  const ns = 'family_4f673322';
+  // Inside the vault's own folder: "<namespace>/<file>", as the app and Gmail import write it.
+  assert.ok(inVaultFolder(`${ns}/1790715383718_passport.pdf`, ns));
+  // Anywhere else is another family's file, or nobody's.
+  for (const path of [
+    'family_5fbc8888/1790715383718_passport.pdf',           // another vault's
+    `${ns}x/a.pdf`, `${ns}`, `${ns}/`, `/${ns}/a.pdf`,       // not quite inside
+    `${ns}/../family_5fbc8888/a.pdf`, `${ns}/./a.pdf`, `${ns}//a.pdf`, `${ns}/a\\b.pdf`,
+    `${ns}/${'x'.repeat(1100)}`, null, 42,
+  ]) assert.equal(inVaultFolder(path, ns), false, String(path));
+  // A namespace that is not one cannot vouch for anything.
+  assert.equal(inVaultFolder('public/a.pdf', 'public'), false);
+  assert.equal(inVaultFolder('family_%/a.pdf', 'family_%'), false);
+  // Text the app sends: a few thousand characters a page, never more than the file has bytes.
+  assert.equal(providedTextLimit(100), 20_100);
+  assert.equal(providedTextLimit(null), 20_000);
+  assert.equal(providedTextLimit(NaN), 20_000);
+  assert.equal(providedTextLimit(50 * 1024 * 1024), MAX_DOCUMENT_TEXT);
+  // 10 MB a file, in the bucket, the app and Gmail import alike.
+  assert.equal(MAX_FILE_BYTES, 10 * 1024 * 1024);
+  assert.equal(MAX_IMPORT_BYTES, MAX_FILE_BYTES);
+  assert.equal(fileTooLargeMessage(14.2 * 1024 * 1024),
+    'This file is 14.2 MB. The limit is 10 MB. Try a lower-quality scan, or split it into parts.');
+  assert.ok(QUESTION_INPUT_MAX < MAX_QUESTION_CHARS);
+  // The refusals the app shows in the database's own words, and nothing else.
+  assert.equal(limitHint({ hint: 'upload_limit', message: 'x' }), 'upload_limit');
+  assert.equal(limitHint({ hint: 'storage_full' }), null);
+  assert.equal(limitHint(null), null);
+  // The day's tries: answered or not, and the words say so.
+  const tried = parseAllowance({ allowed: false, reason: 'tries', tries: 10, tries_limit: 10, used: 4, limit: 20, ceiling: 20, plus: false, resets_on: '2026-11-01' });
+  assert.equal(tried.reason, 'tries');
+  assert.equal(questionLimitMessage(tried),
+    "You've reached today's limit of 10 questions on Free. Every question counts, answered or not. You can ask again tomorrow.");
+  assert.equal(questionLimitMessage({ ...tried, plus: true, triesLimit: 100 }),
+    "You've reached today's limit of 100 questions. You can ask again tomorrow.");
+  assert.ok(questionLimitMessage(tried, 'hi-IN').includes('कल फिर से'));
+  // The month's limit is said as before, and a reply without 050's fields has none of them.
+  assert.ok(questionLimitMessage({ ...tried, reason: 'month', used: 20 }).startsWith("You've used your 20 free questions"));
+  assert.deepEqual(parseAllowance(allowanceJson(tried)), tried);
+  assert.equal('reason' in parseAllowance({ used: 1, limit: 20, ceiling: 20 }), false);
+});
+
+await test('business papers: a GSTIN only with its check character, and an invoice\'s details (051)', () => {
+  // Fictional numbers: the check character is worked out here, from the
+  // 14 before it, the way GST's own rule does.
+  const seller = `27ABCDE1234F1Z${gstinCheckChar('27ABCDE1234F1Z')}`;
+  const buyer = `07ZZZZZ9999Z1Z${gstinCheckChar('07ZZZZZ9999Z1Z')}`;
+  assert.equal(seller, '27ABCDE1234F1Z0');
+  assert.equal(buyer, '07ZZZZZ9999Z1ZA');
+  assert.ok(isValidGstin(seller) && isValidGstin(buyer) && isValidGstin(seller.toLowerCase()));
+  assert.ok(!isValidGstin('27ABCDE1234F1Z1'), 'one wrong character');
+  assert.ok(!isValidGstin('27ABCDE1243F1Z0'), 'two characters swapped');
+  assert.ok(!isValidGstin(`00ABCDE1234F1Z${gstinCheckChar('00ABCDE1234F1Z')}`), 'no state 00');
+  assert.ok(!isValidGstin('27ABCDE1234F1Z'), 'too short');
+  assert.equal(gstinCheckChar('27abcde1234f1z'), null, 'lower case is for isValidGstin to fold');
+
+  const invoice = [
+    'SPECIMEN — fictional, for AskLocker QA',
+    'TAX INVOICE',
+    `Sharma Traders (SPECIMEN)   GSTIN: ${seller}`,
+    `Bill To: Acme Specimen Pvt Ltd   GSTIN: ${buyer}`,
+    'Invoice No.: INV/2026-27/0042   Invoice Date: 12/03/2026',
+    'Due Date: 11-04-2026',
+    'Taxable value 10,000.00   IGST 18% 1,800.00',
+    'Grand Total: ₹11,800.00',
+  ].join('\n');
+  const meta = extractMetadata(invoice);
+  const all = (key) => meta.filter((m) => m.key === key).map((m) => m.value);
+  assert.deepEqual(all('gstin'), [seller, buyer]);
+  assert.deepEqual(all('invoice_number'), ['INV/2026-27/0042']);
+  assert.deepEqual(all('invoice_date'), ['12/03/2026']);
+  assert.deepEqual(all('due_date'), ['11-04-2026']);
+  assert.deepEqual(all('total_amount'), ['11,800.00']);
+  assert.deepEqual(all('amount'), [], 'the total is not stored twice');
+  assert.deepEqual(all('expiry_date'), [], 'a due date is not an expiry');
+  // A GSTIN with an OCR slip is not stored at all.
+  assert.deepEqual(extractMetadata('GSTIN: 27ABCDE1234F1Z1').filter((m) => m.key === 'gstin'), []);
+  assert.deepEqual(extractMetadata('Invoice No. pending').filter((m) => m.key === 'invoice_number'), [], 'a number has a digit');
+  assert.deepEqual(extractMetadata('Invoice Date: 5 March 2026').filter((m) => m.key === 'invoice_date').map((m) => m.value), ['5 March 2026']);
+
+  // A licence's validity becomes an expiry date, and so the expiry reminders.
+  const expiries = (t) => extractMetadata(t).filter((m) => m.key === 'expiry_date').map((m) => m.value);
+  assert.deepEqual(expiries('FSSAI Licence (SPECIMEN)\nValid up to: 31-03-2027'), ['31-03-2027']);
+  assert.deepEqual(expiries('Trade Licence (SPECIMEN) valid upto 31/03/2027'), ['31/03/2027']);
+  assert.deepEqual(expiries('Shop and Establishment (SPECIMEN)\nValidity: 31/12/2027'), ['31/12/2027']);
+  assert.deepEqual(expiries('Renewal due: 15.06.2027'), ['15.06.2027']);
+  assert.deepEqual(expiries('Valid till 30 June 2027'), ['30 June 2027']);
+  assert.deepEqual(expiries('Validity: 5 years'), [], 'no date, no expiry');
+  assert.equal(parseFlexibleDate('31-03-2027'), '2027-03-31');
+  // A family's papers read as before: an insurance total is still its amount.
+  const policy = extractMetadata('Total Premium: 12,000');
+  assert.deepEqual(policy.map((m) => `${m.key}=${m.value}`), ['amount=12,000']);
+});
+
+await test('a category suggested from the file\'s name and text, from the vault\'s own list (051)', () => {
+  const biz = (fileName, text) => suggestCategory({ fileName, text, audience: 'business' });
+  const fam = (fileName, text) => suggestCategory({ fileName, text, audience: 'family' });
+  assert.equal(biz('GSTR-3B_March_2026.pdf'), 'GST Returns');
+  assert.equal(biz('gst return q4.pdf'), 'GST Returns');
+  assert.equal(biz('FSSAI licence.pdf'), 'Licences & Registrations');
+  assert.equal(biz('Udyam-Registration-Certificate.pdf'), 'Licences & Registrations');
+  assert.equal(biz('scan.jpg', 'Form REG-06 Registration Certificate (SPECIMEN)'), 'Licences & Registrations');
+  assert.equal(biz('Shop & Establishment.pdf'), 'Licences & Registrations');
+  assert.equal(biz('payslip_march.pdf', 'TDS deducted 2,000'), 'Payroll', 'a payslip mentions TDS: still payroll');
+  assert.equal(biz('Salary Register Mar.pdf'), 'Payroll');
+  assert.equal(biz('Form16_FY2025-26.pdf'), 'Tax (ITR/TDS)');
+  assert.equal(biz('ITR-V acknowledgement.pdf'), 'Tax (ITR/TDS)');
+  assert.equal(biz('Rent Agreement - Godown.pdf'), 'Lease & Property', 'a lease before a contract');
+  assert.equal(biz('Leave and Licence agreement.pdf'), 'Lease & Property');
+  assert.equal(biz('NDA with Specimen Ltd.pdf'), 'Contracts & Agreements');
+  assert.equal(biz('Distribution Agreement.pdf'), 'Contracts & Agreements');
+  assert.equal(biz('Purchase Order 0042.pdf'), 'Purchase Bills');
+  assert.equal(biz('scan.jpg', 'Supplier: Sharma Traders (SPECIMEN)'), 'Purchase Bills');
+  assert.equal(biz('Tax Invoice 0042.pdf'), 'Sales Invoices');
+  assert.equal(biz('e-way bill.pdf'), 'Sales Invoices');
+  assert.equal(biz('HDFC loan sanction letter.pdf'), 'Bank & Loans');
+  assert.equal(biz('bank statement march.pdf'), 'Bank & Loans');
+  assert.equal(biz('Fire insurance policy.pdf'), 'Business Insurance');
+  assert.equal(biz('Offer Letter - Ravi.pdf'), 'Employee Records');
+  assert.equal(biz('IMG_2041.jpg'), null, 'nothing to go on');
+  // The file's name speaks first: a person named it.
+  assert.equal(biz('Tax Invoice 0042.pdf', 'Registration Certificate'), 'Sales Invoices');
+
+  assert.equal(fam('Mom passport.pdf'), 'Passport');
+  assert.equal(fam('aadhar card.jpg'), 'National ID / Aadhaar');
+  assert.equal(fam('e-PAN.pdf'), 'PAN Card');
+  assert.equal(fam('ITR-V 2025.pdf'), 'Tax Returns', 'a tax return before a PAN card');
+  assert.equal(fam('scan.jpg', 'Union of India Driving Licence DL No MH12 20110012345'), 'Driving License');
+  assert.equal(fam('Star mediclaim policy.pdf'), 'Health Insurance');
+  assert.equal(fam('LIC term plan.pdf'), 'Life Insurance');
+  assert.equal(fam('car insurance 2026.pdf'), 'Vehicle Insurance');
+  assert.equal(fam('electricity bill sept.pdf'), 'Utility Bills');
+  assert.equal(fam('Goa e-ticket.pdf'), 'Visa / Travel Docs');
+  assert.equal(fam('Class 10 marksheet.pdf'), 'Educational Certificates');
+  assert.equal(fam('Fridge warranty.pdf'), 'Warranty Cards');
+
+  // Only the vault's own list: a laptop bill in a family vault is not a Sales Invoice.
+  assert.equal(fam('Laptop invoice.pdf'), null);
+  assert.equal(fam('GSTR-3B March.pdf'), null);
+  assert.equal(biz('Mom passport.pdf'), null);
+  // Every name is a built-in category's (migrations 003 and 051).
+  const builtIn = new Set(['Passport', 'National ID / Aadhaar', 'PAN Card', 'Driving License', 'Voter ID', 'Birth Certificate',
+    'Marriage Certificate', 'Death Certificate', 'Health Insurance', 'Life Insurance', 'Vehicle Insurance', 'Property Documents',
+    'Tax Returns', 'Bank Statements', 'Medical Records', 'Prescriptions', 'Educational Certificates', 'Employment Letters',
+    'Utility Bills', 'Visa / Travel Docs', 'Legal Documents', 'Warranty Cards', 'Other',
+    'Sales Invoices', 'Purchase Bills', 'GST Returns', 'Contracts & Agreements', 'Licences & Registrations', 'Bank & Loans',
+    'Business Insurance', 'Employee Records', 'Payroll', 'Lease & Property', 'Tax (ITR/TDS)']);
+  for (const c of [...SUGGESTED_CATEGORIES.family, ...SUGGESTED_CATEGORIES.business]) assert.ok(builtIn.has(c), c);
+  assert.equal(SUGGESTED_CATEGORIES.business.length, 11, 'every business category but Other can be suggested');
+});
+
+await test('business plans: Plus, Pro and Enterprise, their prices and words, and a closed business (051)', () => {
+  const GB = 1024 ** 3, MB = 1024 ** 2;
+  assert.equal(DEFAULT_PLAN_LIMITS.businessesPerPerson, 1);
+  assert.deepEqual(BUSINESS_PLANS, ['business_plus', 'business_pro', 'business_enterprise']);
+  assert.ok(BUSINESS_PLANS.every(isBusinessPlan) && !isBusinessPlan('plus') && !isBusinessPlan('business') && !isBusinessPlan(null));
+  // Each plan up has more people and more space, and never less of anything.
+  for (let i = 1; i < BUSINESS_PLANS.length; i++) {
+    const lower = DEFAULT_PLAN_LIMITS.business[BUSINESS_PLANS[i - 1]], higher = DEFAULT_PLAN_LIMITS.business[BUSINESS_PLANS[i]];
+    assert.ok(higher.members > lower.members && higher.storage > lower.storage, `${BUSINESS_PLANS[i]} has more people and space`);
+    for (const k of Object.keys(lower)) assert.ok(higher[k] >= lower[k], `${BUSINESS_PLANS[i]}'s ${k} is not below`);
+  }
+  assert.deepEqual(BUSINESS_PRICE, { business_plus: 500, business_pro: 1000, business_enterprise: 4000 });
+  assert.equal(businessAmount('business_plus'), '₹500');
+  assert.equal(businessAmount('business_enterprise'), '₹4,000');
+  assert.equal(businessPrice('business_pro'), '₹1,000 a month + GST');
+  assert.equal(businessYearPrice('business_plus'), '₹5,500 a year + GST', 'a year is eleven months');
+  assert.equal(businessYearPrice('business_pro'), '₹11,000 a year + GST');
+  assert.equal(businessYearPrice('business_enterprise'), '₹44,000 a year + GST');
+  assert.equal(planLabel('business_plus'), 'Plus');
+  assert.equal(planLabel('business_pro'), 'Pro');
+  assert.equal(planLabel('business_enterprise'), 'Enterprise');
+  assert.equal(planLabel('plus'), 'Family Plus');
+  assert.equal(plusName(true), 'Plus');
+  assert.equal(nextBusinessPlan('free'), 'business_plus');
+  assert.equal(nextBusinessPlan('business_plus'), 'business_pro');
+  assert.equal(nextBusinessPlan('business_pro'), 'business_enterprise');
+  assert.equal(nextBusinessPlan('business_enterprise'), null);
+  const shop = { plan: 'free', limitBytes: 200 * MB, usedBytes: 199 * MB, business: true };
+  assert.match(storageFullMessage(shop, 3 * MB), /^This file is 3 MB, but your business has only 1 MB left\./);
+  // Never Family Plus, nor its price, for a business.
+  const shopFull = storageFullMessage({ ...shop, usedBytes: 200 * MB }, 0, { forSale: true, price: plusPrice('inr') });
+  assert.equal(shopFull, "Your business's storage is full, with 200 MB of 200 MB used. Delete records you don't need, or move to Plus for 25 GB.");
+  assert.equal(storageFullMessage({ plan: 'business_plus', limitBytes: 25 * GB, usedBytes: 25 * GB, business: true }),
+    "Your business's storage is full, with 25 GB of 25 GB used. Delete records you don't need, or move to Pro for 100 GB.");
+  assert.match(chatStorageFullMessage({ ...shop, usedBytes: 200 * MB }), /^There's no room to save this chat\. Your business has used 200 MB of 200 MB\. To save more, move to Plus for 25 GB\./);
+  for (const text of [storageFullMessage(shop, 3 * MB), shopFull, chatStorageFullMessage(shop)]) {
+    assert.doesNotMatch(text, /family/i, 'a business is not called a family');
+  }
+  // A paid plan that ended: every record stays, adding waits for the plan.
+  assert.ok(!fits({ ...shop, usedBytes: 5 * MB, closed: true }, 1), 'nothing fits in a closed business');
+  assert.ok(fits({ ...shop, usedBytes: 5 * MB }, 1));
+  assert.equal(storageFullMessage({ ...shop, usedBytes: 5 * MB, closed: true }, 3 * MB), CLOSED_MESSAGE);
+  assert.equal(CLOSED_MESSAGE, "Your business's plan has ended. Your records stay. To add new ones, renew the plan.");
+  assert.equal(storageFullMessage({ plan: 'business_pro', limitBytes: 100 * GB, usedBytes: 100 * GB, business: true }),
+    "Your business's storage is full, with 100 GB of 100 GB used. Delete records you don't need, or move to Enterprise for 200 GB.");
+  assert.equal(storageFullMessage({ plan: 'business_enterprise', limitBytes: 200 * GB, usedBytes: 200 * GB, business: true }),
+    "Your business's storage is full, with 200 GB of 200 GB used. Delete records you don't need to make room.");
+  assert.equal(chatStorageFullMessage({ plan: 'business_enterprise', limitBytes: 200 * GB, usedBytes: 200 * GB, business: true }),
+    "There's no room to save this chat. Your business has used 200 GB of 200 GB. Delete records or saved chats you don't need to make room.");
+  for (const text of [shopFull, chatStorageFullMessage({ ...shop, usedBytes: 200 * MB }, { forSale: true, price: plusPrice('inr') })]) {
+    assert.doesNotMatch(text, /₹100|Family Plus/, 'a business is never offered Family Plus');
+  }
+});
+
 if (failures.length) {
   console.error(failures.map((f) => `✗ ${f}`).join('\n'));
   console.error(`\n${failures.length} self-test(s) failed, ${passed} passed.`);
   process.exit(1);
 }
-console.log(`✓ ${passed} self-tests passed — matchers, judge, run-time PDF, metadata, ticket codes, text cleaning, Gmail rules and token sealing, kinship and the family tree, emergency card checks, web push, plan limits, Razorpay signatures, numbers in digits, questions and budget.`);
+console.log(`✓ ${passed} self-tests passed — matchers, judge, run-time PDF, metadata, ticket codes, text cleaning, Gmail rules and token sealing, kinship and the family tree, emergency card checks, web push, plan limits, questions each month, limits against abuse, business papers, categories and plan words, Razorpay signatures, numbers in digits, sources the answer used, questions and budget.`);

@@ -9,10 +9,11 @@ import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { SUPPORT_EMAIL, SUPPORT_PHONE } from '../../lib/app-info';
 import {
-  DEFAULT_PLAN_LIMITS, FREE_STORAGE_LABEL, PLUS_FOR_SALE, formatBytes, plusPrice, plusPrices, plusYearlyOffer,
-  plusYearlySaving,
+  DEFAULT_PLAN_LIMITS, FREE_PERSONAL_STORAGE_LABEL, businessPrice, FREE_STORAGE_LABEL, MAX_FILE_BYTES, PLUS_FOR_SALE, formatBytes, plusPrice, plusPrices,
+  plusYearlyOffer, plusYearlySaving,
 } from '../../lib/plans';
 import { usePaymentsStatus } from '../../lib/family-plan';
+import { lockAfterText } from '../../lib/app-lock';
 import type { PaymentsStatus } from '../../lib/api';
 import { ScreenHeader } from '../../components/screen-header';
 import { Card, CardTitle, Body, PrimaryButton, screenStyles } from '../../components/settings-ui';
@@ -23,67 +24,99 @@ function faq(payments: PaymentsStatus | null): { q: string; a: string }[] {
   return [
     {
       q: 'How do I add a document?',
-      a: 'Open Upload at the bottom of the screen. Take a photo with Scan, pick a file with Browse Files, or choose a picture from your Gallery. AskLocker reads the text, so you can find it later. On a computer you can also bring documents in From Gmail.',
+      a: 'Tap Upload, then Scan, Browse Files or Gallery. If you\'re in a family, you choose which vault it goes to. With ★ Family Plus, you can also bring documents in From Gmail on a computer.',
     },
     {
-      q: 'How do I find a document or an answer?',
-      a: 'Open Search and ask in your own words, for example "When does Mom\'s passport expire?". AskLocker answers and shows which document the answer came from.',
+      q: 'What is my personal vault?',
+      a: 'Everyone gets a personal vault, and nobody else can join it. If you\'re not in a family, your uploads go there. To share documents, create a family in Settings › Your vaults, or accept an invitation.',
+    },
+    {
+      q: 'How do I see or delete documents?',
+      a: 'On Home, tap the document count or See all. Tap the bin to delete one, or Select to delete several. You can only delete documents you added, and deleting can\'t be undone.',
+    },
+    {
+      q: 'How do I find something?',
+      a: 'Tap the round Ask button and ask in your own words, like "When does Mom\'s passport expire?". AskLocker searches all your vaults and shows which document the answer came from. For a faster answer, pick one vault under Search in.',
+    },
+    {
+      q: 'How many questions can I ask?',
+      a: `On Free, you can ask ${DEFAULT_PLAN_LIMITS.questions.free} questions a month, and the count starts again on the 1st. Questions that get no answer don't count, but you can only try ${DEFAULT_PLAN_LIMITS.questionTriesPerDay.free} a day. ★ With Family Plus, your family shares ${DEFAULT_PLAN_LIMITS.familyQuestions} questions a month, and each person can try ${DEFAULT_PLAN_LIMITS.questionTriesPerDay.plus} a day.`,
+    },
+    {
+      q: 'Are there other limits?',
+      a: `Files can be up to ${MAX_FILE_BYTES / (1024 * 1024)} MB. On Free, you can add ${DEFAULT_PLAN_LIMITS.uploadsPerDay.free} documents a day (${DEFAULT_PLAN_LIMITS.uploadsPerDay.plus} with ★ Family Plus) and create one family or one business besides your personal vault. Saved chats, the family tree, share links and invitations have caps too, and AskLocker tells you if you reach one.`,
     },
     {
       q: 'Can I ask by speaking?',
-      a: `Yes. Turn on the Voice assistant in Settings, under Accessibility. Then tap the microphone on Search and say your question, and the answer is read out loud. Said something by mistake? Tap Cancel while it is still listening, and nothing is asked. On the free plan, each person has ${DEFAULT_PLAN_LIMITS.voiceAnswers.free} free voice chats of their own — a question asked by voice or an answer read aloud, one per question — and Search shows how many you have left. After that you type, and the answer is on the screen; ★ Family Plus has no limit. Settings › Accessibility › Voice chooses who reads the answers, from the voices on your phone or computer.`,
+      a: `Yes. Turn on Voice assistant in Settings › Accessibility, then tap the mic on Ask and speak. On Free, you get ${DEFAULT_PLAN_LIMITS.voiceAnswers.free} voice chats, and ★ Family Plus has no limit.`,
+    },
+    {
+      q: 'How do I sign in?',
+      a: 'Tap Continue with Google. The first time, this creates your account. There\'s no AskLocker password to remember.',
+    },
+    {
+      q: 'Can I sign in with my fingerprint or face?',
+      a: `Yes, on the web app. Sign in with Google once, then turn on Fingerprint sign-in in Settings › Security on each device. AskLocker then locks when it opens and after ${lockAfterText} away, and your fingerprint unlocks it.`,
     },
     {
       q: 'Who can see my documents?',
-      a: 'Only the people in your family — and anyone you send a share link to, for that one document, until the link stops working. An admin invites each person by the email they sign in with, and they join only if they accept; nobody can join by themselves. Settings › Privacy has more.',
+      a: 'Only the members of a document\'s vault can open it in AskLocker, plus anyone with a share link to it. Documents aren\'t end-to-end encrypted, so the people who run AskLocker can technically open them. Settings › Privacy has the details.',
     },
     {
-      q: 'How do I share a document with someone outside the family?',
-      a: 'Open the document, choose Share, then Make a link, and send the link by message or email. Anyone with it can open that one document, without an account, for 1, 7 or 30 days. The same screen shows every working link and how often it was opened, and turns a link off at once. A family admin, whoever added the document, or the person it belongs to can share it. For now, Share is in AskLocker on the web.',
+      q: 'How do I share with someone outside the family?',
+      a: 'Open the document, tap Share, then Make a link. Anyone with the link can open that document for 1 or 7 days, or 30 with ★ Family Plus, until you turn it off. Sharing works on the web app for now.',
     },
     {
       q: 'How do I add someone to my family?',
-      a: `If you are an admin, open Manage Family and choose Add, then type the email they use for AskLocker. They need to have signed up first. They get an invitation and join once they accept — until then they show in Manage Family as Pending approval, and you can withdraw it. A family can have up to ${DEFAULT_PLAN_LIMITS.members.free} members, and invitations waiting for an answer count too. Anyone can be in the family tree without an account.`,
+      a: `If you're an admin, open Manage Family, tap Add and type the Google email they sign in with. They must have signed in to AskLocker once, and they join when they accept. A family can have ${DEFAULT_PLAN_LIMITS.members.free} members on Free and ${DEFAULT_PLAN_LIMITS.members.plus} with ★ Family Plus, counting pending invitations.`,
     },
     {
-      q: 'Someone invited me to their family. What do I do?',
-      a: 'The invitation is on Home and in Manage Family. Choose Accept to join and see the family\'s documents, or Decline to say no. Nobody is added to a family without saying yes, and you can leave a family at any time from Manage Family.',
+      q: 'Can I use AskLocker for my business?',
+      a: `Yes. In Settings › Your vaults, tap Create a business, then invite your team in Manage team. Admins can delete any record, and records stay even if a paid plan ends. A business has its own plans: Plus for ${DEFAULT_PLAN_LIMITS.business.business_plus.members} people, ${businessPrice('business_plus')}. Pro for ${DEFAULT_PLAN_LIMITS.business.business_pro.members}, ${businessPrice('business_pro')}. Enterprise for ${DEFAULT_PLAN_LIMITS.business.business_enterprise.members}, ${businessPrice('business_enterprise')}. Ask for one in Settings › Feedback. Started your shop in a family vault? An admin can tap Make it a business in Settings › Your vaults. Everything stays.`,
+    },
+    {
+      q: 'How do I delete a vault?',
+      a: 'Go to Settings › Your vaults and tap Delete under it. Only its owner, who created it, can delete a family or a business. Everyone in it loses it, so type its name to confirm.',
+    },
+    {
+      q: 'I\'ve been invited to a family. What now?',
+      a: 'You\'ll find the invitation on Home and in Manage Family. Tap Accept to join, or Decline. You can leave a family any time from Manage Family.',
     },
     {
       q: 'Who is in the family tree?',
-      a: 'Everyone in your family, with or without an account — a grandmother who will never sign in included. Admins add people and say how they are related; everyone in the family sees the tree, with how each person is related to you (mother, aunt, cousin…) and any nickname the family gave them, like "Pinky". A green phone on someone\'s picture means they are on AskLocker with their own account; nobody else needs one. You can change your own name, nickname and date of birth. Mark a document as someone\'s and you can ask about it by relation or nickname, like "Nani\'s pension papers" or "Pinky\'s passport".',
+      a: 'Everyone in your family, even people without an account. A green phone on someone\'s picture means they use AskLocker. Mark a document as someone\'s, then ask by relation or nickname, like "Nani\'s pension papers".',
     },
     {
-      q: 'Someone in our tree has just signed up. How do I connect them?',
-      a: 'If you are an admin, open them in the family tree and choose Link to their AskLocker account, then type the email they sign in with. They get an invitation, and once they accept they join the family as a viewer and keep their place in the tree, their documents and their emergency card. If you already added them in Manage Family and they now appear twice, linking makes the two one.',
+      q: 'Someone in our tree just joined. How do I link them?',
+      a: 'If you\'re an admin, open them in the family tree, tap Link to their AskLocker account and type their Google email. Once they accept, they keep their place, documents and emergency card. If they show up twice, linking makes them one.',
     },
     {
       q: 'What is an emergency card?',
-      a: 'Each person in your family tree can have one: blood group, allergies, health conditions, medicines, their doctor, health insurance and up to three people to call. Open Emergency cards from the menu, or the person\'s page, to show it to a doctor; every phone number on it is one tap from your phone. Everyone in the family can see it; an admin, or the person themselves, can change it.',
+      a: 'It holds a person\'s blood group, allergies, medicines, doctor, insurance and people to call. Open Emergency cards from the menu to show a doctor, and tap any number to call it. Everyone in the family can see it, and an admin or the person can change it.',
     },
     {
-      q: 'How much space does my family get?',
-      a: `Every family gets ${FREE_STORAGE_LABEL} free for its documents, in total. ★ Family Plus gives ${formatBytes(DEFAULT_PLAN_LIMITS.plus)}, for ${plusPrices('inr')} in India (${plusPrices('usd')} elsewhere). Saved chats count too. Every plan has a limit: when a family's space is full, new documents and saved chats can't be added until some are deleted${forSale ? ', or, on the free plan, the family moves to Family Plus' : ''}. If Family Plus ends while your family holds more than ${FREE_STORAGE_LABEL}, it has ${DEFAULT_PLAN_LIMITS.graceDays} days to renew or delete documents; after that, the newest documents above ${FREE_STORAGE_LABEL} are removed. You are reminded when it ends, a week before and the day before. Settings › Storage shows how much is used.`,
+      q: 'How much space do we get?',
+      a: `On Free, a family gets ${FREE_STORAGE_LABEL} and your personal vault ${FREE_PERSONAL_STORAGE_LABEL}, saved chats included. ★ Family Plus gives a vault ${formatBytes(DEFAULT_PLAN_LIMITS.plus)}, for ${plusPrices('inr')} in India or ${plusPrices('usd')} elsewhere. If Plus ends while a vault is over its free space, you have ${DEFAULT_PLAN_LIMITS.graceDays} days to renew or delete documents, or the newest ones above it are removed.`,
     },
     {
       q: 'How do reminders work?',
-      a: 'When a document with an expiry date is added, AskLocker reminds everyone in the family 90, 30 and 7 days before it expires, and on the day — under the bell on Home. To get them as notifications on your phone or computer, even when AskLocker is closed, open Settings › Notifications and turn them on for that device. On iPhone, add AskLocker to your Home Screen first. Birthdays in your family tree are reminded of on the morning of the day; switch them off in Settings › Notifications if you would rather not. It is free.',
+      a: 'With ★ Family Plus, everyone in the family is reminded 90, 30 and 7 days before a document expires, and on the day. To get them on your phone or computer, turn them on in Settings › Notifications. Birthday reminders come on every plan.',
     },
     {
       q: 'What does ★ Family Plus mean?',
-      a: `Family Plus is the paid plan for the whole family${forSale ? '' : ', coming soon'}. In India it is ${plusPrice('inr')}, or ${plusYearlyOffer('inr')}: ${plusYearlySaving('inr')}. Elsewhere it is ${plusPrice('usd')}, or ${plusYearlyOffer('usd')}. It gives ${formatBytes(DEFAULT_PLAN_LIMITS.plus)} of space, and the things marked with ★ — voice chats with no limit (on Free, each person has ${DEFAULT_PLAN_LIMITS.voiceAnswers.free}), the Reminders page, with every expiry date in one list, and bringing documents in from Gmail. Tap any ★, or open Settings › Family Plus, to see Free and Plus side by side. The reminders themselves reach every family, Free or Plus.`,
+      a: `Family Plus is the paid plan for the whole family${forSale ? '' : ', coming soon'}. In India it's ${plusPrice('inr')}, or ${plusYearlyOffer('inr')} (${plusYearlySaving('inr')}). Elsewhere it's ${plusPrice('usd')}, or ${plusYearlyOffer('usd')}. It adds ${formatBytes(DEFAULT_PLAN_LIMITS.plus)} of space, no monthly question limit, unlimited voice chats, up to ${DEFAULT_PLAN_LIMITS.members.plus} members, 30-day share links, expiry reminders and Gmail import.`,
     },
     ...(forSale ? [{
       q: 'How do I pay for Family Plus?',
-      a: `Open Settings › Family Plus, or tap any ★, and choose a year or a month. You pay through Razorpay, by UPI, card or net banking — AskLocker never sees your card or UPI details. Anyone in the family can pay, and Family Plus starts as soon as the payment goes through. Nothing renews by itself: paying again adds another month or year to the time left.${payments?.currencies.includes('USD') ? '' : ' For now, payments are in Indian rupees.'} Paying is in AskLocker on the web for now. If something goes wrong with a payment, send us feedback from this screen.`,
+      a: `Open Settings › Family Plus and pick a month or a year. You pay through Razorpay by UPI, card or net banking, and AskLocker never sees your card or UPI details. Nothing renews by itself. For now, you can pay only on the web app${payments?.currencies.includes('USD') ? '' : ', in Indian rupees'}.`,
     }] : []),
     {
       q: 'How do I delete my account?',
-      a: 'Open Settings › Security and choose Delete account. It is immediate and nothing is kept. A family nobody else looks after is deleted with it, documents and all; the screen shows which ones before you confirm. To keep a family for the others, make one of them an admin first.',
+      a: 'In Settings › Security, tap Delete account. It deletes your account, saved chats, personal vault and any family only you manage, right away. Documents you added to other families stay with them, and nobody can delete them, so remove any you want gone first.',
     },
     {
-      q: 'Why can\'t AskLocker find something that is in a document?',
-      a: 'A blurred or dark photo is hard to read. Try again in good light, holding the phone steady. If your documents are in another language, choose it in Settings, under Documents.',
+      q: 'Why can\'t AskLocker find something in my document?',
+      a: 'Blurry or dark photos are hard to read. Retake the photo in good light. If your documents use another language, add it in Settings › Document languages.',
     },
   ];
 }
@@ -121,7 +154,7 @@ export default function HelpScreen() {
 
         <Card>
           <CardTitle icon="send">Send us feedback</CardTitle>
-          <Body>Something not working, an idea, or a question? Write to us here — it goes straight to the AskLocker team.</Body>
+          <Body>Something not working, or have an idea? Tell us here.</Body>
           <PrimaryButton label="Send feedback" icon="edit-3" onPress={() => router.push('/settings/feedback' as any)} />
         </Card>
 
@@ -148,7 +181,7 @@ export default function HelpScreen() {
             </TouchableOpacity>
           )}
           {!SUPPORT_EMAIL && !SUPPORT_PHONE && (
-            <Body>Send feedback, above, reaches the AskLocker team directly.</Body>
+            <Body>Use Send feedback above to reach us.</Body>
           )}
         </Card>
       </ScrollView>

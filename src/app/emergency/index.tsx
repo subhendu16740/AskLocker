@@ -12,6 +12,8 @@ import { router, useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../lib/auth';
 import { useFamily } from '../../lib/family-context';
+import { useFamilyOnly } from '../../lib/family-only';
+import { vaultName } from '../../lib/vaults';
 import { fetchFamilyTree, fetchEmergencyCards, isMissingMigration, type FamilyTree } from '../../lib/api';
 import type { EmergencyCard } from '../../lib/emergency';
 import { buildGraph, relationTo, relationLabel } from '../../../supabase/functions/_shared/kinship';
@@ -22,6 +24,7 @@ import { Muted, Status, screenStyles } from '../../components/settings-ui';
 import { color, radius, shadow, size, space, type } from '../../constants/design';
 
 export default function EmergencyCardsScreen() {
+  useFamilyOnly();
   const { user } = useAuth();
   const { currentFamily } = useFamily();
   const [tree, setTree] = useState<FamilyTree | null>(null);
@@ -37,14 +40,14 @@ export default function EmergencyCardsScreen() {
       .catch((err) => {
         if (cancelled) return;
         setTree({ people: [], links: [], nicknames: false });
-        setProblem(isMissingMigration(err) ? 'The family tree is not switched on yet.' : err?.message ?? 'Could not load the family.');
+        setProblem(isMissingMigration(err) ? "The family tree isn't switched on yet." : err?.message ?? "Couldn't load the family.");
       });
     fetchEmergencyCards(currentFamily.id)
       .then((c) => { if (!cancelled) setCards(c); })
       .catch((err) => {
         if (cancelled) return;
         setCards([]);
-        setProblem(isMissingMigration(err) ? 'Emergency cards are not switched on yet.' : err?.message ?? 'Could not load the emergency cards.');
+        setProblem(isMissingMigration(err) ? "Emergency cards aren't switched on yet." : err?.message ?? "Couldn't load the emergency cards.");
       });
     return () => { cancelled = true; };
   }, [currentFamily?.id]);
@@ -62,7 +65,7 @@ export default function EmergencyCardsScreen() {
 
   return (
     <SafeAreaView style={screenStyles.safe} edges={['top']}>
-      <ScreenHeader title="Emergency cards" subtitle={currentFamily?.name} fallback="/home" />
+      <ScreenHeader title="Emergency cards" subtitle={currentFamily ? vaultName(currentFamily) : undefined} fallback="/home" />
       <ScrollView contentContainerStyle={screenStyles.body} showsVerticalScrollIndicator={false}>
         {tree === null || cards === null ? (
           <View style={styles.center}><ActivityIndicator color={color.primary} /></View>
@@ -71,8 +74,7 @@ export default function EmergencyCardsScreen() {
         ) : (
           <>
             <Muted>
-              Blood group, allergies, medicines, the doctor and who to call, for each person in the family. Open one
-              to show a doctor; every number is one tap from your phone.
+              Health details and who to call, for everyone in the family. Open a card to show a doctor.
             </Muted>
             <View style={styles.list}>
               {everyone.map((p, i) => {

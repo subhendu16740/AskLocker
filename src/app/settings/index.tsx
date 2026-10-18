@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   View, Text, TouchableOpacity, ScrollView, StyleSheet, Switch, Modal, Pressable,
-  ActivityIndicator,
+  ActivityIndicator, Platform,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -10,16 +10,17 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../lib/auth';
 import { isProduction, environmentDescription } from '../../lib/environment';
 import { useFamily } from '../../lib/family-context';
+import { isBusinessVault } from '../../lib/vaults';
 import { usePreferences } from '../../lib/preferences';
 import { fetchPlanLimits, fetchVoiceStatus, indexStatus, type IndexStatus, type VoiceStatus } from '../../lib/api';
-import { useFamilyPlan } from '../../lib/family-plan';
+import { useFamilyPlan, useOnPlus } from '../../lib/family-plan';
 import { DEFAULT_PLAN_LIMITS, type PlanLimits } from '../../lib/plans';
 import { VOICE_LANGUAGES, phrase, voiceLanguage } from '../../lib/voice-languages';
 import { OCR_LANGUAGES, describeOcrLanguages } from '../../lib/ocr-languages';
 import {
   chooseVoice, chosenVoice, hasVoiceFor, speak, stopSpeaking, voicesFor, type DeviceVoice,
 } from '../../lib/speech';
-import { ScreenHeader, PlusTag } from '../../components/screen-header';
+import { ScreenHeader, PlusStar, PlusTag } from '../../components/screen-header';
 import { appVersion } from '../../lib/app-info';
 import { color, radius, shadow, size, space, type } from '../../constants/design';
 
@@ -74,6 +75,7 @@ export default function SettingsScreen() {
   // On the free plan each person has their own voice chats (041–043); say
   // how many are left where voice is switched on.
   const { isFree } = useFamilyPlan();
+  const onPlus = useOnPlus();
   const [limits, setLimits] = useState<PlanLimits>(DEFAULT_PLAN_LIMITS);
   const [voiceChats, setVoiceChats] = useState<VoiceStatus | null>(null);
   useEffect(() => {
@@ -117,16 +119,26 @@ export default function SettingsScreen() {
 
   const accountItems: LinkItem[] = [
     { icon: 'user', label: 'Profile', sub: 'Your name and phone number', route: '/settings/profile' },
-    { icon: 'shield', label: 'Security', sub: 'Password, signing out, deleting your account', route: '/settings/security' },
+    {
+      icon: 'shield', label: 'Security', route: '/settings/security',
+      sub: Platform.OS === 'web'
+        ? 'Sign-in, fingerprint, sign out, delete account'
+        : 'Sign-in, sign out, delete account',
+    },
     {
       icon: 'bell', label: 'Notifications', sub: 'Expiry alerts and family news',
       route: '/settings/notifications', value: notificationsEnabled ? 'On' : 'Off',
     },
   ];
   const vaultItems: LinkItem[] = [
-    { icon: 'users', label: 'Manage Families', sub: 'View and switch families', route: '/family' },
-    { icon: 'hard-drive', label: 'Storage', sub: 'Your family\'s plan, and how much of its space is used', route: '/settings/storage' },
-    { icon: 'star', label: 'Family Plus', sub: 'What Plus gives, side by side with Free', route: '/plus' },
+    { icon: 'layers', label: 'Your vaults', sub: 'Family and business vaults: open, create, delete', route: '/settings/vaults' },
+    isBusinessVault(currentFamily)
+      ? { icon: 'briefcase', label: 'Manage team', sub: 'People in this business', route: '/family' }
+      : { icon: 'users', label: 'Manage Family', sub: 'People in this family', route: '/family' },
+    { icon: 'hard-drive', label: 'Storage', sub: 'Your plan and space used', route: '/settings/storage' },
+    isBusinessVault(currentFamily)
+      ? { icon: 'star', label: 'Plans', sub: 'Plus, Pro and Enterprise', route: '/plus' }
+      : { icon: 'star', label: 'Family Plus', sub: 'Compare Free and Plus', route: '/plus' },
     { icon: 'lock', label: 'Privacy', sub: 'Who can see your documents', route: '/settings/privacy' },
   ];
   const helpItems: LinkItem[] = [
@@ -186,7 +198,7 @@ export default function SettingsScreen() {
         // Not done but nothing embedded either: something is wrong at the far
         // end, and calling again would spin rather than finish.
         if (result.processed === 0) {
-          setIndexError('Stalled — try again in a few minutes');
+          setIndexError('Stuck. Try again in a few minutes.');
           break;
         }
       }
@@ -209,11 +221,20 @@ export default function SettingsScreen() {
     if (index.up_to_date) {
       const stuck = index.unindexed?.length ?? 0;
       return stuck > 0
-        ? `Up to date, but ${stuck} document${stuck === 1 ? '' : 's'} could not be read`
-        : 'Up to date — all languages searchable';
+        ? `${stuck} document${stuck === 1 ? '' : 's'} couldn't be read. Try adding a clearer copy.`
+        : 'Up to date.';
     }
-    return 'Update needed for Indian-language documents';
+    return 'Update so documents in every language can be found.';
   };
+
+  // Search keeps itself up to date (rag-search starts a rebuild when it sees
+  // one is due), so the row shows only when it needs the person: an update
+  // they can start, one running, or documents that could not be read.
+  const indexNeedsYou = !!index && (
+    rebuilding || !!indexError
+    || (!index.up_to_date && index.can_rebuild !== false)
+    || (index.unindexed?.length ?? 0) > 0
+  );
 
   useEffect(() => {
     if (!langPickerOpen) return;
@@ -249,7 +270,9 @@ export default function SettingsScreen() {
             <Text style={styles.avatarInitial}>{initial}</Text>
           </View>
           <View style={styles.profileInfo}>
-            <Text style={styles.profileName}>{displayName}</Text>
+            <Text style={styles.profileName} accessibilityLabel={onPlus ? `${displayName}, Family Plus` : undefined}>
+              {displayName}{onPlus && <PlusStar onDark />}
+            </Text>
             <Text style={styles.profileEmail}>{email}</Text>
             <View style={styles.adminBadge}>
               <Text style={styles.adminBadgeText}>{role}</Text>
@@ -270,7 +293,7 @@ export default function SettingsScreen() {
               </View>
               <View style={styles.settingText}>
                 <Text style={styles.settingLabel}>Voice assistant</Text>
-                <Text style={styles.settingSub}>Talk to search and hear the answers</Text>
+                <Text style={styles.settingSub}>Ask out loud and hear the answers</Text>
               </View>
               <Switch
                 value={voiceMode}
@@ -286,9 +309,9 @@ export default function SettingsScreen() {
                 <Text style={styles.plusNoteText}>
                   {voiceChats?.limit != null
                     ? voiceChats.left === 0
-                      ? `You have used your ${voiceChats.limit} free voice chats. Family Plus brings voice back: every question by voice, every answer read aloud.`
-                      : `You have ${voiceChats.left} of ${voiceChats.limit} free voice chats left: a question asked by voice or an answer read aloud, one per question. Everyone in the family has their own ${voiceChats.limit}. Family Plus has no limit.`
-                    : `On the free plan, each person has ${freeVoiceChats} free voice chats: a question asked by voice or an answer read aloud, one per question. Family Plus has no limit.`}
+                      ? `You've used all ${voiceChats.limit} free voice chats. Family Plus has no limit.`
+                      : `You have ${voiceChats.left} of ${voiceChats.limit} free voice chats left. Each question you ask or hear by voice uses one. Family Plus has no limit.`
+                    : `On Free, you get ${freeVoiceChats} voice chats. Each question you ask or hear by voice uses one. Family Plus has no limit.`}
                 </Text>
               </View>
             )}
@@ -302,7 +325,7 @@ export default function SettingsScreen() {
               </View>
               <View style={styles.settingText}>
                 <Text style={styles.settingLabel}>Voice language</Text>
-                <Text style={styles.settingSub}>What you speak, and what it speaks back</Text>
+                <Text style={styles.settingSub}>The language you speak and hear</Text>
               </View>
               <Text style={styles.settingValue}>{voiceLanguage(voiceLang).native}</Text>
               <Feather name="chevron-right" size={16} color="#9CA3AF" />
@@ -339,7 +362,7 @@ export default function SettingsScreen() {
               </View>
               <View style={styles.settingText}>
                 <Text style={styles.settingLabel}>Document languages</Text>
-                <Text style={styles.settingSub}>What scanning should read on the page</Text>
+                <Text style={styles.settingSub}>Languages your documents are in</Text>
               </View>
               <Text style={styles.settingValue} numberOfLines={1}>
                 {describeOcrLanguages(documentLanguages)}
@@ -349,8 +372,8 @@ export default function SettingsScreen() {
           </View>
         </View>
 
-        {/* Search index — live, and only actionable when a rebuild is due */}
-        <View style={styles.group}>
+        {/* Search — shown only when it needs the person */}
+        {indexNeedsYou && <View style={styles.group}>
           <Text style={styles.groupTitle}>Search</Text>
           <View style={styles.groupCard}>
             <TouchableOpacity
@@ -363,7 +386,7 @@ export default function SettingsScreen() {
                 <Feather name="refresh-cw" size={16} color={color.primary} />
               </View>
               <View style={styles.settingText}>
-                <Text style={styles.settingLabel}>Search index</Text>
+                <Text style={styles.settingLabel}>Search</Text>
                 <Text style={styles.settingSub}>{indexSubtitle()}</Text>
               </View>
               {rebuilding
@@ -373,7 +396,7 @@ export default function SettingsScreen() {
                   : null}
             </TouchableOpacity>
           </View>
-        </View>
+        </View>}
 
         <LinkGroup title="Help" items={helpItems} />
 
@@ -436,11 +459,11 @@ export default function SettingsScreen() {
             <Text style={styles.sheetTitle}>Voice for {voiceLanguage(voiceLang).english}</Text>
             <Text style={styles.sheetNote}>
               {deviceVoices.length
-                ? 'Tap a voice to hear it. The one you tap last reads your answers on this device.'
-                : `This device has no ${voiceLanguage(voiceLang).english} voice of its own, so answers are read in its default voice. A phone's settings, or another browser, may offer more voices.`}
+                ? 'Tap a voice to hear it. The last one you tap reads your answers.'
+                : `This device has no ${voiceLanguage(voiceLang).english} voice, so it uses its default one. Another browser or your phone's settings may have more.`}
             </Text>
             <ScrollView style={styles.sheetList}>
-              {[{ id: null as string | null, label: 'Automatic', note: 'The best voice for the language' }, ...deviceVoices].map((v, i) => {
+              {[{ id: null as string | null, label: 'Automatic', note: 'Best voice for the language' }, ...deviceVoices].map((v, i) => {
                 const selected = v.id === voiceChoice;
                 return (
                   <TouchableOpacity
@@ -479,8 +502,8 @@ export default function SettingsScreen() {
           <Pressable style={styles.sheet} onPress={() => {}}>
             <Text style={styles.sheetTitle}>Document languages</Text>
             <Text style={styles.sheetNote}>
-              Pick every language your scanned documents use. English is always read.
-              Each added language is downloaded once, the first time you scan.
+              Pick the languages your documents use. English is always on. Each new
+              language downloads once, the first time you scan.
             </Text>
             <ScrollView style={styles.sheetList}>
               {OCR_LANGUAGES.map((l, i) => {

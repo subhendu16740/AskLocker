@@ -15,6 +15,7 @@ const AREAS = [
   ['setup', 'Setup'],
   ['access', 'Access'],
   ['members', 'Members'],
+  ['business', 'Business vaults'],
   ['upload', 'Upload'],
   ['index', 'Index'],
   ['questions', 'Questions'],

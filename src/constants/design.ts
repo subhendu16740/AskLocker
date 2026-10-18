@@ -36,6 +36,18 @@ export const color = {
   danger: '#DC2626',
 } as const;
 
+/**
+ * A business's colours (business mode, and every business vault wherever it
+ * is listed): a deep teal with a gold mark, so a business never looks like
+ * the family's navy and coral. Text on white passes WCAG AA.
+ */
+export const biz = {
+  primary: '#0F5C57',
+  secondary: '#1A7A72',
+  tint: '#E7F4F2',
+  accent: '#B7791F',
+} as const;
+
 export const type = {
   /** The screen's title, in the top bar. */
   title: { fontSize: 17, lineHeight: 22, fontWeight: '600', color: color.primary },
@@ -64,6 +76,14 @@ export const size = {
   row: 56,
   icon: 24,
   iconBox: 32,
+  /** The bottom tab bar (Home, Ask, Upload). */
+  tabBar: 64,
+  /**
+   * The round Ask button in the middle of the tab bar: taller than the bar,
+   * so it rises above it by the difference. A tab with something at its
+   * foot (Ask's question box) leaves that much room.
+   */
+  ask: 76,
 } as const;
 
 export const space = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24 } as const;

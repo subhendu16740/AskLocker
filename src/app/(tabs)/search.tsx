@@ -8,12 +8,16 @@ import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFamily } from '../../lib/family-context';
+import { useAuth } from '../../lib/auth';
+import { accountKey, storageGet, storageSet } from '../../lib/storage';
+import { isBusinessVault, isPersonalVault, vaultIcon, vaultName } from '../../lib/vaults';
 import {
   fetchCategories, ragSearch, indexStatus, saveChat, getSavedChat, isMissingMigration, claimVoiceAnswer,
-  fetchVoiceStatus, ChatStorageFullError,
+  fetchVoiceStatus, ChatStorageFullError, fetchQuestionStatus,
   type RagSearchResult, type RagHistoryTurn, type IndexStatus, type SavedChatMessage,
 } from '../../lib/api';
 import { plusPage } from '../../lib/family-plan';
+import { QUESTION_INPUT_MAX, limitHint, parseAllowance, plusName, questionsLeftText, resetDay, type QuestionAllowance } from '../../lib/plans';
 import type { Database } from '../../lib/database.types';
 import { usePreferences } from '../../lib/preferences';
 import { phrase } from '../../lib/voice-languages';
@@ -22,7 +26,9 @@ import {
 } from '../../lib/speech';
 import { toSpeech } from '../../lib/speech-text';
 import { ScreenHeader, HeaderIconButton, HeaderActions } from '../../components/screen-header';
-import { color, space, type } from '../../constants/design';
+import { VaultPill, VaultSheet, type VaultChoice } from '../../components/vault-sheet';
+import { color, size, space, type } from '../../constants/design';
+import { categoryForAnalytics, track } from '../../lib/analytics';
 
 type DocumentCategory = Database['public']['Tables']['document_categories']['Row'];
 
@@ -45,7 +51,45 @@ function shortModel(id: string): string {
 type VoiceState = 'idle' | 'listening' | 'thinking' | 'speaking';
 
 export default function SearchScreen() {
-  const { currentFamily, members } = useFamily();
+  const { user } = useAuth();
+  const { currentFamily, members, families, modeVaults, mode } = useFamily();
+
+  // Where Ask searches (046): every vault this person is in — their personal
+  // vault and each family — unless they pick one, which answers sooner.
+  // Remembered on this device. A vault they have left since is no choice: all
+  // of them, then.
+  const [searchIn, setSearchIn] = useState('all');
+  const [searchInOpen, setSearchInOpen] = useState(false);
+  useEffect(() => {
+    if (!user) return;
+    storageGet(accountKey.askIn(user.id)).then((v) => { if (v) setSearchIn(v); }).catch(() => {});
+  }, [user?.id]);
+  const chooseSearchIn = (key: string) => {
+    setSearchIn(key);
+    if (user) storageSet(accountKey.askIn(user.id), key).catch(() => {});
+  };
+  // Only the vaults of the mode (Family or Business, the drawer's switch):
+  // a business's questions search its records, a family's its papers.
+  const askable = modeVaults;
+  const allLabel = mode === 'business' ? 'All my businesses' : 'All my vaults';
+  const severalVaults = askable.length > 1;
+  const pickedVault = searchIn !== 'all' ? askable.find((f) => f.family_id === searchIn) ?? null : null;
+  const askAll = severalVaults && !pickedVault;
+  const askFamily = pickedVault?.families ?? currentFamily;
+  const searchInChoices: VaultChoice[] = [
+    { key: 'all', name: allLabel, subtitle: 'Every document here you can see', icon: 'layers' },
+    ...askable.map((f): VaultChoice => ({
+      key: f.family_id,
+      name: vaultName(f.families),
+      subtitle: isPersonalVault(f.families) ? 'Only you' : isBusinessVault(f.families) ? 'Business' : 'Family',
+      icon: vaultIcon(f.families),
+    })),
+  ];
+  /** A source's vault, by the name every screen uses for it. */
+  const vaultOf = (familyId?: string, sent?: string) => {
+    const f = familyId ? families.find((x) => x.family_id === familyId) : undefined;
+    return f ? vaultName(f.families) : sent;
+  };
   const [query, setQuery] = useState('');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [categories, setCategories] = useState<DocumentCategory[]>([]);
@@ -84,8 +128,10 @@ export default function SearchScreen() {
       return;
     }
     showSaveNotice('error', isMissingMigration(err)
-      ? 'Saving chats is not switched on yet.'
-      : 'Could not save this chat. Please try again.', 7000);
+      ? "Saving chats isn't available yet."
+      : limitHint(err) === 'chat_limit'
+        ? (err as Error).message      // 50 a person in a vault (050), in the database's words
+        : "Couldn't save this chat. Try again.", 7000);
   };
 
   const startNewChat = () => {
@@ -148,10 +194,11 @@ export default function SearchScreen() {
     setSaving(true);
     try {
       const id = await saveChat(familyId, toSaved(messages));
+      track('chat_saved', {});
       lastSaved.current = messages;
       setSavedId(id);
       setChatFull(null);
-      showSaveNotice('ok', 'Saved. Find it again with the clock at the top.');
+      showSaveNotice('ok', 'Saved. Tap the clock at the top to find it.');
     } catch (err) {
       saveFailed(err);
     } finally {
@@ -256,6 +303,19 @@ export default function SearchScreen() {
   }, [familyId]));
   useEffect(() => { setVoiceQuota(null); limitSaid.current = false; }, [familyId]);
 
+  // Questions this month (049): each person's own, across every vault. Shown
+  // once few are left; each answer brings the count up to date.
+  const [questions, setQuestions] = useState<QuestionAllowance | null>(null);
+  useFocusEffect(useCallback(() => {
+    let cancelled = false;
+    fetchQuestionStatus().then((status) => {
+      if (!cancelled && status) setQuestions(status);   // unknown (before 049, offline): say nothing
+    });
+    return () => { cancelled = true; };
+  }, []));
+  const questionsLine = questions ? questionsLeftText(questions) : null;
+  const showQuestions = !!questions && !!questionsLine && (questions.limit == null || (questions.left ?? 0) <= 5);
+
   const readAnswer = useCallback(async (id: string, text: string, lang?: string) => {
     if (!heardIds.current.has(id) && currentFamily) {
       // None left, as far as this screen knows: no need to ask again.
@@ -304,7 +364,7 @@ export default function SearchScreen() {
   }, []);
 
   const handleAsk = async (q: string, opts: { spoken?: boolean } = {}) => {
-    if (!q.trim() || !currentFamily || isAsking) return;
+    if (!q.trim() || !askFamily || isAsking) return;
     const question = q.trim();
     setQuery('');
     setIsAsking(true);
@@ -335,10 +395,12 @@ export default function SearchScreen() {
 
     setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
 
+    track('question_asked', { voice: !!wantVoice, scope: askAll ? 'all' : 'one' });
     try {
-      const result = await ragSearch(currentFamily.id, question, history, {
+      const result = await ragSearch(askFamily.id, question, history, {
         language: voiceMode ? voiceLanguage : undefined,
         voice: wantVoice,
+        ...(askAll ? { vaults: askable.length === families.length ? 'all' as const : askable.map((f) => f.family_id) } : {}),
       });
       setMessages((prev) =>
         prev.map((m) =>
@@ -347,9 +409,24 @@ export default function SearchScreen() {
             : m
         )
       );
-      if (wantVoice) readAnswer(aiPlaceholder.id, result.answer, result.answer_language);
+      // The kinds of documents answers come from: each source's category only.
+      if (!result.question_limit) {
+        for (const s of new Map((result.sources ?? []).map((x) => [x.id, x])).values()) {
+          track('document_used_in_answer', { category: categoryForAnalytics({ name: s.category_name }) });
+        }
+      }
+      const allowance = parseAllowance(result.questions);
+      if (allowance) setQuestions(allowance);
+      if (result.question_limit) {
+        // This month's questions, or today's tries (050), are used up: said
+        // aloud in voice mode, and, like an apology, never counted as a voice chat.
+        if (voiceWanted) {
+          heardIds.current.add(aiPlaceholder.id);
+          speakMessage(aiPlaceholder.id, result.answer, result.answer_language);
+        }
+      } else if (wantVoice) readAnswer(aiPlaceholder.id, result.answer, result.answer_language);
       else if (voiceWanted) sayNoVoiceLeft();
-      if (result.debug?.index_rebuilding && currentFamily) repairIndex(currentFamily.id);
+      if (result.debug?.index_rebuilding) repairIndex(result.debug.rebuilding_family_ids?.[0] ?? askFamily.id);
     } catch (err) {
       console.error('RAG error:', err);
       const failed = t('failed');
@@ -475,6 +552,18 @@ export default function SearchScreen() {
           )}
         />
 
+        {/* Where to search (046): all vaults, or one, which answers sooner */}
+        {severalVaults && (
+          <View style={styles.searchInBar}>
+            <VaultPill
+              label="Search in"
+              value={pickedVault ? vaultName(pickedVault.families) : allLabel}
+              icon={pickedVault ? vaultIcon(pickedVault.families) : 'layers'}
+              onPress={() => setSearchInOpen(true)}
+            />
+          </View>
+        )}
+
         {/* Chat Area */}
         <ScrollView
           ref={scrollRef}
@@ -500,7 +589,13 @@ export default function SearchScreen() {
                   {voiceMode ? t(noVoiceLeft ? 'empty_title_typed' : 'empty_title') : 'Ask anything about your documents'}
                 </Text>
                 <Text style={styles.emptySub}>
-                  {voiceMode ? t('empty_sub') : "I can find information across all your family's uploaded documents."}
+                  {voiceMode
+                    ? t('empty_sub')
+                    : askAll
+                      ? (mode === 'business' ? "I'll search all your businesses." : "I'll search all your vaults.")
+                      : pickedVault
+                        ? `I'll search ${vaultName(pickedVault.families)}.`
+                        : "I'll search all your documents."}
                 </Text>
               </View>
 
@@ -582,9 +677,12 @@ export default function SearchScreen() {
                             {msg.debug.condensed ? '' : ' (not rewritten)'}
                             {'\n'}
                             {msg.debug.kept_count ?? msg.debug.kept_docs.length} of {msg.debug.candidate_count} passages kept ({msg.debug.kept_docs.length} {msg.debug.kept_docs.length === 1 ? 'doc' : 'docs'}) · {msg.debug.pinned_docs.length} pinned
+                            {Array.isArray(msg.debug.used_docs) && msg.debug.used_docs.length < msg.debug.kept_docs.length
+                              ? ` · answer used ${msg.debug.used_docs.length} ${msg.debug.used_docs.length === 1 ? 'doc' : 'docs'}`
+                              : ''}
                             {msg.debug.models?.answer ? ` · ${shortModel(msg.debug.models.answer)}` : ''}
                             {msg.debug.history_turns > 0 && !msg.debug.client_sent_sources ? ' · old client' : ''}
-                            {msg.debug.index_rebuilding ? ' · index rebuilding — run Settings › Search' : ''}
+                            {msg.debug.index_rebuilding ? ' · index rebuilding, see Settings › Search' : ''}
                             {msg.debug.embedded === false && !msg.debug.index_rebuilding
                               ? ` · no query vector${msg.debug.embed_error ? `: ${msg.debug.embed_error}` : ', keywords only'}`
                               : ''}
@@ -600,10 +698,18 @@ export default function SearchScreen() {
                               <TouchableOpacity
                                 key={s.id}
                                 style={styles.sourceChip}
-                                onPress={() => router.push(`/document/${s.id}` as any)}
+                                // Opened in the vault it is in, which may not be the open one.
+                                onPress={() => router.push({
+                                  pathname: '/document/[id]',
+                                  params: { id: s.id, ...(s.family_id ? { family: s.family_id } : {}) },
+                                } as any)}
+                                accessibilityLabel={[s.file_name, severalVaults ? vaultOf(s.family_id, s.family_name) : null].filter(Boolean).join(', in ')}
                               >
                                 <Feather name="file-text" size={12} color="#2A3D66" />
                                 <Text style={styles.sourceText} numberOfLines={1}>{s.file_name}</Text>
+                                {severalVaults && !!vaultOf(s.family_id, s.family_name) && (
+                                  <Text style={styles.sourceVault} numberOfLines={1}>· {vaultOf(s.family_id, s.family_name)}</Text>
+                                )}
                               </TouchableOpacity>
                             ))}
                           </View>
@@ -623,11 +729,11 @@ export default function SearchScreen() {
             <ActivityIndicator size="small" color="#2A3D66" />
             <Text style={styles.indexStripText} numberOfLines={1}>
               {indexFix.reextracting
-                ? 'Improving search… reading your PDFs again, tables and all'
+                ? 'Improving search… rereading your PDFs'
                 : indexFix.rechunking
-                  ? 'Improving search across languages… re-reading your documents'
-                  : `Improving search across languages… ${indexFix.done_count}` +
-                    `${indexFix.total_count > 0 ? ` of ${indexFix.total_count}` : ''} passages`}
+                  ? 'Improving search… rereading your documents'
+                  : `Improving search… ${indexFix.done_count}` +
+                    `${indexFix.total_count > 0 ? ` of ${indexFix.total_count}` : ''} done`}
             </Text>
           </View>
         )}
@@ -643,8 +749,7 @@ export default function SearchScreen() {
           <View style={[styles.indexStrip, styles.indexStripError]}>
             <Feather name="alert-triangle" size={14} color="#9A6200" />
             <Text style={[styles.indexStripText, styles.indexStripErrorText]} numberOfLines={2}>
-              Not searchable, nothing could be read from {indexFix.unindexed.length === 1 ? 'it' : 'them'}:{' '}
-              {indexFix.unindexed.join(', ')}. Try uploading again.
+              We couldn't read {indexFix.unindexed.join(', ')}. Try uploading again.
             </Text>
           </View>
         )}
@@ -663,12 +768,31 @@ export default function SearchScreen() {
             <Feather name={noVoiceLeft ? 'mic-off' : 'mic'} size={14} color={color.primary} />
             <Text style={styles.indexStripText}>
               {noVoiceLeft
-                ? `You have used your ${voiceQuota.limit} free voice chats. Type to ask; answers stay on the screen.`
-                : `You have ${voiceQuota.left} of ${voiceQuota.limit} free voice chats left.`}
+                ? `You've used all ${voiceQuota.limit} free voice chats. Type to ask instead.`
+                : `${voiceQuota.left} of ${voiceQuota.limit} free voice chats left.`}
             </Text>
             <TouchableOpacity onPress={() => router.push(plusPage('voice') as any)} accessibilityRole="link" hitSlop={8}>
-              <Text style={styles.voiceStripLink}>Family Plus ›</Text>
+              <Text style={styles.voiceStripLink}>{plusName(isBusinessVault(currentFamily))} ›</Text>
             </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Questions this month (049): once few are left, how many, and what Family Plus changes. */}
+        {showQuestions && questions && (
+          <View
+            style={[styles.indexStrip, questions.left === 0 ? styles.indexStripError : styles.voiceStrip]}
+            accessibilityLiveRegion="polite"
+          >
+            <Feather name="message-circle" size={14} color={questions.left === 0 ? '#9A6200' : color.primary} />
+            <Text style={[styles.indexStripText, questions.left === 0 && styles.indexStripErrorText]}>
+              {questionsLine}
+              {questions.left === 0 && resetDay(questions.resetsOn) ? `. They start again on ${resetDay(questions.resetsOn)}.` : '.'}
+            </Text>
+            {!questions.plus && (
+              <TouchableOpacity onPress={() => router.push(plusPage('questions') as any)} accessibilityRole="link" hitSlop={8}>
+                <Text style={styles.voiceStripLink}>{plusName(isBusinessVault(currentFamily))} ›</Text>
+              </TouchableOpacity>
+            )}
           </View>
         )}
 
@@ -679,7 +803,7 @@ export default function SearchScreen() {
             <Text style={[styles.indexStripText, styles.indexStripErrorText]}>{chatFull.text}</Text>
             {chatFull.plusLink && (
               <TouchableOpacity onPress={() => router.push(plusPage('storage') as any)} accessibilityRole="link" hitSlop={8}>
-                <Text style={styles.voiceStripLink}>Family Plus ›</Text>
+                <Text style={styles.voiceStripLink}>{plusName(isBusinessVault(currentFamily))} ›</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -689,7 +813,7 @@ export default function SearchScreen() {
         {hasMessages && (
           <View style={styles.saveBar}>
             {savedId && saveStopped ? (
-              <View style={[styles.saveBtn, styles.saveBtnStopped]} accessibilityLabel="New answers in this chat are not being saved">
+              <View style={[styles.saveBtn, styles.saveBtnStopped]} accessibilityLabel="New answers aren't being saved">
                 <Feather name="alert-circle" size={16} color="#9A6200" />
                 <Text style={[styles.saveBtnText, styles.saveBtnTextStopped]}>Not saving new answers</Text>
               </View>
@@ -742,6 +866,7 @@ export default function SearchScreen() {
               placeholder={voiceMode ? voicePlaceholder() : 'Ask about your documents...'}
               placeholderTextColor={voiceNotice ? '#B45309' : '#9CA3AF'}
               returnKeyType="send"
+              maxLength={QUESTION_INPUT_MAX}
               style={[styles.input, voiceMode && styles.inputLarge]}
               editable={!isAsking && voiceState !== 'listening'}
             />
@@ -802,6 +927,16 @@ export default function SearchScreen() {
           </View>
         </View>
       </KeyboardAvoidingView>
+
+      <VaultSheet
+        visible={searchInOpen}
+        title="Search in"
+        intro="Pick one vault for a faster answer."
+        choices={searchInChoices}
+        selected={pickedVault ? pickedVault.family_id : 'all'}
+        onSelect={chooseSearchIn}
+        onClose={() => setSearchInOpen(false)}
+      />
     </SafeAreaView>
   );
 }
@@ -890,8 +1025,18 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingHorizontal: 8,
     paddingVertical: 4,
+    // Never wider than the answer: the file name gives way first, then the vault.
+    maxWidth: '100%',
   },
-  sourceText: { fontSize: 12, lineHeight: 16, color: color.primary, fontWeight: '500', maxWidth: 160 },
+  sourceText: { fontSize: 12, lineHeight: 16, color: color.primary, fontWeight: '500', maxWidth: 160, flexShrink: 1 },
+  sourceVault: { fontSize: 12, lineHeight: 16, color: color.textMuted, maxWidth: 120, flexShrink: 0 },
+  searchInBar: {
+    paddingHorizontal: space.lg,
+    paddingVertical: space.sm,
+    backgroundColor: color.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: color.border,
+  },
   searchedFor: { fontSize: 12, lineHeight: 16, color: '#9CA3AF', marginTop: space.sm, fontStyle: 'italic' },
   indexStrip: {
     flexDirection: 'row',
@@ -942,7 +1087,9 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: '#E5E7EB',
     paddingHorizontal: space.lg,
-    paddingVertical: 10,
+    paddingTop: 10,
+    // The tab bar's round Ask button rises into this space; the box stays clear of it.
+    paddingBottom: 10 + size.ask - size.tabBar,
   },
   inputBox: {
     flexDirection: 'row',

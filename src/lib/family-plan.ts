@@ -1,13 +1,20 @@
 // ─── Is the family on Family Plus? ──────────────────────────────
 //
-// Starred features (★, <PlusTag />) are for Family Plus families: today the
-// Reminders page, Import from Gmail, and voice chats after each person's
-// first 10 (041–043). For a free family, tapping one opens
-// /plus, which shows Free and Plus side by side, and the screens themselves
-// send a free family there too (after a refresh, or from a link). Storage
-// beyond the free 1 GB is kept by the server (038), and Gmail import refuses
-// a free family on the server as well. The reminders themselves — under the
-// bell and on devices — reach every family.
+// Starred features (★, <PlusTag />) are for Family Plus families: today
+// expiry reminders and the Reminders page (048), Import from Gmail, voice
+// chats after each person's first 10 (041–043), questions after each
+// person's 20 a month, members five to eight, and share links that last 30
+// days (049). For a free family, tapping
+// one opens /plus, which shows Free and Plus side by side, and the screens
+// themselves send a free family there too (after a refresh, or from a link).
+// Storage beyond the free 200 MB (100 MB for a personal vault) is kept by the
+// server (038, 048), the server makes expiry reminders only for a vault on
+// Plus, and Gmail import refuses a free family on the server as well.
+// Birthday reminders reach every family.
+//
+// A business (051) has its own plans, Plus, Pro and Enterprise, never Family Plus. Its ★
+// features open the same /plus page, which shows a business its plans. Its
+// plan ending closes adding (`closed`) instead of removing anything.
 //
 // The plan comes from family_storage_status() (038, 039), kept for a minute
 // per family. When it cannot be read (before 038, or offline) nothing is
@@ -15,18 +22,25 @@
 // ────────────────────────────────────────────────────────────────
 
 import { useCallback, useEffect, useState } from 'react';
+import { useAuth } from './auth';
 import { useFamily } from './family-context';
-import { fetchPaymentsStatus, fetchStorageStatus, type PaymentsStatus } from './api';
+import { fetchPaymentsStatus, fetchQuestionStatus, fetchStorageStatus, type PaymentsStatus } from './api';
 import type { PlanName } from './plans';
 
 /** What a starred feature is called in /plus?feature=… */
-export type PlusFeature = 'reminders' | 'gmail' | 'storage' | 'voice';
+export type PlusFeature = 'reminders' | 'gmail' | 'storage' | 'voice' | 'questions' | 'members' | 'links';
+/** What only a business's paid plans bring (056): the overview's lists, money in and out, reminders on notes. */
+export type BusinessFeature = 'overview' | 'money' | 'notes';
 
 interface KnownPlan {
   plan: PlanName | null;
   paidUntil: string | null;
   /** Plus has ended and the family is above the free limit: when the newest documents above it go (040). */
   removalAt: string | null;
+  /** A business whose paid plan ended: it keeps every record and adds nothing until renewed (051). */
+  closed: boolean;
+  /** The plan running now was switched on for a demo (051). */
+  trial: boolean;
   at: number;
 }
 
@@ -42,12 +56,14 @@ async function readPlan(familyId: string, force: boolean): Promise<KnownPlan> {
       plan: status?.plan ?? null,
       paidUntil: status?.paidUntil ?? null,
       removalAt: status?.removalAt ?? null,
+      closed: status?.closed === true,
+      trial: status?.trial === true,
       at: Date.now(),
     };
     known.set(familyId, fresh);
     return fresh;
   } catch {
-    return hit ?? { plan: null, paidUntil: null, removalAt: null, at: 0 };
+    return hit ?? { plan: null, paidUntil: null, removalAt: null, closed: false, trial: false, at: 0 };
   }
 }
 
@@ -66,7 +82,7 @@ export function usePaymentsStatus(): PaymentsStatus | null {
 }
 
 /** The page a free family sees instead of a starred feature. */
-export function plusPage(feature?: PlusFeature): string {
+export function plusPage(feature?: PlusFeature | BusinessFeature): string {
   return feature ? `/plus?feature=${feature}` : '/plus';
 }
 
@@ -115,9 +131,66 @@ export function useFamilyPlan() {
     plan: plan?.plan ?? null,
     paidUntil: plan?.paidUntil ?? null,
     removalAt: plan?.removalAt ?? null,
+    closed: plan?.closed === true,
+    trial: plan?.trial === true,
     isFree: plan?.plan === 'free',
     loading,
     refresh,
     routeFor,
   };
+}
+
+// ─── Am I on Family Plus? ───────────────────────────────────────
+//
+// A person is on Plus when any vault they are in is (049's person_on_plus()),
+// and a ★ goes before their own name wherever the app shows it. Read from
+// question_status(), which counts nothing, kept a minute and shared by every
+// screen. Unknown (before 049, offline) shows no star. Only your own: whether
+// another member is on Plus through some other family is not theirs to see.
+
+let mine: { userId: string; plus: boolean; at: number } | null = null;
+const listeners = new Set<() => void>();
+
+let asking: Promise<boolean> | null = null;
+
+async function readOnPlus(userId: string, force: boolean): Promise<boolean> {
+  if (mine && mine.userId === userId && !force && Date.now() - mine.at < FRESH_MS) return mine.plus;
+  // Every screen showing a name asks at once; one question answers them all.
+  asking ??= (async () => {
+    const status = await fetchQuestionStatus().catch(() => null);
+    if (!status) return mine?.userId === userId ? mine.plus : false;
+    mine = { userId, plus: status.plus, at: Date.now() };
+    return status.plus;
+  })().finally(() => { asking = null; });
+  return asking;
+}
+
+/** Ask again everywhere: after a payment, or when the plan may have changed. */
+export function forgetOnPlus() {
+  mine = null;
+  listeners.forEach((l) => l());
+}
+
+/** Is the signed-in person on Family Plus, in any vault? False until known. */
+export function useOnPlus(): boolean {
+  const { user } = useAuth();
+  const userId = user?.id ?? null;
+  const [plus, setPlus] = useState(() => !!userId && mine?.userId === userId && mine.plus);
+
+  useEffect(() => {
+    if (!userId) {
+      setPlus(false);
+      return;
+    }
+    let cancelled = false;
+    const read = (force: boolean) => {
+      readOnPlus(userId, force).then((p) => { if (!cancelled) setPlus(p); });
+    };
+    read(false);
+    const onForget = () => read(true);
+    listeners.add(onForget);
+    return () => { cancelled = true; listeners.delete(onForget); };
+  }, [userId]);
+
+  return plus;
 }

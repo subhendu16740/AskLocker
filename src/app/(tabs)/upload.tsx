@@ -12,9 +12,10 @@ import * as ImagePicker from 'expo-image-picker';
 import { useFamily } from '../../lib/family-context';
 import { useDocumentOwners } from '../../lib/family-people';
 import { useAuth } from '../../lib/auth';
-import { StorageFullError, fetchCategories, uploadDocument } from '../../lib/api';
+import { StorageFullError, fetchCategories, fetchDocumentExpiry, fetchStorageStatus, uploadDocument } from '../../lib/api';
+import { longDate } from '../../lib/dates';
 import { plusPage, useFamilyPlan } from '../../lib/family-plan';
-import type { PlanName } from '../../lib/plans';
+import { MAX_FILE_BYTES, fileTooLargeMessage, plusName, type PlanName } from '../../lib/plans';
 import {
   extractTextFromImage, isImageFile, ocrLanguageGapOnThisDevice, type OcrProgress,
 } from '../../lib/ocr';
@@ -25,7 +26,12 @@ import {
 } from '../../lib/file-types';
 import type { Database } from '../../lib/database.types';
 import { ScreenHeader, PlusTag } from '../../components/screen-header';
+import { VaultDropdown, type VaultChoice } from '../../components/vault-sheet';
+import { isBusinessVault, isPersonalVault, splitVaults, vaultIcon, vaultName, vaultSubtitle } from '../../lib/vaults';
+import { vaultTheme } from '../../lib/vault-theme';
 import { color, radius, shadow, size, space, type } from '../../constants/design';
+import { categoryForAnalytics, track } from '../../lib/analytics';
+import { categoryOrder, suggestCategory } from '../../../supabase/functions/_shared/doc-category';
 
 type DocumentCategory = Database['public']['Tables']['document_categories']['Row'];
 
@@ -39,12 +45,38 @@ interface PickedFile {
 
 export default function UploadScreen() {
   const { user } = useAuth();
-  const { currentFamily } = useFamily();
+  const { currentFamily, families, modeVaults, mode, switchFamily } = useFamily();
   const { routeFor } = useFamilyPlan();
-  // Everyone in the family tree (you first); the members, before migration 031.
-  const owners = useDocumentOwners();
   // From a person's page: "Add a document for Nani".
   const { person } = useLocalSearchParams<{ person?: string }>();
+  // Where the document goes (046). Someone in no family has only their
+  // personal vault, and that is where it goes. Someone in a family is asked
+  // every time — their personal vault or one of their families — and nothing
+  // is chosen for them: a private paper must never land in a shared vault by
+  // default. From a person's page, it is that person's vault. Only the
+  // vaults of the mode (the drawer's Family or Business): in Business, a
+  // business's records go to a business, asked when there are several.
+  const { personal, families: shared } = splitVaults(modeVaults);
+  const vaults = [...(personal ? [personal] : []), ...shared];
+  const askWhere = mode === 'business' ? vaults.length > 1 : shared.length > 0 && vaults.length > 1;
+  const [destination, setDestination] = useState<string | null>(person ? currentFamily?.id ?? null : null);
+  const target = askWhere
+    ? vaults.find((v) => v.family_id === destination) ?? null
+    : vaults[0] ?? null;
+  const targetFamily = target?.families ?? null;
+  const toBusiness = isBusinessVault(targetFamily);
+  // The vault's own colours: a business's teal, a family's navy.
+  const uploadTheme = vaultTheme(targetFamily ?? currentFamily);
+  // Everyone in that vault's family tree (you first); the members, before
+  // migration 031. A business has no "whose document" (051).
+  const familyOwners = useDocumentOwners(target?.family_id ?? null);
+  const owners = toBusiness ? [] : familyOwners;
+  const vaultChoices: VaultChoice[] = vaults.map((v) => ({
+    key: v.family_id,
+    name: vaultName(v.families),
+    subtitle: vaultSubtitle(v),
+    icon: vaultIcon(v.families),
+  }));
   const { documentLanguages } = usePreferences();
   // Shown while scanning, so it is obvious which languages are being read —
   // and obvious what to change in Settings if a page comes back as nonsense.
@@ -56,8 +88,17 @@ export default function UploadScreen() {
   const [selectedPerson, setSelectedPerson] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
   const [categories, setCategories] = useState<DocumentCategory[]>([]);
+  // Nothing is picked for the person but a suggestion from the file itself
+  // (its name, and the text read off a photo); a tap changes or clears it.
+  const [suggestedCategory, setSuggestedCategory] = useState<string | null>(null);
+  const [categoryTouched, setCategoryTouched] = useState(false);
+  const [allCategories, setAllCategories] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [uploadResult, setUploadResult] = useState<{ docId: string } | null>(null);
+  // `expiresOn`: a date ingest found in a document saved to a vault on Free —
+  // the moment to offer Family Plus's expiry reminders (049).
+  const [uploadResult, setUploadResult] = useState<
+    { docId: string; familyId: string; vault: string; expiresOn: Date | null } | null
+  >(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   // Which wall was hit: the family's storage limit (038) on this plan, or
   // anything else (null). A free family is offered the Family Plus page.
@@ -70,16 +111,48 @@ export default function UploadScreen() {
     fetchCategories().then(setCategories).catch(console.error);
   }, []);
 
+  // The tab stays mounted: arriving from a person's page again means that person's vault.
+  useEffect(() => {
+    if (person && currentFamily) setDestination(currentFamily.id);
+  }, [person, currentFamily?.id]);
+
   useEffect(() => {
     if (person && owners.some((o) => o.id === person)) setSelectedPerson(person);
     else if (owners.length > 0 && !owners.some((o) => o.id === selectedPerson)) setSelectedPerson(owners[0].id);
   }, [owners, person]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // The vault's own list first (051): a business's for a business, a
+  // family's otherwise; before 051 every category is a family's. A family's
+  // common ones lead, "Other" is last, and the rest are one tap away.
+  const audience: 'family' | 'business' = toBusiness ? 'business' : 'family';
+  const inList = (c: DocumentCategory) => {
+    const a = (c as { audience?: string | null }).audience ?? 'family';
+    return a === audience || a === 'both';
+  };
+  const byOrder = (x: DocumentCategory, y: DocumentCategory) =>
+    categoryOrder(x.is_system !== false ? x.name : '') - categoryOrder(y.is_system !== false ? y.name : '');
+  const ownCategories = categories.filter(inList).sort(byOrder);
+  const firstCategories = ownCategories.slice(0, 12);
+  const shownCategories = allCategories
+    ? [...ownCategories, ...categories.filter((c) => !inList(c)).sort(byOrder)]
+    : [...firstCategories, ...categories.filter((c) => c.id === selectedCategory && !firstCategories.includes(c))];
+  const hiddenCount = categories.length - shownCategories.length;
+
+  // A suggestion, until the person picks: from the file's name at once, and
+  // again once the text of a photo has been read, from the vault's own list.
+  // Nothing is picked when nothing says.
   useEffect(() => {
-    if (categories.length > 0 && !selectedCategory) {
-      setSelectedCategory(categories[0].id);
-    }
-  }, [categories]);
+    if (categoryTouched) return;
+    const name = pickedFile ? suggestCategory({ fileName: pickedFile.name, text: ocrText, audience }) : null;
+    const match = name ? ownCategories.find((c) => c.is_system !== false && c.name === name) : undefined;
+    setSuggestedCategory(match?.id ?? null);
+    setSelectedCategory(match?.id ?? '');
+  }, [categories, audience, pickedFile?.name, ocrText, categoryTouched]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const pickCategory = (id: string) => {
+    setCategoryTouched(true);
+    setSelectedCategory((now) => (now === id ? '' : id));
+  };
 
   // ─── File Pickers ─────────────────────────────────────────────
 
@@ -97,6 +170,13 @@ export default function UploadScreen() {
       setErrorMsg(unsupportedFileMessage(kind));
       return;
     }
+    // Over the bucket's 10 MB (050): said now, before it is read. A picker
+    // that cannot say the size is checked again at Save.
+    if ((picked.size ?? 0) > MAX_FILE_BYTES) {
+      setFullPlan(null);
+      setErrorMsg(fileTooLargeMessage(picked.size ?? 0));
+      return;
+    }
     const file: PickedFile = {
       uri: picked.uri,
       name: nameWithType(picked.name, kind, fallbackStem),
@@ -106,6 +186,8 @@ export default function UploadScreen() {
     };
     setPickedFile(file);
     setOcrText(null);
+    setCategoryTouched(false);
+    setAllCategories(false);
     runOcr(file);
   };
 
@@ -123,14 +205,14 @@ export default function UploadScreen() {
         `document_${Date.now()}`,
       );
     } catch (err) {
-      Alert.alert('Error', 'Failed to pick document.');
+      Alert.alert('Error', "Couldn't open that file. Try again.");
     }
   };
 
   const pickFromCamera = async () => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert('Permission needed', 'Camera permission is required to scan documents.');
+      Alert.alert('Permission needed', 'Allow camera access to scan documents.');
       return;
     }
 
@@ -147,7 +229,7 @@ export default function UploadScreen() {
   const pickFromGallery = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert('Permission needed', 'Gallery permission is required.');
+      Alert.alert('Permission needed', 'Allow photo access to pick from your gallery.');
       return;
     }
 
@@ -187,9 +269,11 @@ export default function UploadScreen() {
   // ─── Upload Handler ───────────────────────────────────────────
 
   const handleUpload = async () => {
-    if (!pickedFile || !currentFamily || !user) {
+    if (!pickedFile || !targetFamily || !user) {
       setFullPlan(null);
-      setErrorMsg('Missing file, family, or user session. Please try again.');
+      setErrorMsg(askWhere && !targetFamily
+        ? 'Choose where to save this document.'
+        : 'Something went wrong. Try again.');
       return;
     }
 
@@ -200,23 +284,39 @@ export default function UploadScreen() {
       const blob = await response.blob();
 
       const docId = await uploadDocument({
-        familyId: currentFamily.id,
-        storageNamespace: currentFamily.storage_namespace,
+        familyId: targetFamily.id,
+        storageNamespace: targetFamily.storage_namespace,
         userId: user.id,
         fileName: pickedFile.name,
         fileType: pickedFile.type,
         fileBlob: blob,
         fileSizeBytes: pickedFile.size || blob.size,
         categoryId: selectedCategory || undefined,
-        belongsToMemberId: selectedPerson || undefined,
+        // Only someone in this vault's tree: the choice may be from another vault's.
+        belongsToMemberId: owners.some((o) => o.id === selectedPerson) ? selectedPerson : undefined,
         ocrText: ocrText || undefined,
       });
+      track('document_added', {
+        category: categoryForAnalytics(categories.find((c) => c.id === selectedCategory)),
+        file_type: /^[a-z0-9]{1,8}$/.test(pickedFile.type) ? pickedFile.type : 'other',
+        vault: isPersonalVault(targetFamily) ? 'personal' : toBusiness ? 'business' : 'family',
+        category_source: !selectedCategory ? 'none'
+          : suggestedCategory ? (selectedCategory === suggestedCategory ? 'suggested' : 'changed')
+            : 'chosen',
+      });
 
-      setUploadResult({ docId });
+      // A future expiry date in a vault on Free: offer the reminders for it.
+      // Neither question may hold the "Uploaded!" back if it fails.
+      const [expiry, room] = await Promise.all([
+        fetchDocumentExpiry(targetFamily.id, docId).catch(() => null),
+        fetchStorageStatus(targetFamily.id).catch(() => null),
+      ]);
+      const expiresOn = expiry && expiry.getTime() > Date.now() && room?.plan === 'free' ? expiry : null;
+      setUploadResult({ docId, familyId: targetFamily.id, vault: vaultName(targetFamily), expiresOn });
     } catch (err: any) {
       console.error('Upload error:', err);
       setFullPlan(err instanceof StorageFullError ? err.room.plan : null);
-      setErrorMsg(err.message ?? 'Something went wrong.');
+      setErrorMsg(err.message ?? 'Something went wrong. Try again.');
     } finally {
       setUploading(false);
     }
@@ -239,7 +339,7 @@ export default function UploadScreen() {
             <View style={styles.primaryActions}>
               <TouchableOpacity onPress={pickFromCamera} activeOpacity={0.85} style={styles.scanTouch}>
                 <LinearGradient
-                  colors={['#2A3D66', '#4A6491']}
+                  colors={uploadTheme.gradient}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 1 }}
                   style={styles.primaryBtn}
@@ -291,7 +391,7 @@ export default function UploadScreen() {
             {/* Supported formats hint */}
             <View style={styles.hintCard}>
               <Feather name="info" size={16} color="#6B7280" />
-              <Text style={styles.hintText}>Supports PDF, PNG, JPG, JPEG</Text>
+              <Text style={styles.hintText}>PDF, PNG or JPG</Text>
             </View>
           </View>
         ) : (
@@ -328,7 +428,7 @@ export default function UploadScreen() {
                 <Feather name="alert-triangle" size={16} color="#9A6200" />
                 <Text style={styles.ocrGapText}>
                   This app can't read {languageGap.map(l => l.english).join(', ')} yet.
-                  Scanning still works, but only the English on the page will be found.
+                  It will only find the English text.
                 </Text>
               </View>
             )}
@@ -340,8 +440,8 @@ export default function UploadScreen() {
                   <ActivityIndicator size="small" color="#2A3D66" />
                   <Text style={styles.ocrLabel}>
                     {ocrProgress.downloading ? `Getting ${languageLabel} language data...` :
-                     ocrProgress.stage === 'loading' ? 'Loading OCR engine...' :
-                     ocrProgress.stage === 'recognizing' ? `Reading ${languageLabel} text from image...` : 'Done'}
+                     ocrProgress.stage === 'loading' ? 'Getting ready...' :
+                     ocrProgress.stage === 'recognizing' ? `Reading ${languageLabel} text...` : 'Done'}
                   </Text>
                 </View>
                 <View style={styles.ocrBarBg}>
@@ -355,7 +455,7 @@ export default function UploadScreen() {
               <View style={styles.ocrDoneCard}>
                 <Feather name="check-circle" size={16} color="#16A34A" />
                 <Text style={styles.ocrDoneText}>
-                  Text extracted ({ocrText.length} characters)
+                  Found {ocrText.length} characters of text
                 </Text>
               </View>
             )}
@@ -369,8 +469,30 @@ export default function UploadScreen() {
               <Text style={styles.changeFileBtnText}>Choose different file</Text>
             </TouchableOpacity>
 
-            {/* Owner */}
-            <Text style={styles.sectionTitle}>Who does this belong to?</Text>
+            {/* Where it goes (046): asked, in a dropdown, whenever there is more than one vault */}
+            {askWhere && (
+              <>
+                <Text style={styles.sectionTitle}>Where should this go?</Text>
+                <VaultDropdown
+                  label="Where should this go?"
+                  choices={vaultChoices}
+                  selected={target?.family_id ?? null}
+                  onSelect={setDestination}
+                />
+                <Text style={styles.whereHint}>
+                  {!targetFamily
+                    ? `${personal ? 'Your personal vault is yours alone. ' : ''}Everyone in a family or business can see what's saved there.`
+                    : isPersonalVault(targetFamily)
+                      ? "Yours alone. Your family won't see it."
+                      : `Everyone in ${targetFamily.name} will see it.`}
+                </Text>
+              </>
+            )}
+
+            {/* Owner: only when there is someone else to choose */}
+            {!!targetFamily && owners.length > 1 && (
+            <>
+            <Text style={[styles.sectionTitle, askWhere && styles.sectionTitleLater]}>Who does this belong to?</Text>
             <View style={styles.chipsWrap}>
               {owners.map((o) => {
                 const sub = o.label ? ` (${o.label})` : '';
@@ -398,14 +520,21 @@ export default function UploadScreen() {
                 );
               })}
             </View>
+            </>
+            )}
 
             {/* Category */}
             <Text style={[styles.sectionTitle, styles.sectionTitleLater]}>Category</Text>
+            {!!suggestedCategory && selectedCategory === suggestedCategory && !categoryTouched && (
+              <Text style={styles.categoryHint}>Picked from the file. Tap another to change it.</Text>
+            )}
             <View style={styles.chipsWrap}>
-              {categories.slice(0, 12).map((cat) => (
+              {shownCategories.map((cat) => (
                 <TouchableOpacity
                   key={cat.id}
-                  onPress={() => setSelectedCategory(cat.id)}
+                  onPress={() => pickCategory(cat.id)}
+                  accessibilityRole="button"
+                  aria-pressed={selectedCategory === cat.id}
                   style={[
                     styles.chip,
                     selectedCategory === cat.id && styles.chipSelected,
@@ -419,6 +548,16 @@ export default function UploadScreen() {
                   </Text>
                 </TouchableOpacity>
               ))}
+              {hiddenCount > 0 || allCategories ? (
+                <TouchableOpacity
+                  onPress={() => setAllCategories((v) => !v)}
+                  style={[styles.chip, styles.chipMore]}
+                  accessibilityRole="button"
+                  accessibilityLabel={allCategories ? 'Show fewer categories' : `Show ${hiddenCount} more categories`}
+                >
+                  <Text style={[styles.chipText, styles.chipMoreText]}>{allCategories ? 'Fewer' : 'More…'}</Text>
+                </TouchableOpacity>
+              ) : null}
             </View>
 
             {/* Upload Button */}
@@ -426,13 +565,15 @@ export default function UploadScreen() {
               activeOpacity={0.85}
               style={styles.saveBtnWrap}
               onPress={handleUpload}
-              disabled={uploading || ocrRunning}
+              disabled={uploading || ocrRunning || (askWhere && !targetFamily)}
+              accessibilityRole="button"
+              accessibilityState={{ disabled: uploading || ocrRunning || (askWhere && !targetFamily) }}
             >
               <LinearGradient
-                colors={['#2A3D66', '#4A6491']}
+                colors={uploadTheme.gradient}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 0 }}
-                style={[styles.saveBtn, uploading && styles.saveBtnDisabled]}
+                style={[styles.saveBtn, (uploading || (askWhere && !targetFamily)) && styles.saveBtnDisabled]}
               >
                 {uploading ? (
                   <View style={styles.uploadingRow}>
@@ -440,7 +581,9 @@ export default function UploadScreen() {
                     <Text style={styles.saveBtnText}>Uploading...</Text>
                   </View>
                 ) : (
-                  <Text style={styles.saveBtnText}>Save to Vault</Text>
+                  <Text style={styles.saveBtnText} numberOfLines={1}>
+                    {targetFamily ? `Save to ${vaultName(targetFamily)}` : askWhere ? 'Choose where it goes' : 'Save to Vault'}
+                  </Text>
                 )}
               </LinearGradient>
             </TouchableOpacity>
@@ -456,22 +599,47 @@ export default function UploadScreen() {
               <Feather name="check-circle" size={32} color="#22C55E" />
             </View>
             <Text style={styles.dialogTitle}>Uploaded!</Text>
-            <Text style={styles.dialogMsg}>Document saved to your vault.</Text>
+            <Text style={styles.dialogMsg}>Saved to {uploadResult?.vault ?? 'your vault'}.</Text>
+            {uploadResult?.expiresOn && (
+              <View style={styles.offer}>
+                <Text style={styles.offerText}>
+                  It expires on {longDate(uploadResult.expiresOn)}. ★ With {plusName(toBusiness)}, everyone gets reminders
+                  90, 30 and 7 days before.
+                </Text>
+                <TouchableOpacity
+                  onPress={() => {
+                    const done = uploadResult;
+                    setUploadResult(null);
+                    setPickedFile(null);
+                    setDestination(person ? currentFamily?.id ?? null : null);
+                    // The Plus page is about the open vault: open the one it went to first.
+                    if (done.familyId !== currentFamily?.id) switchFamily(done.familyId);
+                    router.push(plusPage('reminders') as any);
+                  }}
+                  accessibilityRole="link"
+                  hitSlop={8}
+                >
+                  <Text style={styles.offerLink}>See {plusName(toBusiness)} ›</Text>
+                </TouchableOpacity>
+              </View>
+            )}
             <View style={styles.dialogBtns}>
               <TouchableOpacity
                 style={styles.dialogBtnOutline}
                 onPress={() => {
-                  const docId = uploadResult?.docId;
+                  const done = uploadResult;
                   setUploadResult(null);
                   setPickedFile(null);
-                  if (docId) router.push(`/document/${docId}` as any);
+                  setDestination(person ? currentFamily?.id ?? null : null);
+                  // It opens in the vault it went to, whichever vault is open.
+                  if (done) router.push({ pathname: '/document/[id]', params: { id: done.docId, family: done.familyId } } as any);
                 }}
               >
                 <Text style={styles.dialogBtnOutlineText}>View</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.dialogBtnFilled}
-                onPress={() => { setUploadResult(null); setPickedFile(null); }}
+                onPress={() => { setUploadResult(null); setPickedFile(null); setDestination(person ? currentFamily?.id ?? null : null); }}
               >
                 <Text style={styles.dialogBtnFilledText}>Done</Text>
               </TouchableOpacity>
@@ -493,10 +661,15 @@ export default function UploadScreen() {
               <View style={styles.dialogBtns}>
                 <TouchableOpacity
                   style={styles.dialogBtnOutline}
-                  onPress={() => { setErrorMsg(null); router.push(plusPage('storage') as any); }}
+                  onPress={() => {
+                    setErrorMsg(null);
+                    // The Plus page is about the open vault: open the one that is full first.
+                    if (targetFamily && targetFamily.id !== currentFamily?.id) switchFamily(targetFamily.id);
+                    router.push(plusPage('storage') as any);
+                  }}
                   accessibilityRole="button"
                 >
-                  <Text style={styles.dialogBtnOutlineText}>See Family Plus</Text>
+                  <Text style={styles.dialogBtnOutlineText}>See {plusName(toBusiness)}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.dialogBtnFilled} onPress={() => setErrorMsg(null)} accessibilityRole="button">
                   <Text style={styles.dialogBtnFilledText}>OK</Text>
@@ -520,6 +693,7 @@ export default function UploadScreen() {
 // ─── Styles ───────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
+  whereHint: { ...type.caption, marginTop: space.sm },
   safe: { flex: 1, backgroundColor: color.background },
   scroll: { flex: 1 },
   body: { padding: space.lg },
@@ -693,6 +867,9 @@ const styles = StyleSheet.create({
   chipCheck: { marginRight: space.xs },
   chipText: { fontSize: 14, lineHeight: 20, fontWeight: '500', color: color.textBody },
   chipTextSelected: { color: '#FFFFFF' },
+  chipMore: { borderStyle: 'dashed' },
+  chipMoreText: { color: color.primary },
+  categoryHint: { ...type.caption, marginTop: -space.sm, marginBottom: space.sm },
   saveBtnWrap: { marginTop: space.xl },
   saveBtn: {
     borderRadius: radius.control,
@@ -722,6 +899,12 @@ const styles = StyleSheet.create({
   dialogTitle: { ...type.title, color: color.text, marginBottom: space.xs },
   dialogMsg: { ...type.body, color: color.textMuted, textAlign: 'center', marginBottom: space.xl },
   dialogBtns: { flexDirection: 'row', gap: space.md, width: '100%' },
+  offer: {
+    width: '100%', gap: space.xs, padding: space.md, marginTop: -space.md, marginBottom: space.lg,
+    borderRadius: radius.control, backgroundColor: '#FBEDEB',
+  },
+  offerText: { ...type.caption, color: color.text },
+  offerLink: { ...type.label, color: color.primary, fontWeight: '600' },
   dialogBtnOutline: {
     flex: 1,
     borderRadius: radius.control,

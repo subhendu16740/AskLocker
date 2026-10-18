@@ -11,6 +11,7 @@ import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../lib/auth';
 import { useFamily } from '../../lib/family-context';
+import { useFamilyOnly } from '../../lib/family-only';
 import { fetchFamilyTree, fetchEmergencyCard, isMissingMigration, type FamilyTree } from '../../lib/api';
 import type { EmergencyCard } from '../../lib/emergency';
 import { longDate, ageInYears } from '../../lib/dates';
@@ -21,6 +22,7 @@ import { Card, Muted, PrimaryButton, Status, screenStyles } from '../../componen
 import { color, radius, space, type } from '../../constants/design';
 
 export default function EmergencyCardScreen() {
+  useFamilyOnly();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { user } = useAuth();
   const { currentFamily, membership } = useFamily();
@@ -39,14 +41,14 @@ export default function EmergencyCardScreen() {
       .catch((err) => {
         if (cancelled) return;
         setTree({ people: [], links: [], nicknames: false });
-        setProblem(isMissingMigration(err) ? 'The family tree is not switched on yet.' : err?.message ?? 'Could not load this person.');
+        setProblem(isMissingMigration(err) ? "The family tree isn't switched on yet." : err?.message ?? "Couldn't load this person.");
       });
     fetchEmergencyCard(currentFamily.id, id)
       .then((c) => { if (!cancelled) setCard(c); })
       .catch((err) => {
         if (cancelled) return;
         setCard(null);
-        setProblem(isMissingMigration(err) ? 'Emergency cards are not switched on yet.' : err?.message ?? 'Could not load the emergency card.');
+        setProblem(isMissingMigration(err) ? "Emergency cards aren't switched on yet." : err?.message ?? "Couldn't load the emergency card.");
       });
     return () => { cancelled = true; };
   }, [currentFamily?.id, id]);
@@ -104,7 +106,7 @@ export default function EmergencyCardScreen() {
                   {isMe ? 'You have no emergency card yet.' : `${shortName(person.name)} has no emergency card yet.`}
                 </Text>
                 <Muted>
-                  Blood group, allergies, medicines, their doctor and who to call — ready to show a doctor in one tap.
+                  It keeps blood group, allergies and who to call ready for a doctor.
                 </Muted>
                 {canEdit
                   ? <PrimaryButton label="Add an emergency card" icon="plus" onPress={edit} />

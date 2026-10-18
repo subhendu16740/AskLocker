@@ -67,6 +67,7 @@ export type Database = {
       }
       document_categories: {
         Row: {
+          audience: string
           created_by: string | null
           has_expiry: boolean | null
           icon: string | null
@@ -75,6 +76,7 @@ export type Database = {
           name: string
         }
         Insert: {
+          audience?: string
           created_by?: string | null
           has_expiry?: boolean | null
           icon?: string | null
@@ -83,6 +85,7 @@ export type Database = {
           name: string
         }
         Update: {
+          audience?: string
           created_by?: string | null
           has_expiry?: boolean | null
           icon?: string | null
@@ -99,6 +102,33 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      daily_usage: {
+        Row: {
+          day: string
+          question_tries: number
+          reads: number
+          updated_at: string
+          uploads: number
+          user_id: string
+        }
+        Insert: {
+          day: string
+          question_tries?: number
+          reads?: number
+          updated_at?: string
+          uploads?: number
+          user_id: string
+        }
+        Update: {
+          day?: string
+          question_tries?: number
+          reads?: number
+          updated_at?: string
+          uploads?: number
+          user_id?: string
+        }
+        Relationships: []
       }
       document_shares: {
         Row: {
@@ -176,6 +206,7 @@ export type Database = {
           family_icon: string | null
           id: string
           is_personal: boolean
+          kind: string
           name: string
           storage_namespace: string
           vector_namespace: string
@@ -188,6 +219,7 @@ export type Database = {
           family_icon?: string | null
           id?: string
           is_personal?: boolean
+          kind?: string
           name: string
           storage_namespace: string
           vector_namespace: string
@@ -200,6 +232,7 @@ export type Database = {
           family_icon?: string | null
           id?: string
           is_personal?: boolean
+          kind?: string
           name?: string
           storage_namespace?: string
           vector_namespace?: string
@@ -918,24 +951,57 @@ export type Database = {
       }
       plan_limits: {
         Row: {
+          businesses_per_person: number | null
+          families_per_person: number | null
+          family_questions_per_month: number | null
           grace_days: number | null
+          invites_per_day: number
           max_members: number
+          personal_storage_bytes: number | null
           plan: string
+          question_tries_per_day: number | null
+          questions_fair_use: number
+          questions_per_month: number | null
           storage_bytes: number
+          uploads_per_day: number | null
+          vaults_per_person: number | null
+          notes_per_person: number | null
           voice_answers: number | null
         }
         Insert: {
+          businesses_per_person?: number | null
+          families_per_person?: number | null
+          family_questions_per_month?: number | null
           grace_days?: number | null
+          invites_per_day?: number
           max_members?: number
+          personal_storage_bytes?: number | null
           plan: string
+          question_tries_per_day?: number | null
+          questions_fair_use?: number
+          questions_per_month?: number | null
           storage_bytes: number
+          uploads_per_day?: number | null
+          vaults_per_person?: number | null
+          notes_per_person?: number | null
           voice_answers?: number | null
         }
         Update: {
+          businesses_per_person?: number | null
+          families_per_person?: number | null
+          family_questions_per_month?: number | null
           grace_days?: number | null
+          invites_per_day?: number
           max_members?: number
+          personal_storage_bytes?: number | null
           plan?: string
+          question_tries_per_day?: number | null
+          questions_fair_use?: number
+          questions_per_month?: number | null
           storage_bytes?: number
+          uploads_per_day?: number | null
+          vaults_per_person?: number | null
+          notes_per_person?: number | null
           voice_answers?: number | null
         }
         Relationships: []
@@ -1067,6 +1133,27 @@ export type Database = {
           },
         ]
       }
+      question_usage: {
+        Row: {
+          month: string
+          questions: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          month: string
+          questions?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          month?: string
+          questions?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       reminders_sent: {
         Row: {
           due_on: string
@@ -1101,6 +1188,42 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      scratch_notes: {
+        Row: {
+          body: string
+          created_at: string
+          done: boolean
+          family_id: string
+          id: string
+          remind_on: string | null
+          reminded_at: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          body: string
+          created_at?: string
+          done?: boolean
+          family_id: string
+          id?: string
+          remind_on?: string | null
+          reminded_at?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Update: {
+          body?: string
+          created_at?: string
+          done?: boolean
+          family_id?: string
+          id?: string
+          remind_on?: string | null
+          reminded_at?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
       }
       saved_chats: {
         Row: {
@@ -1156,6 +1279,7 @@ export type Database = {
           last_login: string | null
           notifications_enabled: boolean
           phone: string | null
+          use_for: string | null
           voice_language: string
           voice_mode_enabled: boolean
         }
@@ -1174,6 +1298,7 @@ export type Database = {
           last_login?: string | null
           notifications_enabled?: boolean
           phone?: string | null
+          use_for?: string | null
           voice_language?: string
           voice_mode_enabled?: boolean
         }
@@ -1192,6 +1317,7 @@ export type Database = {
           last_login?: string | null
           notifications_enabled?: boolean
           phone?: string | null
+          use_for?: string | null
           voice_language?: string
           voice_mode_enabled?: boolean
         }
@@ -1206,10 +1332,12 @@ export type Database = {
       account_deletion_plan: {
         Args: { p_user_id: string }
         Returns: {
+          blocked: boolean
           delete_family: boolean
           document_count: number
           family_id: string
           family_name: string
+          kind: string
           other_admins: number
           other_members: number
           role: string
@@ -1254,6 +1382,14 @@ export type Database = {
         Args: { p_family_id: string }
         Returns: number
       }
+      claim_daily: { Args: { p_user_id: string; p_what: string }; Returns: Json }
+      claim_question: { Args: { p_user_id: string }; Returns: Json }
+      make_business_vault: { Args: { p_family_id: string }; Returns: Json }
+      queue_note_reminders: { Args: { p_now?: string }; Returns: number }
+      set_bill_paid: {
+        Args: { p_document_id: string; p_family_id: string; p_paid?: boolean }
+        Returns: undefined
+      }
       claim_voice_answer: { Args: { p_family_id: string }; Returns: Json }
       complete_document_ingestion: {
         Args: {
@@ -1288,9 +1424,40 @@ export type Database = {
           p_family_icon?: string
           p_family_name: string
           p_is_personal?: boolean
+          p_kind?: string
           p_user_id: string
         }
         Returns: string
+      }
+      business_overview: { Args: { p_family_id: string }; Returns: Json }
+      business_vault_blocker: { Args: { p_family_id: string }; Returns: Json }
+      business_vault_preview: { Args: { p_family_id: string }; Returns: Json }
+      family_owner: { Args: { p_family_id: string }; Returns: string }
+      family_deletion_plan: {
+        Args: { p_family_id: string; p_user_id: string }
+        Returns: {
+          document_count: number
+          family_id: string
+          family_name: string
+          is_owner: boolean
+          other_members: string[]
+          owner_name: string
+          storage_namespace: string
+        }[]
+      }
+      purge_family_vault: {
+        Args: { p_confirm_name: string; p_family_id: string; p_user_id: string }
+        Returns: string
+      }
+      business_deletion_plan: {
+        Args: { p_family_id: string; p_user_id: string }
+        Returns: {
+          document_count: number
+          family_id: string
+          family_name: string
+          other_members: string[]
+          storage_namespace: string
+        }[]
       }
       decline_family_invite: { Args: { p_invite_id: string }; Returns: undefined }
       delete_account_data: { Args: { p_user_id: string }; Returns: Json }
@@ -1298,23 +1465,34 @@ export type Database = {
         Args: { p_document_id: string; p_family_id: string; p_user_id: string }
         Returns: undefined
       }
+      document_file_deletable: { Args: { p_name: string }; Returns: boolean }
       family_storage_objects: {
         Args: { p_storage_namespace: string }
         Returns: string[]
       }
       family_storage_has_room: { Args: { p_folder: string }; Returns: boolean }
       end_family_plan: { Args: { p_family_id: string }; Returns: undefined }
+      ensure_personal_vault: { Args: never; Returns: string }
       family_chats_bytes: { Args: { p_family_id: string }; Returns: number }
       family_files_bytes: { Args: { p_ns: string }; Returns: number }
       family_plan_now: { Args: { p_family_id: string }; Returns: string }
+      family_question_room: {
+        Args: { p_user_id: string }
+        Returns: { cap: number; family_id: string; used: number }[]
+      }
+      family_questions_used: { Args: { p_family_id: string }; Returns: number }
       family_storage_status: {
         Args: { p_family_id: string }
         Returns: {
+          business: boolean
           chats_bytes: number
+          closed: boolean
           limit_bytes: number
           paid_until: string
+          personal: boolean
           plan: string
           removal_at: string
+          trial: boolean
           used_bytes: number
         }[]
       }
@@ -1380,6 +1558,7 @@ export type Database = {
         Returns: {
           created_at: string
           family_id: string
+          family_kind: string
           family_name: string
           id: string
           invited_by_name: string
@@ -1480,6 +1659,14 @@ export type Database = {
         Args: { p_notification_id: string; p_user_id: string }
         Returns: undefined
       }
+      person_daily_limit: { Args: { p_user_id: string; p_what: string }; Returns: number }
+      is_business_vault: { Args: { p_family_id: string }; Returns: boolean }
+      person_on_plus: { Args: { p_user_id: string }; Returns: boolean }
+      person_plans: { Args: { p_user_id: string }; Returns: string[] }
+      purge_business: {
+        Args: { p_confirm_name: string; p_family_id: string; p_user_id: string }
+        Returns: string
+      }
       purge_family: { Args: { p_family_id: string }; Returns: string }
       rag_chunk_total: { Args: { p_schema: string }; Returns: number }
       open_document_share: {
@@ -1545,6 +1732,16 @@ export type Database = {
         Args: { p_family_id: string; p_today?: string }
         Returns: number
       }
+      question_allowance: {
+        Args: { p_user_id: string }
+        Returns: {
+          ceiling: number
+          monthly: number
+          plus: boolean
+        }[]
+      }
+      question_month: { Args: never; Returns: string }
+      question_status: { Args: never; Returns: Json }
       rag_chunks_to_embed: {
         Args: { p_after?: string; p_limit?: number; p_schema: string }
         Returns: {
@@ -1627,6 +1824,7 @@ export type Database = {
           ingestion_status: string
         }[]
       }
+      release_question: { Args: { p_user_id: string }; Returns: undefined }
       remove_family_person: {
         Args: { p_person_id: string }
         Returns: undefined
@@ -1695,12 +1893,18 @@ export type Database = {
         Args: {
           p_family_id: string
           p_paid_until: string
+          p_plan?: string
           p_source?: string
           p_source_ref?: string
         }
         Returns: undefined
       }
       shares_family: { Args: { p_user: string }; Returns: boolean }
+      size_text: { Args: { p_bytes: number }; Returns: string }
+      start_document_read: {
+        Args: { p_document_id: string; p_family_id: string; p_user_id: string }
+        Returns: Json
+      }
       tree_add_pair: {
         Args: { p_a: string; p_b: string; p_family_id: string; p_kind: string }
         Returns: undefined
@@ -1746,6 +1950,11 @@ export type Database = {
       upgrade_family_schema_for_search: {
         Args: { p_family_id: string }
         Returns: undefined
+      }
+      usage_day: { Args: never; Returns: string }
+      vault_storage_bytes: {
+        Args: { p_family_id: string; p_plan: string }
+        Returns: number
       }
     }
     Enums: {

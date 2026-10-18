@@ -10,17 +10,20 @@ import {
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { color, radius, shadow, size, space, type } from '../constants/design';
+import { useVaultTheme } from '../lib/vault-theme';
 
 export function Card({ children, style }: { children: ReactNode; style?: StyleProp<ViewStyle> }) {
   return <View style={[styles.card, style]}>{children}</View>;
 }
 
 export function CardTitle({ icon, children }: { icon?: string; children: ReactNode }) {
+  // Business mode wears the business's colours (the drawer's switch).
+  const theme = useVaultTheme();
   return (
     <View style={styles.cardTitleRow}>
       {!!icon && (
-        <View style={styles.iconWrap}>
-          <Feather name={icon as any} size={16} color={color.primary} />
+        <View style={[styles.iconWrap, { backgroundColor: theme.tint }]}>
+          <Feather name={icon as any} size={16} color={theme.primary} />
         </View>
       )}
       <Text style={styles.cardTitle} accessibilityRole="header">{children}</Text>
@@ -40,9 +43,10 @@ type ButtonProps = { label: string; onPress: () => void; disabled?: boolean; bus
 
 export function PrimaryButton({ label, onPress, disabled, busy, icon }: ButtonProps) {
   const off = disabled || busy;
+  const theme = useVaultTheme();
   return (
     <TouchableOpacity
-      style={[styles.button, styles.primary, off && styles.disabled]}
+      style={[styles.button, styles.primary, { backgroundColor: theme.primary }, off && styles.disabled]}
       onPress={onPress}
       disabled={off}
       activeOpacity={0.8}
@@ -60,16 +64,17 @@ export function PrimaryButton({ label, onPress, disabled, busy, icon }: ButtonPr
 }
 
 export function SecondaryButton({ label, onPress, disabled, icon }: ButtonProps) {
+  const theme = useVaultTheme();
   return (
     <TouchableOpacity
-      style={[styles.button, styles.secondary, disabled && styles.disabled]}
+      style={[styles.button, styles.secondary, { borderColor: theme.primary }, disabled && styles.disabled]}
       onPress={onPress}
       disabled={disabled}
       activeOpacity={0.8}
       accessibilityRole="button"
     >
-      {!!icon && <Feather name={icon as any} size={16} color={color.primary} />}
-      <Text style={styles.secondaryText}>{label}</Text>
+      {!!icon && <Feather name={icon as any} size={16} color={theme.primary} />}
+      <Text style={[styles.secondaryText, { color: theme.primary }]}>{label}</Text>
     </TouchableOpacity>
   );
 }
@@ -122,7 +127,7 @@ export function OnOff({ value, onChange, label }: { value: boolean; onChange: (o
             onPress={() => onChange(on)}
             activeOpacity={0.8}
             accessibilityRole="radio"
-            accessibilityState={{ selected }}
+            aria-checked={selected}
           >
             <Text style={[styles.segmentText, selected && styles.segmentTextSelected]}>{on ? 'On' : 'Off'}</Text>
           </TouchableOpacity>

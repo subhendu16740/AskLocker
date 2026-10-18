@@ -23,6 +23,8 @@ import { router, useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../lib/auth';
 import { useFamily } from '../lib/family-context';
+import { useFamilyOnly } from '../lib/family-only';
+import { vaultName } from '../lib/vaults';
 import {
   fetchFamilyTree, fetchExpiringDocuments, isMissingMigration,
   type FamilyTree, type ExpiringDocument,
@@ -38,6 +40,7 @@ import { Card, CardTitle, Body, PrimaryButton, Status, screenStyles } from '../c
 import { color, radius, shadow, size, space, type } from '../constants/design';
 
 export default function FamilyTreeScreen() {
+  useFamilyOnly();
   const { user } = useAuth();
   const { currentFamily, membership } = useFamily();
   const isAdmin = membership?.role === 'admin';
@@ -56,8 +59,8 @@ export default function FamilyTreeScreen() {
         if (cancelled) return;
         setTree({ people: [], links: [], nicknames: false });
         setProblem(isMissingMigration(err)
-          ? { unavailable: true, text: 'The family tree is not switched on yet.' }
-          : { unavailable: false, text: err?.message ?? 'Could not load the family tree.' });
+          ? { unavailable: true, text: "The family tree isn't switched on yet." }
+          : { unavailable: false, text: err?.message ?? "Couldn't load the family tree." });
       });
     // Badges come a moment later: the dates live in each document's details.
     fetchExpiringDocuments(currentFamily.id)
@@ -88,7 +91,7 @@ export default function FamilyTreeScreen() {
     <SafeAreaView style={screenStyles.safe} edges={['top']}>
       <ScreenHeader
         title="Family tree"
-        subtitle={currentFamily?.name}
+        subtitle={currentFamily ? vaultName(currentFamily) : undefined}
         fallback="/family"
         right={isAdmin && tree && !problem ? <HeaderButton icon="user-plus" label="Add" onPress={() => setSheet({ mode: 'add' })} /> : undefined}
       />
@@ -104,8 +107,8 @@ export default function FamilyTreeScreen() {
               <Card>
                 <CardTitle icon="git-branch">Start your family tree</CardTitle>
                 <Body>
-                  Add parents, children and grandparents — they don't need an account. Mark documents as theirs, and
-                  ask about them by relation, like "Nani's pension papers".
+                  Add your family, even people without an account. Then ask about them by relation, like "Nani's
+                  pension papers".
                 </Body>
                 {isAdmin
                   ? <PrimaryButton label="Add someone" icon="user-plus" onPress={() => setSheet({ mode: 'add' })} />

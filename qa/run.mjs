@@ -32,8 +32,10 @@ import { ensureVault, syncFixtures, VAULT_A, VAULT_B } from './lib/vault.mjs';
 import { runDbChecks } from './lib/checks/db.mjs';
 import { runAccessChecks } from './lib/checks/access.mjs';
 import { runMemberChecks } from './lib/checks/members.mjs';
+import { runBusinessChecks } from './lib/checks/business.mjs';
 import { runUploadChecks, checkIndex } from './lib/checks/upload.mjs';
 import { runQuestions } from './lib/checks/ask.mjs';
+import { startQaDay } from './lib/dev-day.mjs';
 import { writeReport, annotate } from './lib/report.mjs';
 
 const QUESTIONS = fileURLToPath(new URL('./questions.yaml', import.meta.url));
@@ -93,6 +95,8 @@ async function main() {
       const vaultA = await ensureVault(a, VAULT_A);
       const vaultB = await ensureVault(b, VAULT_B);
       for (const v of [vaultA, vaultB]) if (v.created) results.note('setup', `created ${v.name} (${v.namespace})`);
+      const dayWhy = await startQaDay(cfg, { a, b, vaultA });
+      if (dayWhy) results.note('setup', dayWhy);
       const { docs: docsA, notIndexed } = await syncFixtures(cfg, a, vaultA, results);
 
       if (want('access')) {
@@ -101,6 +105,13 @@ async function main() {
         // After the stranger probes: this one makes B an insider, then removes it.
         section('Members');
         await runMemberChecks(cfg, { a, b, vaultA }, results);
+        // A business's rules, and a family's kept (051). B joins and leaves again.
+        section('Business');
+        try {
+          await runBusinessChecks(cfg, { a, b, anon, vaultA, vaultB }, results);
+        } catch (err) {
+          results.add('business', 'business', 'Business vaults (051)', 'fail', { why: err?.message ?? String(err) });
+        }
       }
       if (want('upload')) {
         section('Upload');

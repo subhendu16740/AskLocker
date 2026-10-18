@@ -1,9 +1,10 @@
 // Reminders — every document in the family with an expiry date, soonest
 // first. AskLocker reminds every member 90, 30 and 7 days before and on the
 // day (migration 034): under the bell, and as a notification on any device
-// where they turned reminders on — every family, Free or Plus. This page, the
-// list, is part of Family Plus (★ in the menu): a free family is sent to the
-// Family Plus page instead, here too in case it arrives by a link or a refresh.
+// where they turned reminders on. Both the reminders (since 048) and this
+// page, the list, are part of Family Plus (★ in the menu): a free family is
+// sent to the Family Plus page instead, here too in case it arrives by a link
+// or a refresh.
 
 import { useCallback, useState } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet, ActivityIndicator, Platform } from 'react-native';
@@ -11,6 +12,8 @@ import { Feather } from '@expo/vector-icons';
 import { Redirect, router, useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFamily } from '../lib/family-context';
+import { isBusinessVault, vaultName } from '../lib/vaults';
+import { plusName } from '../lib/plans';
 import { fetchExpiringDocuments, type ExpiringDocument } from '../lib/api';
 import { plusPage, useFamilyPlan } from '../lib/family-plan';
 import { expiryPhrase, longDate } from '../lib/dates';
@@ -30,7 +33,7 @@ export default function RemindersScreen() {
     setError(null);
     fetchExpiringDocuments(currentFamily.id)
       .then((found) => { if (!cancelled) setItems(found); })
-      .catch((err) => { if (!cancelled) { setItems([]); setError(err?.message ?? 'Could not load your documents.'); } });
+      .catch((err) => { if (!cancelled) { setItems([]); setError(err?.message ?? "Couldn't load your documents."); } });
     return () => { cancelled = true; };
   }, [currentFamily?.id, isFree]));
 
@@ -42,13 +45,12 @@ export default function RemindersScreen() {
 
       <ScrollView contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
         <View style={styles.plusCard}>
-          <Text style={styles.plusCardTag}>★ Family Plus</Text>
+          <Text style={styles.plusCardTag}>★ {plusName(isBusinessVault(currentFamily))}</Text>
           <Text style={styles.plusCardText}>
-            AskLocker reminds the whole family 90, 30 and 7 days before a passport, licence or policy expires, and on the day.
+            Your family gets a reminder 90, 30 and 7 days before a document expires, and on the day.
           </Text>
           <Text style={styles.plusCardNote}>
-            Reminders appear under the bell on Home{Platform.OS === 'web' ? ', and as notifications on any phone or computer where you turn them on' : ''}, for every family.
-            This page, with every expiry date in one list, is part of Family Plus.
+            They show under the bell on Home{Platform.OS === 'web' ? ', and on any device where you turn them on' : ''}.
           </Text>
           {Platform.OS === 'web' && (
             <TouchableOpacity
@@ -64,7 +66,7 @@ export default function RemindersScreen() {
         </View>
 
         <Text style={styles.sectionTitle}>
-          {currentFamily ? `Expiry dates in ${currentFamily.name}` : 'Expiry dates'}
+          {currentFamily ? `Expiry dates in ${vaultName(currentFamily)}` : 'Expiry dates'}
         </Text>
 
         {items === null ? (
@@ -74,7 +76,7 @@ export default function RemindersScreen() {
           </View>
         ) : error ? (
           <View style={styles.emptyCard}>
-            <Text style={styles.emptyTitle}>Could not load your documents</Text>
+            <Text style={styles.emptyTitle}>Couldn't load your documents</Text>
             <Text style={styles.muted}>{error}</Text>
           </View>
         ) : items.length === 0 ? (
@@ -82,7 +84,7 @@ export default function RemindersScreen() {
             <Feather name="calendar" size={24} color="#9CA3AF" />
             <Text style={styles.emptyTitle}>No expiry dates found yet</Text>
             <Text style={styles.muted}>
-              When a passport, licence or policy with an expiry date is added, it shows here.
+              Documents with an expiry date show up here.
             </Text>
           </View>
         ) : (

@@ -1,0 +1,145 @@
+// Sign in with Google, on the login screen — the only way in. On the web,
+// where it is set up, Google's own button (google-button.web.ts): the sign-in
+// never passes through Supabase's address, so Google's screen names this app
+// instead of <project>.supabase.co. Everywhere else — the phone app, a preview
+// whose address Google was not told about, before the setting is made, or
+// when Google's script cannot be loaded — the redirect sign-in, so there is
+// always a way in.
+//
+// What goes wrong is said on the screen, never with Alert.alert, which does
+// nothing on the web.
+
+import { useEffect, useRef, useState } from 'react';
+import { View, Text, TouchableOpacity, ActivityIndicator, Image, StyleSheet } from 'react-native';
+import { useAuth } from '../lib/auth';
+import { googleButtonAvailable, googleButtonReason, renderGoogleButton } from '../lib/google-button';
+import { noteSignInStarted } from '../lib/app-lock-device';
+import { color, radius, size, space, type } from '../constants/design';
+
+let reasonTold = false;
+
+export function GoogleSignIn({ onSignedIn }: { onSignedIn: () => void }) {
+  const { signInWithGoogle, signInWithGoogleToken } = useAuth();
+  // Google's button could not be drawn: its script blocked, unreachable or too slow.
+  const [drawFailed, setDrawFailed] = useState(false);
+  const ownButton = googleButtonAvailable() && !drawFailed;
+  const box = useRef<View>(null);
+  const [width, setWidth] = useState(0);
+  // A new round draws the button again, with a fresh one-time value.
+  const [round, setRound] = useState(0);
+  // Google's script has come and drawn the button; until then, a spinner in its place.
+  const [drawn, setDrawn] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [problem, setProblem] = useState<string | null>(null);
+
+  // Says in the browser's console which sign-in this page uses, and why — once a page load.
+  useEffect(() => {
+    if (reasonTold) return;
+    reasonTold = true;
+    console.info('[Google sign-in]', googleButtonReason());
+  }, []);
+
+  useEffect(() => {
+    if (!ownButton || !width || !box.current) return;
+    let cancelled = false;
+    // On the web a View's ref is its element, which Google draws into.
+    renderGoogleButton(box.current as unknown as HTMLElement, {
+      width,
+      onToken: async (token, nonce) => {
+        setBusy(true);
+        setProblem(null);
+        const { error } = await signInWithGoogleToken(token, nonce);
+        if (cancelled) return;
+        setBusy(false);
+        if (error) {
+          setProblem(`Google sign-in didn't work: ${error}`);
+          setRound((r) => r + 1);
+        } else {
+          onSignedIn();
+        }
+      },
+      onError: (message) => { if (!cancelled) setProblem(message); },
+    }).then(() => { if (!cancelled) setDrawn(true); }).catch((err: Error) => {
+      if (cancelled) return;
+      console.warn('[Google sign-in] Google\'s button could not be drawn, so the redirect sign-in:', err.message);
+      setDrawFailed(true);
+    });
+    return () => { cancelled = true; };
+  }, [ownButton, width, round]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const redirect = async () => {
+    setBusy(true);
+    setProblem(null);
+    // The page that comes back signed in has just signed in: the lock (app-lock.tsx) leaves it open.
+    noteSignInStarted();
+    const { error } = await signInWithGoogle();
+    setBusy(false);
+    if (error) setProblem(`Google sign-in didn't work: ${error}`);
+    else onSignedIn();
+  };
+
+  return (
+    <View style={styles.wrap}>
+      {ownButton ? (
+        <View>
+          {/* Google's button fills this box. It is Google's to draw, in Google's design. */}
+          <View
+            ref={box}
+            style={styles.googleBox}
+            onLayout={(e) => setWidth(Math.round(e.nativeEvent.layout.width))}
+          />
+          {!drawn && (
+            <View style={styles.drawing} pointerEvents="none">
+              <ActivityIndicator size="small" color={color.primary} accessibilityLabel="Loading Google sign-in" />
+            </View>
+          )}
+        </View>
+      ) : (
+        <TouchableOpacity
+          style={styles.socialBtn}
+          onPress={redirect}
+          disabled={busy}
+          activeOpacity={0.85}
+          accessibilityRole="button"
+          accessibilityLabel="Continue with Google"
+        >
+          {busy ? <ActivityIndicator color={color.primary} /> : (
+            <>
+              <Image source={require('@/assets/images/google-g.png')} style={styles.gLogo} accessibilityIgnoresInvertColors />
+              <Text style={styles.socialBtnText}>Continue with Google</Text>
+            </>
+          )}
+        </TouchableOpacity>
+      )}
+      {ownButton && busy && (
+        <View style={styles.busy}>
+          <ActivityIndicator size="small" color={color.primary} />
+          <Text style={styles.busyText}>Signing you in…</Text>
+        </View>
+      )}
+      {!!problem && <Text style={styles.problem} accessibilityRole="alert">{problem}</Text>}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  wrap: { marginBottom: space.lg, gap: space.sm },
+  googleBox: { minHeight: size.control, alignItems: 'center', justifyContent: 'center' },
+  drawing: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, alignItems: 'center', justifyContent: 'center' },
+  socialBtn: {
+    flexDirection: 'row',
+    gap: space.md,
+    backgroundColor: color.surface,
+    borderWidth: 1,
+    borderColor: color.inputBorder,
+    borderRadius: radius.control,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: size.control,
+  },
+  gLogo: { width: 18, height: 18 },
+  socialBtnText: { ...type.button, fontWeight: '500', color: color.textBody },
+  busy: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.sm },
+  busyText: type.caption,
+  problem: { ...type.caption, color: color.danger, textAlign: 'center' },
+});
