@@ -155,7 +155,7 @@ export default function NotesScreen() {
       <SafeAreaView style={screenStyles.safe} edges={['top']}>
         <ScreenHeader title="My notes" fallback="/home" />
         <ScrollView contentContainerStyle={screenStyles.body}>
-          <Status kind="error">Notes are for business vaults. Open one in Manage Family.</Status>
+          <Status kind="error">Notes are for business vaults. Switch to Business in the menu.</Status>
         </ScrollView>
       </SafeAreaView>
     );

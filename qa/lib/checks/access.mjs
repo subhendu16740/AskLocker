@@ -292,6 +292,22 @@ const overviewJudge = (expect) => (outcome) => {
   }
   return judge(expect, outcome);
 };
+// Deleting a family vault (057): its owner's alone, through delete-account,
+// and the database side is the server's. Skipped until 057 is on DEV (no such
+// function; delete-account answering needs_migration), or until DEV runs a
+// delete-account that knows the action (400 "action must be …").
+const familyDeletionJudge = (expect) => (outcome) => {
+  if (outcome.missing || ['PGRST202'].includes(String(outcome.error?.code))) {
+    return ['skipped', 'migration 057 is not applied to DEV yet'];
+  }
+  if (outcome.status !== undefined) {
+    if (outcome.status === 503 && outcome.data?.status === 'needs_migration') return ['skipped', 'migration 057 is not applied to DEV yet'];
+    if (outcome.status === 400 && /action must be/i.test(String(outcome.data?.error ?? ''))) {
+      return ['skipped', 'DEV runs a delete-account from before 057'];
+    }
+  }
+  return judge(expect, outcome);
+};
 // Limits against abuse (050): each person's counts for the day are the
 // server's, and so is reading a document — no client reads or changes a
 // count, starts a read, or raises a plan's number. Skipped until 050 is on
@@ -1138,6 +1154,13 @@ export async function runAccessChecks(cfg, { a, b, anon, vaultA, vaultB, docsA }
     ['anon', "read anyone's notes", overviewJudge('refused-or-empty'), () => anon.client.from('scratch_notes').select('id, body').limit(5)],
     ['B', "read anyone else's notes", overviewJudge('refused-or-empty'), () => b.client.from('scratch_notes').select('id, body').neq('user_id', b.user.id).limit(5)],
     ['B', 'write a note into QA Vault A', overviewJudge('refused'), () => b.client.from('scratch_notes').insert({ family_id: A.family, body: 'QA intrusion' })],
+    // Deleting a family vault (057): only its owner, through delete-account.
+    ['anon', 'see what deleting QA Vault A would take', familyDeletionJudge('http-401-403'), fn(anon, 'delete-account', { action: 'family_preview', family_id: A.family })],
+    ['B', 'see what deleting QA Vault A would take', familyDeletionJudge('http-401-403'), fn(b, 'delete-account', { action: 'family_preview', family_id: A.family })],
+    ['B', 'delete QA Vault A', familyDeletionJudge('http-401-403'), fn(b, 'delete-account', { action: 'delete_family', family_id: A.family, confirm_name: 'QA Vault A' })],
+    ['B', "ask who owns QA Vault A (server-only)", familyDeletionJudge('refused'), rpc(b, 'family_owner', { p_family_id: A.family })],
+    ['B', "plan deleting QA Vault A as account A (server-only)", familyDeletionJudge('refused'), rpc(b, 'family_deletion_plan', { p_user_id: A.user, p_family_id: A.family })],
+    ['B', "delete QA Vault A as account A (server-only)", familyDeletionJudge('refused'), rpc(b, 'purge_family_vault', { p_user_id: A.user, p_family_id: A.family, p_confirm_name: 'QA Vault A' })],
     ['B', "raise every plan's question limit", questionsJudge('refused'), onQuestions(() => b.client.from('plan_limits').update({ questions_per_month: 100000 }).eq('plan', 'free'))],
     // Limits against abuse (050): the day's counts, and reading a document.
     ['anon', "start reading one of account A's documents (server-only)", abuseJudge('refused'), rpc(anon, 'start_document_read', { p_family_id: A.family, p_document_id: sacrificialId, p_user_id: A.user })],

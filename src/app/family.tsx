@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback } from 'react';
 import {
   View, Text, TouchableOpacity, ScrollView,
   StyleSheet, Modal, TextInput, Pressable, ActivityIndicator,
@@ -10,18 +10,18 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../lib/auth';
 import { useFamily } from '../lib/family-context';
 import {
-  addFamilyMember, cancelInvitation, fetchFamilyInvites, fetchPlanLimits, fetchUseFor, leaveFamily, removeFamilyMember, updateMemberRole,
-  type PendingInvite, type UseFor,
+  addFamilyMember, cancelInvitation, fetchFamilyInvites, fetchPlanLimits, leaveFamily, removeFamilyMember, updateMemberRole,
+  type PendingInvite,
 } from '../lib/api';
 import { plusPage, useFamilyPlan, useOnPlus } from '../lib/family-plan';
 import { DEFAULT_PLAN_LIMITS, businessPlanName, isBusinessPlan, nextBusinessPlan, type PlanLimits } from '../lib/plans';
 import { ScreenHeader, HeaderButton, PlusStar } from '../components/screen-header';
 import { InvitationCards } from '../components/invitation-cards';
 import { longDate } from '../lib/dates';
-import { isBusinessVault, isPersonalVault, vaultName, vaultSubtitle, vaultWord } from '../lib/vaults';
+import { isBusinessVault, isPersonalVault, vaultWord } from '../lib/vaults';
 import { color, radius, shadow, size, space, type } from '../constants/design';
 import { track } from '../lib/analytics';
-import { BUSINESS_THEME, useVaultTheme, vaultTheme } from '../lib/vault-theme';
+import { useVaultTheme } from '../lib/vault-theme';
 
 const relations = ['Father', 'Mother', 'Spouse', 'Son', 'Daughter', 'Brother', 'Sister', 'Other'];
 
@@ -41,11 +41,15 @@ const relations = ['Father', 'Mother', 'Spouse', 'Son', 'Daughter', 'Brother', '
 //
 // A business (051) is managed here too, as a team: no family tree, no
 // relations, and its own words. Its last admin cannot leave (the server
-// refuses too); an admin can delete the business, by typing its name.
+// refuses too).
+//
+// This screen manages the people in the open vault, nothing else. The
+// vaults themselves (opening one, creating one, Make it a business, Delete)
+// are in Settings › Your vaults (the owner's ask, 18 October 2026).
 
 export default function FamilyScreen() {
   const { user } = useAuth();
-  const { currentFamily, families, members, membership, refreshMembers, refreshFamilies, switchFamily } = useFamily();
+  const { currentFamily, members, membership, refreshMembers, refreshFamilies } = useFamily();
   const [showAddMember, setShowAddMember] = useState(false);
   const [email, setEmail] = useState('');
   const [selectedRelation, setSelectedRelation] = useState('');
@@ -65,10 +69,6 @@ export default function FamilyScreen() {
   const business = isBusinessVault(currentFamily);
   const theme = useVaultTheme();
   const word = vaultWord(currentFamily);
-  const [useFor, setUseFor] = useState<UseFor | 'skipped' | null>(null);
-  useEffect(() => {
-    if (user) fetchUseFor(user.id).then(setUseFor).catch(() => {});
-  }, [user?.id]);
   const adminCount = members.filter((m) => m.role === 'admin').length;
   // The last admin cannot leave: nobody would be left to manage the family.
   const canLeave = !!currentFamily && !(isAdmin && adminCount <= 1);
@@ -215,71 +215,6 @@ export default function FamilyScreen() {
     }
   };
 
-  // A family or a business (051) is how documents are shared; anyone can
-  // make one, at any time. What the person said they use AskLocker for
-  // decides which comes first, nothing more.
-  const createLink = (kind: 'family' | 'business', inList: boolean) => (
-    <TouchableOpacity
-      key={kind}
-      onPress={() => router.push(`/setup-family?kind=${kind}` as any)}
-      style={[styles.treeLink, inList && styles.treeLinkInList]}
-      activeOpacity={0.8}
-      accessibilityRole="button"
-    >
-      <View style={[styles.treeIcon, kind === 'business' && { backgroundColor: BUSINESS_THEME.tint }]}>
-        <Feather name={kind === 'business' ? 'briefcase' : 'plus'} size={16} color={kind === 'business' ? BUSINESS_THEME.primary : color.primary} />
-      </View>
-      <View style={styles.memberInfo}>
-        <Text style={styles.treeTitle}>{kind === 'business' ? 'Create a business' : 'Create a family'}</Text>
-        <Text style={styles.treeSub}>{kind === 'business' ? 'Keep records with your team' : 'Share documents with your family'}</Text>
-      </View>
-      <Feather name="chevron-right" size={16} color="#9CA3AF" />
-    </TouchableOpacity>
-  );
-  const createLinks = (inList: boolean) => useFor === 'business'
-    ? <>{createLink('business', inList)}{createLink('family', inList)}</>
-    : <>{createLink('family', inList)}{createLink('business', inList)}</>;
-  const createFamily = createLinks(false);
-
-  // Every vault this person is in (046): their personal vault and each
-  // family. Tapping one opens it everywhere — Home, the family tree, Storage.
-  // Creating a family or a business sits under the list, where someone
-  // already in a family looks for another vault (051).
-  const vaultList = families.length > 1 && currentFamily && (
-    <View style={styles.section}>
-      <Text style={styles.sectionLabel}>Your vaults</Text>
-      <View style={styles.memberList}>
-        {families.map((f) => {
-          const isCurrent = f.family_id === currentFamily.id;
-          const rowTheme = vaultTheme(f.families);
-          return (
-            <TouchableOpacity
-              key={f.family_id}
-              onPress={() => switchFamily(f.family_id)}
-              style={[styles.familyRow, isCurrent && { backgroundColor: rowTheme.primary }]}
-              activeOpacity={0.8}
-              accessibilityRole="button"
-              accessibilityState={{ selected: isCurrent }}
-            >
-              <Feather
-                name={isPersonalVault(f.families) ? 'lock' : isBusinessVault(f.families) ? 'briefcase' : 'home'}
-                size={16}
-                color={isCurrent ? '#FFFFFF' : rowTheme.primary}
-              />
-              <View style={styles.memberInfo}>
-                <Text style={[styles.familyRowName, isCurrent && styles.familyRowNameCurrent]}>{vaultName(f.families)}</Text>
-                <Text style={[styles.familyRowRole, isCurrent && styles.familyRowRoleCurrent]}>{vaultSubtitle(f)}</Text>
-              </View>
-              {isCurrent && <Feather name="check" size={16} color="#FFFFFF" />}
-            </TouchableOpacity>
-          );
-        })}
-      </View>
-      {createLinks(true)}
-    </View>
-  );
-
-
   if (!currentFamily) {
     return (
       <SafeAreaView style={styles.safe} edges={['top']}>
@@ -335,13 +270,25 @@ export default function FamilyScreen() {
             <View style={styles.memberInfo}>
               <Text style={styles.treeTitle}>Nobody else can join it</Text>
               <Text style={styles.personalText}>
-                To share documents, create a family or a business, or accept an invitation. When you upload, you pick
-                where each document goes. Ask searches all your vaults at once.
+                To share documents, create a family or accept an invitation. Your vaults are in Settings.
               </Text>
             </View>
           </View>
-          {vaultList}
-          {!vaultList && createFamily}
+          <TouchableOpacity
+            style={styles.treeLink}
+            onPress={() => router.push('/settings/vaults' as any)}
+            activeOpacity={0.8}
+            accessibilityRole="button"
+          >
+            <View style={styles.treeIcon}>
+              <Feather name="layers" size={16} color={color.primary} />
+            </View>
+            <View style={styles.memberInfo}>
+              <Text style={styles.treeTitle}>Your vaults</Text>
+              <Text style={styles.treeSub}>Open, create or delete a vault</Text>
+            </View>
+            <Feather name="chevron-right" size={16} color="#9CA3AF" />
+          </TouchableOpacity>
           <View style={{ height: 24 }} />
         </ScrollView>
       </SafeAreaView>
@@ -409,9 +356,6 @@ export default function FamilyScreen() {
             <Feather name="chevron-right" size={16} color="#9CA3AF" />
           </TouchableOpacity>
         )}
-
-        {/* Every vault this person is in, and a family of their own to start (046) */}
-        {vaultList}
 
         {/* Members */}
         {members.length > 0 && (
@@ -538,21 +482,6 @@ export default function FamilyScreen() {
           </View>
         )}
 
-        {!vaultList && createFamily}
-
-        {/* A small business that started here moves when it grows (054). */}
-        {!business && isAdmin && (
-          <TouchableOpacity
-            onPress={() => router.push({ pathname: '/make-business', params: { family: currentFamily.id } } as any)}
-            style={[styles.businessBtn, { borderColor: BUSINESS_THEME.primary, backgroundColor: BUSINESS_THEME.tint }]}
-            activeOpacity={0.8}
-            accessibilityRole="button"
-          >
-            <Feather name="briefcase" size={16} color={BUSINESS_THEME.primary} />
-            <Text style={[styles.businessBtnText, { color: BUSINESS_THEME.primary }]}>Make this a business vault</Text>
-          </TouchableOpacity>
-        )}
-
         {canLeave && (
           <TouchableOpacity onPress={handleLeave} style={styles.leaveBtn} activeOpacity={0.8}>
             <Feather name="log-out" size={16} color="#EF4444" />
@@ -560,18 +489,6 @@ export default function FamilyScreen() {
           </TouchableOpacity>
         )}
 
-        {/* A business never goes with an account (051): an admin deletes it, on purpose. */}
-        {business && isAdmin && (
-          <TouchableOpacity
-            onPress={() => router.push({ pathname: '/delete-business', params: { family: currentFamily.id } } as any)}
-            style={styles.leaveBtn}
-            activeOpacity={0.8}
-            accessibilityRole="button"
-          >
-            <Feather name="trash-2" size={16} color="#EF4444" />
-            <Text style={styles.leaveBtnText}>Delete this business</Text>
-          </TouchableOpacity>
-        )}
         {business && isAdmin && adminCount <= 1 && (
           <Text style={styles.lastAdminNote}>
             You're its only admin. To leave, make someone else an admin first.
@@ -845,21 +762,6 @@ const styles = StyleSheet.create({
   fullNoteText: { flex: 1, fontSize: 14, lineHeight: 20, color: '#7A5200' },
   fullNoteLink: { fontSize: 14, lineHeight: 20, fontWeight: '600', color: '#2A3D66' },
   // Family switcher
-  familyRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.md,
-    backgroundColor: color.surface,
-    borderRadius: radius.control,
-    paddingHorizontal: space.lg,
-    paddingVertical: 10,
-    minHeight: size.row,
-    ...shadow.card,
-  },
-  familyRowName: type.label,
-  familyRowNameCurrent: { color: '#FFFFFF' },
-  familyRowRole: type.caption,
-  familyRowRoleCurrent: { color: 'rgba(255,255,255,0.8)' },
   leaveBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -874,20 +776,6 @@ const styles = StyleSheet.create({
     minHeight: size.control,
   },
   leaveBtnText: { ...type.button, color: color.danger },
-  businessBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: space.sm,
-    marginHorizontal: space.lg,
-    marginTop: space.xl,
-    borderRadius: radius.control,
-    borderWidth: 1,
-    borderColor: color.inputBorder,
-    backgroundColor: color.surface,
-    minHeight: size.control,
-  },
-  businessBtnText: { ...type.button, color: color.primary },
   lastAdminNote: { ...type.caption, textAlign: 'center', marginTop: space.sm, marginHorizontal: space.lg },
   // Modal
   modalOverlay: {
@@ -1046,7 +934,6 @@ const styles = StyleSheet.create({
     backgroundColor: color.surface,
     ...shadow.card,
   },
-  treeLinkInList: { marginHorizontal: 0, marginTop: space.sm },
   treeIcon: { width: size.iconBox, height: size.iconBox, borderRadius: 8, backgroundColor: color.tint, alignItems: 'center', justifyContent: 'center' },
   treeTitle: type.label,
   treeSub: type.caption,

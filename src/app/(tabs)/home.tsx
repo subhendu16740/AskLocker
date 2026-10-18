@@ -85,9 +85,10 @@ export default function HomeScreen() {
   // Home lists the newest documents from every vault of the mode together
   // (046; Family or Business, the drawer's switch), each tagged with the
   // vault it is in, and opens each in its own vault.
-  const { families, modeVaults, mode, refreshFamilies } = useFamily();
+  const { families, modeVaults, mode, refreshFamilies, otherModeVaultIds } = useFamily();
   const theme = useVaultTheme();
-  const shown = modeVaults.length ? modeVaults : families;
+  // Only the mode's vaults, never a fallback to every vault: a business never shows a family's documents.
+  const shown = modeVaults;
   const familyKey = `${mode}:` + shown.map((f) => `${f.family_id}:${vaultName(f.families)}`).join('|');
   const { openDrawer } = useDrawer();
   // Settings › Notifications off: the bell stays, its count does not.
@@ -109,7 +110,8 @@ export default function HomeScreen() {
   const loadData = useCallback(() => {
     if (!user) return;
     // The bell counts with or without a vault: an invitation to join a family is a notification.
-    fetchUnreadNotificationCount(user.id).then(setUnreadCount).catch(() => {});
+    // The other mode's news is left out: a business never shows a family's, nor the other way round.
+    fetchUnreadNotificationCount(user.id, otherModeVaultIds).then(setUnreadCount).catch(() => {});
     if (families.length === 0) {
       // No vault yet: the personal one is on its way (046), or they joined a family since sign-in.
       refreshFamilies().catch(() => {});

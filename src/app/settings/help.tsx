@@ -28,7 +28,7 @@ function faq(payments: PaymentsStatus | null): { q: string; a: string }[] {
     },
     {
       q: 'What is my personal vault?',
-      a: 'Everyone gets a personal vault, and nobody else can join it. If you\'re not in a family, your uploads go there. To share documents, create or join a family in Manage Family.',
+      a: 'Everyone gets a personal vault, and nobody else can join it. If you\'re not in a family, your uploads go there. To share documents, create a family in Settings › Your vaults, or accept an invitation.',
     },
     {
       q: 'How do I see or delete documents?',
@@ -72,7 +72,11 @@ function faq(payments: PaymentsStatus | null): { q: string; a: string }[] {
     },
     {
       q: 'Can I use AskLocker for my business?',
-      a: `Yes. In Manage Family, tap Create a business, then invite your team. Admins can delete any record, and records stay even if a paid plan ends. A business has its own plans: Plus for ${DEFAULT_PLAN_LIMITS.business.business_plus.members} people, ${businessPrice('business_plus')}. Pro for ${DEFAULT_PLAN_LIMITS.business.business_pro.members}, ${businessPrice('business_pro')}. Enterprise for ${DEFAULT_PLAN_LIMITS.business.business_enterprise.members}, ${businessPrice('business_enterprise')}. Ask for one in Settings › Feedback. Started your shop in a family vault? An admin can tap Make this a business vault in Manage Family. Everything stays.`,
+      a: `Yes. In Settings › Your vaults, tap Create a business, then invite your team in Manage team. Admins can delete any record, and records stay even if a paid plan ends. A business has its own plans: Plus for ${DEFAULT_PLAN_LIMITS.business.business_plus.members} people, ${businessPrice('business_plus')}. Pro for ${DEFAULT_PLAN_LIMITS.business.business_pro.members}, ${businessPrice('business_pro')}. Enterprise for ${DEFAULT_PLAN_LIMITS.business.business_enterprise.members}, ${businessPrice('business_enterprise')}. Ask for one in Settings › Feedback. Started your shop in a family vault? An admin can tap Make it a business in Settings › Your vaults. Everything stays.`,
+    },
+    {
+      q: 'How do I delete a vault?',
+      a: 'Go to Settings › Your vaults and tap Delete under it. Only its owner, who created it, can delete a family or a business. Everyone in it loses it, so type its name to confirm.',
     },
     {
       q: 'I\'ve been invited to a family. What now?',

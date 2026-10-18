@@ -110,7 +110,7 @@ export default function SetupFamilyScreen() {
     <SafeAreaView style={styles.safe} edges={['top']}>
       {families.length > 0 && (
         <View style={styles.backRow}>
-          <BackButton fallback="/family" />
+          <BackButton fallback="/settings/vaults" />
         </View>
       )}
       <View style={[styles.container, families.length > 0 && styles.containerBelowBack]}>

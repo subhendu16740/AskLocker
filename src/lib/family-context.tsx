@@ -34,6 +34,8 @@ interface FamilyContextType {
   modeVaults: FamilyWithMembership[];
   /** Open the vault last open in that mode, or its first. False when there is none (no business yet). */
   setMode: (mode: AppMode) => boolean;
+  /** The vaults of the other mode: nothing of theirs is shown in this one (notifications, documents). */
+  otherModeVaultIds: string[];
 }
 
 const FamilyContext = createContext<FamilyContextType>({
@@ -49,6 +51,7 @@ const FamilyContext = createContext<FamilyContextType>({
   mode: 'family',
   modeVaults: [],
   setMode: () => false,
+  otherModeVaultIds: [],
 });
 
 const selectionKey = accountKey.family;
@@ -88,6 +91,7 @@ export function FamilyProvider({ children }: { children: ReactNode }) {
 
   const mode = modeOf(currentFamily);
   const modeVaults = families.filter((f) => modeOf(f.families) === mode);
+  const otherModeVaultIds = families.filter((f) => modeOf(f.families) !== mode).map((f) => f.family_id);
 
   const setMode = useCallback((next: AppMode): boolean => {
     if (next === mode) return true;
@@ -190,6 +194,7 @@ export function FamilyProvider({ children }: { children: ReactNode }) {
         mode,
         modeVaults,
         setMode,
+        otherModeVaultIds,
       }}
     >
       {children}

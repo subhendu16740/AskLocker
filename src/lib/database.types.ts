@@ -1432,6 +1432,23 @@ export type Database = {
       business_overview: { Args: { p_family_id: string }; Returns: Json }
       business_vault_blocker: { Args: { p_family_id: string }; Returns: Json }
       business_vault_preview: { Args: { p_family_id: string }; Returns: Json }
+      family_owner: { Args: { p_family_id: string }; Returns: string }
+      family_deletion_plan: {
+        Args: { p_family_id: string; p_user_id: string }
+        Returns: {
+          document_count: number
+          family_id: string
+          family_name: string
+          is_owner: boolean
+          other_members: string[]
+          owner_name: string
+          storage_namespace: string
+        }[]
+      }
+      purge_family_vault: {
+        Args: { p_confirm_name: string; p_family_id: string; p_user_id: string }
+        Returns: string
+      }
       business_deletion_plan: {
         Args: { p_family_id: string; p_user_id: string }
         Returns: {
