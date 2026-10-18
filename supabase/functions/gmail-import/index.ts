@@ -147,7 +147,7 @@ Deno.serve(async (req) => {
       if (r.plan === 'free') {
         throw new ImportProblem(r.business
           ? 'Import from Gmail comes with every paid plan.'
-          : 'Import from Gmail comes with Family Plus. See Settings › Family Plus.');
+          : 'Import from Gmail comes with Family Plus. Open Family Plus from the menu.');
       }
       const room: StorageRoom = {
         plan: isBusinessPlan(r.plan) ? r.plan : 'plus',
