@@ -707,7 +707,7 @@ src/
     settings/                # (NOT a tab) its own Stack, so Back returns to Settings
       index.tsx              # the list; every row opens a screen
       profile.tsx  security.tsx  notifications.tsx  privacy.tsx   # notifications: the switch, and this device (034)
-      storage.tsx  help.tsx  feedback.tsx  about.tsx   # storage: each family's plan, and how much of its space is used (038, 039)
+      storage.tsx  help.tsx  feedback.tsx  about.tsx   # storage: one table, a row per vault: used, space, its plan, ★ for a paid one (038, 039); help: a business's answers in Business mode
       vaults.tsx             # Your vaults: Family vaults and Business vaults, open, create, Make it a business, Delete (057)
       delete-account.tsx     # Security › Delete account: shows what goes, asks for DELETE (029)
     document/[id].tsx        # document viewer; Share opens the share sheet (036, web only)
@@ -763,7 +763,7 @@ tabs. `(tabs)` is a layout group, so routes are `/home`, `/search`, `/upload`.
 | `emergency.ts` | The emergency card's shape, blood groups (`bloodGroupLabel()`: "A−", "Bombay (hh)"), `telHref()`, and `cardProblem()` — the same checks and messages as `save_emergency_card()`, so the form can say what is wrong before saving |
 | `family-people.ts` | Whose a document can be: everyone in the tree, you first (`useDocumentOwners()`, members only before 031), and a person's expiry badge (`badgeFromExpiries()`) |
 | `plans.ts` | What each plan allows (038–048): the limits as 039–048 set them — storage (on Free 200 MB for a family and 100 MB for a personal vault, `freePersonal`; 10 GB on Plus), 4 members on Free and 8 on Plus, 10 voice chats and 20 questions a month for each person on Free (049; on Plus 200 a month the whole family shares, `familyQuestions`, 053) (`DEFAULT_PLAN_LIMITS`, used only when the database cannot be asked), Family Plus's prices, monthly and yearly (`PLUS_PRICE`; `localPlusPrice()` / `localPlusPrices()` show rupees in India, dollars elsewhere, by the device's time zone; the yearly one against twelve months, crossed out, and the months it saves: `plusTwelveMonths()`, `plusYearlySaving()`), `storageLevel()`, and the words for a full vault (`storageFullMessage()`; for a chat, `chatStorageFullMessage()`), which live in `supabase/functions/_shared/plan-text.ts` so Gmail import says the same; 050's file limit and the words for its refusals (`MAX_FILE_BYTES`, `fileTooLargeMessage()`, `limitHint()`, `QUESTION_INPUT_MAX`) come from `_shared/limits.ts`. Whether Plus can be bought is the payments function's answer (044: `usePaymentsStatus()`, `plusForSale()`); `PLUS_FOR_SALE` (false) is only what the words assume before it answers |
-| `family-plan.ts` | Is the current family on Family Plus? `useFamilyPlan()` (from `family_storage_status()`, kept a minute per family): `isFree`, `closed` and `trial` (051), and `routeFor(feature, route)`, which sends a free family to `/plus?feature=…` instead of a starred feature. Unknown (before 038, offline) gates nothing. `usePaymentsStatus()`: can Family Plus be bought here (044). `useOnPlus()`: is the signed-in person on Plus in any vault (from `question_status()`, a minute, shared; `forgetOnPlus()` after paying), for the ★ before their name |
+| `family-plan.ts` | Is the current family on Family Plus? `useFamilyPlan()` (from `family_storage_status()`, kept a minute per family): `isFree`, `closed` and `trial` (051), and `routeFor(feature, route)`, which sends a free family to `/plus?feature=…` instead of a starred feature. Unknown (before 038, offline) gates nothing. `usePaymentsStatus()`: can Family Plus be bought here (044). `useOnPlus()`: is the signed-in person on Plus in any vault (from `question_status()`, a minute, shared; `forgetOnPlus()` after paying), for the creation screen's "On Free" line. `useModeOnPlus()`: is any vault of the open mode on a paid plan, for the ★ after their name |
 | `file-types.ts` | What a picked file is (`detectFileType()`: MIME type, then name, never a web `blob:` uri) and whether the vault can keep it (PDF, JPG, PNG) |
 | `app-info.ts` | Version, release date and commit (stamped into `extra` by `app.config.ts` at build time), and the support contact Help shows |
 | `ocr.ts` | Platform-split OCR with progress callback; reads the person's chosen languages |
@@ -1042,10 +1042,15 @@ so storage policies live only in `019`.
   `authenticated`, the sender defaulted from `auth.uid()` and checked by the
   policy, and no SELECT for any client — the team reads it in the dashboard.
   Before 027 the app says feedback is not switched on yet.
-- **Storage** shows each family's plan, what it may keep and what its files
-  and saved chats add up to (`family_storage_status()`, 038; chats since
-  042, and how much of it they are), amber from 80%, red at the
-  limit, which **the server enforces** — see
+- **Storage** is one table, a row for each vault (the owner's ask, 18
+  October 2026, when the screen read as too wordy): its name and plan, what
+  its files and saved chats use, and its space (`family_storage_status()`,
+  038; chats since 042), a ★ on the plan and the space of a paid one, and a
+  bar in the vault's own colours, amber from 80%, red at the limit, which
+  **the server enforces**. A row says one short line only when something
+  needs doing (nearly full, full, Plus ended and when documents go, a
+  business's plan ended), with Family Plus › or Plans ›. The mode's vaults
+  come first; one link under it compares the plans — see
   [Plans and storage limits](#plans-and-storage-limits--every-plan-has-a-limit-038-039).
   Before 038 it adds up `file_size_bytes` from `get_family_documents` and
   shows the free limit, unenforced. Mind the platform underneath: the
@@ -2255,9 +2260,9 @@ so storage policies live only in `019`.
   open vault's colours, and the shared pieces follow it: the top bar, back
   arrow and header buttons, `settings-ui` cards, buttons and On/Off, Home's
   header, the tab bar and its Ask button, the drawer, the ★ Plus tag (gold
-  on a business), and every Settings screen (in Business mode Storage lists
-  Free and the business plans, not Family Plus, and each vault's bar keeps
-  its own colours). Anything about a business
+  on a business), and every Settings screen (Storage's rows keep each
+  vault's own colours; Help, Notifications and the voice row say ★ Plus and
+  answer for a business). Anything about a business
   wears teal wherever it is listed, whichever mode is open
   (`vaultTheme(family)`): its row in Manage Family, Create a business, its
   documents on Home, a business's invitation, the vault picker, Upload's
@@ -2880,10 +2885,12 @@ rule again once pinned chunks are mixed in.
   Family Plus page, Free and Plus side by side (`/plus`); a new starred
   feature must do the same, through `useFamilyPlan().routeFor()` and a
   redirect in its own screen, and get a row on that page. Each shows the tag
-  where you find it, and Help's FAQ names them all. A person on Plus (any
-  vault they are in, 049's `person_on_plus()`) has a ★ after their own name
-  — the drawer, Home, Settings, Manage Family (`useOnPlus()` from
-  `question_status()`, `<PlusStar />`) — and in Manage Family every member
+  where you find it, and Help's FAQ names them all. A person with a paid
+  vault in the open mode has a ★ after their own name — the drawer, Home,
+  Settings, Manage Family (`useModeOnPlus()`, `<PlusStar />`): in Family
+  mode a family or personal vault on Family Plus, in Business mode a
+  business on a paid plan, never one for the other (the owner's ask, 18
+  October 2026) — and in Manage Family every member
   of a family on Plus has one; never another member's Plus through some
   other family, which is not theirs to see. Every plan, Free
   included, has a storage limit the server keeps (see

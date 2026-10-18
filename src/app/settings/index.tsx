@@ -13,8 +13,8 @@ import { useFamily } from '../../lib/family-context';
 import { isBusinessVault } from '../../lib/vaults';
 import { usePreferences } from '../../lib/preferences';
 import { fetchPlanLimits, fetchVoiceStatus, indexStatus, type IndexStatus, type VoiceStatus } from '../../lib/api';
-import { useFamilyPlan, useOnPlus } from '../../lib/family-plan';
-import { DEFAULT_PLAN_LIMITS, type PlanLimits } from '../../lib/plans';
+import { useFamilyPlan, useModeOnPlus } from '../../lib/family-plan';
+import { DEFAULT_PLAN_LIMITS, type PlanLimits, plusName } from '../../lib/plans';
 import { VOICE_LANGUAGES, phrase, voiceLanguage } from '../../lib/voice-languages';
 import { OCR_LANGUAGES, describeOcrLanguages } from '../../lib/ocr-languages';
 import {
@@ -79,7 +79,7 @@ export default function SettingsScreen() {
   // On the free plan each person has their own voice chats (041–043); say
   // how many are left where voice is switched on.
   const { isFree } = useFamilyPlan();
-  const onPlus = useOnPlus();
+  const onPlus = useModeOnPlus();
   const [limits, setLimits] = useState<PlanLimits>(DEFAULT_PLAN_LIMITS);
   const [voiceChats, setVoiceChats] = useState<VoiceStatus | null>(null);
   useEffect(() => {
@@ -139,7 +139,7 @@ export default function SettingsScreen() {
     isBusinessVault(currentFamily)
       ? { icon: 'briefcase', label: 'Manage team', sub: 'People in this business', route: '/family' }
       : { icon: 'users', label: 'Manage Family', sub: 'People in this family', route: '/family' },
-    { icon: 'hard-drive', label: 'Storage', sub: 'Your plan and space used', route: '/settings/storage' },
+    { icon: 'hard-drive', label: 'Storage', sub: 'Space used in each vault', route: '/settings/storage' },
     isBusinessVault(currentFamily)
       ? { icon: 'star', label: 'Plans', sub: 'Plus, Pro and Enterprise', route: '/plus' }
       : { icon: 'star', label: 'Family Plus', sub: 'Compare Free and Plus', route: '/plus' },
@@ -274,7 +274,7 @@ export default function SettingsScreen() {
             <Text style={styles.avatarInitial}>{initial}</Text>
           </View>
           <View style={styles.profileInfo}>
-            <Text style={styles.profileName} accessibilityLabel={onPlus ? `${displayName}, Family Plus` : undefined}>
+            <Text style={styles.profileName} accessibilityLabel={onPlus ? `${displayName}, ${plusName(theme.business)}` : undefined}>
               {displayName}{onPlus && <PlusStar onDark />}
             </Text>
             <Text style={styles.profileEmail}>{email}</Text>
@@ -313,9 +313,9 @@ export default function SettingsScreen() {
                 <Text style={styles.plusNoteText}>
                   {voiceChats?.limit != null
                     ? voiceChats.left === 0
-                      ? `You've used all ${voiceChats.limit} free voice chats. Family Plus has no limit.`
-                      : `You have ${voiceChats.left} of ${voiceChats.limit} free voice chats left. Each question you ask or hear by voice uses one. Family Plus has no limit.`
-                    : `On Free, you get ${freeVoiceChats} voice chats. Each question you ask or hear by voice uses one. Family Plus has no limit.`}
+                      ? `You've used all ${voiceChats.limit} free voice chats. ${plusName(theme.business)} has no limit.`
+                      : `You have ${voiceChats.left} of ${voiceChats.limit} free voice chats left. Each question you ask or hear by voice uses one. ${plusName(theme.business)} has no limit.`
+                    : `On Free, you get ${freeVoiceChats} voice chats. Each question you ask or hear by voice uses one. ${plusName(theme.business)} has no limit.`}
                 </Text>
               </View>
             )}
