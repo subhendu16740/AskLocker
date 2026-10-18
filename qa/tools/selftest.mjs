@@ -701,9 +701,9 @@ await test('plans: every limit is finite, and a full vault says why and what to 
     notesPerPerson: { free: 20, paid: 500 },
     invitesPerDay: { free: 20, plus: 20 },
     business: {
-      business_plus: { storage: 25 * GB, members: 10, questionsFairUse: 100, questionTriesPerDay: 30, uploadsPerDay: 300, invitesPerDay: 20 },
-      business_pro: { storage: 100 * GB, members: 15, questionsFairUse: 100, questionTriesPerDay: 30, uploadsPerDay: 300, invitesPerDay: 20 },
-      business_enterprise: { storage: 200 * GB, members: 50, questionsFairUse: 100, questionTriesPerDay: 30, uploadsPerDay: 300, invitesPerDay: 50 },
+      business_plus: { storage: 10 * GB, members: 10, questionsFairUse: 100, questionTriesPerDay: 30, uploadsPerDay: 300, invitesPerDay: 20 },
+      business_pro: { storage: 25 * GB, members: 15, questionsFairUse: 100, questionTriesPerDay: 30, uploadsPerDay: 300, invitesPerDay: 20 },
+      business_enterprise: { storage: 100 * GB, members: 50, questionsFairUse: 100, questionTriesPerDay: 30, uploadsPerDay: 300, invitesPerDay: 50 },
     },
   });
   assert.deepEqual(PLUS_PRICE, { monthly: { inr: 100, usd: 10 }, yearly: { inr: 1100, usd: 110 } });
@@ -1141,10 +1141,10 @@ await test('business plans: Plus, Pro and Enterprise, their prices and words, an
   assert.match(storageFullMessage(shop, 3 * MB), /^This file is 3 MB, but your business has only 1 MB left\./);
   // Never Family Plus, nor its price, for a business.
   const shopFull = storageFullMessage({ ...shop, usedBytes: 200 * MB }, 0, { forSale: true, price: plusPrice('inr') });
-  assert.equal(shopFull, "Your business's storage is full, with 200 MB of 200 MB used. Delete records you don't need, or move to Plus for 25 GB.");
-  assert.equal(storageFullMessage({ plan: 'business_plus', limitBytes: 25 * GB, usedBytes: 25 * GB, business: true }),
-    "Your business's storage is full, with 25 GB of 25 GB used. Delete records you don't need, or move to Pro for 100 GB.");
-  assert.match(chatStorageFullMessage({ ...shop, usedBytes: 200 * MB }), /^There's no room to save this chat\. Your business has used 200 MB of 200 MB\. To save more, move to Plus for 25 GB\./);
+  assert.equal(shopFull, "Your business's storage is full, with 200 MB of 200 MB used. Delete records you don't need, or move to Plus for 10 GB.");
+  assert.equal(storageFullMessage({ plan: 'business_plus', limitBytes: 10 * GB, usedBytes: 10 * GB, business: true }),
+    "Your business's storage is full, with 10 GB of 10 GB used. Delete records you don't need, or move to Pro for 25 GB.");
+  assert.match(chatStorageFullMessage({ ...shop, usedBytes: 200 * MB }), /^There's no room to save this chat\. Your business has used 200 MB of 200 MB\. To save more, move to Plus for 10 GB\./);
   for (const text of [storageFullMessage(shop, 3 * MB), shopFull, chatStorageFullMessage(shop)]) {
     assert.doesNotMatch(text, /family/i, 'a business is not called a family');
   }
@@ -1153,12 +1153,12 @@ await test('business plans: Plus, Pro and Enterprise, their prices and words, an
   assert.ok(fits({ ...shop, usedBytes: 5 * MB }, 1));
   assert.equal(storageFullMessage({ ...shop, usedBytes: 5 * MB, closed: true }, 3 * MB), CLOSED_MESSAGE);
   assert.equal(CLOSED_MESSAGE, "Your business's plan has ended. Your records stay. To add new ones, renew the plan.");
-  assert.equal(storageFullMessage({ plan: 'business_pro', limitBytes: 100 * GB, usedBytes: 100 * GB, business: true }),
-    "Your business's storage is full, with 100 GB of 100 GB used. Delete records you don't need, or move to Enterprise for 200 GB.");
-  assert.equal(storageFullMessage({ plan: 'business_enterprise', limitBytes: 200 * GB, usedBytes: 200 * GB, business: true }),
-    "Your business's storage is full, with 200 GB of 200 GB used. Delete records you don't need to make room.");
-  assert.equal(chatStorageFullMessage({ plan: 'business_enterprise', limitBytes: 200 * GB, usedBytes: 200 * GB, business: true }),
-    "There's no room to save this chat. Your business has used 200 GB of 200 GB. Delete records or saved chats you don't need to make room.");
+  assert.equal(storageFullMessage({ plan: 'business_pro', limitBytes: 25 * GB, usedBytes: 25 * GB, business: true }),
+    "Your business's storage is full, with 25 GB of 25 GB used. Delete records you don't need, or move to Enterprise for 100 GB.");
+  assert.equal(storageFullMessage({ plan: 'business_enterprise', limitBytes: 100 * GB, usedBytes: 100 * GB, business: true }),
+    "Your business's storage is full, with 100 GB of 100 GB used. Delete records you don't need to make room.");
+  assert.equal(chatStorageFullMessage({ plan: 'business_enterprise', limitBytes: 100 * GB, usedBytes: 100 * GB, business: true }),
+    "There's no room to save this chat. Your business has used 100 GB of 100 GB. Delete records or saved chats you don't need to make room.");
   for (const text of [shopFull, chatStorageFullMessage({ ...shop, usedBytes: 200 * MB }, { forSale: true, price: plusPrice('inr') })]) {
     assert.doesNotMatch(text, /₹100|Family Plus/, 'a business is never offered Family Plus');
   }
