@@ -290,7 +290,7 @@ const overviewJudge = (expect) => (outcome) => {
   if (outcome.missing || missingTable(outcome.error) || ['PGRST202'].includes(String(outcome.error?.code))) {
     return ['skipped', 'migration 056 is not applied to DEV yet'];
   }
-  return judge(expect, outcome);
+  return typeof expect === 'function' ? expect(outcome) : judge(expect, outcome);
 };
 // Deleting a family vault (057): its owner's alone, through delete-account,
 // and the database side is the server's. Skipped until 057 is on DEV (no such
@@ -1153,7 +1153,10 @@ export async function runAccessChecks(cfg, { a, b, anon, vaultA, vaultB, docsA }
     ['B', "make everyone's note reminders (server-only)", overviewJudge('refused'), rpc(b, 'queue_note_reminders', {})],
     ['anon', "read anyone's notes", overviewJudge('refused-or-empty'), () => anon.client.from('scratch_notes').select('id, body').limit(5)],
     ['B', "read anyone else's notes", overviewJudge('refused-or-empty'), () => b.client.from('scratch_notes').select('id, body').neq('user_id', b.user.id).limit(5)],
-    ['B', 'write a note into QA Vault A', overviewJudge('refused'), () => b.client.from('scratch_notes').insert({ family_id: A.family, body: 'QA intrusion' })],
+    // QA Vault A is a family vault, where 056's trigger refuses a note to
+    // anyone before RLS is reached; a stranger's note into a business, which
+    // RLS refuses, is checked in business.mjs.
+    ['B', 'write a note into QA Vault A', overviewJudge((o) => (o.error?.hint === 'not_business' ? ['pass', short(o.error)] : judge('refused', o))), () => b.client.from('scratch_notes').insert({ family_id: A.family, body: 'QA intrusion' })],
     // Deleting a family vault (057): only its owner, through delete-account.
     ['anon', 'see what deleting QA Vault A would take', familyDeletionJudge('http-401-403'), fn(anon, 'delete-account', { action: 'family_preview', family_id: A.family })],
     ['B', 'see what deleting QA Vault A would take', familyDeletionJudge('http-401-403'), fn(b, 'delete-account', { action: 'family_preview', family_id: A.family })],

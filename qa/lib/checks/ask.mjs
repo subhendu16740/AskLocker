@@ -13,6 +13,7 @@ import { invokeFunction } from '../supabase.mjs';
 import { DEV_REF } from '../config.mjs';
 import { Budget } from '../budget.mjs';
 import { condenses } from '../questions.mjs';
+import { EMBED_ALLOWANCE } from '../results.mjs';
 import {
   mentionsDate, mentionsAmount, mentionsPhone, mentionsText, refuses, scriptShare, hasMarkdown,
 } from '../match.mjs';
@@ -198,11 +199,21 @@ export async function runQuestions(cfg, { a, vaultA, notIndexed = new Map() }, r
     }
 
     answered.set(q.id, record);
-    const reasons = judgeAnswer(q, d);
+    // HuggingFace out of credit (or rate-limited): search answered from
+    // keywords alone. A right answer still passes; a wrong one may only be the
+    // missing vectors, so it is retried on a later run rather than failed.
+    const embedError = String(d.debug?.embed_error ?? '');
+    const embedOut = d.debug?.embedded === false && EMBED_ALLOWANCE.test(embedError);
+    const reasons = judgeAnswer(q, d).filter((reason) => !(embedOut && reason.startsWith('the question was NOT embedded')));
     const rerankLimited = /429|rate/i.test(String(d.debug?.rerank_error ?? ''));
-    const status = reasons.length === 0 ? 'pass' : rerankLimited ? 'inconclusive' : 'fail';
+    const status = reasons.length === 0 ? 'pass' : rerankLimited || embedOut ? 'inconclusive' : 'fail';
+    const keywordsOnly = `keywords only: HuggingFace refused the search vectors (${embedError.slice(0, 60)})`;
     results.add('questions', q.id, title, status, {
-      why: reasons.length ? reasons.join('; ') + (rerankLimited ? ' (the relevance judge was rate-limited, so this is retried later)' : '') : `${(r.ms / 1000).toFixed(1)}s`,
+      why: reasons.length
+        ? reasons.join('; ')
+          + (embedOut ? ` (${keywordsOnly}, so this is retried later)` : '')
+          + (rerankLimited ? ' (the relevance judge was rate-limited, so this is retried later)' : '')
+        : `${(r.ms / 1000).toFixed(1)}s${embedOut ? `, ${keywordsOnly}` : ''}`,
       ...record,
     });
   }

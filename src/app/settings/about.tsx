@@ -11,8 +11,11 @@ import { longDate } from '../../lib/dates';
 import { ScreenHeader } from '../../components/screen-header';
 import { Card, screenStyles } from '../../components/settings-ui';
 import { color, space, type } from '../../constants/design';
+import { useVaultTheme } from '../../lib/vault-theme';
 
 export default function AboutScreen() {
+  // Settings follows the mode, Family or Business (the drawer's switch).
+  const theme = useVaultTheme();
   const rows: { label: string; value: string }[] = [
     { label: 'Version', value: appVersion },
     { label: 'Released', value: releaseDate ? longDate(releaseDate) : 'Not recorded' },
@@ -25,10 +28,10 @@ export default function AboutScreen() {
       <ScreenHeader title="About" fallback="/settings" />
       <ScrollView contentContainerStyle={screenStyles.body}>
         <Card style={styles.hero}>
-          <LinearGradient colors={['#2A3D66', '#4A6491']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.logo}>
+          <LinearGradient colors={theme.gradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.logo}>
             <Feather name="shield" size={26} color="#FFFFFF" />
           </LinearGradient>
-          <Text style={styles.name}>AskLocker</Text>
+          <Text style={[styles.name, { color: theme.primary }]}>AskLocker</Text>
           <Text style={styles.tagline}>Your family's important papers, easy to find.</Text>
         </Card>
 

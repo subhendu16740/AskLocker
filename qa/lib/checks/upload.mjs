@@ -22,6 +22,7 @@
 import { readFileSync } from 'node:fs';
 import { invokeFunction } from '../supabase.mjs';
 import { uploadDocument, deleteDocument, fetchCategories } from '../vault.mjs';
+import { EMBED_ALLOWANCE } from '../results.mjs';
 import { vehicleInsurance } from '../tiny-pdf.mjs';
 import { documents } from '../../fixtures/documents.mjs';
 
@@ -44,8 +45,11 @@ export async function runUploadChecks(cfg, { a, vaultA }, results, today) {
   results.add('upload', 'vehicle:ingest', 'Upload a PDF and index it (storage → insert → ingest-document)', ingested ? 'pass' : 'fail', {
     why: ingested ? `${body.chunks} chunk(s), ${body.metadata} metadata field(s) in ${(up.ingest.ms / 1000).toFixed(1)}s` : `HTTP ${up.ingest.status}: ${body.error ?? JSON.stringify(body).slice(0, 200)}`,
   });
-  results.add('upload', 'vehicle:vectors', 'Its chunks got search vectors (HuggingFace embeddings)', ingested && !body.embed_error ? 'pass' : ingested ? 'fail' : 'skipped', {
-    why: body.embed_error ? `NO VECTORS: ${body.embed_error}` : ingested ? 'no embed_error' : 'ingest failed',
+  const embedOut = EMBED_ALLOWANCE.test(String(body.embed_error ?? ''));
+  results.add('upload', 'vehicle:vectors', 'Its chunks got search vectors (HuggingFace embeddings)', ingested && !body.embed_error ? 'pass' : ingested ? (embedOut ? 'inconclusive' : 'fail') : 'skipped', {
+    why: body.embed_error
+      ? `NO VECTORS: ${body.embed_error}${embedOut ? ' — an outside allowance, not the app; the rebuild adds them once HuggingFace answers' : ''}`
+      : ingested ? 'no embed_error' : 'ingest failed',
   });
 
   const doc = { id: up.docId, storage_path: up.storagePath };

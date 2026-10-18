@@ -28,11 +28,14 @@ import {
   Card, CardTitle, Body, Muted, Field, PrimaryButton, SecondaryButton, DangerButton, Status, screenStyles,
 } from '../../components/settings-ui';
 import { color, space, type } from '../../constants/design';
+import { useVaultTheme } from '../../lib/vault-theme';
 
 const documents = (n: number) => `${n} ${n === 1 ? 'document' : 'documents'}`;
 const people = (n: number) => (n === 1 ? '1 other member loses it' : `${n} other members lose it`);
 
 export default function DeleteAccountScreen() {
+  // Settings follows the mode, Family or Business (the drawer's switch).
+  const theme = useVaultTheme();
   const { user } = useAuth();
   const [plan, setPlan] = useState<AccountDeletionFamily[] | null>(null);
   const [problem, setProblem] = useState<{ unavailable: boolean; text: string } | null>(null);
@@ -110,7 +113,7 @@ export default function DeleteAccountScreen() {
       <ScrollView contentContainerStyle={screenStyles.body} keyboardShouldPersistTaps="handled">
         {plan === null ? (
           <View style={styles.center}>
-            <ActivityIndicator color={color.primary} />
+            <ActivityIndicator color={theme.primary} />
             <Muted>Checking what would be deleted…</Muted>
           </View>
         ) : problem ? (

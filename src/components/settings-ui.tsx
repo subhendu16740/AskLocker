@@ -116,6 +116,7 @@ export function Field({ label, hint, ...input }: TextInputProps & { label: strin
 
 /** Two buttons that say what they do. Clearer than a small switch. */
 export function OnOff({ value, onChange, label }: { value: boolean; onChange: (on: boolean) => void; label: string }) {
+  const theme = useVaultTheme();
   return (
     <View style={styles.segment} accessibilityRole="radiogroup" accessibilityLabel={label}>
       {[true, false].map((on) => {
@@ -123,13 +124,13 @@ export function OnOff({ value, onChange, label }: { value: boolean; onChange: (o
         return (
           <TouchableOpacity
             key={String(on)}
-            style={[styles.segmentOption, selected && styles.segmentSelected]}
+            style={[styles.segmentOption, selected && styles.segmentSelected, selected && { backgroundColor: theme.primary }]}
             onPress={() => onChange(on)}
             activeOpacity={0.8}
             accessibilityRole="radio"
             aria-checked={selected}
           >
-            <Text style={[styles.segmentText, selected && styles.segmentTextSelected]}>{on ? 'On' : 'Off'}</Text>
+            <Text style={[styles.segmentText, { color: theme.secondary }, selected && styles.segmentTextSelected]}>{on ? 'On' : 'Off'}</Text>
           </TouchableOpacity>
         );
       })}

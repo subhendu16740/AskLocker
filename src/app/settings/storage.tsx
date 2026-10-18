@@ -17,8 +17,8 @@ import {
   fetchPlanLimits, fetchStorageStatus, fetchStorageUsage, type FamilyPlanStatus, type FamilyStorage,
 } from '../../lib/api';
 import {
-  CLOSED_MESSAGE, DEFAULT_PLAN_LIMITS, PLUS_FOR_SALE, businessPlanName, formatBytes, isBusinessPlan, localPlusPrice, localPlusPrices,
-  localPlusYearlyOffer, storageFullMessage, storageLevel, type PlanLimits, type StorageLevel,
+  BUSINESS_PLANS, CLOSED_MESSAGE, DEFAULT_PLAN_LIMITS, PLUS_FOR_SALE, businessAmount, businessPlanName, formatBytes, isBusinessPlan,
+  localPlusPrice, localPlusPrices, localPlusYearlyOffer, storageFullMessage, storageLevel, type PlanLimits, type StorageLevel,
 } from '../../lib/plans';
 import { longDate } from '../../lib/dates';
 import { plusPage, usePaymentsStatus } from '../../lib/family-plan';
@@ -26,10 +26,12 @@ import { ScreenHeader, PlusTag } from '../../components/screen-header';
 import { YearlyPrice } from '../../components/plus-price';
 import { Card, CardTitle, Body, Muted, Status, screenStyles } from '../../components/settings-ui';
 import { color, radius, size, space, type } from '../../constants/design';
+import { useVaultTheme, vaultTheme } from '../../lib/vault-theme';
 
 const documents = (n: number) => `${n} ${n === 1 ? 'document' : 'documents'}`;
 
-const BAR: Record<StorageLevel, string> = { ok: color.secondary, nearly: '#D97706', full: color.danger };
+// Room left in the vault's own colour (a business's teal, 051); amber, then red.
+const BAR: Record<Exclude<StorageLevel, 'ok'>, string> = { nearly: '#D97706', full: color.danger };
 
 function planName(status: FamilyPlanStatus | null): string {
   if (isBusinessPlan(status?.plan)) return `${businessPlanName(status.plan)}${status.trial ? ', trial' : ''}`;
@@ -40,7 +42,10 @@ function planName(status: FamilyPlanStatus | null): string {
 
 export default function StorageScreen() {
   const { user } = useAuth();
-  const { families } = useFamily();
+  const { families, mode } = useFamily();
+  // Settings follows the mode, Family or Business (the drawer's switch).
+  const theme = useVaultTheme();
+  const business = mode === 'business';
   const [usage, setUsage] = useState<FamilyStorage[] | null>(null);
   // Each family's plan and room as the server counts them; null before 038.
   const [plans, setPlans] = useState<Record<string, FamilyPlanStatus | null>>({});
@@ -81,7 +86,7 @@ export default function StorageScreen() {
       <ScrollView contentContainerStyle={screenStyles.body}>
         {usage === null ? (
           <View style={styles.center}>
-            <ActivityIndicator color={color.primary} />
+            <ActivityIndicator color={theme.primary} />
             <Muted>Adding up your documents…</Muted>
           </View>
         ) : (
@@ -93,13 +98,32 @@ export default function StorageScreen() {
               <Body>
                 Documents and saved chats share each vault's space. Every plan has a limit.
               </Body>
+              {business ? (
+                <View style={styles.planRows}>
+                  <View style={styles.planRow}>
+                    <View style={styles.planRowText}>
+                      <Text style={styles.planRowName}>Free</Text>
+                    </View>
+                    <Text style={[styles.planRowSize, { color: theme.primary }]}>{formatBytes(limits.free)}</Text>
+                  </View>
+                  {BUSINESS_PLANS.map((p) => (
+                    <View key={p} style={styles.planRow}>
+                      <View style={styles.planRowText}>
+                        <Text style={styles.planRowName}>★ {businessPlanName(p)}</Text>
+                        <Text style={styles.planRowPrice}>{businessAmount(p)} a month, plus GST</Text>
+                      </View>
+                      <Text style={[styles.planRowSize, { color: theme.primary }]}>{formatBytes(limits.business[p].storage)}</Text>
+                    </View>
+                  ))}
+                </View>
+              ) : (
               <View style={styles.planRows}>
                 <View style={styles.planRow}>
                   <View style={styles.planRowText}>
                     <Text style={styles.planRowName}>Free</Text>
                     <Text style={styles.planRowPrice}>{formatBytes(limits.freePersonal)} for your personal vault</Text>
                   </View>
-                  <Text style={styles.planRowSize}>{formatBytes(limits.free)}</Text>
+                  <Text style={[styles.planRowSize, { color: theme.primary }]}>{formatBytes(limits.free)}</Text>
                 </View>
                 <View style={styles.planRow}>
                   <View style={styles.planRowText}>
@@ -111,18 +135,19 @@ export default function StorageScreen() {
                       {localPlusPrice('monthly')} or <YearlyPrice />
                     </Text>
                   </View>
-                  <Text style={styles.planRowSize}>{formatBytes(limits.plus)}</Text>
+                  <Text style={[styles.planRowSize, { color: theme.primary }]}>{formatBytes(limits.plus)}</Text>
                 </View>
               </View>
-              {payments && !payments.available && (
+              )}
+              {!business && payments && !payments.available && (
                 <View style={styles.plusRow}>
                   <PlusTag link name="Family Plus" />
                   <Text style={styles.plusText}>Family Plus is coming soon.</Text>
                 </View>
               )}
               <TouchableOpacity style={styles.compare} onPress={() => router.push('/plus' as any)} accessibilityRole="link">
-                <Text style={styles.compareText}>Compare Free and Family Plus</Text>
-                <Feather name="chevron-right" size={16} color={color.primary} />
+                <Text style={[styles.compareText, { color: theme.primary }]}>{business ? 'Compare Free and the business plans' : 'Compare Free and Family Plus'}</Text>
+                <Feather name="chevron-right" size={16} color={theme.primary} />
               </TouchableOpacity>
             </Card>
 
@@ -140,7 +165,7 @@ export default function StorageScreen() {
                 <Card key={f.familyId}>
                   <View style={styles.familyRow}>
                     <Text style={styles.familyName} numberOfLines={2}>{f.name}</Text>
-                    <Text style={styles.familyBytes}>
+                    <Text style={[styles.familyBytes, { color: vaultTheme(families.find((v) => v.family_id === f.familyId)?.families).primary }]}>
                       {formatBytes(used)}
                       <Text style={styles.ofFree}> of {formatBytes(limit)}</Text>
                     </Text>
@@ -166,7 +191,7 @@ export default function StorageScreen() {
                     <View
                       style={[
                         styles.barFill,
-                        { width: `${used > 0 ? Math.max(2, percent) : 0}%`, backgroundColor: BAR[level] },
+                        { width: `${used > 0 ? Math.max(2, percent) : 0}%`, backgroundColor: level === 'ok' ? vaultTheme(families.find((v) => v.family_id === f.familyId)?.families).secondary : BAR[level] },
                       ]}
                     />
                   </View>
@@ -211,7 +236,7 @@ export default function StorageScreen() {
 
             <Text style={styles.sectionTitle}>What you have added</Text>
             <Card>
-              <Text style={styles.big}>{formatBytes(yourBytes)}</Text>
+              <Text style={[styles.big, { color: theme.primary }]}>{formatBytes(yourBytes)}</Text>
               <Muted>
                 {documents(yourDocs)}, in {usage.length} {usage.length === 1 ? 'family' : 'families'}
               </Muted>

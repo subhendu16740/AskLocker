@@ -21,6 +21,7 @@ import {
   Card, CardTitle, Body, Muted, OnOff, PrimaryButton, SecondaryButton, Status, screenStyles,
 } from '../../components/settings-ui';
 import { color, space } from '../../constants/design';
+import { useVaultTheme } from '../../lib/vault-theme';
 
 const DEVICE_TEXT: Record<Exclude<PushStatus, 'on' | 'off'>, string> = {
   unsupported: "This browser can't show notifications. Try Chrome, Edge, Firefox or Safari.",
@@ -31,6 +32,8 @@ const DEVICE_TEXT: Record<Exclude<PushStatus, 'on' | 'off'>, string> = {
 };
 
 export default function NotificationSettingsScreen() {
+  // Settings follows the mode, Family or Business (the drawer's switch).
+  const theme = useVaultTheme();
   const { notificationsEnabled, setNotificationsEnabled, birthdayReminders, setBirthdayReminders, birthdaysAvailable } = usePreferences();
   const onWeb = Platform.OS === 'web';
   const [device, setDevice] = useState<PushStatus | null>(null);
@@ -100,7 +103,7 @@ export default function NotificationSettingsScreen() {
           <Card>
             <CardTitle icon="smartphone">On this device</CardTitle>
             {device === null ? (
-              <ActivityIndicator color={color.primary} />
+              <ActivityIndicator color={theme.primary} />
             ) : device === 'on' ? (
               <>
                 <Body>This device gets notifications, even when AskLocker is closed.</Body>

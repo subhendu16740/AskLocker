@@ -384,6 +384,10 @@ function FamilyPlus() {
 // ─── A business's plans (051) ─────────────────────────────────────
 
 const PAID: readonly BusinessPlan[] = ['business_plus', 'business_pro', 'business_enterprise'];
+// The table always compares Free beside the paid plans (the owner's ask, 18 October 2026).
+type BusinessColumn = 'free' | BusinessPlan;
+const COLUMNS: readonly BusinessColumn[] = ['free', ...PAID];
+const columnName = (c: BusinessColumn) => (c === 'free' ? 'Free' : businessPlanName(c));
 
 // A business's plans have a monthly number of questions, and more people as they go up.
 const BUSINESS_BROUGHT_BY: Record<PlusFeature | BusinessFeature, { icon: string; text: string }> = {
@@ -399,24 +403,31 @@ const BUSINESS_BROUGHT_BY: Record<PlusFeature | BusinessFeature, { icon: string;
 
 interface BusinessRow {
   label: string;
-  cells: Record<BusinessPlan, Cell>;
+  cells: Record<BusinessColumn, Cell>;
   feature?: PlusFeature | BusinessFeature;
 }
 
 function businessRows(limits: PlanLimits): BusinessRow[] {
-  const each = (pick: (p: BusinessPlan) => Cell) =>
-    Object.fromEntries(PAID.map((p) => [p, pick(p)])) as Record<BusinessPlan, Cell>;
+  // Free's cell first, then each paid plan's.
+  const row = (free: Cell, pick: (p: BusinessPlan) => Cell) =>
+    ({ free, ...Object.fromEntries(PAID.map((p) => [p, pick(p)])) }) as Record<BusinessColumn, Cell>;
+  const freeVoice = limits.voiceAnswers.free;
   return [
-    { label: '★ People', cells: each((p) => String(limits.business[p].members)), feature: 'members' },
-    { label: 'Space', cells: each((p) => formatBytes(limits.business[p].storage)), feature: 'storage' },
-    { label: '★ Each person\'s questions', cells: each((p) => `${limits.business[p].questionsFairUse} a month`), feature: 'questions' },
-    { label: '★ Voice chats', cells: each(() => true), feature: 'voice' },
-    { label: '★ 30-day share links', cells: each(() => true), feature: 'links' },
-    { label: '★ Expiry reminders', cells: each(() => true), feature: 'reminders' },
-    { label: '★ Import from Gmail', cells: each(() => true), feature: 'gmail' },
-    { label: '★ Renewals and bills due', cells: each(() => true), feature: 'overview' },
-    { label: '★ Money in and out', cells: each((p) => p !== 'business_plus'), feature: 'money' },
-    { label: '★ Reminders on notes', cells: each(() => true), feature: 'notes' },
+    { label: '★ People', cells: row(String(limits.members.free), (p) => String(limits.business[p].members)), feature: 'members' },
+    { label: 'Space', cells: row(formatBytes(limits.free), (p) => formatBytes(limits.business[p].storage)), feature: 'storage' },
+    {
+      label: '★ Each person\'s questions',
+      cells: row(`${limits.questions.free ?? 20} a month`, (p) => `${limits.business[p].questionsFairUse} a month`),
+      feature: 'questions',
+    },
+    { label: '★ Voice chats', cells: row(freeVoice == null ? true : `${freeVoice} each`, () => true), feature: 'voice' },
+    { label: '★ 30-day share links', cells: row(false, () => true), feature: 'links' },
+    { label: '★ Expiry reminders', cells: row(false, () => true), feature: 'reminders' },
+    { label: '★ Import from Gmail', cells: row(false, () => true), feature: 'gmail' },
+    { label: '★ Renewals and bills due', cells: row(false, () => true), feature: 'overview' },
+    { label: '★ Money in and out', cells: row(false, (p) => p !== 'business_plus'), feature: 'money' },
+    { label: 'Notes each', cells: row(String(limits.notesPerPerson.free ?? 20), () => String(limits.notesPerPerson.paid ?? 500)) },
+    { label: '★ Reminders on notes', cells: row(false, () => true), feature: 'notes' },
   ];
 }
 
@@ -438,7 +449,7 @@ function BusinessPlans() {
     return () => { cancelled = true; };
   }, [refresh, feature]));
 
-  const saidAll = (r: BusinessRow) => PAID.map((p) => `${businessPlanName(p)} ${said(r.cells[p])}`).join(', ');
+  const saidAll = (r: BusinessRow) => COLUMNS.map((c) => `${columnName(c)} ${said(r.cells[c])}`).join(', ');
 
   return (
     <SafeAreaView style={screenStyles.safe} edges={['top']}>
@@ -494,8 +505,8 @@ function BusinessPlans() {
         <Card style={styles.tableCard}>
           <View style={[styles.row, styles.headRow]}>
             <Text style={[styles.label, styles.headText]}>What you get</Text>
-            {PAID.map((p) => (
-              <Text key={p} style={[styles.value, styles.valueWide, styles.headText, { color: biz.accent }]}>{businessPlanName(p)}</Text>
+            {COLUMNS.map((c) => (
+              <Text key={c} style={[styles.value, styles.valueBiz, styles.headBiz, styles.headText, c !== 'free' && { color: biz.accent }]}>{columnName(c)}</Text>
             ))}
           </View>
           {businessRows(limits).map((r) => {
@@ -503,8 +514,10 @@ function BusinessPlans() {
             return (
               <View key={r.label} style={[styles.row, pointed && styles.rowPointed]} accessible accessibilityLabel={`${r.label.replace('★ ', '')}: ${saidAll(r)}`}>
                 <Text style={styles.label}>{r.label}</Text>
-                {PAID.map((p) => (
-                  <View key={p} style={[styles.value, styles.valueWide]}><CellView value={r.cells[p]} plus tone={biz.primary} /></View>
+                {COLUMNS.map((c) => (
+                  <View key={c} style={[styles.value, styles.valueBiz]}>
+                    <CellView value={r.cells[c]} plus={c !== 'free'} tone={biz.primary} />
+                  </View>
                 ))}
               </View>
             );
@@ -512,19 +525,19 @@ function BusinessPlans() {
           <View
             style={[styles.row, styles.priceRow]}
             accessible
-            accessibilityLabel={`Price a month, plus GST: ${PAID.map((p) => `${businessPlanName(p)} ${businessAmount(p)}`).join(', ')}.`}
+            accessibilityLabel={`Price a month, plus GST: Free nothing, ${PAID.map((p) => `${businessPlanName(p)} ${businessAmount(p)}`).join(', ')}.`}
           >
             <Text style={[styles.label, styles.priceLabel]}>Price</Text>
+            <View style={[styles.value, styles.valueBiz]}>
+              <Text style={styles.cellText}>₹0</Text>
+            </View>
             {PAID.map((p) => (
-              <View key={p} style={[styles.value, styles.valueWide]}>
+              <View key={p} style={[styles.value, styles.valueBiz]}>
                 <Text style={[styles.cellText, { color: biz.primary }]}>{businessAmount(p)}</Text>
                 <Text style={styles.cellPer}>a month</Text>
               </View>
             ))}
           </View>
-          <Muted>
-            {`On Free: ${limits.members.free} people, ${formatBytes(limits.free)}, ${limits.questions.free ?? 20} questions each a month, ${limits.notesPerPerson.free ?? 20} notes each.`}
-          </Muted>
         </Card>
 
         {next && (
@@ -600,6 +613,10 @@ const styles = StyleSheet.create({
   value: { width: 60, alignItems: 'center', textAlign: 'center' },
   // "Enterprise" is wider than 60 (051).
   valueWide: { width: 70 },
+  // Four columns in a business's table (Free and three plans), so a little narrower.
+  valueBiz: { width: 58 },
+  // A heading may reach into the gaps beside it, so "Enterprise" stays one word.
+  headBiz: { width: 66, marginHorizontal: -4 },
   cellText: { fontSize: 14, lineHeight: 20, fontWeight: '600', color: color.textBody, textAlign: 'center' },
   cellTextPlus: { color: color.primary },
   cellWas: { fontSize: 12, lineHeight: 16, color: color.textMuted, textAlign: 'center' },

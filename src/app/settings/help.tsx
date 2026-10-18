@@ -18,6 +18,7 @@ import type { PaymentsStatus } from '../../lib/api';
 import { ScreenHeader } from '../../components/screen-header';
 import { Card, CardTitle, Body, PrimaryButton, screenStyles } from '../../components/settings-ui';
 import { color, radius, shadow, space, type } from '../../constants/design';
+import { useVaultTheme } from '../../lib/vault-theme';
 
 function faq(payments: PaymentsStatus | null): { q: string; a: string }[] {
   const forSale = payments?.available ?? PLUS_FOR_SALE;
@@ -122,6 +123,8 @@ function faq(payments: PaymentsStatus | null): { q: string; a: string }[] {
 }
 
 export default function HelpScreen() {
+  // Settings follows the mode, Family or Business (the drawer's switch).
+  const theme = useVaultTheme();
   const [open, setOpen] = useState<number | null>(null);
   const payments = usePaymentsStatus();
   const items = useMemo(() => faq(payments), [payments]);
@@ -144,7 +147,7 @@ export default function HelpScreen() {
                   accessibilityState={{ expanded }}
                 >
                   <Text style={styles.faqQ}>{item.q}</Text>
-                  <Feather name={expanded ? 'chevron-up' : 'chevron-down'} size={18} color={color.secondary} />
+                  <Feather name={expanded ? 'chevron-up' : 'chevron-down'} size={18} color={theme.secondary} />
                 </TouchableOpacity>
                 {expanded && <Text style={styles.faqA}>{item.a}</Text>}
               </View>
@@ -166,8 +169,8 @@ export default function HelpScreen() {
               onPress={() => Linking.openURL(`mailto:${SUPPORT_EMAIL}`)}
               accessibilityRole="link"
             >
-              <Feather name="mail" size={16} color={color.primary} />
-              <Text style={styles.contactText}>{SUPPORT_EMAIL}</Text>
+              <Feather name="mail" size={16} color={theme.primary} />
+              <Text style={[styles.contactText, { color: theme.primary }]}>{SUPPORT_EMAIL}</Text>
             </TouchableOpacity>
           )}
           {!!SUPPORT_PHONE && (
@@ -176,8 +179,8 @@ export default function HelpScreen() {
               onPress={() => Linking.openURL(`tel:${SUPPORT_PHONE.replace(/[^\d+]/g, '')}`)}
               accessibilityRole="link"
             >
-              <Feather name="phone" size={16} color={color.primary} />
-              <Text style={styles.contactText}>{SUPPORT_PHONE}</Text>
+              <Feather name="phone" size={16} color={theme.primary} />
+              <Text style={[styles.contactText, { color: theme.primary }]}>{SUPPORT_PHONE}</Text>
             </TouchableOpacity>
           )}
           {!SUPPORT_EMAIL && !SUPPORT_PHONE && (

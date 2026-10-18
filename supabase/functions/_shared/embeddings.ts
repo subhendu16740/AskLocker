@@ -50,6 +50,15 @@ const ENDPOINTS = [
 
 let workingEndpoint: string | null = null;
 
+// Answers about the account, not the address: every address would say the
+// same, so the first one ends the search and is reported in plain words.
+const ACCOUNT_REFUSALS: Record<number, string> = {
+  401: 'HuggingFace refused the token',
+  402: 'HuggingFace credit is used up',
+  403: 'the token may not call this model',
+  429: 'HuggingFace rate limit',
+};
+
 export interface EmbedResult {
   /** One entry per input, in order. Null where that input could not be embedded. */
   vectors: (number[] | null)[];
@@ -99,6 +108,10 @@ async function embedRaw(inputs: string[]): Promise<EmbedResult> {
     : ENDPOINTS;
 
   let lastError = 'no endpoint answered';
+  // An address that answered beats one that could not be reached. The retired
+  // host's DNS failure, tried last, hid the router's "402, credit used up"
+  // behind "dns error" in every report until this kept the real answer.
+  let heard = false;
 
   for (const endpoint of candidates) {
     try {
@@ -106,12 +119,16 @@ async function embedRaw(inputs: string[]): Promise<EmbedResult> {
 
       if (!response.ok) {
         const errText = (await response.text()).replace(/\s+/g, ' ').slice(0, 160);
-        lastError = `HTTP ${response.status}: ${errText}`;
+        const account = ACCOUNT_REFUSALS[response.status];
+        lastError = `HTTP ${response.status}${account ? ` (${account})` : ''}: ${errText}`;
+        heard = true;
         console.warn(`[embed] ${lastError} at ${endpoint}`);
+        if (account) break;
         continue;
       }
 
       const payload = await response.json();
+      heard = true;
       if (!Array.isArray(payload) || payload.length !== inputs.length) {
         lastError = `expected ${inputs.length} vectors, got ${Array.isArray(payload) ? payload.length : typeof payload}`;
         console.warn(`[embed] ${lastError}`);
@@ -141,8 +158,9 @@ async function embedRaw(inputs: string[]): Promise<EmbedResult> {
       }
       return { vectors };
     } catch (err) {
-      lastError = String(err).slice(0, 160);
-      console.warn(`[embed] Endpoint failed (${endpoint}): ${lastError}`);
+      const reason = String(err).slice(0, 160);
+      if (!heard) lastError = reason;
+      console.warn(`[embed] Endpoint failed (${endpoint}): ${reason}`);
     }
   }
 

@@ -42,6 +42,7 @@ import { MAX_IMPORT_BYTES } from '../../supabase/functions/_shared/gmail-rules.t
 import { BUSINESS_PLANS, BUSINESS_PRICE, CLOSED_MESSAGE, DEFAULT_PLAN_LIMITS, PLUS_FOR_SALE, PLUS_PRICE, businessAmount, businessPrice, businessYearPrice, chatStorageFullMessage, fits, formatBytes, isBusinessPlan, nextBusinessPlan, planLabel, plusName, plusAmount, plusPrice, plusPrices, plusTwelveMonths, plusYearlyOffer, plusYearlySaving, storageFullMessage } from '../../supabase/functions/_shared/plan-text.ts';
 import { mentionsDate, mentionsAmount, mentionsPhone, mentionsText, refuses, devanagariShare, scriptShare, hasMarkdown } from '../lib/match.mjs';
 import { judgeAnswer } from '../lib/checks/ask.mjs';
+import { EMBED_ALLOWANCE } from '../lib/results.mjs';
 import { vehicleInsurance } from '../lib/tiny-pdf.mjs';
 import { loadQuestions, selectQuestions, groupCount, rotationGroup, estimateFor } from '../lib/questions.mjs';
 import { documents, permanentDocuments } from '../fixtures/documents.mjs';
@@ -137,6 +138,13 @@ await test('judgeAnswer catches wrong answers', () => {
   assert.equal(fathers.length, 3);
   const noVectors = judgeAnswer(byId.get('passport-expiry'), { answer: 'It expires on 19 July 2033.', sources: passport, debug: { embedded: false, embed_error: 'HTTP 410' } });
   assert.ok(noVectors.some((r) => r.includes('NOT embedded')));
+  // HuggingFace out of credit is an outside allowance (inconclusive); a
+  // retired host, a DNS failure or any other answer still fails.
+  assert.ok(EMBED_ALLOWANCE.test('HTTP 402 (HuggingFace credit is used up): {"error":"You have exceeded your monthly included credits"}'));
+  assert.ok(EMBED_ALLOWANCE.test('HTTP 429 (HuggingFace rate limit): slow down'));
+  for (const other of ['HTTP 410: Gone', 'HTTP 401 (HuggingFace refused the token): bad', 'TypeError: error sending request: dns error: failed', 'HF_API_TOKEN is not set']) {
+    assert.ok(!EMBED_ALLOWANCE.test(other), other);
+  }
   const markdown = judgeAnswer(byId.get('voice-mode'), { answer: 'It expires on **19 July 2033**.', sources: passport, debug: healthy });
   assert.ok(markdown.some((r) => r.includes('markdown')));
 });

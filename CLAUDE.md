@@ -211,8 +211,8 @@ business while on Family Plus and can once it ends, staying on Free with
 everyone in it, B (on Free, with QA Vault B) is refused a free business
 (054) and creates one once it is in a family on Family Plus (055); neither
 a stranger nor a viewer can make QA Vault A a business; on Free the
-overview gives counts and a note takes no reminder, a teammate cannot read,
-change or delete someone's note, and on Pro the overview has money in and
+overview gives counts and a note takes no reminder, a stranger cannot write
+a note there, a teammate cannot read, change or delete someone's note, and on Pro the overview has money in and
 out and a note's reminder reaches its owner (056); nobody but its owner
 deletes a vault, and only the server calls 057's functions),
 a question asked by relation ("my mother's passport"), and the full upload → ingest →
@@ -226,7 +226,10 @@ photos OCR'd the way the web app does it, with Tesseract — which is about
   200K/day). Questions go one at a time, 90s apart; the run backs off on a
   rate limit and stops if Groq pushes back twice; at most two post-deploy
   runs a day may ask questions. A rate limit is *inconclusive*, never a
-  failure. Worst day ≈ half of `gpt-oss-20b`'s free allowance.
+  failure, and so is HuggingFace refusing the search vectors for want of
+  credit (402) or calls (429): search falls back to keywords, a right answer
+  still passes, and a wrong one waits for a later run. Worst day ≈ half of
+  `gpt-oss-20b`'s free allowance.
 - **It never touches PROD data** — the runner refuses a PROD URL. Its only
   PROD access is the two read-only catalog queries above.
 - **Everything in `qa/fixtures/` is fictional and says so.** This repo is
@@ -2053,7 +2056,9 @@ so storage policies live only in `019`.
   makes for a Razorpay payment — and refuses the business plans for a
   family. The payments function refuses to start Family Plus for a
   business (409 `business_plan`), so no business can pay ₹100 for 10 GB.
-  The Plans page (`/plus` in a business) says Ask us, which opens Feedback.
+  The Plans page (`/plus` in a business) compares Free beside Plus, Pro and
+  Enterprise, row by row (the owner's ask, 18 October 2026), and says Ask
+  us, which opens Feedback.
 - **A person's numbers are the best of their plans**, number by number:
   `person_plans()` (the plans of their vaults, and Free) feeds 049's
   `person_on_plus()` / `question_allowance()` and 050's
@@ -2248,8 +2253,11 @@ so storage policies live only in `019`.
   `#0F5C57`, secondary `#1A7A72`, tint `#E7F4F2`, accent `#B7791F`), a
   family the app's navy. `useVaultTheme()` (`src/lib/vault-theme.ts`) is the
   open vault's colours, and the shared pieces follow it: the top bar, back
-  arrow and header buttons, `settings-ui` cards and buttons, Home's header,
-  the tab bar and its Ask button, the drawer. Anything about a business
+  arrow and header buttons, `settings-ui` cards, buttons and On/Off, Home's
+  header, the tab bar and its Ask button, the drawer, the ★ Plus tag (gold
+  on a business), and every Settings screen (in Business mode Storage lists
+  Free and the business plans, not Family Plus, and each vault's bar keeps
+  its own colours). Anything about a business
   wears teal wherever it is listed, whichever mode is open
   (`vaultTheme(family)`): its row in Manage Family, Create a business, its
   documents on Home, a business's invitation, the vault picker, Upload's
@@ -2641,6 +2649,13 @@ neither calls HuggingFace directly. Three things matter:
   in search, an error on the Settings › Search row, `console.error` in
   ingest), and the host is a list to try rather than one name to be wrong
   about. A token is now required — `HF_API_TOKEN` must be set.
+- **The reason is the one HuggingFace gave.** An address that answered beats
+  one that could not be reached, so the retired host's DNS failure, tried
+  last, can no longer hide the router's answer: for days every report said
+  "dns error" while the router was saying 402, credit used up. An answer
+  about the account (401, 402, 403, 429) stops the search at once, since every
+  address would say the same, and reads in words: `HTTP 402 (HuggingFace
+  credit is used up): …`.
 - **Query and chunk vectors must come from the same model.** Mixing ranks by
   noise instead of failing. `public.family_embedding_state` (migration 013)
   records which model a family's chunks use and whether the rebuild finished;

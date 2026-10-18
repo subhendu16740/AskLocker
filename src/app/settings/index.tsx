@@ -23,6 +23,7 @@ import {
 import { ScreenHeader, PlusStar, PlusTag } from '../../components/screen-header';
 import { appVersion } from '../../lib/app-info';
 import { color, radius, shadow, size, space, type } from '../../constants/design';
+import { useVaultTheme } from '../../lib/vault-theme';
 
 // A row with an arrow opens a screen — every one of them. Rows that opened
 // nothing used to sit here, which tells the person using the app that it is
@@ -30,6 +31,8 @@ import { color, radius, shadow, size, space, type } from '../../constants/design
 type LinkItem = { icon: string; label: string; sub: string; route: string; value?: string };
 
 function LinkGroup({ title, items }: { title: string; items: LinkItem[] }) {
+  // Business mode wears the business's colours (the drawer's switch).
+  const theme = useVaultTheme();
   return (
     <View style={styles.group}>
       <Text style={styles.groupTitle}>{title}</Text>
@@ -42,8 +45,8 @@ function LinkGroup({ title, items }: { title: string; items: LinkItem[] }) {
             onPress={() => router.push(item.route as any)}
             accessibilityRole="button"
           >
-            <View style={styles.settingIconWrap}>
-              <Feather name={item.icon as any} size={16} color={color.primary} />
+            <View style={[styles.settingIconWrap, { backgroundColor: theme.tint }]}>
+              <Feather name={item.icon as any} size={16} color={theme.primary} />
             </View>
             <View style={styles.settingText}>
               <Text style={styles.settingLabel}>{item.label}</Text>
@@ -68,6 +71,7 @@ function readableError(err: unknown): string {
 export default function SettingsScreen() {
   const { user, signOut } = useAuth();
   const { membership, currentFamily } = useFamily();
+  const theme = useVaultTheme();
   const {
     voiceMode, voiceLanguage: voiceLang, documentLanguages, notificationsEnabled,
     setVoiceMode, setVoiceLanguage, setDocumentLanguages,
@@ -261,7 +265,7 @@ export default function SettingsScreen() {
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* Profile Card */}
         <LinearGradient
-          colors={['#2A3D66', '#4A6491']}
+          colors={theme.gradient}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={styles.profileCard}
@@ -288,8 +292,8 @@ export default function SettingsScreen() {
           <Text style={styles.groupTitle}>Accessibility</Text>
           <View style={styles.groupCard}>
             <View style={styles.settingRow}>
-              <View style={styles.settingIconWrap}>
-                <Feather name="mic" size={16} color={color.primary} />
+              <View style={[styles.settingIconWrap, { backgroundColor: theme.tint }]}>
+                <Feather name="mic" size={16} color={theme.primary} />
               </View>
               <View style={styles.settingText}>
                 <Text style={styles.settingLabel}>Voice assistant</Text>
@@ -298,7 +302,7 @@ export default function SettingsScreen() {
               <Switch
                 value={voiceMode}
                 onValueChange={setVoiceMode}
-                trackColor={{ false: '#D1D5DB', true: '#4A6491' }}
+                trackColor={{ false: '#D1D5DB', true: theme.secondary }}
                 thumbColor="#FFFFFF"
                 accessibilityLabel="Voice assistant"
               />
@@ -320,8 +324,8 @@ export default function SettingsScreen() {
               activeOpacity={0.7}
               onPress={() => setLangPickerOpen(true)}
             >
-              <View style={styles.settingIconWrap}>
-                <Feather name="globe" size={16} color={color.primary} />
+              <View style={[styles.settingIconWrap, { backgroundColor: theme.tint }]}>
+                <Feather name="globe" size={16} color={theme.primary} />
               </View>
               <View style={styles.settingText}>
                 <Text style={styles.settingLabel}>Voice language</Text>
@@ -335,8 +339,8 @@ export default function SettingsScreen() {
               activeOpacity={0.7}
               onPress={() => setVoicePickerOpen(true)}
             >
-              <View style={styles.settingIconWrap}>
-                <Feather name="volume-2" size={16} color={color.primary} />
+              <View style={[styles.settingIconWrap, { backgroundColor: theme.tint }]}>
+                <Feather name="volume-2" size={16} color={theme.primary} />
               </View>
               <View style={styles.settingText}>
                 <Text style={styles.settingLabel}>Voice</Text>
@@ -357,8 +361,8 @@ export default function SettingsScreen() {
               activeOpacity={0.7}
               onPress={() => setDocLangPickerOpen(true)}
             >
-              <View style={styles.settingIconWrap}>
-                <Feather name="file-text" size={16} color={color.primary} />
+              <View style={[styles.settingIconWrap, { backgroundColor: theme.tint }]}>
+                <Feather name="file-text" size={16} color={theme.primary} />
               </View>
               <View style={styles.settingText}>
                 <Text style={styles.settingLabel}>Document languages</Text>
@@ -382,17 +386,17 @@ export default function SettingsScreen() {
               disabled={rebuilding || !index || index.up_to_date || index.can_rebuild === false}
               onPress={rebuildIndex}
             >
-              <View style={styles.settingIconWrap}>
-                <Feather name="refresh-cw" size={16} color={color.primary} />
+              <View style={[styles.settingIconWrap, { backgroundColor: theme.tint }]}>
+                <Feather name="refresh-cw" size={16} color={theme.primary} />
               </View>
               <View style={styles.settingText}>
                 <Text style={styles.settingLabel}>Search</Text>
                 <Text style={styles.settingSub}>{indexSubtitle()}</Text>
               </View>
               {rebuilding
-                ? <ActivityIndicator size="small" color="#2A3D66" />
+                ? <ActivityIndicator size="small" color={theme.primary} />
                 : index && !index.up_to_date && index.can_rebuild !== false
-                  ? <Text style={styles.settingAction}>Update</Text>
+                  ? <Text style={[styles.settingAction, { color: theme.primary }]}>Update</Text>
                   : null}
             </TouchableOpacity>
           </View>
@@ -434,12 +438,12 @@ export default function SettingsScreen() {
                     onPress={() => { setVoiceLanguage(l.code); setLangPickerOpen(false); }}
                   >
                     <View style={styles.settingText}>
-                      <Text style={[styles.langNative, selected && styles.langSelected]}>{l.native}</Text>
+                      <Text style={[styles.langNative, selected && styles.langSelected, selected && { color: theme.primary }]}>{l.native}</Text>
                       <Text style={styles.settingSub}>
                         {l.english}{unavailable ? ' · No voice on this phone' : ''}
                       </Text>
                     </View>
-                    {selected && <Feather name="check" size={18} color={color.primary} />}
+                    {selected && <Feather name="check" size={18} color={theme.primary} />}
                   </TouchableOpacity>
                 );
               })}
@@ -475,17 +479,17 @@ export default function SettingsScreen() {
                     accessibilityState={{ checked: selected }}
                   >
                     <View style={styles.settingText}>
-                      <Text style={[styles.langNative, selected && styles.langSelected]} numberOfLines={2}>{v.label}</Text>
+                      <Text style={[styles.langNative, selected && styles.langSelected, selected && { color: theme.primary }]} numberOfLines={2}>{v.label}</Text>
                       {!!v.note && <Text style={styles.settingSub}>{v.note}</Text>}
                     </View>
                     {selected
-                      ? <Feather name="check" size={18} color={color.primary} />
+                      ? <Feather name="check" size={18} color={theme.primary} />
                       : <Feather name="play-circle" size={18} color="#9CA3AF" />}
                   </TouchableOpacity>
                 );
               })}
             </ScrollView>
-            <TouchableOpacity style={styles.sheetDone} onPress={closeVoicePicker} accessibilityRole="button">
+            <TouchableOpacity style={[styles.sheetDone, { backgroundColor: theme.primary }]} onPress={closeVoicePicker} accessibilityRole="button">
               <Text style={styles.sheetDoneText}>Done</Text>
             </TouchableOpacity>
           </Pressable>
@@ -517,7 +521,7 @@ export default function SettingsScreen() {
                     onPress={() => toggleDocLanguage(l.code)}
                   >
                     <View style={styles.settingText}>
-                      <Text style={[styles.langNative, selected && styles.langSelected]}>{l.native}</Text>
+                      <Text style={[styles.langNative, selected && styles.langSelected, selected && { color: theme.primary }]}>{l.native}</Text>
                       <Text style={styles.settingSub}>
                         {l.english}{l.code === 'eng' ? ' · always on' : ''}
                       </Text>
@@ -525,7 +529,7 @@ export default function SettingsScreen() {
                     <Feather
                       name={selected ? 'check-square' : 'square'}
                       size={18}
-                      color={selected ? color.primary : '#D1D5DB'}
+                      color={selected ? theme.primary : '#D1D5DB'}
                     />
                   </TouchableOpacity>
                 );
