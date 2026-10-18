@@ -109,7 +109,7 @@ function faq(payments: PaymentsStatus | null): { q: string; a: string }[] {
     },
     ...(forSale ? [{
       q: 'How do I pay for Family Plus?',
-      a: `Open Settings › Family Plus and pick a month or a year. You pay through Razorpay by UPI, card or net banking, and AskLocker never sees your card or UPI details. Nothing renews by itself. For now, you can pay only on the web app${payments?.currencies.includes('USD') ? '' : ', in Indian rupees'}.`,
+      a: `Open Family Plus from the menu and pick a month or a year. You pay through Razorpay by UPI, card or net banking, and AskLocker never sees your card or UPI details. Nothing renews by itself. For now, you can pay only on the web app${payments?.currencies.includes('USD') ? '' : ', in Indian rupees'}.`,
     }] : []),
     {
       q: 'How do I delete my account?',
@@ -168,7 +168,7 @@ function businessFaq(): { q: string; a: string }[] {
     },
     {
       q: 'What does ★ Plus mean?',
-      a: `It marks what the paid plans add. Plus is ${businessPrice('business_plus')}, Pro ${businessPrice('business_pro')} and Enterprise ${businessPrice('business_enterprise')}. To get one, open Settings › Plans and tap Ask us.`,
+      a: `It marks what the paid plans add. Plus is ${businessPrice('business_plus')}, Pro ${businessPrice('business_pro')} and Enterprise ${businessPrice('business_enterprise')}. To get one, open Plans from the menu and tap Ask us.`,
     },
     {
       q: 'How do I share with someone outside the business?',

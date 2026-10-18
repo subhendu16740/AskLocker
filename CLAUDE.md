@@ -713,7 +713,7 @@ src/
     document/[id].tsx        # document viewer; Share opens the share sheet (036, web only)
     documents.tsx            # All documents (Home's three counts, See all): tabs Documents, Family (Team) and Categories; a vault filter, a person's or a category's documents, Delete one or several (Select)
     gmail-import.tsx         # connect Gmail, review what it found, import (web only, ★ Family Plus)
-    plus.tsx                 # Family Plus: what Plus gives, side by side with Free; every ★ opens it for a free family; pay for a month or a year (044, web only); a business sees Plans instead: Plus, Pro and Enterprise with their prices, and Ask us (051)
+    plus.tsx                 # Family Plus (in the drawer; Plans in a business): what Plus gives, side by side with Free; every ★ opens it for a free family; pay for a month or a year (044, web only); a business sees Plans instead: Plus, Pro and Enterprise with their prices, and Ask us (051)
     s.tsx                    # what a share link opens: one document, for anyone with the link, no account (036)
     +html.tsx                # custom HTML shell, web only
     (tabs)/
@@ -1557,8 +1557,9 @@ so storage policies live only in `019`.
   Gmail on Upload, the voice-chat strip on Ask — opens `/plus?feature=…`, which says which feature brought
   them there and marks its row; the screens redirect there too, after a
   refresh or from a link (Gmail import not while Google is handing back a
-  connection). A ★ tag drawn on its own (`<PlusTag link />`), Settings ›
-  Family Plus, Storage and a full vault's dialog open it as well. Gmail
+  connection). A ★ tag drawn on its own (`<PlusTag link />`), the drawer's
+  Family Plus (Plans in a business; moved out of Settings, the owner's ask,
+  18 October 2026), Storage and a full vault's dialog open it as well. Gmail
   import also refuses a free family on the server, and the server makes
   expiry reminders only for a vault on Plus (048). Birthday reminders reach
   every family. Where Plus cannot be
