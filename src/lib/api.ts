@@ -1334,6 +1334,25 @@ export interface FamilyPlanStatus extends StorageRoom {
   trial: boolean;
 }
 
+/**
+ * How a family on Family Plus last paid: for a month or for a year. Since 039
+ * family_plans keeps no period, but each payment (set_family_plan) sets
+ * updated_at, so paid_until less updated_at is the time it added, plus any
+ * left over: a month, or a year. Null when the vault has no paid-up row.
+ */
+export async function fetchPlusPeriod(familyId: string): Promise<'monthly' | 'yearly' | null> {
+  const { data, error } = await supabase
+    .from('family_plans')
+    .select('paid_until, updated_at')
+    .eq('family_id', familyId)
+    .maybeSingle();
+  if (error || !data) return null;
+  const until = Date.parse(data.paid_until);
+  if (!(until > Date.now())) return null;
+  // Six months: a month paid with another left is two; a year is twelve.
+  return until - Date.parse(data.updated_at) > 183 * 86_400_000 ? 'yearly' : 'monthly';
+}
+
 /** A family's plan, its limit and what its files (and, since 042, saved chats) add up to; null before 038. */
 export async function fetchStorageStatus(familyId: string): Promise<FamilyPlanStatus | null> {
   const { data, error } = await supabase.rpc('family_storage_status', { p_family_id: familyId });

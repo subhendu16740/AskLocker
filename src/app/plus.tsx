@@ -20,7 +20,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFamily } from '../lib/family-context';
 import { isBusinessVault, isPersonalVault, vaultName } from '../lib/vaults';
 import { forgetOnPlus, useFamilyPlan, usePaymentsStatus, type BusinessFeature, type PlusFeature } from '../lib/family-plan';
-import { PaymentError, createPlusOrder, fetchPlanLimits, verifyPlusPayment } from '../lib/api';
+import { PaymentError, createPlusOrder, fetchPlanLimits, fetchPlusPeriod, verifyPlusPayment } from '../lib/api';
 import { checkoutSupported, openCheckout } from '../lib/razorpay';
 import {
   CLOSED_MESSAGE, DEFAULT_PLAN_LIMITS, businessAmount, businessPlanName, formatBytes, isBusinessPlan, localCurrency, localPlusAmount,
@@ -118,6 +118,8 @@ function FamilyPlus() {
   const name = plusName(false);
   const paid = plan === 'plus';
   const [limits, setLimits] = useState<PlanLimits>(DEFAULT_PLAN_LIMITS);
+  // How the family pays for Plus, a month or a year: only that column is Current.
+  const [plusPeriod, setPlusPeriod] = useState<'monthly' | 'yearly' | null>(null);
   const monthly = localPlusPrice('monthly');
   // "₹1,100 a year instead of ₹1,200": what a screen reader hears for <YearlyPrice />.
   const yearlyOffer = localPlusYearlyOffer();
@@ -128,9 +130,15 @@ function FamilyPlus() {
     track('plus_viewed', { feature: feature && feature in BROUGHT_BY ? feature : 'none' });
     refresh(true);
     fetchPlanLimits().then((l) => { if (!cancelled) setLimits(l); });
+    if (currentFamily) fetchPlusPeriod(currentFamily.id).then((p) => { if (!cancelled) setPlusPeriod(p); });
     return () => { cancelled = true; };
-  }, [refresh, feature]));
+  }, [refresh, feature, currentFamily?.id]));
 
+  // The Current column: Free, or Plus as the family pays for it, a month or a
+  // year (none until that is known, and none once a plan has ended).
+  const currentColumn = plan === 'plus'
+    ? (plusPeriod === 'yearly' ? 2 : plusPeriod === 'monthly' ? 1 : -1)
+    : plan === 'free' && !closed ? 0 : -1;
   const familyName = currentFamily ? vaultName(currentFamily) : undefined;
   // What this vault may keep on Free (048): a personal vault less than a family.
   const freeHere = isPersonalVault(currentFamily) ? limits.freePersonal : limits.free;
@@ -159,6 +167,7 @@ function FamilyPlus() {
       try {
         const { paidUntil } = await verifyPlusPayment(result);
         track('payment_done', { period, currency });
+        setPlusPeriod(period);
         await refresh(true);
         forgetOnPlus();
         setPayNote({
@@ -176,7 +185,11 @@ function FamilyPlus() {
           tone: 'info',
           text: `We're still confirming your payment. If it went through, ${name} turns on in a few minutes. You don't need to pay again.`,
         });
-        setTimeout(() => { refresh(true); forgetOnPlus(); }, 30_000);
+        setTimeout(() => {
+          refresh(true);
+          forgetOnPlus();
+          fetchPlusPeriod(currentFamily.id).then(setPlusPeriod);
+        }, 30_000);
       }
     } catch (err) {
       setPayNote({ tone: 'error', text: err instanceof Error ? err.message : 'Something went wrong. Please try again.' });
@@ -256,14 +269,17 @@ function FamilyPlus() {
         ) : null}
 
         <Card style={styles.tableCard}>
-          <View style={[styles.row, styles.headRow]}>
+          {currentColumn >= 0 && (
+            <CurrentColumn from={currentColumn} to={currentColumn} count={3} width={60} tone={color.primary} tint="#F3F6FB" />
+          )}
+          <View style={[styles.row, styles.headRow, currentColumn >= 0 && styles.headRowTagged]}>
             <Text style={[styles.label, styles.headText]}>What you get</Text>
-            <Text style={[styles.value, styles.headText]}>Free</Text>
-            <View style={styles.value} accessible accessibilityLabel={`${name}, monthly`}>
+            <Text style={[styles.value, styles.headText]} accessibilityLabel={currentColumn === 0 ? 'Free, your plan' : 'Free'}>Free</Text>
+            <View style={styles.value} accessible accessibilityLabel={`${name}, monthly${currentColumn === 1 ? ', your plan' : ''}`}>
               <Text style={[styles.headText, styles.headPlus]}>★ Plus</Text>
               <Text style={[styles.headText, styles.headPlus]}>Monthly</Text>
             </View>
-            <View style={styles.value} accessible accessibilityLabel={`${name}, yearly`}>
+            <View style={styles.value} accessible accessibilityLabel={`${name}, yearly${currentColumn === 2 ? ', your plan' : ''}`}>
               <Text style={[styles.headText, styles.headPlus]}>★ Plus</Text>
               <Text style={[styles.headText, styles.headPlus]}>Yearly</Text>
             </View>
@@ -385,6 +401,27 @@ function FamilyPlus() {
 
 const PAID: readonly BusinessPlan[] = ['business_plus', 'business_pro', 'business_enterprise'];
 // The table always compares Free beside the paid plans (the owner's ask, 18 October 2026).
+/**
+ * A border round the columns of the plan the vault is on, top to bottom, with
+ * "Current" at its head (the owner's ask, 18 October 2026). Drawn first, so it
+ * sits behind the rows; the value columns have fixed widths, so where a column
+ * sits is counted from the card's right edge.
+ */
+function CurrentColumn({ from, to, count, width, tone, tint }: {
+  from: number; to: number; count: number; width: number; tone: string; tint: string;
+}) {
+  const reach = 4;
+  const right = space.lg + (count - 1 - to) * (width + space.xs) - reach;
+  const span = (to - from + 1) * width + (to - from) * space.xs + 2 * reach;
+  return (
+    <View pointerEvents="none" style={[styles.current, { right, width: span, borderColor: tone, backgroundColor: tint }]}>
+      <View style={[styles.currentTag, { backgroundColor: tone }]}>
+        <Text style={styles.currentTagText}>Current</Text>
+      </View>
+    </View>
+  );
+}
+
 type BusinessColumn = 'free' | BusinessPlan;
 const COLUMNS: readonly BusinessColumn[] = ['free', ...PAID];
 const columnName = (c: BusinessColumn) => (c === 'free' ? 'Free' : businessPlanName(c));
@@ -450,6 +487,8 @@ function BusinessPlans() {
   }, [refresh, feature]));
 
   const saidAll = (r: BusinessRow) => COLUMNS.map((c) => `${columnName(c)} ${said(r.cells[c])}`).join(', ');
+  // The column of the plan it is on; none while unknown, or once a paid plan has ended (closed).
+  const currentColumn = onPlan ? COLUMNS.indexOf(onPlan) : plan === 'free' && !closed ? 0 : -1;
 
   return (
     <SafeAreaView style={screenStyles.safe} edges={['top']}>
@@ -503,10 +542,19 @@ function BusinessPlans() {
         ) : null}
 
         <Card style={styles.tableCard}>
-          <View style={[styles.row, styles.headRow]}>
+          {currentColumn >= 0 && (
+            <CurrentColumn from={currentColumn} to={currentColumn} count={COLUMNS.length} width={58} tone={biz.primary} tint="#F1F8F7" />
+          )}
+          <View style={[styles.row, styles.headRow, currentColumn >= 0 && styles.headRowTagged]}>
             <Text style={[styles.label, styles.headText]}>What you get</Text>
-            {COLUMNS.map((c) => (
-              <Text key={c} style={[styles.value, styles.valueBiz, styles.headBiz, styles.headText, c !== 'free' && { color: biz.accent }]}>{columnName(c)}</Text>
+            {COLUMNS.map((c, i) => (
+              <Text
+                key={c}
+                style={[styles.value, styles.valueBiz, styles.headBiz, styles.headText, c !== 'free' && { color: biz.accent }]}
+                accessibilityLabel={`${columnName(c)}${i === currentColumn ? ', your plan' : ''}`}
+              >
+                {columnName(c)}
+              </Text>
             ))}
           </View>
           {businessRows(limits).map((r) => {
@@ -606,6 +654,11 @@ const styles = StyleSheet.create({
   },
   rowPointed: { backgroundColor: '#FFF7ED', marginHorizontal: -space.lg, paddingHorizontal: space.lg },
   headRow: { paddingTop: space.xs },
+  // Room above the column names for the current plan's "Current".
+  headRowTagged: { paddingTop: 28 },
+  current: { position: 'absolute', top: space.xs, bottom: space.xs, borderWidth: 2, borderRadius: radius.control, alignItems: 'center' },
+  currentTag: { marginTop: space.xs, borderRadius: radius.pill, paddingHorizontal: 6, paddingVertical: 1 },
+  currentTagText: { fontSize: 12, lineHeight: 16, fontWeight: '700', color: '#FFFFFF' },
   // Not uppercase like an overline: "MONTHLY" is wider than its column.
   headText: { fontSize: 12, lineHeight: 16, fontWeight: '600', color: color.textMuted },
   headPlus: { color: color.accent },

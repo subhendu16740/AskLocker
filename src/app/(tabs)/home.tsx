@@ -10,7 +10,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../lib/auth';
 import { useFamily } from '../../lib/family-context';
 import { useDrawer } from '../../lib/drawer-context';
-import { fetchRecentDocuments, fetchFamilyStats, fetchUnreadNotificationCount, checkExpiryNotifications } from '../../lib/api';
+import { fetchAllDocuments, fetchFamilyStats, fetchUnreadNotificationCount, checkExpiryNotifications } from '../../lib/api';
+import { categoryCount, peopleVault, type DocumentsTab } from '../../lib/document-groups';
 import { usePreferences } from '../../lib/preferences';
 import { useModeOnPlus } from '../../lib/family-plan';
 import { PlusStar } from '../../components/screen-header';
@@ -86,11 +87,13 @@ export default function HomeScreen() {
   // Home lists the newest documents from every vault of the mode together
   // (046; Family or Business, the drawer's switch), each tagged with the
   // vault it is in, and opens each in its own vault.
-  const { families, modeVaults, mode, refreshFamilies, otherModeVaultIds } = useFamily();
+  const { families, modeVaults, mode, refreshFamilies, otherModeVaultIds, currentFamily } = useFamily();
   const theme = useVaultTheme();
   // Only the mode's vaults, never a fallback to every vault: a business never shows a family's documents.
   const shown = modeVaults;
-  const familyKey = `${mode}:` + shown.map((f) => `${f.family_id}:${vaultName(f.families)}`).join('|');
+  // Whose people the Members count is: the open vault when shared, else the mode's first shared one.
+  const people = peopleVault(currentFamily, shown);
+  const familyKey = `${mode}:${people?.family_id ?? ''}:` + shown.map((f) => `${f.family_id}:${vaultName(f.families)}`).join('|');
   const { openDrawer } = useDrawer();
   // Settings › Notifications off: the bell stays, its count does not.
   const { notificationsEnabled } = usePreferences();
@@ -123,14 +126,16 @@ export default function HomeScreen() {
     const load = ++loads.current;
     setLoading(true);
     Promise.all([
-      // One vault that cannot be read leaves the others' documents on the list.
-      Promise.all(vaults.map((v) => fetchRecentDocuments(v.family_id, RECENT).catch((err) => {
+      // Every document of the mode's vaults: the newest for the list, and the
+      // counts All documents' tabs show (document-groups.ts). One vault that
+      // cannot be read leaves the others' documents on the list.
+      Promise.all(vaults.map((v) => fetchAllDocuments(v.family_id).catch((err) => {
         console.error('[Home] documents of', v.family_id, err);
         return [] as FamilyDocumentRow[];
       }))),
-      Promise.all(vaults.map((v) => fetchFamilyStats(v.family_id).catch(() => null))),
+      people ? fetchFamilyStats(people.family_id).catch(() => null) : Promise.resolve(null),
     ])
-      .then(([lists, vaultStats]) => {
+      .then(([lists, peopleStats]) => {
         if (load !== loads.current) return;
         setRecentDocs(
           lists
@@ -146,9 +151,9 @@ export default function HomeScreen() {
             .slice(0, RECENT),
         );
         setStats({
-          docs: vaultStats.reduce((sum, st) => sum + Number(st?.doc_count ?? 0), 0),
-          members: Number(vaultStats[0]?.member_count ?? 0),
-          categories: Number(vaultStats[0]?.category_count ?? 0),
+          docs: lists.reduce((sum, docs) => sum + docs.length, 0),
+          members: Number(peopleStats?.member_count ?? 0),
+          categories: categoryCount(lists.flat()),
         });
       })
       .catch((err) => console.error('[Home] fetch error:', err))
@@ -231,31 +236,28 @@ export default function HomeScreen() {
         {/* Stats Bar */}
         <View style={styles.section}>
           <View style={[styles.statsBar, { backgroundColor: theme.tint }, isDark && styles.statsBarDark]}>
-            {/* Opens All documents: every vault's documents, a vault filter, and Delete */}
-            <TouchableOpacity
-              style={styles.statLink}
-              onPress={() => router.push('/documents' as any)}
-              hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}
-              activeOpacity={0.7}
-              accessibilityRole="button"
-              accessibilityLabel={`${count(stats.docs, 'document', 'documents')}. See all documents`}
-            >
-              <Text style={[styles.statText, styles.statLinkText, { color: theme.primary }, isDark && styles.statTextDark]}>{count(stats.docs, 'Document', 'Documents')}</Text>
-              <Feather name="chevron-right" size={14} color={isDark ? '#4A6491' : theme.primary} />
-            </TouchableOpacity>
-            <Text style={styles.statDivider}>|</Text>
-            {shown.length > 1 ? (
-              // Several vaults: what they hold together, and in how many.
-              <Text style={[styles.statText, { color: theme.primary }, isDark && styles.statTextDark]}>{count(shown.length, 'Vault', 'Vaults')}</Text>
-            ) : (
-              <>
-                <Text style={[styles.statText, { color: theme.primary }, isDark && styles.statTextDark]}>
-                  {isPersonalVault(shown[0]?.families) ? 'Only you' : count(stats.members, 'Member', 'Members')}
-                </Text>
-                <Text style={styles.statDivider}>|</Text>
-                <Text style={[styles.statText, { color: theme.primary }, isDark && styles.statTextDark]}>{count(stats.categories, 'Category', 'Categories')}</Text>
-              </>
-            )}
+            {/* Each count opens All documents at its own tab: Documents, Family (Team) or Categories */}
+            {([
+              ['documents', count(stats.docs, 'Document', 'Documents'), `${count(stats.docs, 'document', 'documents')}. See all documents`],
+              ['people', people && isPersonalVault(people.families) ? 'Only you' : count(stats.members, 'Member', 'Members'),
+                `${people && isPersonalVault(people.families) ? 'Only you' : count(stats.members, 'member', 'members')}. See ${theme.business ? 'the team' : 'the family'}`],
+              ['categories', count(stats.categories, 'Category', 'Categories'), `${count(stats.categories, 'category', 'categories')}. See categories`],
+            ] as [DocumentsTab, string, string][]).map(([tab, label, spoken], i) => (
+              <View key={tab} style={styles.statItem}>
+                {i > 0 && <Text style={styles.statDivider}>|</Text>}
+                <TouchableOpacity
+                  style={styles.statLink}
+                  onPress={() => router.push(`/documents?tab=${tab}` as any)}
+                  hitSlop={{ top: 10, bottom: 10, left: 6, right: 6 }}
+                  activeOpacity={0.7}
+                  accessibilityRole="button"
+                  accessibilityLabel={spoken}
+                >
+                  <Text style={[styles.statText, styles.statLinkText, { color: theme.primary }, isDark && styles.statTextDark]} numberOfLines={1}>{label}</Text>
+                  <Feather name="chevron-right" size={14} color={isDark ? '#4A6491' : theme.primary} />
+                </TouchableOpacity>
+              </View>
+            ))}
           </View>
         </View>
 
@@ -429,7 +431,8 @@ const styles = StyleSheet.create({
   },
   statsBarDark: { backgroundColor: '#161B22', borderWidth: 1, borderColor: '#30363D' },
   statText: { ...type.caption, color: color.primary, fontWeight: '500' },
-  statLink: { flexDirection: 'row', alignItems: 'center', gap: 2 },
+  statItem: { flexDirection: 'row', alignItems: 'center', gap: space.sm, flexShrink: 1 },
+  statLink: { flexDirection: 'row', alignItems: 'center', gap: 2, flexShrink: 1 },
   statLinkText: { textDecorationLine: 'underline' },
   sectionHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: space.sm },
   sectionTitleInRow: { marginBottom: 0 },
