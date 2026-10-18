@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # Scores a rendered video and writes the deliverables:
-#   out/asklocker-intro-<tag>.mp4            music, sound effects and voices
-#   out/asklocker-intro-<tag>-sfx-only.mp4   sound effects and voices, no
-#                                            music, for adding a platform's
-#                                            own music track
-# usage: tools/mux.sh [16x9|9x16]   (after tools/render.mjs has written out/video-<tag>.mp4)
+#   out/asklocker-<tag>.mp4            music, sound effects and voices
+#   out/asklocker-<tag>-sfx-only.mp4   sound effects and voices, no music,
+#                                      for adding a platform's own music track
+# usage: tools/mux.sh <film>-<16x9|9x16>[-short], e.g. tools/mux.sh business-9x16
+#        (after tools/render.mjs has written out/video-<tag>.mp4)
 set -euo pipefail
 cd "$(dirname "$0")/.."
-TAG=${1:-16x9}
+TAG=${1:-family-16x9}
 FFMPEG=${FFMPEG:-ffmpeg}
 PYTHON=${PYTHON:-python3}
 
@@ -19,5 +19,5 @@ mux() { # video audio out
     -c:a aac -b:a 192k -ar 48000 -shortest -movflags +faststart "$3"
   echo "$3"
 }
-mux "out/video-$TAG.mp4" "out/score-$TAG.wav" "out/asklocker-intro-$TAG.mp4"
-mux "out/video-$TAG.mp4" "out/sfx-$TAG.wav" "out/asklocker-intro-$TAG-sfx-only.mp4"
+mux "out/video-$TAG.mp4" "out/score-$TAG.wav" "out/asklocker-$TAG.mp4"
+mux "out/video-$TAG.mp4" "out/sfx-$TAG.wav" "out/asklocker-$TAG-sfx-only.mp4"

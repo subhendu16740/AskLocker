@@ -13,6 +13,8 @@ const NEEDED = [
   // v4 screens: drawer, family tree, emergency card, reminders, Gmail import, saved chats
   'git-branch', 'plus-square', 'settings', 'log-out', 'chevron-down', 'check-square', 'droplet',
   'alert-triangle', 'edit-2', 'maximize-2', 'calendar', 'gift', 'bookmark', 'star', 'link',
+  // Vaults and the business film: the drawer's switch, Overview, My notes, Manage team
+  'briefcase', 'archive', 'bar-chart-2', 'edit-3', 'trash-2', 'user-minus', 'circle', 'monitor', 'copy',
 ];
 const missing = NEEDED.filter(n => !icons[n]);
 if (missing.length) throw new Error(`Unknown Feather icons: ${missing.join(', ')}`);

@@ -1,18 +1,19 @@
-"""Synthesises the intro video's soundtrack from the cue sheet the renderer writes.
+"""Synthesises a film's soundtrack from the cue sheet the renderer writes.
 
-    python audio/score.py out/cues-16x9.json out/score-16x9.wav [--sfx-only]
+    python audio/score.py out/cues-family-16x9.json out/score-family-16x9.wav [--sfx-only]
 
-Every sound here is generated (numpy + scipy), so the video carries no
-third-party audio licence. The picture decides the timing: src/main.js emits a
-cue for each tap, notification and scene change, and this script places sound
-on exactly those frames. The two spoken lines, Maa's question and the app
-reading its answer, are the WAVs in audio/voices/ (made by tools/voices.py);
-the music dips under them, and --sfx-only keeps them.
+Every sound here is generated (numpy + scipy), so the films carry no
+third-party audio licence. The picture decides the timing: the film's script
+(src/family.js, src/business.js) emits a cue for each tap, notification and
+scene change, and this script places sound on exactly those frames. The family
+film's two spoken lines, Maa's question and the app reading its answer, are the
+WAVs in audio/voices/ (made by tools/voices.py); the music dips under them, and
+--sfx-only keeps them.
 
-The music follows the story in three moods:
+The music follows the story in three moods, in both films:
   night   (0 -> brand reveal)  D minor pad, a low pulse, a ticking clock during
-                               the scramble, a boom on "Your family won't.",
-                               a ringtone, then silence when nobody answers
+                               the scramble, a boom on the insight's second line,
+                               a call nobody answers, then silence
   day     (reveal -> night2)   F major, 96 bpm: I-V-vi-IV with a felt-piano
                                arpeggio, soft kick and shaker once it settles
   night2 + end                 the same progression, slow and sparse, resolving
@@ -232,6 +233,17 @@ def sfx_ring():
         k = int(i * 0.12 * SR)
         out[k:k + len(s)] += s[: len(out) - k]
     return out * 0.5
+
+
+def sfx_ringback():
+    """An Indian ringback tone, as the caller hears it: 400 Hz shaped by 25 Hz,
+    two bursts of 0.4 s, through the earpiece."""
+    out = np.zeros(int(1.0 * SR))
+    for k in [0, int(0.6 * SR)]:
+        t = t_axis(0.4)
+        s = np.sin(2 * np.pi * 400 * t) * (0.55 + 0.45 * np.sin(2 * np.pi * 25 * t)) * adsr(len(t), 0.01, 0.02)
+        out[k:k + len(s)] += s
+    return bandpass(out, 300, 3400) * 0.35
 
 
 def sfx_whoosh(dur=1.0, lo=250, hi=4200):
@@ -454,7 +466,7 @@ def main():
     total = float(data['duration'])
     cues = data['cues']
     sec = {c['name']: c['t'] for c in cues if c['type'] == 'section'}
-    first = lambda kind: next(c['t'] for c in cues if c['type'] == kind)
+    first = lambda kind, default=None: next((c['t'] for c in cues if c['type'] == kind), default)
     n = int((total + 0.5) * SR)
     music = np.zeros((2, n))
     fx = np.zeros((2, n))
@@ -462,7 +474,8 @@ def main():
     spoken = []
 
     reveal, day, night2, end = sec['reveal'], sec['day'], sec['night2'], sec['end']
-    hit, ring_stop = first('hit'), first('ring-stop')
+    # A cut without the unanswered call goes quiet just before the reveal.
+    hit, ring_stop = first('hit'), first('ring-stop', reveal - 0.45)
     ticks = [c['t'] for c in cues if c['type'] == 'tick']
     scramble_a = ticks[0] - 1.9 if ticks else 7.0
     scramble_b = ticks[-1] + 1.9 if ticks else 16.0
@@ -479,6 +492,7 @@ def main():
         'tap': lambda c: (sfx_tap(), 0.55), 'buzz': lambda c: (sfx_buzz(), 0.6), 'notif': lambda c: (sfx_notif(), 0.7),
         'pop': lambda c: (sfx_pop(), 0.6), 'pop-soft': lambda c: (sfx_pop(0.6), 0.5), 'tick': lambda c: (sfx_tick(), 0.9),
         'error': lambda c: (sfx_error(), 0.7), 'hit': lambda c: (sfx_hit(), 0.7), 'ring': lambda c: (sfx_ring(), 0.7),
+        'ringback': lambda c: (sfx_ringback(), 0.6),
         'whoosh': lambda c: (sfx_whoosh(1.1), 0.8), 'whoosh-soft': lambda c: (sfx_whoosh(0.6, 400, 3000), 0.45),
         'shutter': lambda c: (sfx_shutter(), 0.7), 'scan': lambda c: (sfx_scan(c.get('dur', 1.0)), 0.6),
         'process': lambda c: (sfx_process(c.get('dur', 1.5)), 0.7), 'success': lambda c: (sfx_success(), 0.7),

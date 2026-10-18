@@ -1,11 +1,12 @@
 {
   "name": "asklocker-intro-video",
   "private": true,
-  "description": "Source for the AskLocker intro video: an HTML/GSAP composition rendered frame-by-frame to MP4.",
+  "description": "Source for the AskLocker films, for families and for business: HTML/GSAP compositions rendered frame-by-frame to MP4.",
   "type": "module",
   "scripts": {
     "preview": "npx --yes serve -l 4173 .",
     "render": "node tools/render.mjs",
+    "render:business": "node tools/render.mjs --film business",
     "render:portrait": "node tools/render.mjs --portrait"
   },
   "dependencies": {
