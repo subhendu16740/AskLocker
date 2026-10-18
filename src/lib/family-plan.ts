@@ -171,6 +171,40 @@ export function forgetOnPlus() {
   listeners.forEach((l) => l());
 }
 
+// ─── Am I on a paid plan here? ──────────────────────────────────
+//
+// The ★ after your own name follows the mode (the owner's ask, 18 October
+// 2026): in Family mode, a family or personal vault of yours on Family Plus;
+// in Business mode, a business of yours on a paid plan. A family's Family Plus
+// never stars you in a business, nor a business plan in your family. Read
+// from each of the mode's vaults' plans (kept a minute, shared with
+// useFamilyPlan()); unknown shows no star.
+
+const paidUp = (p: KnownPlan | null | undefined) => !!p?.plan && p.plan !== 'free' && !p.closed;
+
+/** Is any vault of the open mode on a paid plan? False until known. */
+export function useModeOnPlus(): boolean {
+  const { modeVaults } = useFamily();
+  const ids = modeVaults.map((v) => v.family_id).join(',');
+  const [plus, setPlus] = useState(() => modeVaults.some((v) => paidUp(known.get(v.family_id))));
+
+  useEffect(() => {
+    const list = ids ? ids.split(',') : [];
+    let cancelled = false;
+    const read = (force: boolean) => {
+      Promise.all(list.map((id) => readPlan(id, force))).then((plans) => { if (!cancelled) setPlus(plans.some(paidUp)); });
+    };
+    setPlus(list.some((id) => paidUp(known.get(id))));
+    read(false);
+    // After a payment (forgetOnPlus), ask again.
+    const onForget = () => read(true);
+    listeners.add(onForget);
+    return () => { cancelled = true; listeners.delete(onForget); };
+  }, [ids]);
+
+  return plus;
+}
+
 /** Is the signed-in person on Family Plus, in any vault? False until known. */
 export function useOnPlus(): boolean {
   const { user } = useAuth();

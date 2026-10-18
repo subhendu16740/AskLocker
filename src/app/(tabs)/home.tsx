@@ -12,7 +12,7 @@ import { useFamily } from '../../lib/family-context';
 import { useDrawer } from '../../lib/drawer-context';
 import { fetchRecentDocuments, fetchFamilyStats, fetchUnreadNotificationCount, checkExpiryNotifications } from '../../lib/api';
 import { usePreferences } from '../../lib/preferences';
-import { useOnPlus } from '../../lib/family-plan';
+import { useModeOnPlus } from '../../lib/family-plan';
 import { PlusStar } from '../../components/screen-header';
 import { InvitationCards } from '../../components/invitation-cards';
 import { LockOffer } from '../../components/lock-offer';
@@ -21,6 +21,7 @@ import { isBusinessVault, isPersonalVault, vaultIcon, vaultName } from '../../li
 import { useVaultTheme, vaultTheme } from '../../lib/vault-theme';
 import type { FamilyDocumentRow } from '../../lib/database.types';
 import { biz, color, radius, shadow, size, space, type } from '../../constants/design';
+import { plusName } from '../../lib/plans';
 
 
 function getTimeGreeting(): string {
@@ -81,7 +82,7 @@ export default function HomeScreen() {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
   const { user } = useAuth();
-  const onPlus = useOnPlus();
+  const onPlus = useModeOnPlus();
   // Home lists the newest documents from every vault of the mode together
   // (046; Family or Business, the drawer's switch), each tagged with the
   // vault it is in, and opens each in its own vault.
@@ -184,7 +185,7 @@ export default function HomeScreen() {
                   <Text style={styles.greeting}>{getTimeGreeting()}</Text>
                   <Text
                     style={styles.headerTitle}
-                    accessibilityLabel={onPlus ? `${displayName}, Family Plus` : undefined}
+                    accessibilityLabel={onPlus ? `${displayName}, ${plusName(theme.business)}` : undefined}
                   >
                     {displayName}{onPlus && <PlusStar onDark />}
                   </Text>
@@ -196,7 +197,7 @@ export default function HomeScreen() {
               >
                 <Feather name="bell" size={20} color="#FFFFFF" />
                 {notificationsEnabled && unreadCount > 0 && (
-                  <View style={styles.bellBadge}>
+                  <View style={[styles.bellBadge, { borderColor: theme.primary }]}>
                     <Text style={styles.bellBadgeText}>
                       {unreadCount > 9 ? '9+' : unreadCount}
                     </Text>
@@ -275,7 +276,7 @@ export default function HomeScreen() {
           </View>
 
           {loading ? (
-            <ActivityIndicator size="small" color="#2A3D66" style={{ marginTop: 20 }} />
+            <ActivityIndicator size="small" color={theme.primary} style={{ marginTop: 20 }} />
           ) : recentDocs.length === 0 ? (
             <View style={styles.emptyState}>
               <Feather name="file-plus" size={32} color="#D1D5DB" />

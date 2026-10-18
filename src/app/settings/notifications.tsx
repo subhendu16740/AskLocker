@@ -22,6 +22,7 @@ import {
 } from '../../components/settings-ui';
 import { color, space } from '../../constants/design';
 import { useVaultTheme } from '../../lib/vault-theme';
+import { plusName } from '../../lib/plans';
 
 const DEVICE_TEXT: Record<Exclude<PushStatus, 'on' | 'off'>, string> = {
   unsupported: "This browser can't show notifications. Try Chrome, Edge, Firefox or Safari.",
@@ -115,7 +116,7 @@ export default function NotificationSettingsScreen() {
               </>
             ) : device === 'off' ? (
               <>
-                <Body>Get invitations, birthdays and, with ★ Family Plus, expiry reminders here, even when AskLocker is closed.</Body>
+                <Body>Get invitations, birthdays and, with ★ {plusName(theme.business)}, expiry reminders here, even when AskLocker is closed.</Body>
                 <PrimaryButton label="Turn on" icon="bell" onPress={turnOn} busy={busy === 'on'} disabled={busy !== null} />
               </>
             ) : (
@@ -147,9 +148,9 @@ export default function NotificationSettingsScreen() {
 
         <Card>
           <CardTitle icon="info">What you are told about</CardTitle>
-          <Body>• Expiring documents, 90, 30 and 7 days ahead and on the day. Needs ★ Family Plus.</Body>
+          <Body>• Expiring {theme.business ? 'records' : 'documents'}, 90, 30 and 7 days ahead and on the day. Needs ★ {plusName(theme.business)}.</Body>
           <Body>• Birthdays in your family tree, if Birthdays is on.</Body>
-          <Body>• Invitations to join a family.</Body>
+          <Body>• Invitations to join a {theme.business ? 'business' : 'family'}.</Body>
           <Muted>
             Phones and computers get these between 8 am and 10 pm, India time. Anything at night waits until
             morning.

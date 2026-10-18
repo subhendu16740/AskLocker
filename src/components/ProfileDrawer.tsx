@@ -23,12 +23,13 @@ import { useAuth } from '../lib/auth';
 import { useFamily, type AppMode } from '../lib/family-context';
 import { isBusinessVault, isPersonalVault, vaultName } from '../lib/vaults';
 import { useDrawer } from '../lib/drawer-context';
-import { useFamilyPlan, useOnPlus, type PlusFeature } from '../lib/family-plan';
+import { useFamilyPlan, useModeOnPlus, type PlusFeature } from '../lib/family-plan';
 import { appVersion } from '../lib/app-info';
 import { PlusStar, PlusTag } from './screen-header';
 import { color, radius, size, space, type } from '../constants/design';
 import { BUSINESS_THEME, FAMILY_THEME, useVaultTheme } from '../lib/vault-theme';
 import { track } from '../lib/analytics';
+import { plusName } from '../lib/plans';
 
 type MenuItem = { icon: string; label: string; route: string; plus?: PlusFeature; familyOnly?: boolean; businessOnly?: boolean };
 
@@ -54,7 +55,7 @@ export default function ProfileDrawer() {
   const theme = useVaultTheme();
   const { isDrawerOpen, closeDrawer } = useDrawer();
   const { routeFor } = useFamilyPlan();
-  const onPlus = useOnPlus();
+  const onPlus = useModeOnPlus();
   const { width } = useWindowDimensions();
   const drawerWidth = Math.min(300, Math.round(width * 0.86));
 
@@ -156,7 +157,7 @@ export default function ProfileDrawer() {
             <Text
               style={styles.profileName}
               numberOfLines={1}
-              accessibilityLabel={onPlus ? `${displayName}, Family Plus` : undefined}
+              accessibilityLabel={onPlus ? `${displayName}, ${plusName(theme.business)}` : undefined}
             >
               {displayName}{onPlus && <PlusStar onDark />}
             </Text>

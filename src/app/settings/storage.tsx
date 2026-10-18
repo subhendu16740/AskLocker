@@ -1,9 +1,11 @@
-// Settings › Storage — each family's plan, what it may keep and what it
-// holds, and what you have added yourself. Every plan has a limit (038): the
-// server refuses new documents once a family is at its limit, and this screen
-// says so before anyone meets the refusal. Before 038 it shows the free limit,
-// unenforced, from the documents' own sizes (see src/lib/plans.ts). Whether
-// Family Plus can be bought is the payments function's answer (044).
+// Settings › Storage — one table, a row for each vault: what it holds, the
+// space it has, and its plan, a ★ marking a paid one (the owner's ask, 18
+// October 2026: the screen had read as too wordy). Every plan has a limit
+// (038) and the server refuses new documents once a vault is at it, so a
+// vault nearly full or full says so on its row. Each vault wears its own
+// colours, a business's teal and a family's navy, whichever mode is open;
+// the mode's own vaults come first. Before 038 a vault's space is the free
+// limit, from its documents' own sizes (see src/lib/plans.ts).
 
 import { useCallback, useState } from 'react';
 import { ScrollView, View, Text, ActivityIndicator, TouchableOpacity, StyleSheet } from 'react-native';
@@ -12,26 +14,28 @@ import { router, useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../lib/auth';
 import { useFamily } from '../../lib/family-context';
-import { isPersonalVault, vaultName } from '../../lib/vaults';
+import { isBusinessVault, isPersonalVault, vaultIcon, vaultName } from '../../lib/vaults';
+import { fetchPlanLimits, fetchStorageStatus, fetchStorageUsage, type FamilyPlanStatus } from '../../lib/api';
 import {
-  fetchPlanLimits, fetchStorageStatus, fetchStorageUsage, type FamilyPlanStatus, type FamilyStorage,
-} from '../../lib/api';
-import {
-  BUSINESS_PLANS, CLOSED_MESSAGE, DEFAULT_PLAN_LIMITS, PLUS_FOR_SALE, businessAmount, businessPlanName, formatBytes, isBusinessPlan,
-  localPlusPrice, localPlusPrices, localPlusYearlyOffer, storageFullMessage, storageLevel, type PlanLimits, type StorageLevel,
+  DEFAULT_PLAN_LIMITS, businessPlanName, formatBytes, isBusinessPlan, storageLevel, type PlanLimits, type StorageLevel,
 } from '../../lib/plans';
 import { longDate } from '../../lib/dates';
-import { plusPage, usePaymentsStatus } from '../../lib/family-plan';
-import { ScreenHeader, PlusTag } from '../../components/screen-header';
-import { YearlyPrice } from '../../components/plus-price';
-import { Card, CardTitle, Body, Muted, Status, screenStyles } from '../../components/settings-ui';
-import { color, radius, size, space, type } from '../../constants/design';
+import { plusPage } from '../../lib/family-plan';
+import { ScreenHeader } from '../../components/screen-header';
+import { Muted, Status, screenStyles } from '../../components/settings-ui';
+import { biz, color, radius, shadow, size, space, type } from '../../constants/design';
 import { useVaultTheme, vaultTheme } from '../../lib/vault-theme';
+import type { FamilyWithMembership } from '../../lib/database.types';
 
-const documents = (n: number) => `${n} ${n === 1 ? 'document' : 'documents'}`;
+// Nearly full in amber, full in red; otherwise the vault's own colour.
+const LEVEL: Record<Exclude<StorageLevel, 'ok'>, string> = { nearly: '#B45309', full: color.danger };
 
-// Room left in the vault's own colour (a business's teal, 051); amber, then red.
-const BAR: Record<Exclude<StorageLevel, 'ok'>, string> = { nearly: '#D97706', full: color.danger };
+interface Row {
+  vault: FamilyWithMembership;
+  status: FamilyPlanStatus | null;
+  used: number;
+  limit: number;
+}
 
 function planName(status: FamilyPlanStatus | null): string {
   if (isBusinessPlan(status?.plan)) return `${businessPlanName(status.plan)}${status.trial ? ', trial' : ''}`;
@@ -40,209 +44,83 @@ function planName(status: FamilyPlanStatus | null): string {
   return status?.closed ? 'Plan ended' : 'Free';
 }
 
+const paid = (status: FamilyPlanStatus | null) => !!status && status.plan !== 'free' && !status.closed;
+
 export default function StorageScreen() {
   const { user } = useAuth();
   const { families, mode } = useFamily();
-  // Settings follows the mode, Family or Business (the drawer's switch).
+  // The screen follows the mode, Family or Business (the drawer's switch).
   const theme = useVaultTheme();
   const business = mode === 'business';
-  const [usage, setUsage] = useState<FamilyStorage[] | null>(null);
-  // Each family's plan and room as the server counts them; null before 038.
-  const [plans, setPlans] = useState<Record<string, FamilyPlanStatus | null>>({});
-  const [limits, setLimits] = useState<PlanLimits>(DEFAULT_PLAN_LIMITS);
+  const [rows, setRows] = useState<Row[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const payments = usePaymentsStatus();
   const familyKey = families.map((f) => f.family_id).join(',');
 
   useFocusEffect(useCallback(() => {
     if (!user) return;
     let cancelled = false;
     setError(null);
-    const list = families.map((f) => ({ id: f.families.id, name: vaultName(f.families) }));
+    // The mode's own vaults first; within a kind, the personal vault first.
+    const rank = (v: FamilyWithMembership) =>
+      (isBusinessVault(v.families) === business ? 0 : 2) + (isPersonalVault(v.families) ? 0 : 1);
+    const vaults = [...families].sort((a, b) => rank(a) - rank(b));
     Promise.all([
-      fetchStorageUsage(list, user.id),
-      Promise.all(list.map((f) => fetchStorageStatus(f.id).catch(() => null))),
-      fetchPlanLimits(),
+      Promise.all(vaults.map((v) => fetchStorageStatus(v.family_id).catch(() => null))),
+      fetchPlanLimits().catch((): PlanLimits => DEFAULT_PLAN_LIMITS),
     ])
-      .then(([u, statuses, l]) => {
+      .then(async ([statuses, limits]) => {
+        // Before 038 there is no status: add up the documents' own sizes instead.
+        const unknown = vaults.filter((_, i) => !statuses[i]);
+        const sizes = unknown.length
+          ? await fetchStorageUsage(unknown.map((v) => ({ id: v.family_id, name: vaultName(v.families) })), user.id)
+          : [];
         if (cancelled) return;
-        setUsage(u);
-        setPlans(Object.fromEntries(list.map((f, i) => [f.id, statuses[i]])));
-        setLimits(l);
+        setRows(vaults.map((vault, i) => {
+          const status = statuses[i];
+          const used = status ? status.usedBytes : sizes.find((s) => s.familyId === vault.family_id)?.bytes ?? 0;
+          const limit = status ? status.limitBytes : isPersonalVault(vault.families) ? limits.freePersonal : limits.free;
+          return { vault, status, used, limit };
+        }));
       })
-      .catch((err) => { if (!cancelled) { setUsage([]); setError(err?.message ?? "Couldn't add up your storage."); } });
+      .catch((err) => { if (!cancelled) { setRows([]); setError(err?.message ?? "Couldn't add up your storage."); } });
     return () => { cancelled = true; };
-  }, [user?.id, familyKey]));
-
-  const price = localPlusPrices();
-  // Which vaults are personal (046), for the free limit before the server says (048).
-  const personalIds = new Set(families.filter((f) => isPersonalVault(f.families)).map((f) => f.families.id));
-  const yourBytes = usage?.reduce((sum, f) => sum + f.yourBytes, 0) ?? 0;
-  const yourDocs = usage?.reduce((sum, f) => sum + f.yourDocuments, 0) ?? 0;
+  }, [user?.id, familyKey, business]));
 
   return (
     <SafeAreaView style={screenStyles.safe} edges={['top']}>
       <ScreenHeader title="Storage" fallback="/settings" />
       <ScrollView contentContainerStyle={screenStyles.body}>
-        {usage === null ? (
+        {rows === null ? (
           <View style={styles.center}>
             <ActivityIndicator color={theme.primary} />
-            <Muted>Adding up your documents…</Muted>
+            <Muted>Adding up your vaults…</Muted>
           </View>
         ) : (
           <>
             {error && <Status kind="error">{error}</Status>}
 
-            <Card>
-              <CardTitle icon="hard-drive">Plans</CardTitle>
-              <Body>
-                Documents and saved chats share each vault's space. Every plan has a limit.
-              </Body>
-              {business ? (
-                <View style={styles.planRows}>
-                  <View style={styles.planRow}>
-                    <View style={styles.planRowText}>
-                      <Text style={styles.planRowName}>Free</Text>
-                    </View>
-                    <Text style={[styles.planRowSize, { color: theme.primary }]}>{formatBytes(limits.free)}</Text>
-                  </View>
-                  {BUSINESS_PLANS.map((p) => (
-                    <View key={p} style={styles.planRow}>
-                      <View style={styles.planRowText}>
-                        <Text style={styles.planRowName}>★ {businessPlanName(p)}</Text>
-                        <Text style={styles.planRowPrice}>{businessAmount(p)} a month, plus GST</Text>
-                      </View>
-                      <Text style={[styles.planRowSize, { color: theme.primary }]}>{formatBytes(limits.business[p].storage)}</Text>
-                    </View>
-                  ))}
-                </View>
-              ) : (
-              <View style={styles.planRows}>
-                <View style={styles.planRow}>
-                  <View style={styles.planRowText}>
-                    <Text style={styles.planRowName}>Free</Text>
-                    <Text style={styles.planRowPrice}>{formatBytes(limits.freePersonal)} for your personal vault</Text>
-                  </View>
-                  <Text style={[styles.planRowSize, { color: theme.primary }]}>{formatBytes(limits.free)}</Text>
-                </View>
-                <View style={styles.planRow}>
-                  <View style={styles.planRowText}>
-                    <Text style={styles.planRowName}>★ Family Plus</Text>
-                    <Text
-                      style={styles.planRowPrice}
-                      accessibilityLabel={`${localPlusPrice('monthly')} or ${localPlusYearlyOffer()}`}
-                    >
-                      {localPlusPrice('monthly')} or <YearlyPrice />
-                    </Text>
-                  </View>
-                  <Text style={[styles.planRowSize, { color: theme.primary }]}>{formatBytes(limits.plus)}</Text>
-                </View>
+            <View style={styles.table} accessibilityRole="list">
+              <View style={styles.headRow} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+                <Text style={[styles.head, styles.vaultCol]}>Vault</Text>
+                <Text style={[styles.head, styles.usedCol]}>Used</Text>
+                <Text style={[styles.head, styles.spaceCol]}>Space</Text>
               </View>
-              )}
-              {!business && payments && !payments.available && (
-                <View style={styles.plusRow}>
-                  <PlusTag link name="Family Plus" />
-                  <Text style={styles.plusText}>Family Plus is coming soon.</Text>
-                </View>
-              )}
-              <TouchableOpacity style={styles.compare} onPress={() => router.push('/plus' as any)} accessibilityRole="link">
-                <Text style={[styles.compareText, { color: theme.primary }]}>{business ? 'Compare Free and the business plans' : 'Compare Free and Family Plus'}</Text>
-                <Feather name="chevron-right" size={16} color={theme.primary} />
-              </TouchableOpacity>
-            </Card>
+              {rows.length === 0 && <View style={styles.empty}><Muted>No vaults yet.</Muted></View>}
+              {rows.map((r, i) => <VaultRow key={r.vault.family_id} row={r} last={i === rows.length - 1} />)}
+            </View>
 
-            <Text style={styles.sectionTitle}>Your vaults</Text>
-            {usage.length === 0 && <Muted>You're not in a family yet.</Muted>}
-            {usage.map((f) => {
-              const status = plans[f.familyId] ?? null;
-              // As the server counts it once 038 is applied; the documents' sizes before.
-              const used = status ? status.usedBytes : f.bytes;
-              const limit = status ? status.limitBytes : personalIds.has(f.familyId) ? limits.freePersonal : limits.free;
-              const level = storageLevel(used, limit);
-              const percent = Math.min(100, Math.round((used / limit) * 100));
-              const isPlus = !!status && status.plan !== 'free';
-              return (
-                <Card key={f.familyId}>
-                  <View style={styles.familyRow}>
-                    <Text style={styles.familyName} numberOfLines={2}>{f.name}</Text>
-                    <Text style={[styles.familyBytes, { color: vaultTheme(families.find((v) => v.family_id === f.familyId)?.families).primary }]}>
-                      {formatBytes(used)}
-                      <Text style={styles.ofFree}> of {formatBytes(limit)}</Text>
-                    </Text>
-                  </View>
-                  <View style={styles.planBadgeRow}>
-                    <View style={[styles.planBadge, isPlus && styles.planBadgePlus]}>
-                      <Text style={[styles.planBadgeText, isPlus && styles.planBadgeTextPlus]}>
-                        {isPlus ? '★ ' : ''}{planName(status)}
-                      </Text>
-                    </View>
-                    {isPlus && status?.paidUntil && (
-                      <Text style={styles.until}>until {longDate(new Date(status.paidUntil))}</Text>
-                    )}
-                  </View>
-                  <View
-                    style={styles.bar}
-                    accessibilityRole="progressbar"
-                    accessibilityLabel={`${f.name}: ${formatBytes(used)} of ${formatBytes(limit)} used`}
-                    aria-valuemin={0}
-                    aria-valuemax={100}
-                    aria-valuenow={percent}
-                  >
-                    <View
-                      style={[
-                        styles.barFill,
-                        { width: `${used > 0 ? Math.max(2, percent) : 0}%`, backgroundColor: level === 'ok' ? vaultTheme(families.find((v) => v.family_id === f.familyId)?.families).secondary : BAR[level] },
-                      ]}
-                    />
-                  </View>
-                  <Muted>
-                    {used >= limit ? 'No space left' : `${formatBytes(limit - used)} left`}
-                    {' · '}{documents(f.documents)}
-                  </Muted>
-                  <Muted>You added {formatBytes(f.yourBytes)} ({documents(f.yourDocuments)}).</Muted>
-                  {!!status?.chatsBytes && <Muted>Saved chats use {formatBytes(status.chatsBytes)}.</Muted>}
-                  {status?.closed && (
-                    <View style={[styles.note, styles.noteFull]}>
-                      <Text style={[styles.noteText, styles.noteTextFull]}>{CLOSED_MESSAGE}</Text>
-                    </View>
-                  )}
-                  {level !== 'ok' && !status?.closed && (
-                    <View style={[styles.note, level === 'full' ? styles.noteFull : styles.noteNearly]}>
-                      <Text style={[styles.noteText, level === 'full' ? styles.noteTextFull : styles.noteTextNearly]}>
-                        {!status
-                          // Before 038: said, not kept.
-                          ? `This ${personalIds.has(f.familyId) ? 'vault' : 'family'} has used ${level === 'full' ? 'all of' : 'most of'} its free ${formatBytes(limit)}.`
-                          : level === 'full'
-                            ? storageFullMessage(status, 0, {
-                                limits,
-                                price,
-                                // Plus has ended and the family is above the free limit (040).
-                                removalOn: status.removalAt ? longDate(new Date(status.removalAt)) : undefined,
-                                forSale: payments?.available ?? PLUS_FOR_SALE,
-                              })
-                            : "Nearly full. When it's full, you can't add documents or save chats."}
-                      </Text>
-                      {/* A business can move up a plan until Enterprise (051). */}
-                      {(!isPlus || (status?.business && status.plan !== 'business_enterprise')) && (
-                        <TouchableOpacity onPress={() => router.push(plusPage('storage') as any)} accessibilityRole="link">
-                          <Text style={[styles.noteLink, level === 'full' ? styles.noteTextFull : styles.noteTextNearly]}>See {status?.business ? 'plans' : 'Family Plus'} ›</Text>
-                        </TouchableOpacity>
-                      )}
-                    </View>
-                  )}
-                </Card>
-              );
-            })}
+            <View style={styles.key}>
+              <Text style={styles.keyText}>
+                <Text style={{ color: business ? biz.accent : color.accent }}>★</Text> Paid plan. Documents and saved chats share a vault's space.
+              </Text>
+            </View>
 
-            <Text style={styles.sectionTitle}>What you have added</Text>
-            <Card>
-              <Text style={[styles.big, { color: theme.primary }]}>{formatBytes(yourBytes)}</Text>
-              <Muted>
-                {documents(yourDocs)}, in {usage.length} {usage.length === 1 ? 'family' : 'families'}
-              </Muted>
-            </Card>
-
-            <Muted>Saved chats count too. Delete a document or chat to free space.</Muted>
+            <TouchableOpacity style={styles.compare} onPress={() => router.push('/plus' as any)} accessibilityRole="link">
+              <Text style={[styles.compareText, { color: theme.primary }]}>
+                {business ? 'Compare Free and the business plans' : 'Compare Free and Family Plus'}
+              </Text>
+              <Feather name="chevron-right" size={16} color={theme.primary} />
+            </TouchableOpacity>
           </>
         )}
       </ScrollView>
@@ -250,40 +128,109 @@ export default function StorageScreen() {
   );
 }
 
+function VaultRow({ row, last }: { row: Row; last: boolean }) {
+  const { vault, status, used, limit } = row;
+  const name = vaultName(vault.families);
+  const theme = vaultTheme(vault.families);
+  const business = isBusinessVault(vault.families);
+  const star = business ? biz.accent : color.accent;
+  const isPaid = paid(status);
+  const level = status?.closed ? 'full' : storageLevel(used, limit);
+  const percent = limit > 0 ? Math.min(100, Math.round((used / limit) * 100)) : 0;
+  const plan = planName(status);
+  // One short line, only when something needs doing.
+  const note = status?.closed
+    ? 'Plan ended. You can’t add records until it’s renewed.'
+    : status?.removalAt
+      ? `Plus has ended. On ${longDate(new Date(status.removalAt))}, the newest documents above ${formatBytes(limit)} are removed.`
+      : level === 'full'
+        ? 'Full. Delete something to add more.'
+        : level === 'nearly'
+          ? 'Nearly full.'
+          : null;
+  // A free vault, or a business below Enterprise, can move up a plan.
+  const canMoveUp = !isPaid || (business && status?.plan !== 'business_enterprise');
+
+  return (
+    <View
+      style={[styles.row, last && styles.lastRow]}
+      accessible
+      accessibilityLabel={`${name}, ${isPaid ? `${plan}, paid plan` : plan}: ${formatBytes(used)} of ${formatBytes(limit)} used${note ? `. ${note}` : ''}`}
+    >
+      <View style={styles.rowMain}>
+        <View style={[styles.vaultCol, styles.vaultCell]}>
+          <View style={[styles.icon, { backgroundColor: theme.tint }]}>
+            <Feather name={vaultIcon(vault.families)} size={16} color={theme.primary} />
+          </View>
+          <View style={styles.vaultText}>
+            <Text style={styles.name} numberOfLines={1}>{name}</Text>
+            <Text style={styles.plan} numberOfLines={1}>
+              {isPaid && <Text style={{ color: star }}>★ </Text>}
+              {plan}
+            </Text>
+          </View>
+        </View>
+        <Text style={[styles.num, styles.usedCol, level !== 'ok' && { color: LEVEL[level] }]} numberOfLines={1}>{formatBytes(used)}</Text>
+        <Text style={[styles.num, styles.spaceCol, styles.space, { color: theme.primary }]} numberOfLines={1}>
+          {isPaid && <Text style={{ color: star }}>★ </Text>}
+          {formatBytes(limit)}
+        </Text>
+      </View>
+      <View style={styles.bar}>
+        <View
+          style={[
+            styles.barFill,
+            { width: `${used > 0 ? Math.max(2, percent) : 0}%`, backgroundColor: level === 'ok' ? theme.secondary : LEVEL[level] },
+          ]}
+        />
+      </View>
+      {note && (
+        <View style={styles.noteRow}>
+          <Text style={[styles.note, { color: level === 'ok' ? color.textBody : LEVEL[level] }]}>{note}</Text>
+          {canMoveUp && (level !== 'ok' || status?.removalAt) && (
+            <TouchableOpacity onPress={() => router.push(plusPage('storage') as any)} accessibilityRole="link" hitSlop={8}>
+              <Text style={[styles.noteLink, { color: theme.primary }]}>{business ? 'Plans' : 'Family Plus'} ›</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   center: { alignItems: 'center', gap: space.sm, paddingVertical: 40 },
-  planRows: { gap: space.xs },
-  planRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', minHeight: 28 },
-  planRowText: { flex: 1 },
-  planRowName: type.label,
-  planRowPrice: type.caption,
-  planRowSize: { ...type.label, color: color.primary, fontWeight: '600' },
-  plusRow: { flexDirection: 'row', alignItems: 'flex-start', gap: space.sm },
-  plusText: { ...type.caption, flex: 1, color: color.textBody, marginTop: 2 },
+  table: { backgroundColor: color.surface, borderRadius: radius.card, ...shadow.card, overflow: 'hidden' },
+  headRow: {
+    flexDirection: 'row', alignItems: 'center', gap: space.sm,
+    paddingHorizontal: space.lg, paddingVertical: space.sm, borderBottomWidth: 1, borderBottomColor: color.divider,
+  },
+  head: { ...type.overline },
+  vaultCol: { flex: 1, minWidth: 0 },
+  usedCol: { width: 64, textAlign: 'right' },
+  spaceCol: { width: 88, textAlign: 'right' },
+  row: { paddingHorizontal: space.lg, paddingVertical: space.md, gap: space.sm, borderBottomWidth: 1, borderBottomColor: color.divider },
+  lastRow: { borderBottomWidth: 0 },
+  rowMain: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  vaultCell: { flexDirection: 'row', alignItems: 'center', gap: space.md },
+  icon: { width: size.iconBox, height: size.iconBox, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+  vaultText: { flex: 1, minWidth: 0 },
+  name: type.label,
+  plan: type.caption,
+  num: { ...type.label, color: color.text },
+  space: { fontWeight: '600' },
+  bar: { height: 6, borderRadius: 3, backgroundColor: '#EEF2F8', overflow: 'hidden' },
+  barFill: { height: '100%', borderRadius: 3 },
+  noteRow: { flexDirection: 'row', alignItems: 'flex-start', gap: space.sm },
+  note: { ...type.caption, flex: 1 },
+  noteLink: { ...type.caption, fontWeight: '600' },
+  empty: { padding: space.lg },
+  key: { paddingHorizontal: space.xs },
+  keyText: type.caption,
   compare: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    minHeight: size.control, borderTopWidth: 1, borderTopColor: color.divider, marginTop: -space.xs,
+    minHeight: size.control, paddingHorizontal: space.lg,
+    backgroundColor: color.surface, borderRadius: radius.control, ...shadow.card,
   },
-  compareText: { ...type.label, color: color.primary },
-  noteLink: { fontSize: 14, lineHeight: 20, fontWeight: '600', marginTop: space.xs },
-  big: { fontSize: 22, lineHeight: 28, fontWeight: '600', color: color.primary },
-  sectionTitle: { ...type.overline, marginTop: space.sm, marginLeft: space.xs },
-  familyRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.md },
-  familyName: { ...type.heading, flex: 1 },
-  familyBytes: { ...type.heading, color: color.primary },
-  ofFree: { ...type.caption, color: color.textMuted },
-  planBadgeRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, flexWrap: 'wrap' },
-  planBadge: { borderRadius: radius.pill, paddingHorizontal: 8, paddingVertical: 2, backgroundColor: color.divider },
-  planBadgePlus: { backgroundColor: '#FEF3C7' },
-  planBadgeText: { fontSize: 12, lineHeight: 16, fontWeight: '600', color: color.textBody },
-  planBadgeTextPlus: { color: '#B45309' },
-  until: type.caption,
-  bar: { height: 8, borderRadius: 4, backgroundColor: '#EEF2F8', overflow: 'hidden' },
-  barFill: { height: '100%', borderRadius: 4 },
-  note: { borderRadius: 10, paddingVertical: 10, paddingHorizontal: space.md, borderWidth: 1 },
-  noteNearly: { backgroundColor: '#FFF7E6', borderColor: '#F5D9A0' },
-  noteFull: { backgroundColor: '#FEF2F2', borderColor: '#FECACA' },
-  noteText: { fontSize: 14, lineHeight: 20 },
-  noteTextNearly: { color: '#7A5200' },
-  noteTextFull: { color: '#B91C1C' },
+  compareText: { ...type.label, fontWeight: '600' },
 });
