@@ -5,7 +5,7 @@
 // vault's owner only, family or business (057; the screen tells another
 // admin who that is), a personal vault never, since it goes with the account.
 //
-// Above them, what the welcome questions asked (welcome.tsx): which one
+// Above them, what the welcome question asked (welcome.tsx): which one
 // AskLocker opens in, and the other too, which puts the Family | Business
 // switch in the menu (the owner's ask, 19 October 2026).
 

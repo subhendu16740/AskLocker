@@ -114,7 +114,7 @@ export default function ProfileDrawer() {
   };
 
   // Family or Business (the switch under the header), only for someone who
-  // chose both (the welcome questions, Settings › Your vaults), or who is in
+  // chose both (the welcome question, Settings › Your vaults), or who is in
   // the other mode now and needs a way back (family-context.tsx). It opens
   // the vault last open in that mode; someone with no business yet is taken
   // to make one.

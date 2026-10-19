@@ -58,7 +58,7 @@ export default function SetupFamilyScreen() {
   // Family to make another, and needs a way out.
   const { families, refreshFamilies, switchFamily, uses, usesChosen, setUses } = useFamily();
   // Family or business (051): from the button that opened this, else what
-  // AskLocker opens in (the welcome questions). Either can be picked here.
+  // AskLocker opens in (the welcome question). Either can be picked here.
   const params = useLocalSearchParams<{ kind?: string }>();
   const fixedKind = params.kind === 'business' || params.kind === 'family' ? params.kind : null;
   const [kind, setKind] = useState<Kind>(fixedKind ?? uses.primary);

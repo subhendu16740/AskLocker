@@ -33,8 +33,8 @@ function AuthGate() {
     } else if (session && !inProtectedRoute && seg !== undefined) {
       router.replace('/home' as any);
     } else if (session && needsWelcome && seg === '(tabs)') {
-      // A new account answers the welcome questions first (welcome.tsx):
-      // Family or Business, and the other too.
+      // A new account answers the welcome question first (welcome.tsx):
+      // Family, Business or Both.
       router.replace('/welcome' as any);
     }
   }, [session, authLoading, segments, needsWelcome]);

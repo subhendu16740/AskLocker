@@ -20,9 +20,10 @@ export const otherMode = (mode: AppMode): AppMode => (mode === 'family' ? 'busin
 
 /**
  * Family or Business first, and whether the other one too: what a person
- * answers after signing up (welcome.tsx) and can change in Settings › Your
- * vaults. AskLocker opens in the first; the drawer has the Family | Business
- * switch only with both (the owner's ask, 19 October 2026).
+ * answers after signing up (welcome.tsx: Family, Business or Both, which
+ * opens in Family) and can change in Settings › Your vaults. AskLocker opens
+ * in the first; the drawer has the Family | Business switch only with both
+ * (the owner's ask, 19 October 2026).
  */
 export type Uses = { primary: AppMode; both: boolean };
 
@@ -78,9 +79,9 @@ interface FamilyContextType {
    * (users.use_for, 051) suggest.
    */
   uses: Uses;
-  /** Whether the person chose (the welcome questions, Settings › Your vaults). */
+  /** Whether the person chose (the welcome question, Settings › Your vaults). */
   usesChosen: boolean;
-  /** A new account that has not answered the welcome questions yet: the app asks them first. */
+  /** A new account that has not answered the welcome question yet: the app asks them first. */
   needsWelcome: boolean;
   /** The drawer's Family | Business switch: with both on, or while in the other mode, to get back. */
   showModeSwitch: boolean;
@@ -176,7 +177,7 @@ export function FamilyProvider({ children }: { children: ReactNode }) {
   const showModeSwitch = uses.both || mode !== uses.primary;
 
   // A new account (046 gave it a personal vault and nothing else) that has
-  // not answered the welcome questions. Right after signing up that is known
+  // not answered the welcome question. Right after signing up that is known
   // at once, from when the account was made; for an older one, once its
   // vaults and Home's older answer are in.
   const onlyPersonal = families.every((f) => isPersonalVault(f.families));
@@ -243,7 +244,7 @@ export function FamilyProvider({ children }: { children: ReactNode }) {
     if (!accountUses) fetchUseFor(user.id).then(setOlderAnswer).catch(() => setOlderAnswer(null));
     // The remembered vault and families together, so screens never load the
     // default family only to switch a moment later. AskLocker opens in the
-    // person's first mode (the welcome questions), at the vault last open
+    // person's first mode (the welcome question), at the vault last open
     // there; without one, where they last were.
     setLastByMode({});
     Promise.all([storageGet(selectionKey(user.id)), storageGet(accountKey.modeVaults(user.id))])

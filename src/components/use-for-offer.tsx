@@ -1,14 +1,14 @@
 // Home's nudge about the kind of vault a person has not made yet.
 //
-// Someone who answered the welcome questions (welcome.tsx) and has no vault
+// Someone who answered the welcome question (welcome.tsx) and has no vault
 // of their first kind yet, besides their personal vault, is asked to set one
 // up: "Set up your family", or "your business". Later hides it on this
 // device. It locks nothing: the personal vault works without either.
 //
-// Someone who never answered (an account made before the welcome questions)
+// Someone who never answered (an account made before the welcome question)
 // and is in a family and no business, or the other way round, is offered the
 // other kind once ("Have a business too?"). Either button keeps their answer
-// on the account, as the welcome questions do: Create turns the other mode
+// on the account, as the welcome question do: Create turns the other mode
 // on, Not now leaves it off.
 
 import { useEffect, useState } from 'react';
