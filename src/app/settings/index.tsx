@@ -135,7 +135,7 @@ export default function SettingsScreen() {
     },
   ];
   const vaultItems: LinkItem[] = [
-    { icon: 'layers', label: 'Your vaults', sub: 'Family and business vaults: open, create, delete', route: '/settings/vaults' },
+    { icon: 'layers', label: 'Your vaults', sub: 'Family or Business first, and every vault', route: '/settings/vaults' },
     isBusinessVault(currentFamily)
       ? { icon: 'briefcase', label: 'Manage team', sub: 'People in this business', route: '/family' }
       : { icon: 'users', label: 'Manage Family', sub: 'People in this family', route: '/family' },

@@ -4,8 +4,10 @@
 // looks. Renders nothing when there are none, or before 037.
 //
 // Accept makes them a member and shows that family: they have just said they
-// want it. Decline asks once more first — after a no, only an admin can ask
-// again.
+// want it. Joining the other kind than the one they chose first (a business
+// for someone who chose Family) turns the other mode on, so the menu has the
+// Family | Business switch. Decline asks once more first — after a no, only
+// an admin can ask again.
 
 import { useCallback, useState } from 'react';
 import { View, Text, TouchableOpacity, ActivityIndicator, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
@@ -16,7 +18,7 @@ import { acceptInvitation, declineInvitation, fetchMyInvitations, type Invitatio
 import { biz, color, radius, shadow, size, space, type } from '../constants/design';
 
 export function InvitationCards({ style }: { style?: StyleProp<ViewStyle> }) {
-  const { refreshFamilies, switchFamily } = useFamily();
+  const { refreshFamilies, switchFamily, uses, usesChosen, setUses } = useFamily();
   const [invites, setInvites] = useState<Invitation[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [confirming, setConfirming] = useState<string | null>(null);
@@ -38,6 +40,8 @@ export function InvitationCards({ style }: { style?: StyleProp<ViewStyle> }) {
     try {
       const outcome = await acceptInvitation(invite.id);
       if (outcome.status === 'joined') {
+        const kind = invite.familyKind === 'business' ? 'business' : 'family';
+        if (usesChosen && kind !== uses.primary && !uses.both) setUses({ primary: uses.primary, both: true }).catch(() => {});
         await refreshFamilies();
         switchFamily(outcome.familyId);
         setNews({ kind: 'ok', text: `You joined ${outcome.familyName || invite.familyName}. Its documents are on Home now.` });
