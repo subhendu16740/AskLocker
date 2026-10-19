@@ -14,8 +14,8 @@
 // Free has 10 voice chats (041–043) and 20 questions a month (049); on Family
 // Plus, voice without a limit and 200 questions a month the whole family
 // shares (053). A share link lasts 1 or 7 days on Free, and up to 30 days on
-// Family Plus (049). On Free a person creates one vault besides their
-// personal vault, a family or a business (054).
+// Family Plus (049). On Free a person creates one family and one business
+// besides their personal vault (059; one of either kind under 054).
 //
 // A year costs eleven months: one month free. The yearly price is shown
 // against twelve months at the monthly price, crossed out (₹1,200 → ₹1,100,
@@ -137,7 +137,7 @@ export const DEFAULT_PLAN_LIMITS: PlanLimits = {
   uploadsPerDay: { free: 50, plus: 100 },
   familiesPerPerson: 1,
   businessesPerPerson: 1,
-  vaultsPerPerson: 1,
+  vaultsPerPerson: null,
   notesPerPerson: { free: 20, paid: 500 },
   invitesPerDay: { free: 20, plus: 20 },
   business: {
@@ -244,6 +244,25 @@ export function businessPlanName(plan: BusinessPlan): string {
 export function planLabel(plan: PlanName, business?: boolean): string {
   if (plan === 'free') return 'the free plan';
   return isBusinessPlan(plan) ? businessPlanName(plan) : plusName(business);
+}
+
+/**
+ * What a person on Free may create besides their personal vault: "one family
+ * and one business" (050's and 051's numbers, 059), or "one family or one
+ * business" while 054's combined number is the tighter one. Null when
+ * nothing is said: no limit, or none at all, which the server says itself.
+ */
+export function freeVaultsText(limits: Pick<PlanLimits, 'familiesPerPerson' | 'businessesPerPerson' | 'vaultsPerPerson'>): string | null {
+  const { familiesPerPerson: f, businessesPerPerson: b, vaultsPerPerson: v } = limits;
+  if (v === 0) return null;
+  if (v != null && (f == null || b == null || v < f + b)) {
+    return v === 1 ? 'one family or one business' : `${v} families or businesses in all`;
+  }
+  const parts = [
+    f != null && f > 0 ? (f === 1 ? 'one family' : `${f} families`) : null,
+    b != null && b > 0 ? (b === 1 ? 'one business' : `${b} businesses`) : null,
+  ].filter((part): part is string => part !== null);
+  return parts.length ? parts.join(' and ') : null;
 }
 
 /**

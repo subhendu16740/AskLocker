@@ -208,8 +208,9 @@ is refused for a business and a business plan for a family, QA Vault A's
 Family Plus starts and ends as before, on Family Plus a family that has
 used its month's questions is refused (053), QA Vault A cannot become a
 business while on Family Plus and can once it ends, staying on Free with
-everyone in it, B (on Free, with QA Vault B) is refused a free business
-(054) and creates one once it is in a family on Family Plus (055); neither
+everyone in it, B (on Free, with QA Vault B) creates a free business beside
+it (059; refused under 054 alone) and once it is in a family on Family Plus
+(055); neither
 a stranger nor a viewer can make QA Vault A a business; on Free the
 overview gives counts and a note takes no reminder, a stranger cannot write
 a note there, a teammate cannot read, change or delete someone's note, and on Pro the overview has money in and
@@ -779,7 +780,7 @@ tabs. `(tabs)` is a layout group, so routes are `/home`, `/search`, `/upload`.
 | `speech-text.ts` | `toSpeech()`: strips markdown and spells out ID numbers before they are read aloud — and a number named as one ("train number 16782", "PNR: 4512", "PIN 751001", "नंबर 16782") digit by digit, from its digits; the screen keeps the digits |
 | `voice-languages.ts` | The language picker list and the few phrases the app itself says, per language |
 | `storage.ts` | Key-value cache: localStorage on web, AsyncStorage on native |
-| `database.types.ts` | Generated Supabase types, current to 057 (030, 052, 055 and 058 changed nothing in them; 049's, 050's, 051's, 053's, 054's, 056's and 057's added by hand). Regenerate after every migration and re-append the hand-written block at the bottom (see the typecheck note) |
+| `database.types.ts` | Generated Supabase types, current to 057 (030, 052, 055, 058 and 059 changed nothing in them; 049's, 050's, 051's, 053's, 054's, 056's and 057's added by hand). Regenerate after every migration and re-append the hand-written block at the bottom (see the typecheck note) |
 
 ---
 
@@ -878,7 +879,8 @@ DEV's test files and QA traffic use the same allowance as PROD's families
 - **Going over is not a bill, it is a stop.** Supabase emails, allows a grace
   period, then may restrict every project in the organisation: paused,
   read-only, or 402 on every request. 048's limits keep each vault in bounds,
-  and 050's one family a person on Free keeps one account to about 300 MB,
+  and one family and one business a person on Free (050, 051, 059) keep one
+  account to about 500 MB (300 MB under 054's one vault in all),
   but nothing keeps all the vaults together under 1 GB: at 048's free limits
   that is about five full families or ten full personal vaults, less what DEV
   keeps (64 MB, 141 files, on 7 October 2026).
@@ -1715,8 +1717,9 @@ so storage policies live only in `019`.
   account made 200 MB families as often as it liked, and five of them are
   the whole organisation's 1 GB. A family on Plus does not count, so paying
   for one lets a person create another. Create a family says so on the
-  screen, with Family Plus › (an alert shows nothing on the web). Since
-  054 it is one vault in all, a family or a business.
+  screen, with Family Plus › (an alert shows nothing on the web). 054
+  made it one vault in all, a family or a business; 059 gave back one of
+  each.
 - **The same on every plan** — each is a row in the shared 500 MB database,
   which turns read-only when full: 50 saved chats a person in a vault
   (`chat_limit`), 10 feedback messages a day (`feedback_limit`), 300 people
@@ -2099,9 +2102,10 @@ so storage policies live only in `019`.
   before. Expiry reminders and 30-day links come with any paid plan.
   `plan_limits.invites_per_day` replaces 050's fixed 20, and
   `businesses_per_person` (1 on Free) counts businesses apart from
-  families. Since 054 `vaults_per_person` (1 on Free) counts both
-  together, so a person on Free has one free family or one free business
-  besides their personal vault; vaults made before stay.
+  families. 054's `vaults_per_person` counted both together (one free
+  family or one free business); since 059 it is NULL on Free, so a person
+  on Free has one free family and one free business besides their
+  personal vault.
 - **No PROD business goes on a paid plan before PROD is on Supabase Pro**, and
   Groq and HuggingFace are paid: one active business can use up Groq's
   whole free day (about 25 questions, for everyone). A business on Free has
@@ -2181,6 +2185,7 @@ so storage policies live only in `019`.
   per-kind numbers are still checked within it. Paid vaults do not count;
   vaults made before stay (QA's account A has one of each). The creation
   screen says so above the form, and a refusal (`family_limit`) names it.
+  **059 turns this off** (below): one free family and one free business.
 - **Someone on a paid plan is not on Free** (055). 054 counted only the
   vaults a person created, so a member of a family on Family Plus that
   someone else pays for, with a free family of their own, was refused a
@@ -2192,6 +2197,19 @@ so storage policies live only in `019`.
   creation screen hides its "On Free" line from someone on Plus
   (`useOnPlus()`). A member of a Plus family gets two free vaults, not
   one: bounded, and what the owner asked for.
+- **One free family and one free business, for everyone on Free** (059,
+  the owner's rule, 19 October 2026: Free's benefits for both, without
+  paying). Under 054 a person with a free family was refused a business,
+  and Both on the welcome screen led to a refusal. 059 sets the free row's
+  `vaults_per_person` to NULL, only where it was 054's 1, so
+  `create_family()` (unchanged) checks only 050's `families_per_person`
+  and 051's `businesses_per_person`, both 1: a second free family or a
+  second free business is still refused. One account on Free can keep
+  500 MB (100 MB personal, 200 MB family, 200 MB business) instead of
+  300 MB. The creation screen and Help say "one family and one business"
+  (`freeVaultsText()` in `_shared/plan-text.ts`, which follows the numbers
+  and says "one family or one business" where 059 is not applied). Data
+  only, so the fingerprint cannot see it: check the free row by hand.
 - **The numbers that make the move pay**, only where still the old ones:
   Family Plus 100 documents a day (was 500) and 50 question tries a day
   (was 100), which no family comes near and a busy office does; one

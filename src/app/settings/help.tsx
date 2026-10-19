@@ -9,8 +9,8 @@ import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { SUPPORT_EMAIL, SUPPORT_PHONE } from '../../lib/app-info';
 import {
-  DEFAULT_PLAN_LIMITS, FREE_PERSONAL_STORAGE_LABEL, businessPrice, FREE_STORAGE_LABEL, MAX_FILE_BYTES, PLUS_FOR_SALE, formatBytes, plusPrice, plusPrices,
-  plusYearlyOffer, plusYearlySaving,
+  DEFAULT_PLAN_LIMITS, FREE_PERSONAL_STORAGE_LABEL, businessPrice, FREE_STORAGE_LABEL, MAX_FILE_BYTES, PLUS_FOR_SALE, formatBytes, freeVaultsText,
+  plusPrice, plusPrices, plusYearlyOffer, plusYearlySaving,
 } from '../../lib/plans';
 import { usePaymentsStatus } from '../../lib/family-plan';
 import { lockAfterText } from '../../lib/app-lock';
@@ -45,7 +45,7 @@ function faq(payments: PaymentsStatus | null): { q: string; a: string }[] {
     },
     {
       q: 'Are there other limits?',
-      a: `Files can be up to ${MAX_FILE_BYTES / (1024 * 1024)} MB. On Free, you can add ${DEFAULT_PLAN_LIMITS.uploadsPerDay.free} documents a day (${DEFAULT_PLAN_LIMITS.uploadsPerDay.plus} with ★ Family Plus) and create one family or one business besides your personal vault. Saved chats, the family tree, share links and invitations have caps too, and AskLocker tells you if you reach one.`,
+      a: `Files can be up to ${MAX_FILE_BYTES / (1024 * 1024)} MB. On Free, you can add ${DEFAULT_PLAN_LIMITS.uploadsPerDay.free} documents a day (${DEFAULT_PLAN_LIMITS.uploadsPerDay.plus} with ★ Family Plus) and create ${freeVaultsText(DEFAULT_PLAN_LIMITS)} besides your personal vault. Saved chats, the family tree, share links and invitations have caps too, and AskLocker tells you if you reach one.`,
     },
     {
       q: 'Can I ask by speaking?',
@@ -148,7 +148,7 @@ function businessFaq(): { q: string; a: string }[] {
     },
     {
       q: 'Are there other limits?',
-      a: `Files can be up to ${MAX_FILE_BYTES / (1024 * 1024)} MB. Each person can add ${L.uploadsPerDay.free} documents a day on Free and ${plus.uploadsPerDay} on a paid plan. On Free, you can create one family or one business besides your personal vault.`,
+      a: `Files can be up to ${MAX_FILE_BYTES / (1024 * 1024)} MB. Each person can add ${L.uploadsPerDay.free} documents a day on Free and ${plus.uploadsPerDay} on a paid plan. On Free, you can create ${freeVaultsText(L)} besides your personal vault.`,
     },
     {
       q: 'Can I ask by speaking?',

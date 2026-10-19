@@ -10,6 +10,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../lib/auth';
 import { useFamily } from '../lib/family-context';
 import { createNewFamily, fetchPlanLimits } from '../lib/api';
+import { freeVaultsText } from '../lib/plans';
 import { BackButton } from '../components/back-button';
 import { color, radius, size, space, type } from '../constants/design';
 import { track } from '../lib/analytics';
@@ -68,13 +69,17 @@ export default function SetupFamilyScreen() {
   useEffect(() => {
     if (!fixedKind && !picked) setKind(uses.primary);
   }, [uses.primary]);
-  // On Free, one vault in all besides the personal one, a family or a
-  // business (054). Said before the form, not only when it is refused.
-  // Someone in a vault on a paid plan is not on Free (055), so not to them.
+  // On Free, one family and one business besides the personal vault (059;
+  // 054 allowed one vault in all, which a project without 059 still keeps).
+  // Said before the form, not only when it is refused. Someone in a vault on
+  // a paid plan is not on Free (055), so not to them.
   const onPlus = useOnPlus();
-  const [freeVaults, setFreeVaults] = useState<number | null>(null);
+  const [freeNote, setFreeNote] = useState<string | null>(null);
   useEffect(() => {
-    fetchPlanLimits().then((l) => setFreeVaults(l.vaultsPerPerson)).catch(() => {});
+    fetchPlanLimits().then((l) => {
+      const text = freeVaultsText(l);
+      setFreeNote(text ? `On Free, you can create ${text}.` : null);
+    }).catch(() => {});
   }, []);
   const w = WORDS[kind];
   // What is being made wears its own colours: a business's from the start.
@@ -153,13 +158,7 @@ export default function SetupFamilyScreen() {
           ))}
         </View>
 
-        {!onPlus && freeVaults != null && freeVaults > 0 && (
-          <Text style={styles.kindNote}>
-            {freeVaults === 1
-              ? 'On Free, you can create one family or one business.'
-              : `On Free, you can create ${freeVaults} families or businesses.`}
-          </Text>
-        )}
+        {!onPlus && freeNote && <Text style={styles.kindNote}>{freeNote}</Text>}
 
         {/* Form */}
         <View style={styles.form}>

@@ -42,7 +42,7 @@ export {
 
 export {
   BUSINESS_PLANS, BUSINESS_PRICE, CLOSED_MESSAGE, DEFAULT_PLAN_LIMITS, PLUS_FOR_SALE, PLUS_PRICE, businessAmount, businessPlanName, businessPrice,
-  businessYearPrice, chatStorageFullMessage, fits, formatBytes, isBusinessPlan, nextBusinessPlan, planLabel, plusAmount, plusName,
+  businessYearPrice, chatStorageFullMessage, fits, formatBytes, freeVaultsText, isBusinessPlan, nextBusinessPlan, planLabel, plusAmount, plusName,
   plusPrice, plusPrices, plusTwelveMonths, plusYearlyOffer, plusYearlySaving, storageFullMessage,
   type BusinessPlan, type BusinessPlanLimits, type PlanLimits, type PlanName, type PriceCurrency, type PricePeriod, type StorageRoom,
 } from '../../supabase/functions/_shared/plan-text';

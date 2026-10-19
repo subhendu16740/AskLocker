@@ -39,7 +39,7 @@ import { phoneLooksRight, cardProblem, cardIsEmpty, emptyCard, bloodGroupLabel, 
 import { allowanceJson, givenBack, parseAllowance, questionLimitMessage, questionsLeftText, resetDay } from '../../supabase/functions/_shared/questions.ts';
 import { MAX_DOCUMENT_TEXT, MAX_FILE_BYTES, QUESTION_INPUT_MAX, MAX_QUESTION_CHARS, fileTooLargeMessage, inVaultFolder, limitHint, providedTextLimit } from '../../supabase/functions/_shared/limits.ts';
 import { MAX_IMPORT_BYTES } from '../../supabase/functions/_shared/gmail-rules.ts';
-import { BUSINESS_PLANS, BUSINESS_PRICE, CLOSED_MESSAGE, DEFAULT_PLAN_LIMITS, PLUS_FOR_SALE, PLUS_PRICE, businessAmount, businessPrice, businessYearPrice, chatStorageFullMessage, fits, formatBytes, isBusinessPlan, nextBusinessPlan, planLabel, plusName, plusAmount, plusPrice, plusPrices, plusTwelveMonths, plusYearlyOffer, plusYearlySaving, storageFullMessage } from '../../supabase/functions/_shared/plan-text.ts';
+import { BUSINESS_PLANS, BUSINESS_PRICE, CLOSED_MESSAGE, DEFAULT_PLAN_LIMITS, PLUS_FOR_SALE, PLUS_PRICE, businessAmount, businessPrice, businessYearPrice, chatStorageFullMessage, fits, formatBytes, freeVaultsText, isBusinessPlan, nextBusinessPlan, planLabel, plusName, plusAmount, plusPrice, plusPrices, plusTwelveMonths, plusYearlyOffer, plusYearlySaving, storageFullMessage } from '../../supabase/functions/_shared/plan-text.ts';
 import { mentionsDate, mentionsAmount, mentionsPhone, mentionsText, refuses, devanagariShare, scriptShare, hasMarkdown } from '../lib/match.mjs';
 import { judgeAnswer } from '../lib/checks/ask.mjs';
 import { EMBED_ALLOWANCE } from '../lib/results.mjs';
@@ -683,9 +683,9 @@ await test('plans: every limit is finite, and a full vault says why and what to 
   // Free and 8 on Plus (049), 10 voice chats for each person on Free (043),
   // and 20 questions a month for each person on Free, none on Plus up to
   // fair use (049), and on Plus 200 a month the whole family shares (053).
-  // A business (051) has its own plans. On Free a person creates one vault
-  // in all, a family or a business (054), and Family Plus adds 100
-  // documents and 50 question tries a day.
+  // A business (051) has its own plans. On Free a person creates one family
+  // and one business (059; one of either under 054), and Family Plus adds
+  // 100 documents and 50 question tries a day.
   assert.deepEqual(DEFAULT_PLAN_LIMITS, {
     free: 200 * MB, freePersonal: 100 * MB, plus: 10 * GB, graceDays: 30,
     members: { free: 4, plus: 8 },
@@ -697,7 +697,7 @@ await test('plans: every limit is finite, and a full vault says why and what to 
     uploadsPerDay: { free: 50, plus: 100 },
     familiesPerPerson: 1,
     businessesPerPerson: 1,
-    vaultsPerPerson: 1,
+    vaultsPerPerson: null,
     notesPerPerson: { free: 20, paid: 500 },
     invitesPerDay: { free: 20, plus: 20 },
     business: {
@@ -713,6 +713,14 @@ await test('plans: every limit is finite, and a full vault says why and what to 
     const months = PLUS_PRICE.yearly[c] / PLUS_PRICE.monthly[c];
     assert.ok(Number.isInteger(months) && months < 12, `${c}: a year costs ${months} months`);
   }
+  // What the creation screen and Help say a person on Free may create: one
+  // of each kind since 059, one of either while 054's combined 1 is there,
+  // one family before 051 had businesses.
+  assert.equal(freeVaultsText(DEFAULT_PLAN_LIMITS), 'one family and one business');
+  assert.equal(freeVaultsText({ familiesPerPerson: 1, businessesPerPerson: 1, vaultsPerPerson: 1 }), 'one family or one business');
+  assert.equal(freeVaultsText({ familiesPerPerson: 1, businessesPerPerson: 1, vaultsPerPerson: 2 }), 'one family and one business');
+  assert.equal(freeVaultsText({ familiesPerPerson: 1, businessesPerPerson: 0, vaultsPerPerson: null }), 'one family');
+  assert.equal(freeVaultsText({ familiesPerPerson: 1, businessesPerPerson: 1, vaultsPerPerson: 0 }), null);
   assert.equal(plusYearlySaving('inr'), '1 month free');
   assert.equal(plusYearlySaving('usd'), '1 month free');
   assert.equal(plusPrice('inr'), '₹100 a month');
