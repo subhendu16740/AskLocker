@@ -71,7 +71,7 @@ LINES = {
                lead='बाबांच्या हेल्थ इन्शुरन्स पॉलिसीचा नंबर',
                number='ए एस एच दोन, तीन एक एक चार, पाच आठ नऊ आहे.',
                a2='ही पॉलिसी चौदा मार्च दोन हजार सत्तावीस पर्यंत वैध आहे.'),
-    'gu': dict(maa='Neha', app='Yash', pace={'maa': 'moderate', 'app': 'slightly fast'},
+    'gu': dict(maa='Neha', app='Yash', pace={'maa': 'moderate', 'app': 'slightly fast'}, longest_pause=0.3,
                ask='પપ્પાના હેલ્થ ઇન્શ્યોરન્સનો પોલિસી નંબર શું છે?',
                lead='પપ્પાના હેલ્થ ઇન્શ્યોરન્સ પોલિસીનો નંબર',
                number='એ એસ એચ બે, ત્રણ એક એક ચાર, પાંચ આઠ નવ છે.',
@@ -97,7 +97,9 @@ LINES = {
 # Hindi; the app even and clear. Parler-TTS reads these as plain English. A
 # language's `pace` changes a voice's where it reads slowly: Tamil's and
 # Gujarati's app voices took nine and six seconds over the policy number at a
-# moderate pace, where Kannada's took five.
+# moderate pace, where Kannada's took five. Gujarati's words come at a normal
+# pace even so, between pauses of half a second or more (one after
+# "insurance"), so its `longest_pause` cuts every pause in its lines to that.
 STYLE = {
     'maa': '{name} speaks at a {pace} pace with a natural, conversational tone. '
            'The recording is very clear and close-sounding, with no background noise.',
@@ -250,6 +252,21 @@ def number_onset(lead, sentence):
     return t
 
 
+def tighten(x, longest):
+    """The take with every pause inside it cut to `longest` seconds, from the
+    pause's middle, each cut crossfaded over 5 ms. The words are untouched."""
+    fade = int(0.005 * SR)
+    out, start = [], 0
+    for a, b in pauses(x):
+        if b - a > longest:
+            cut, resume = int((a + longest / 2) * SR), int((b - longest / 2) * SR)
+            out.append(x[start:cut - fade])
+            out.append(x[cut - fade:cut] * np.linspace(1, 0, fade) + x[resume:resume + fade] * np.linspace(0, 1, fade))
+            start = resume + fade
+    out.append(x[start:])
+    return np.concatenate(out)
+
+
 def trim(x, pad=0.03):
     """Cut the silence at both ends, keeping a breath of it. The floor follows
     the take's own loudness, since takes differ."""
@@ -304,7 +321,9 @@ def main():
     found = re.search(r'LANG_VOICES = (\{.*\});', js.read_text(), re.S) if js.exists() else None
     marks = json.loads(found.group(1)) if found else {}
     gap = np.zeros(int(SENTENCE_GAP * SR))
-    for (lang, _), ask, first, lead, second in zip(lines, asks, firsts, leads, seconds):
+    for (lang, line), ask, first, lead, second in zip(lines, asks, firsts, leads, seconds):
+        if 'longest_pause' in line:
+            ask, first, second = (tighten(x, line['longest_pause']) for x in (ask, first, second))
         answer = np.concatenate([first, gap, second])
         write_wav(ROOT / 'audio' / 'voices' / 'lang' / f'{lang}-ask.wav', ask)
         write_wav(ROOT / 'audio' / 'voices' / 'lang' / f'{lang}-answer.wav', answer)

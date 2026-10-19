@@ -24,12 +24,12 @@ export const LANG_VOICES = {
   },
   "gu": {
     "ask": {
-      "dur": 5.311
+      "dur": 4.273
     },
     "answer": {
-      "dur": 16.183,
-      "number": 3.79,
-      "sentence2": 10.369
+      "dur": 14.233,
+      "number": 3.945,
+      "sentence2": 9.656
     }
   },
   "hi": {
@@ -84,12 +84,12 @@ export const LANG_VOICES = {
   },
   "ta": {
     "ask": {
-      "dur": 2.868
+      "dur": 3.123
     },
     "answer": {
-      "dur": 18.899,
-      "number": 3.18,
-      "sentence2": 12.803
+      "dur": 12.342,
+      "number": 2.94,
+      "sentence2": 7.428
     }
   },
   "te": {
