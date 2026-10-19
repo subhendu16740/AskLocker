@@ -12,10 +12,12 @@ The WAVs are committed, so the film renders without this step.
 The voices are AI4Bharat's Indic Parler-TTS (Apache 2.0), which speaks every
 one of these languages from text, trained on Indian speakers; Kokoro, which
 speaks the full film's Hindi, has no voices for the others. The model is gated
-on Hugging Face: accept its terms there, and set HF_TOKEN to a read token.
+on Hugging Face: accept its terms there and set HF_TOKEN to a read token, or
+pass --model a folder holding its files.
 
-Needs: pip install torch parler-tts soundfile scipy (parler-tts pins its own
-transformers). On a CPU each line takes a minute or two.
+Needs: pip install torch torchaudio parler-tts scipy (parler-tts pins its own
+transformers). The languages are spoken together, a batch of ten lines at a
+time, which on a 4-core CPU takes four to six minutes.
 
 The screen shows the lines with numbers in digits (src/voice-lines.js); here
 they are written as the voice should say them: the policy number letter by
@@ -27,6 +29,7 @@ import json
 import os
 import pathlib
 import re
+import time
 import wave
 
 import numpy as np
@@ -35,9 +38,8 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 SR = 24_000
 
 # Each language: Maa's voice and the app's (two of the model's named speakers,
-# never the same one), her question, and the answer in three takes: the words
-# up to the policy number, the number with whatever closes the sentence, and
-# the second sentence.
+# never the same one), her question, and the answer: the words up to the policy
+# number, the number with whatever closes the sentence, and the second sentence.
 LINES = {
     'en': dict(maa='Mary', app='Thoma',
                ask="What's Papa's health insurance policy number?",
@@ -99,9 +101,9 @@ STYLE = {
     'app': '{name} speaks clearly at a moderate pace with a calm, friendly tone. '
            'The recording is very clear and close-sounding, with no background noise.',
 }
-NUMBER_GAP = 0.15    # between the words and the number they lead to
-SENTENCE_GAP = 0.4   # between the answer's two sentences, as tools/voices.py
-SEEDS = (7, 11, 23)  # a take that reads too fast or too slow is taken again
+SENTENCE_GAP = 0.4       # between the answer's two sentences, as tools/voices.py
+SEEDS = (7, 11, 23, 31)  # a take that fails its check is drawn again
+HOP = 0.01               # seconds between the frames the checks and the timing read
 
 
 class Parler:
@@ -116,31 +118,122 @@ class Parler:
         self.describe = AutoTokenizer.from_pretrained(self.model.config.text_encoder._name_or_path, token=token)
         self.rate = self.model.config.sampling_rate
 
-    def say(self, text, speaker, style):
-        """One take of the text as audio at SR, trimmed. The model samples, so a
-        take is redrawn with another seed when its pace is far off the text's
-        length (a word swallowed, or one said twice)."""
+    def batch(self, items, seed):
+        """Each (name, text, speaker, style) said once, all in one batch: on a
+        CPU ten lines take about four times as long as one. Audio at SR."""
         from scipy.signal import resample_poly
-        description = STYLE[style].format(name=speaker)
-        d = self.describe(description, return_tensors='pt')
-        p = self.tokenizer(text, return_tensors='pt')
-        letters = len(re.sub(r'[\s,.!?।]', '', text))
-        best = None
+        d = self.describe([STYLE[style].format(name=speaker) for _, _, speaker, style in items],
+                          return_tensors='pt', padding=True)
+        p = self.tokenizer([text for _, text, _, _ in items], return_tensors='pt', padding=True)
+        self.torch.manual_seed(seed)
+        with self.torch.no_grad():
+            out = self.model.generate(input_ids=d.input_ids, attention_mask=d.attention_mask,
+                                      prompt_input_ids=p.input_ids, prompt_attention_mask=p.attention_mask,
+                                      return_dict_in_generate=True)
+        return [resample_poly(out.sequences[i, :n].cpu().numpy().astype(np.float64), SR, self.rate)
+                for i, n in enumerate(out.audios_length)]
+
+    def takes(self, items, what):
+        """One good take of each item, trimmed and levelled. The model samples,
+        so a take now and then swallows a word, says one twice or stops to
+        think: one whose pace is far off its text's length, or that pauses too
+        long, is drawn again with the next seed, and if none passes, the
+        nearest is kept."""
+        best = [None] * len(items)
+        todo = list(range(len(items)))
         for seed in SEEDS:
-            self.torch.manual_seed(seed)
-            with self.torch.no_grad():
-                out = self.model.generate(input_ids=d.input_ids, attention_mask=d.attention_mask,
-                                          prompt_input_ids=p.input_ids, prompt_attention_mask=p.attention_mask)
-            x = out.cpu().numpy().squeeze().astype(np.float64)
-            x = resample_poly(x, SR, self.rate)
-            x, _ = trim(x)
-            per = len(x) / SR / max(1, letters)
-            print(f'      seed {seed}: {len(x) / SR:.2f}s, {per * 1000:.0f} ms a letter')
-            if best is None or abs(np.log(per / 0.075)) < abs(np.log(best[1] / 0.075)):
-                best = (x, per)
-            if 0.045 <= per <= 0.13:
+            if not todo:
                 break
-        return level(best[0])
+            t = time.time()
+            said = self.batch([items[i] for i in todo], seed)
+            print(f'{what}: {len(todo)} in {time.time() - t:.0f}s, seed {seed}', flush=True)
+            again = []
+            for i, x in zip(todo, said):
+                x, _ = trim(x)
+                off, why = check(x, items[i][1])
+                print(f'   {items[i][0]}: {len(x) / SR:.2f}s{"  " + why if why else ""}', flush=True)
+                if best[i] is None or off < best[i][1]:
+                    best[i] = (x, off)
+                if why:
+                    again.append(i)
+            todo = again
+        return [level(x) for x, _ in best]
+
+
+def check(x, text):
+    """How far a take is from passing (0 when it passes), and why it fails."""
+    letters = len(re.sub(r'[\s,.!?।]', '', text))
+    per = len(x) / SR / max(1, letters)
+    longest = max((b - a for a, b in pauses(x)), default=0.0)
+    off = max(0.0, np.log(0.04 / per), np.log(per / 0.15)) + max(0.0, longest - 0.7)
+    why = [f'{per * 1000:.0f} ms a letter'] if not 0.04 <= per <= 0.15 else []
+    why += [f'a {longest:.1f}s pause'] if longest > 0.7 else []
+    return off, ', '.join(why)
+
+
+def pauses(x, shortest=0.04):
+    """The quiet stretches inside a take, as (start, end) in seconds: frames
+    under a tenth of its speech's loudness, at least `shortest` long."""
+    hop = int(HOP * SR)
+    rms = np.sqrt(np.mean(x[: len(x) // hop * hop].reshape(-1, hop) ** 2, axis=1))
+    quiet = rms < 0.1 * np.percentile(rms, 90)
+    out, start = [], None
+    for i, q in enumerate([*quiet, False]):
+        if q and start is None:
+            start = i
+        elif not q and start is not None:
+            if start > 0 and i < len(rms) and (i - start) * HOP >= shortest:
+                out.append((start * HOP, i * HOP))
+            start = None
+    return out
+
+
+def speech(x):
+    """Log-mel frames of a take's speech, HOP apart, each band normalised, and
+    each frame's time. Its pauses are left out: the same words are said with
+    pauses in different places, and a pause matches nothing."""
+    import torch
+    import torchaudio
+    mel = torchaudio.transforms.MelSpectrogram(sample_rate=SR, n_fft=1024, win_length=600,
+                                               hop_length=int(HOP * SR), n_mels=40)(torch.from_numpy(x).float()).numpy()
+    loud = np.sqrt(mel.sum(0))
+    keep = np.flatnonzero(loud >= 0.1 * np.percentile(loud, 90))
+    f = np.log(mel[:, keep] + 1e-5).T
+    return (f - f.mean(0)) / (f.std(0) + 1e-5), keep * HOP
+
+
+def number_onset(lead, sentence):
+    """Where the policy number starts in the answer's first sentence, which is
+    said in one take so it flows. The words before the number, said alone, are
+    matched against the sentence's start by dynamic time warping (each side at
+    most twice the other's pace, the end left free): their last frame lands
+    where the number begins. A pause there is split down the middle, as
+    tools/voices.py does."""
+    from scipy.spatial.distance import cdist
+    a, _ = speech(lead)
+    b, times = speech(sentence)
+    cost = cdist(a, b, 'cosine')
+    n, m = cost.shape
+    acc = np.full((n, m), np.inf)
+    acc[0, 0] = cost[0, 0]
+    for i in range(n):
+        for j in range(m):
+            c = cost[i, j]
+            best = np.inf
+            if i and j:
+                best = acc[i - 1, j - 1] + 2 * c
+            if i and j > 1:
+                best = min(best, acc[i - 1, j - 2] + 2 * cost[i, j - 1] + c)
+            if i > 1 and j:
+                best = min(best, acc[i - 2, j - 1] + 2 * cost[i - 1, j] + c)
+            if i or j:
+                acc[i, j] = best
+    end = int(np.argmin(acc[n - 1] / (n + np.arange(1, m + 1))))
+    t = times[end] + HOP
+    for p, q in pauses(sentence):
+        if p - 0.1 <= t <= q:
+            return (p + q) / 2
+    return t
 
 
 def trim(x, pad=0.03):
@@ -158,8 +251,8 @@ def trim(x, pad=0.03):
 
 
 def level(x, rms=0.08):
-    """Every take at the same loudness, so the answer's three takes sound like
-    one breath."""
+    """Every take at the same loudness, so the answer's two sentences sound
+    like one voice."""
     return x * rms / max(1e-9, np.sqrt(np.mean(x ** 2)))
 
 
@@ -184,32 +277,32 @@ def main():
         raise SystemExit(f'No lines for {unknown}; known: {", ".join(LINES)}')
     tts = Parler(args.model)
 
+    # Four batches, each line in every language at once: Maa's question, the
+    # answer's first sentence (its words and the number in one take), those
+    # words alone (only to find where the number starts), the second sentence.
+    lines = [(lang, LINES[lang]) for lang in langs]
+    asks = tts.takes([(lang, l['ask'], l['maa'], 'maa') for lang, l in lines], 'questions')
+    firsts = tts.takes([(lang, f"{l['lead']} {l['number']}", l['app'], 'app') for lang, l in lines], 'first sentences')
+    leads = tts.takes([(lang, l['lead'], l['app'], 'app') for lang, l in lines], 'words before the number')
+    seconds = tts.takes([(lang, l['a2'], l['app'], 'app') for lang, l in lines], 'second sentences')
+
     js = ROOT / 'src' / 'voices-langs.js'
     found = re.search(r'LANG_VOICES = (\{.*\});', js.read_text(), re.S) if js.exists() else None
     marks = json.loads(found.group(1)) if found else {}
-    for lang in langs:
-        line = LINES[lang]
-        print(lang)
-        print('   ask')
-        ask = tts.say(line['ask'], line['maa'], 'maa')
-        print('   answer')
-        lead = tts.say(line['lead'], line['app'], 'app')
-        number = tts.say(line['number'], line['app'], 'app')
-        a2 = tts.say(line['a2'], line['app'], 'app')
-        gap1, gap2 = np.zeros(int(NUMBER_GAP * SR)), np.zeros(int(SENTENCE_GAP * SR))
-        answer = np.concatenate([lead, gap1, number, gap2, a2])
+    gap = np.zeros(int(SENTENCE_GAP * SR))
+    for (lang, _), ask, first, lead, second in zip(lines, asks, firsts, leads, seconds):
+        answer = np.concatenate([first, gap, second])
         write_wav(ROOT / 'audio' / 'voices' / 'lang' / f'{lang}-ask.wav', ask)
         write_wav(ROOT / 'audio' / 'voices' / 'lang' / f'{lang}-answer.wav', answer)
         marks[lang] = {
             'ask': {'dur': round(len(ask) / SR, 3)},
             'answer': {
                 'dur': round(len(answer) / SR, 3),
-                # Halfway through the pause before the number's first letter.
-                'number': round((len(lead) + len(gap1) / 2) / SR, 3),
-                'sentence2': round((len(lead) + len(gap1) + len(number) + len(gap2)) / SR, 3),
+                'number': round(number_onset(lead, first), 3),
+                'sentence2': round((len(first) + len(gap)) / SR, 3),
             },
         }
-        print(f'   {json.dumps(marks[lang])}')
+        print(lang, json.dumps(marks[lang]))
 
     js.write_text(
         '// Written by tools/voices_indic.py: for each voice language, how long its\n'

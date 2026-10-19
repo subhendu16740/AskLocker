@@ -169,14 +169,17 @@ The language versions' lines are spoken by AI4Bharat's
 [Indic Parler-TTS](https://huggingface.co/ai4bharat/indic-parler-tts) (Apache
 2.0), which speaks all ten languages from text and was trained on Indian
 speakers; Kokoro has no voices for the regional ones. Each language has two of
-its named speakers, one for Maa and one for the app. The answer is spoken in
-three takes (the words before the number, the number, the second sentence),
-joined with short pauses, so the film knows where the number starts. The
-model is gated: accept its terms on Hugging Face, then
+its named speakers, one for Maa and one for the app. Each sentence of the
+answer is one take, so it flows; to find where the policy number starts, the
+words before it are said alone too and matched against the sentence, pauses
+left out (`number_onset()`). Every line is spoken in all ten languages at once,
+in one batch, and a take that runs too fast or too slow for its words, or
+stops too long, is drawn again. The model is gated: accept its terms on
+Hugging Face and set `HF_TOKEN`, or pass `--model` a folder holding its files.
 
 ```bash
-python3 -m pip install torch parler-tts soundfile scipy
-HF_TOKEN=hf_... python3 tools/voices_indic.py            # all ten, a minute or two a line on a CPU
+python3 -m pip install torch torchaudio parler-tts scipy
+HF_TOKEN=hf_... python3 tools/voices_indic.py            # all ten, about 25 minutes on a 4-core CPU
 HF_TOKEN=hf_... python3 tools/voices_indic.py --langs ta  # one
 ```
 
