@@ -8,6 +8,7 @@ import {
   uploadedDialog, lockScreen, lockNotif, pushNotif, callScreen, cameraScreen, phoneShell, askMessages, askHeader,
   searchIn, saveBar, askInput, whyHow, trustBlock, brand,
 } from './parts.js';
+import { VOICE_LINES, APP_PHRASES, voiceSubtitles } from './voice-lines.js';
 
 // ─── Story data (edit here to re-cast the film) ──────────────────────────
 export const STORY = {
@@ -238,12 +239,16 @@ function askScreen() {
   </section>`;
 }
 
-function voiceScreen() {
+function voiceScreen(lang) {
+  // The voice scene's language (src/voice-lines.js): the full film's Hindi
+  // unless ?lang= names another. The app's own phrases come in English or Hindi.
+  const V = VOICE_LINES[lang || 'hi'];
+  const P = APP_PHRASES[V.app];
   const turns = [{
-    q: 'पापा की हेल्थ इंश्योरेंस का पॉलिसी नंबर क्या है?',
-    loading: 'आपके दस्तावेज़ों में देख रहा हूँ…',
-    a: `पापा की हेल्थ इंश्योरेंस पॉलिसी का नंबर <mark class="hl" id="v-hl">${STORY.policyNo}</mark> है। यह पॉलिसी 14 मार्च 2027 तक वैध है।`,
-    src: STORY.scanFile, vault: STORY.familyName, stop: 'रोकें', again: 'फिर से सुनें',
+    q: V.q,
+    loading: P.thinking,
+    a: `${V.lead} <mark class="hl" id="v-hl">${STORY.policyNo}</mark>${V.tail} ${V.a2}`,
+    src: STORY.scanFile, vault: STORY.familyName, stop: P.stop, again: P.again,
   }];
   const ph = (id, text, shown) => `<span class="ask-ph" id="${id}" style="opacity:${shown ? 1 : 0}">${text}</span>`;
   // While it listens, the mic is a ✕ Cancel pill that throws away what was heard.
@@ -251,17 +256,17 @@ function voiceScreen() {
     ${askHeader('v')}
     ${searchIn('All my vaults')}
     <div class="ask-area" id="v-area">
-      ${askEmpty('v-empty', 'mic', 'माइक दबाएँ और अपने दस्तावेज़ों के बारे में पूछें', 'जैसे: मेरा पासपोर्ट कब खत्म हो रहा है?')}
+      ${askEmpty('v-empty', 'mic', P.emptyTitle, P.emptySub)}
       <div class="chat-stack" id="v-stack">${askMessages('v', turns, true)}</div>
     </div>
     <div class="ask-bottom">${saveBar('v')}
       <div class="ask-inputbar"><div class="ask-inputbox">
         <span class="ask-lead"><span style="position:absolute;inset:0">${icon('mic', 18, '#9CA3AF')}</span>
           <span style="position:absolute;inset:0;opacity:0" id="v-icon-on">${icon('mic', 18, '#D4807B')}</span></span>
-        <div class="ask-input">${ph('v-ph-idle', 'माइक दबाएँ और पूछें', true)}${ph('v-ph-listen', 'सुन रहा हूँ…')}${ph('v-ph-think', 'आपके दस्तावेज़ों में देख रहा हूँ…')}${ph('v-ph-again', 'दूसरा सवाल पूछने के लिए दबाएँ')}<span class="ask-line" id="v-line"><span id="v-typed"></span></span></div>
+        <div class="ask-input">${ph('v-ph-idle', P.tap, true)}${ph('v-ph-listen', P.listening)}${ph('v-ph-think', P.thinking)}${ph('v-ph-again', P.another)}<span class="ask-line" id="v-line"><span id="v-typed"></span></span></div>
         <div class="mic-wrap" id="v-mic">
           <div class="mic-c grad" id="mic-idle">${icon('mic', 26, '#fff')}</div>
-          <div class="mic-c listening" id="mic-listen" style="opacity:0">${icon('x', 22, '#fff')}<span>रद्द करें</span></div>
+          <div class="mic-c listening" id="mic-listen" style="opacity:0">${icon('x', 22, '#fff')}<span>${P.cancel}</span></div>
           <div class="mic-c thinking" id="mic-think" style="opacity:0">${spinner('#6B7280', 20, 'mic-spin')}</div>
           <div class="mic-c speaking" id="mic-speak" style="opacity:0">${icon('volume-2', 26, '#fff')}</div>
         </div>
@@ -437,7 +442,7 @@ function notificationsScreen() {
   </section>`;
 }
 
-export function phone() {
+export function phone(lang = '') {
   return phoneShell(`
     ${lockScreen('scr-lock', '2:14', 'Tuesday, 10 November', lockNotif('ln1', 'Maa', [
       'Beta, Papa ko hospital laaye hain 🙏',
@@ -449,7 +454,7 @@ export function phone() {
     ${cameraScreen(policyPaper())}
     ${tagScreen()}
     ${askScreen()}
-    ${voiceScreen()}
+    ${voiceScreen(lang)}
     ${homeScreen()}
     ${treeScreen()}
     ${personScreen()}
@@ -586,12 +591,15 @@ export function callouts() {
   <div class="wave" id="wave">${Array.from({ length: 26 }, () => '<i></i>').join('')}</div>`;
 }
 
-export function subtitles() {
+export function subtitles(lang = '') {
+  const v = voiceSubtitles(lang || 'hi', STORY.policyNo);
+  // Without subtitles (English), the voice lines' stay empty and unseen.
+  const line = (id, text) => `<div class="subline on-light" id="${id}"${text ? '' : ' style="display:none"'}>${text ?? ''}</div>`;
   return `
     <div class="subline" id="sub-1">Son, we've brought Papa to the hospital.</div>
     <div class="subline" id="sub-2">They're asking for the insurance policy number. Where is it?</div>
-    <div class="subline on-light" id="sub-3">“What is Papa's health insurance policy number?”</div>
-    <div class="subline on-light" id="sub-4">“It's ${STORY.policyNo}.”</div>
-    <div class="subline on-light" id="sub-4b">“The policy is valid till 14 March 2027.”</div>
+    ${line('sub-3', v?.q)}
+    ${line('sub-4', v?.a1)}
+    ${line('sub-4b', v?.a2)}
     <div class="subline" id="sub-5">“Found it, son. Cashless is approved. Go back to sleep.”</div>`;
 }

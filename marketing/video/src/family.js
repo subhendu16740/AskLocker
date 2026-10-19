@@ -5,14 +5,27 @@
 // scramble, insight, the missed call, Gmail import, Ask, Hindi voice,
 // resolution. It drops the statistic, Scan, the family tree, the emergency
 // card, Reminders and Privacy.
+//
+// ?lang= (render.mjs --lang) puts the voice scene in another of the app's ten
+// voice languages (src/voice-lines.js), spoken by tools/voices_indic.py's
+// voices; without it, the voice scene is the Hindi of tools/voices.py.
 import {
   gsap, PORTRAIT, SHORT, $, $$, build, askArea, inputOverflow, at, scrollTo, layoutChat, place, initialState,
   setLayout, tl, cue, IR, showCallout, reveal, showWhy, showHow, hide, fadeIn, swap, nextZ, nav, chrome, tap, type,
-  vibrate, phoneTo, phoneIn, popCard, notify, bubblePop, sub, count, drawer, motion, finish,
+  vibrate, phoneTo, phoneIn, popCard, notify, bubblePop, sub, count, drawer, motion, finish, LANG,
 } from './engine.js';
 import { phone, scrambleCards, textBlocks, callouts, subtitles, HEALTH } from './family-screens.js';
-// How long Maa's question and the spoken answer run (tools/voices.py).
-import { VOICES } from './voices.js';
+import { VOICE_LINES } from './voice-lines.js';
+// How long Maa's question and the spoken answer run: the Hindi of
+// tools/voices.py, or a language's from tools/voices_indic.py.
+import { VOICES as HINDI } from './voices.js';
+import { LANG_VOICES } from './voices-langs.js';
+
+if (LANG && !VOICE_LINES[LANG]) throw new Error(`No voice lines for "${LANG}" in src/voice-lines.js`);
+if (LANG && !LANG_VOICES[LANG]) throw new Error(`No voices for "${LANG}" yet: run tools/voices_indic.py`);
+const VOICES = LANG ? LANG_VOICES[LANG] : HINDI;
+// Which recording each spoken line plays (audio/voices/).
+const wav = (line) => (LANG ? `lang/${LANG}-${line}.wav` : `${line}-hi.wav`);
 
 // ─── Layout: every position that differs between 16:9 and 9:16 ───────────
 // Phone positions are the centre of the device in stage pixels.
@@ -31,7 +44,11 @@ const L = PORTRAIT ? {
   coGmail: [1630, 700], coScan: [1628, 690], coTree: [1636, 720], coAlerts: [1636, 730], wave: [1690, 548], resWave: [1705, 548],
 };
 
-await build({ cards: scrambleCards(), texts: textBlocks(), phone: phone(), callouts: callouts(), subs: subtitles() });
+await build({
+  cards: scrambleCards(), texts: textBlocks(), phone: phone(LANG), callouts: callouts(), subs: subtitles(LANG),
+  // The voice scene's script, in the weights the chat uses.
+  fontText: `${VOICE_LINES[LANG || 'hi'].q} ${VOICE_LINES[LANG || 'hi'].lead} ${VOICE_LINES[LANG || 'hi'].a2}`,
+});
 
 // ─── Layout passes: what flexbox would have settled in the app ──────────
 askArea('#ask-area', '#scr-ask');
@@ -68,7 +85,7 @@ const micW = $('#v-mic').offsetWidth;
 const pillW = $('#mic-listen').offsetWidth;
 $('#v-mic').style.width = `${pillW}px`;
 const Q1 = "What is Papa's health insurance policy number?";
-const VQ = 'पापा की हेल्थ इंश्योरेंस का पॉलिसी नंबर क्या है?';
+const VQ = VOICE_LINES[LANG || 'hi'].q;
 const OV = { q1: inputOverflow('#ask-line', Q1), vq: inputOverflow('#v-line', VQ) };
 $('#v-mic').style.width = '';
 
@@ -460,7 +477,7 @@ if (!SHORT) {
   // Maa asks; the words appear a beat behind her, as a recogniser's do.
   const q0 = d + 1.3;
   const q1 = q0 + VOICES.ask.dur;
-  cue(q0, 'voice', { line: 'ask' });
+  cue(q0, 'voice', { line: 'ask', wav: wav('ask') });
   sub('sub-3', q0, q1 + 0.5);
   const typing = q1 - q0 - 0.2;
   tl.set('#v-ph-listen', { autoAlpha: 0 }, q0 + 0.3);
@@ -497,7 +514,7 @@ if (!SHORT) {
   const a0 = ans + 0.35;
   const a2 = a0 + VOICES.answer.sentence2;
   const a1 = SHORT ? a2 - 0.4 : a0 + VOICES.answer.dur;
-  cue(a0, 'voice', { line: 'answer', ...(SHORT ? { to: VOICES.answer.sentence2 } : {}) });
+  cue(a0, 'voice', { line: 'answer', wav: wav('answer'), ...(SHORT ? { to: VOICES.answer.sentence2 } : {}) });
   if (!PORTRAIT) {
     tl.to($$('#wave i'), { backgroundColor: '#2F7D5C', duration: 0.2, ease: 'none' }, ans - 0.05);
     tl.to('#wave', { autoAlpha: 1, duration: 0.25 }, ans);
@@ -634,7 +651,7 @@ if (!SHORT) {
   const [from, to] = SHORT ? [VOICES.answer.sentence2, VOICES.answer.dur] : [VOICES.answer.number, VOICES.answer.sentence2 - 0.4];
   const r0 = t0 + 1.0;
   const r1 = r0 + to - from;
-  cue(r0, 'voice', { line: 'answer', from, to, phone: true });
+  cue(r0, 'voice', { line: 'answer', wav: wav('answer'), from, to, phone: true });
   sub(SHORT ? 'sub-4b' : 'sub-4', r0 + 0.1, r1 + 0.3);
   if (L.resWave) {
     tl.set('#wave', { x: L.resWave[0], y: L.resWave[1] }, t0);

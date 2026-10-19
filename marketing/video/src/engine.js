@@ -17,6 +17,8 @@ export const PORTRAIT = params.get('orientation') === 'portrait';
 // The short cut (about a minute, for Reels and Shorts) keeps the story and one
 // pass through the product; each film says what it drops.
 export const SHORT = params.get('cut') === 'short';
+// The family film's voice scene can speak another of the app's voice languages.
+export const LANG = params.get('lang') || '';
 export const W = PORTRAIT ? 1080 : 1920;
 export const H = PORTRAIT ? 1920 : 1080;
 
@@ -25,7 +27,7 @@ export const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 const stage = document.getElementById('stage');
 
 // ─── Build the stage ─────────────────────────────────────────────────────
-export async function build({ cards, texts, phone, callouts, subs, look = '' }) {
+export async function build({ cards, texts, phone, callouts, subs, look = '', fontText = '' }) {
   stage.className = `${PORTRAIT ? 'portrait' : 'landscape'}${look ? ` ${look}` : ''}`;
   stage.innerHTML = `
     <div id="bg-night" class="layer"></div>
@@ -59,6 +61,11 @@ export async function build({ cards, texts, phone, callouts, subs, look = '' }) 
     ['Noto Sans Telugu', 'తెలుగు'], ['Noto Sans Gujarati', 'ગુજરાતી'], ['Noto Sans Kannada', 'ಕನ್ನಡ'],
     ['Noto Sans Malayalam', 'മലയാളം'], ['Noto Sans Gurmukhi', 'ਪੰਜਾਬੀ'],
   ].map(([family, text]) => document.fonts.load(`600 30px "${family}"`, text)));
+  // Text the phone shows in other scripts, in every weight the app's text uses.
+  if (fontText) {
+    const ui = getComputedStyle(document.documentElement).getPropertyValue('--ui');
+    await Promise.all([400, 500, 600, 700].map((w) => document.fonts.load(`${w} 15px ${ui}`, fontText)));
+  }
   await document.fonts.ready;
 }
 

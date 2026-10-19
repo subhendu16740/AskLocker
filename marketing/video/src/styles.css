@@ -27,7 +27,9 @@
   --night: #070a12;
   --film-ink: #152036;
   --film-sub: #4B5875;
-  --ui: 'Roboto', 'Noto Sans Devanagari', 'Noto Color Emoji', sans-serif;
+  /* The phone's text; the other scripts are for the voice scene's languages. */
+  --ui: 'Roboto', 'Noto Sans Devanagari', 'Noto Sans Bengali', 'Noto Sans Tamil', 'Noto Sans Telugu',
+    'Noto Sans Gujarati', 'Noto Sans Kannada', 'Noto Sans Malayalam', 'Noto Sans Gurmukhi', 'Noto Color Emoji', sans-serif;
   --display: 'Bricolage Grotesque', 'Noto Sans Devanagari', sans-serif;
   --serif: 'Instrument Serif', Georgia, serif;
   /* Each voice language in its own script; Roboto takes the Latin. */

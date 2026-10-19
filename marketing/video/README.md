@@ -56,6 +56,19 @@ app's theme colour, navy in both modes.
 | `asklocker-business-9x16-short.mp4` | 0:59 | Reels, Shorts, WhatsApp forwards |
 | `asklocker-business-16x9-short.mp4` | 0:59 | LinkedIn and X feeds |
 | `…-sfx-only.mp4` | same | Posting with a platform's own music: effects and voices, no music |
+| `asklocker-family-9x16-short-ta.mp4` … | about 1:10 | The family short with its voice scene in one of the app's ten voice languages (below) |
+
+**The voice scene in every voice language.** The family film's two short
+cuts also come in each of the app's ten voice languages: English (`en`),
+Hindi (`hi`), Bengali (`bn`), Tamil (`ta`), Telugu (`te`), Marathi (`mr`),
+Gujarati (`gu`), Kannada (`kn`), Malayalam (`ml`) and Punjabi (`pa`), named
+`asklocker-family-<9x16|16x9>-short-<code>.mp4`. Only the voice scene changes:
+Maa asks in that language and the app answers in it, on the screen and aloud,
+with English subtitles under both (none in English, where the phone already
+shows the words). Every headline stays in English. The voice screen shows the
+app's own phrases (the placeholder, Listening…, Cancel, Stop) in English,
+except in Hindi, because the app has them only in those two and falls back to
+English. The full-length cuts keep the Hindi of the main film.
 
 The family short keeps the story and one pass through the product: Gmail
 import, Ask, and the Hindi voice answer. It drops the statistic, Scan, the
@@ -82,6 +95,7 @@ python3 -m pip install numpy scipy
 node tools/render.mjs                             # family, 16:9, full -> out/video-family-16x9.mp4
 node tools/render.mjs --film business --portrait  # business, 9:16    -> out/video-business-9x16.mp4
 node tools/render.mjs --film business --portrait --short
+node tools/render.mjs --portrait --short --lang ta   # the family short, voice scene in Tamil -> family-9x16-short-ta
 ./tools/mux.sh family-16x9             # adds sound -> out/asklocker-family-16x9.mp4
 ./tools/mux.sh business-9x16-short     # tag = film, orientation, and -short for the short cut
 ```
@@ -141,12 +155,37 @@ keys jump to tenths of the film.
   with how long each runs and where the policy number starts in the answer;
   the voice scene and the night scene time themselves from that file, so a
   longer line lengthens the film by itself.
+- **The voice scene's languages**: `src/voice-lines.js` holds what the screen
+  shows in each (the question, the answer and the app's own phrases), and
+  `LINES` in `tools/voices_indic.py` what each voice says, with the numbers as
+  words. Run it (below) to remake `audio/voices/lang/<code>-ask.wav`,
+  `<code>-answer.wav` and `src/voices-langs.js`, their timings.
 - **Fonts**: `tools/fetch-fonts.sh` refreshes the local copies in `fonts/`.
 - **Icons**: add a Feather name to `NEEDED` in `tools/build-icons.mjs` and rerun it.
 
 ### The voices
 
-The family film's two lines are spoken by
+The language versions' lines are spoken by AI4Bharat's
+[Indic Parler-TTS](https://huggingface.co/ai4bharat/indic-parler-tts) (Apache
+2.0), which speaks all ten languages from text and was trained on Indian
+speakers; Kokoro has no voices for the regional ones. Each language has two of
+its named speakers, one for Maa and one for the app. The answer is spoken in
+three takes (the words before the number, the number, the second sentence),
+joined with short pauses, so the film knows where the number starts. The
+model is gated: accept its terms on Hugging Face, then
+
+```bash
+python3 -m pip install torch parler-tts soundfile scipy
+HF_TOKEN=hf_... python3 tools/voices_indic.py            # all ten, a minute or two a line on a CPU
+HF_TOKEN=hf_... python3 tools/voices_indic.py --langs ta  # one
+```
+
+The lines are first drafts. Have someone who speaks each language read its
+lines in `src/voice-lines.js` and listen to its voices before that version goes
+out. Maa calls her husband what a mother of that language would to her
+children's app (Papa, Baba, Appa, Nanna, Achan).
+
+The main film's two Hindi lines are spoken by
 [Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M) v1.0, an open
 text-to-speech model (Apache 2.0), from espeak-ng's Hindi phonemes, the way
 Kokoro's own pipeline reads Hindi. Maa is the voice `hf_beta`; the app is
@@ -165,10 +204,13 @@ python3 tools/voices.py --model model.onnx --voices voices/
 Word timings come from the model itself (each sound's length, read out of the
 graph), not from the waveform, so the night scene starts on the number's first
 letter. Kokoro's Hindi voices are its least practised, so have a Hindi speaker
-listen to both lines before the film goes out. One word is already handed to
-them in English spelling (`SAY` in `tools/voices.py`): from हेल्थ espeak gives
-Hindi's long e and an aspirated t, which came out as "hayl-t-huh", so the voice
-is given "health" while the screen keeps हेल्थ.
+listen to both lines before the film goes out. Two words are already handed to
+them in other spellings (`SAY` in `tools/voices.py`), while the screen keeps the
+usual ones: from हेल्थ espeak gives Hindi's long e and an aspirated t, which came
+out as "hayl-t-huh", so the voice is given "health"; and it reads इंश्योरेंस's
+anusvaras as nasal vowels with no n, so the voice is given इन्श्योरेन्स. The
+answer says the policy is वैलिड, as people say it, not वैध, whose aspirated
+ending trips the voice the same way.
 
 ## Keep it honest
 
@@ -285,5 +327,5 @@ name, as the app does.
 Fonts are from Google Fonts under the SIL Open Font License. Icons are Feather
 (MIT). GSAP is used under its free standard licence. The soundtrack and sound
 effects are generated by `audio/score.py`, so no audio licence is involved. The
-voices are generated by Kokoro-82M, whose model and voices are Apache 2.0; no
-recording or voice actor is involved.
+voices are generated by Kokoro-82M and, for the language versions, Indic
+Parler-TTS, both Apache 2.0; no recording or voice actor is involved.

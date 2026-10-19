@@ -2,11 +2,11 @@
 // and the moments in it the film times to. Regenerate rather than edit.
 export const VOICES = {
   "ask": {
-    "dur": 3.0
+    "dur": 3.099
   },
   "answer": {
-    "dur": 11.033,
-    "sentence2": 6.887,
-    "number": 2.76
+    "dur": 11.312,
+    "sentence2": 7.082,
+    "number": 2.933
   }
 };

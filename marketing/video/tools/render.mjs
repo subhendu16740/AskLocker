@@ -8,6 +8,8 @@
 //   node tools/render.mjs --film business   the business film -> out/video-business-16x9.mp4
 //   add --portrait for 9:16 (1080x1920), --short for the ~70s cut:
 //   the tag is <film>-16x9, <film>-9x16, <film>-16x9-short or <film>-9x16-short
+//   --lang ta puts the family film's voice scene in that voice language
+//   (src/voice-lines.js), and the tag ends -ta
 //   tools/mux.sh <tag> then adds sound -> out/asklocker-<tag>.mp4
 //   node tools/render.mjs --stills 3,12.5   PNGs of single frames -> out/stills/
 //   options: --fps 30  --from 0 --to 20 (seconds)  --workers 3  --scale 1
@@ -42,7 +44,9 @@ const size = orientation === 'portrait' ? { width: 1080, height: 1920 } : { widt
 const short = flag('short');
 const film = opt('film', 'family');
 if (!['family', 'business'].includes(film)) throw new Error(`--film is family or business, not ${film}`);
-const tag = `${film}-${orientation === 'portrait' ? '9x16' : '16x9'}${short ? '-short' : ''}`;
+const lang = opt('lang', '');
+if (lang && film !== 'family') throw new Error('--lang is for the family film, whose voice scene it changes');
+const tag = `${film}-${orientation === 'portrait' ? '9x16' : '16x9'}${short ? '-short' : ''}${lang ? `-${lang}` : ''}`;
 
 // ─── Static server: module scripts do not load from file:// ───────────────
 const TYPES = {
@@ -62,7 +66,7 @@ const server = createServer(async (req, res) => {
   }
 });
 await new Promise((ok) => server.listen(0, '127.0.0.1', ok));
-const base = `http://127.0.0.1:${server.address().port}/src/intro.html?film=${film}&orientation=${orientation}${short ? '&cut=short' : ''}`;
+const base = `http://127.0.0.1:${server.address().port}/src/intro.html?film=${film}&orientation=${orientation}${short ? '&cut=short' : ''}${lang ? `&lang=${lang}` : ''}`;
 
 const browser = await chromium.launch({
   args: ['--font-render-hinting=none', '--disable-lcd-text', '--force-color-profile=srgb', '--hide-scrollbars'],

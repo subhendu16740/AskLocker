@@ -41,14 +41,16 @@ LINES = {
     ]),
     'answer': dict(voice='hm_omega', speed=1.0, sentences=[
         'पापा की हेल्थ इंश्योरेंस पॉलिसी का नंबर ए एस एच 2, 3 1 1 4, 5 8 9 है।',
-        'यह पॉलिसी 14 मार्च 2027 तक वैध है।',
+        'यह पॉलिसी 14 मार्च 2027 तक वैलिड है।',
     ]),
 }
-# Words the voices say better from their English spelling. espeak reads हेल्थ
-# with Hindi's long e and an aspirated t (hˈeːltʰ), which Kokoro holds long
-# enough to say "hayl-t-huh"; from "health" it takes English's hˈɛlθ, as people
-# say it. Only what the voice is given changes: the screen keeps हेल्थ.
-SAY = {'हेल्थ': 'health'}
+# Words the voices are given in another spelling, so they come out as people
+# say them. espeak reads हेल्थ with Hindi's long e and an aspirated t (hˈeːltʰ),
+# which Kokoro holds long enough to say "hayl-t-huh": from "health" it takes
+# hˈɛlθ. It reads इंश्योरेंस's two anusvaras as nasal vowels with no n
+# (ˈĩʃjoːɾˌẽːs): with the n written out, ˌɪnʃjoːɾˈeːns. Only what the voice is
+# given changes: the screen keeps the usual spelling.
+SAY = {'हेल्थ': 'health', 'इंश्योरेंस': 'इन्श्योरेन्स'}
 # The policy number starts after these words of the answer's first sentence:
 # the film highlights it from there, and the night scene picks the reading up
 # there.

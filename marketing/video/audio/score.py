@@ -328,7 +328,8 @@ def voice_line(c):
     the line) and coloured by who is speaking: Maa as she is, the app through a
     phone's speaker, and at night the same speaker heard across a room.
     Returns the sound (room tail included), its gain and how long the words run."""
-    with wave.open(str(VOICES / f"{c['line']}-hi.wav")) as w:
+    # The cue names its recording; older cue sheets meant the Hindi one.
+    with wave.open(str(VOICES / c.get('wav', f"{c['line']}-hi.wav"))) as w:
         rate = w.getframerate()
         x = np.frombuffer(w.readframes(w.getnframes()), dtype=np.int16) / 32768.0
     a = int(c.get('from', 0) * rate)
