@@ -10,7 +10,10 @@
 // instead (056). Family Plus sits here, not in Settings (the owner's ask, 18
 // October 2026), its star in the ★'s colour. Under the header, Family or
 // Business: the mode the app runs in, which is the open vault's kind; a
-// business wears its own colours (vault-theme.ts).
+// business wears its own colours (vault-theme.ts). The switch is only for
+// someone who chose both after signing up (welcome.tsx) or in Settings ›
+// Your vaults: someone here for one never sees the other (the owner's ask,
+// 19 October 2026).
 // ────────────────────────────────────────────────────────────────
 
 import { useEffect, useRef, useState } from 'react';
@@ -59,7 +62,7 @@ const useNativeDriver = Platform.OS !== 'web';
 
 export default function ProfileDrawer() {
   const { user, signOut } = useAuth();
-  const { currentFamily, membership, mode, setMode } = useFamily();
+  const { currentFamily, membership, mode, setMode, showModeSwitch } = useFamily();
   const theme = useVaultTheme();
   const { isDrawerOpen, closeDrawer } = useDrawer();
   const { routeFor } = useFamilyPlan();
@@ -110,8 +113,11 @@ export default function ProfileDrawer() {
     setTimeout(() => router.navigate(route as any), 150);
   };
 
-  // Family or Business (the switch under the header): opens the vault last
-  // open in that mode. Someone with no business yet is taken to make one.
+  // Family or Business (the switch under the header), only for someone who
+  // chose both (the welcome question, Settings › Your vaults), or who is in
+  // the other mode now and needs a way back (family-context.tsx). It opens
+  // the vault last open in that mode; someone with no business yet is taken
+  // to make one.
   const chooseMode = (next: AppMode) => {
     if (next === mode) return;
     track('mode_switched', { mode: next });
@@ -176,26 +182,28 @@ export default function ProfileDrawer() {
             {!!familyLine && <Text style={styles.profileSub} numberOfLines={1}>{familyLine}</Text>}
           </LinearGradient>
 
-          <View style={styles.modeRow} accessibilityRole="radiogroup" accessibilityLabel="Use AskLocker for">
-            {([['family', 'users', 'Family'], ['business', 'briefcase', 'Business']] as const).map(([m, icon, label]) => {
-              const on = mode === m;
-              const tone = m === 'business' ? BUSINESS_THEME : FAMILY_THEME;
-              return (
-                <TouchableOpacity
-                  key={m}
-                  onPress={() => chooseMode(m)}
-                  style={[styles.modeBtn, on && { backgroundColor: tone.primary, borderColor: tone.primary }]}
-                  activeOpacity={0.8}
-                  accessibilityRole="radio"
-                  accessibilityState={{ checked: on }}
-                  aria-checked={on}
-                >
-                  <Feather name={icon} size={16} color={on ? '#FFFFFF' : tone.primary} />
-                  <Text style={[styles.modeText, { color: on ? '#FFFFFF' : tone.primary }]}>{label}</Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
+          {showModeSwitch && (
+            <View style={styles.modeRow} accessibilityRole="radiogroup" accessibilityLabel="Use AskLocker for">
+              {([['family', 'users', 'Family'], ['business', 'briefcase', 'Business']] as const).map(([m, icon, label]) => {
+                const on = mode === m;
+                const tone = m === 'business' ? BUSINESS_THEME : FAMILY_THEME;
+                return (
+                  <TouchableOpacity
+                    key={m}
+                    onPress={() => chooseMode(m)}
+                    style={[styles.modeBtn, on && { backgroundColor: tone.primary, borderColor: tone.primary }]}
+                    activeOpacity={0.8}
+                    accessibilityRole="radio"
+                    accessibilityState={{ checked: on }}
+                    aria-checked={on}
+                  >
+                    <Feather name={icon} size={16} color={on ? '#FFFFFF' : tone.primary} />
+                    <Text style={[styles.modeText, { color: on ? '#FFFFFF' : tone.primary }]}>{label}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          )}
 
           <View style={styles.menuList}>
             {items.map((item) => (

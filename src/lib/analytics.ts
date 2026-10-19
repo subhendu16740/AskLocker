@@ -40,7 +40,9 @@ export interface AnalyticsEvents {
   share_link_made: { days: number };
   member_invited: Record<string, never>;
   family_created: { kind: 'family' | 'business' };
-  use_for_chosen: { choice: 'family' | 'business' | 'both' | 'skipped' };
+  // Family or Business first, and the other too: after signing up, in
+  // Settings › Your vaults, or Home's offer to someone who never answered.
+  uses_chosen: { primary: 'family' | 'business'; both: boolean; where: 'welcome' | 'settings' | 'home' };
   business_deleted: Record<string, never>;
   // A family vault deleted by its owner, from Settings › Your vaults (057).
   family_deleted: Record<string, never>;

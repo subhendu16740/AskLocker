@@ -115,6 +115,19 @@ export async function saveUseFor(userId: string, choice: UseFor | 'skipped'): Pr
 }
 
 /**
+ * Family or Business first, and whether the other one too (the welcome
+ * questions, Settings › Your vaults): kept in the sign-in account's metadata,
+ * which every device has the moment it signs in, so the app opens in the
+ * first one with no query; and on users.use_for as 051 has it ('family',
+ * 'business' or 'both'), which the vault lists still read. No migration.
+ */
+export async function saveUses(userId: string, primary: 'family' | 'business', both: boolean): Promise<void> {
+  const { error } = await supabase.auth.updateUser({ data: { primary_mode: primary, both_modes: both } });
+  if (error) throw error;
+  await saveUseFor(userId, both ? 'both' : primary);
+}
+
+/**
  * The signed-in person's personal vault (046): a family of one, for them
  * alone, made the first time it is asked for. Null where 046 is not applied:
  * the app then works as before, with families only.

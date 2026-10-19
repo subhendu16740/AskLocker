@@ -1,71 +1,56 @@
-// Home's one question for someone new (051): what will you use AskLocker
-// for? Family, Business or Both, one tap. It only decides which Create comes
-// first in Manage Family, and goes to usage counts; it locks nothing.
+// Home's nudge about the kind of vault a person has not made yet.
 //
-// Asked only of someone whose only vault is their personal vault — a new
-// account; someone who joined by invitation is in a family already — and
-// only until they answer or tap Not now. The answer is kept on their users
-// row (051), so another device does not ask again; Not now is this device's.
+// Someone who answered the welcome question (welcome.tsx) and has no vault
+// of their first kind yet, besides their personal vault, is asked to set one
+// up: "Set up your family", or "your business". Later hides it on this
+// device. It locks nothing: the personal vault works without either.
 //
-// Someone already in a family and in no business, or the other way round,
-// who has never answered, is offered the other kind of vault once instead
-// ("Have a business too?"), so an account made before 051 finds it too.
-// Creating one counts as "both".
+// Someone who never answered (an account made before the welcome question)
+// and is in a family and no business, or the other way round, is offered the
+// other kind once ("Have a business too?"). Either button keeps their answer
+// on the account, as the welcome question do: Create turns the other mode
+// on, Not now leaves it off.
 
 import { useEffect, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
-import { Feather } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useAuth } from '../lib/auth';
-import { useFamily } from '../lib/family-context';
-import { fetchUseFor, saveUseFor, type UseFor } from '../lib/api';
+import { useFamily, otherMode, type AppMode } from '../lib/family-context';
 import { isBusinessVault, isPersonalVault } from '../lib/vaults';
+import { accountKey, storageGet, storageSet } from '../lib/storage';
 import { track } from '../lib/analytics';
 import { biz, color, radius, shadow, size, space, type } from '../constants/design';
 
-const CHOICES: Array<{ key: UseFor; label: string; icon: 'users' | 'briefcase' | 'layers' }> = [
-  { key: 'family', label: 'Family', icon: 'users' },
-  { key: 'business', label: 'Business', icon: 'briefcase' },
-  { key: 'both', label: 'Both', icon: 'layers' },
-];
-
 export function UseForOffer({ style }: { style?: StyleProp<ViewStyle> }) {
   const { user } = useAuth();
-  const { families } = useFamily();
-  // Unknown until asked: shown only once it is known nobody has answered.
-  const [answered, setAnswered] = useState<boolean | null>(null);
-  const [picked, setPicked] = useState<UseFor | null>(null);
-
-  const onlyPersonal = families.length > 0 && families.every((f) => isPersonalVault(f.families));
-  const inBusiness = families.some((f) => isBusinessVault(f.families));
-  const inFamily = families.some((f) => !isPersonalVault(f.families) && !isBusinessVault(f.families));
-  // The kind of vault to offer someone who already has the other one.
-  const other: 'business' | 'family' | null =
-    inFamily && !inBusiness ? 'business' : inBusiness && !inFamily ? 'family' : null;
-  const ask = onlyPersonal || other !== null;
+  const { families, uses, usesChosen, setUses } = useFamily();
+  // Unknown until read: shown only once it is known it was not put off.
+  const [later, setLater] = useState<string | null | undefined>(undefined);
+  const [hidden, setHidden] = useState(false);
 
   useEffect(() => {
-    if (!user || !ask) return;
+    if (!user) return;
     let cancelled = false;
-    fetchUseFor(user.id).then((v) => { if (!cancelled) setAnswered(v !== null); }).catch(() => {});
+    storageGet(accountKey.setupLater(user.id)).then((v) => { if (!cancelled) setLater(v); }).catch(() => setLater(null));
     return () => { cancelled = true; };
-  }, [user?.id, ask]);
+  }, [user?.id]);
 
-  if (!user || (!ask && !picked) || (answered !== false && !picked)) return null;
+  const inBusiness = families.some((f) => isBusinessVault(f.families));
+  const inFamily = families.some((f) => !isPersonalVault(f.families) && !isBusinessVault(f.families));
+  const has = (kind: AppMode) => (kind === 'business' ? inBusiness : inFamily);
 
-  const choose = (choice: UseFor) => {
-    setPicked(choice);
-    track('use_for_chosen', { choice });
-    saveUseFor(user.id, choice).catch(() => {});
-  };
+  if (!user || hidden || families.length === 0) return null;
 
-  const notNow = () => {
-    setAnswered(true);
-    track('use_for_chosen', { choice: 'skipped' });
-    saveUseFor(user.id, 'skipped').catch(() => {});
-  };
-
-  if (!onlyPersonal && other && !picked) {
+  // Never answered, and in one kind of vault: the other kind, once.
+  const other: AppMode | null = inFamily && !inBusiness ? 'business' : inBusiness && !inFamily ? 'family' : null;
+  if (!usesChosen && other) {
+    const first = otherMode(other);
+    const answer = (both: boolean) => {
+      setHidden(true);
+      track('uses_chosen', { primary: first, both, where: 'home' });
+      setUses({ primary: first, both }).catch(() => {});
+      if (both) router.push(`/setup-family?kind=${other}` as any);
+    };
     return (
       <View style={style}>
         <View style={styles.card}>
@@ -78,17 +63,12 @@ export function UseForOffer({ style }: { style?: StyleProp<ViewStyle> }) {
           <View style={styles.buttons}>
             <TouchableOpacity
               style={[styles.primary, other === 'business' && { backgroundColor: biz.primary }]}
-              onPress={() => {
-                setAnswered(true);
-                track('use_for_chosen', { choice: 'both' });
-                saveUseFor(user.id, 'both').catch(() => {});
-                router.push(`/setup-family?kind=${other}` as any);
-              }}
+              onPress={() => answer(true)}
               accessibilityRole="button"
             >
               <Text style={styles.primaryText}>Create a {other}</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.secondary} onPress={notNow} accessibilityRole="button">
+            <TouchableOpacity style={styles.secondary} onPress={() => answer(false)} accessibilityRole="button">
               <Text style={styles.secondaryText}>Not now</Text>
             </TouchableOpacity>
           </View>
@@ -97,52 +77,32 @@ export function UseForOffer({ style }: { style?: StyleProp<ViewStyle> }) {
     );
   }
 
-  if (picked) {
-    const kind = picked === 'business' ? 'business' : 'family';
-    return (
-      <View style={style}>
-        <View style={styles.card}>
-          <Text style={styles.title}>{picked === 'business' ? 'Set up your business' : 'Set up your family'}</Text>
-          <Text style={styles.sub}>
-            Create a {kind} vault and invite people to share documents. Your personal vault stays yours.
-          </Text>
-          <View style={styles.buttons}>
-            <TouchableOpacity
-              style={[styles.primary, kind === 'business' && { backgroundColor: biz.primary }]}
-              onPress={() => { setAnswered(true); setPicked(null); router.push(`/setup-family?kind=${kind}` as any); }}
-              accessibilityRole="button"
-            >
-              <Text style={styles.primaryText}>Create a {kind}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.secondary} onPress={() => { setAnswered(true); setPicked(null); }} accessibilityRole="button">
-              <Text style={styles.secondaryText}>Later</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </View>
-    );
-  }
-
+  // Answered, and no vault of the first kind yet: set one up.
+  const kind = uses.primary;
+  if (!usesChosen || has(kind) || later === undefined || later === kind) return null;
   return (
     <View style={style}>
       <View style={styles.card}>
-        <Text style={styles.title}>What will you use AskLocker for?</Text>
-        <View style={styles.buttons} accessibilityRole="radiogroup">
-          {CHOICES.map((c) => (
-            <TouchableOpacity
-              key={c.key}
-              style={styles.choice}
-              onPress={() => choose(c.key)}
-              accessibilityRole="button"
-            >
-              <Feather name={c.icon} size={16} color={c.key === 'business' ? biz.primary : color.primary} />
-              <Text style={[styles.choiceText, c.key === 'business' && { color: biz.primary }]}>{c.label}</Text>
-            </TouchableOpacity>
-          ))}
+        <Text style={styles.title}>{kind === 'business' ? 'Set up your business' : 'Set up your family'}</Text>
+        <Text style={styles.sub}>
+          Create a {kind} vault and invite people to share documents. Your personal vault stays yours.
+        </Text>
+        <View style={styles.buttons}>
+          <TouchableOpacity
+            style={[styles.primary, kind === 'business' && { backgroundColor: biz.primary }]}
+            onPress={() => router.push(`/setup-family?kind=${kind}` as any)}
+            accessibilityRole="button"
+          >
+            <Text style={styles.primaryText}>Create a {kind}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.secondary}
+            onPress={() => { setLater(kind); storageSet(accountKey.setupLater(user.id), kind); }}
+            accessibilityRole="button"
+          >
+            <Text style={styles.secondaryText}>Later</Text>
+          </TouchableOpacity>
         </View>
-        <TouchableOpacity onPress={notNow} accessibilityRole="button" hitSlop={8}>
-          <Text style={styles.later}>Not now</Text>
-        </TouchableOpacity>
       </View>
     </View>
   );
@@ -156,11 +116,6 @@ const styles = StyleSheet.create({
   title: type.heading,
   sub: type.caption,
   buttons: { flexDirection: 'row', gap: space.sm },
-  choice: {
-    flex: 1, minHeight: size.control, borderRadius: radius.control, borderWidth: 1, borderColor: color.inputBorder,
-    alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: space.xs, backgroundColor: color.surface,
-  },
-  choiceText: { ...type.button, color: color.primary },
   primary: { flex: 1, minHeight: size.control, borderRadius: radius.control, backgroundColor: color.primary, alignItems: 'center', justifyContent: 'center' },
   primaryText: { ...type.button, color: '#FFFFFF' },
   secondary: {
@@ -168,5 +123,4 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center', backgroundColor: color.surface,
   },
   secondaryText: { ...type.button, color: color.textBody },
-  later: { ...type.caption, textAlign: 'center' },
 });

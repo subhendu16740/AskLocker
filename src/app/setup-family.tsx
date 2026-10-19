@@ -9,7 +9,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../lib/auth';
 import { useFamily } from '../lib/family-context';
-import { createNewFamily, fetchPlanLimits, fetchUseFor } from '../lib/api';
+import { createNewFamily, fetchPlanLimits } from '../lib/api';
 import { BackButton } from '../components/back-button';
 import { color, radius, size, space, type } from '../constants/design';
 import { track } from '../lib/analytics';
@@ -56,15 +56,18 @@ export default function SetupFamilyScreen() {
   // First sign-in has nowhere to go back to — the app sends people here
   // until they have a vault. Someone who already has one came from Manage
   // Family to make another, and needs a way out.
-  const { families, refreshFamilies, switchFamily } = useFamily();
-  // Family or business (051): from the button that opened this, else from
-  // what the person said they use AskLocker for. Either can be picked here.
+  const { families, refreshFamilies, switchFamily, uses, usesChosen, setUses } = useFamily();
+  // Family or business (051): from the button that opened this, else what
+  // AskLocker opens in (the welcome question). Either can be picked here.
   const params = useLocalSearchParams<{ kind?: string }>();
-  const [kind, setKind] = useState<Kind>(params.kind === 'business' ? 'business' : 'family');
+  const fixedKind = params.kind === 'business' || params.kind === 'family' ? params.kind : null;
+  const [kind, setKind] = useState<Kind>(fixedKind ?? uses.primary);
+  // For someone who never chose, what AskLocker opens in is worked out from
+  // their vaults and older answer, which arrive a moment later.
+  const [picked, setPicked] = useState(false);
   useEffect(() => {
-    if (params.kind || !user) return;
-    fetchUseFor(user.id).then((u) => { if (u === 'business') setKind('business'); }).catch(() => {});
-  }, [user?.id, params.kind]);
+    if (!fixedKind && !picked) setKind(uses.primary);
+  }, [uses.primary]);
   // On Free, one vault in all besides the personal one, a family or a
   // business (054). Said before the form, not only when it is refused.
   // Someone in a vault on a paid plan is not on Free (055), so not to them.
@@ -95,6 +98,9 @@ export default function SetupFamilyScreen() {
     try {
       const familyId = await createNewFamily(user.id, familyName.trim(), description.trim() || undefined, undefined, kind);
       track('family_created', { kind });
+      // A vault of the other kind than the one they chose first: they use
+      // both now, so the menu gets the Family | Business switch.
+      if (usesChosen && kind !== uses.primary && !uses.both) setUses({ primary: uses.primary, both: true }).catch(() => {});
       await refreshFamilies();
       // Their own new family, so it opens: making it is their own choice.
       switchFamily(familyId);
@@ -134,7 +140,7 @@ export default function SetupFamilyScreen() {
           {(['family', 'business'] as const).map((k) => (
             <TouchableOpacity
               key={k}
-              onPress={() => { setKind(k); setProblem(null); }}
+              onPress={() => { setKind(k); setPicked(true); setProblem(null); }}
               style={[styles.kind, kind === k && { backgroundColor: vaultTheme({ kind: k }).primary, borderColor: vaultTheme({ kind: k }).primary }]}
               accessibilityRole="radio"
               accessibilityState={{ checked: kind === k }}

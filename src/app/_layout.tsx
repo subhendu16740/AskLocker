@@ -4,7 +4,7 @@ import { View, ActivityIndicator, StyleSheet, Platform } from 'react-native';
 import * as Font from 'expo-font';
 import { Feather } from '@expo/vector-icons';
 import { AuthProvider, useAuth } from '../lib/auth';
-import { FamilyProvider } from '../lib/family-context';
+import { FamilyProvider, useFamily } from '../lib/family-context';
 import { PreferencesProvider } from '../lib/preferences';
 import { EnvBadge } from '../components/env-badge';
 import { AnalyticsTracker } from '../components/analytics-tracker';
@@ -13,6 +13,7 @@ import { AppLockScreen } from '../components/app-lock-screen';
 
 function AuthGate() {
   const { session, loading: authLoading } = useAuth();
+  const { needsWelcome } = useFamily();
   const segments = useSegments();
   const router = useRouter();
 
@@ -25,14 +26,18 @@ function AuthGate() {
     if (seg === 's') return;
     // A route missing here sends a signed-in person to /home — which, for
     // gmail-import, would throw away the code Google just sent back.
-    const inProtectedRoute = seg === '(tabs)' || seg === 'document' || seg === 'family' || seg === 'settings' || seg === 'setup-family' || seg === 'notifications' || seg === 'gmail-import' || seg === 'reminders' || seg === 'saved-chats' || seg === 'family-tree' || seg === 'person' || seg === 'emergency' || seg === 'plus' || seg === 'documents' || seg === 'delete-vault' || seg === 'make-business' || seg === 'overview' || seg === 'notes';
+    const inProtectedRoute = seg === '(tabs)' || seg === 'document' || seg === 'family' || seg === 'settings' || seg === 'setup-family' || seg === 'notifications' || seg === 'gmail-import' || seg === 'reminders' || seg === 'saved-chats' || seg === 'family-tree' || seg === 'person' || seg === 'emergency' || seg === 'plus' || seg === 'documents' || seg === 'delete-vault' || seg === 'make-business' || seg === 'overview' || seg === 'notes' || seg === 'welcome';
 
     if (!session && inProtectedRoute) {
       router.replace('/login' as any);
     } else if (session && !inProtectedRoute && seg !== undefined) {
       router.replace('/home' as any);
+    } else if (session && needsWelcome && seg === '(tabs)') {
+      // A new account answers the welcome question first (welcome.tsx):
+      // Family, Business or Both.
+      router.replace('/welcome' as any);
     }
-  }, [session, authLoading, segments]);
+  }, [session, authLoading, segments, needsWelcome]);
 
   return null;
 }
@@ -81,6 +86,7 @@ export default function RootLayout() {
           <Stack.Screen name="index" />
           <Stack.Screen name="onboarding" />
           <Stack.Screen name="login" />
+          <Stack.Screen name="welcome" />
           <Stack.Screen name="setup-family" />
           <Stack.Screen name="(tabs)" />
           <Stack.Screen name="family" />
