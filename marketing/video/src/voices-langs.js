@@ -87,9 +87,9 @@ export const LANG_VOICES = {
       "dur": 3.123
     },
     "answer": {
-      "dur": 12.342,
-      "number": 2.94,
-      "sentence2": 7.428
+      "dur": 13.749,
+      "number": 2.795,
+      "sentence2": 8.829
     }
   },
   "te": {
