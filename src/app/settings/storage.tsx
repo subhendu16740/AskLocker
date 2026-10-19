@@ -3,7 +3,7 @@
 // October 2026: the screen had read as too wordy). Every plan has a limit
 // (038) and the server refuses new documents once a vault is at it, so a
 // vault nearly full or full says so on its row. Each vault wears its own
-// colours, a business's orange and a family's navy, whichever mode is open;
+// colours, a business's teal and a family's navy, whichever mode is open;
 // the mode's own vaults come first. Before 038 a vault's space is the free
 // limit, from its documents' own sizes (see src/lib/plans.ts).
 

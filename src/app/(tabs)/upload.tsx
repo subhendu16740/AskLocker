@@ -65,7 +65,7 @@ export default function UploadScreen() {
     : vaults[0] ?? null;
   const targetFamily = target?.families ?? null;
   const toBusiness = isBusinessVault(targetFamily);
-  // The vault's own colours: a business's orange, a family's navy.
+  // The vault's own colours: a business's teal, a family's navy.
   const uploadTheme = vaultTheme(targetFamily ?? currentFamily);
   // Everyone in that vault's family tree (you first); the members, before
   // migration 031. A business has no "whose document" (051).
