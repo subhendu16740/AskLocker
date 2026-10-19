@@ -2110,7 +2110,8 @@ so storage policies live only in `019`.
   business or both, its own column grant; the device before 051): asked
   once on Home of someone whose only vault is their personal vault
   (`UseForOffer`), sent to usage counts (`use_for_chosen`). It decides which
-  Create comes first in Manage Family, and nothing else.
+  kind comes first in Settings › Your vaults, and whether the drawer shows
+  the Family | Business switch to someone in no business, and nothing else.
 - **An account made before 051 finds it too.** Someone in a family and no
   business (or the other way round) who never answered is offered the other
   kind once on Home, "Have a business too?", with Create and Not now;
@@ -2261,6 +2262,11 @@ so storage policies live only in `019`.
   `family-context.tsx`), never a setting of its own, so nothing can
   disagree with it; the personal vault belongs to Family. No server change:
   it is which vaults the app shows.
+- **Only someone who uses AskLocker for a business sees the switch**: in a
+  business vault, or who said business or both on Home (`users.use_for`,
+  asked again each time the drawer opens). Someone here only for their
+  family never sees Business in the drawer (the owner's ask, 19 October
+  2026); Settings › Your vaults still creates a business for anyone.
 - **Home, Ask and Upload show only the mode's vaults** (`modeVaults`):
   Business lists, asks across and saves to businesses alone; Family the
   personal vault and families. Ask sends `family_ids` for them (`'all'`

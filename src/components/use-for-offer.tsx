@@ -1,6 +1,8 @@
 // Home's one question for someone new (051): what will you use AskLocker
-// for? Family, Business or Both, one tap. It only decides which Create comes
-// first in Manage Family, and goes to usage counts; it locks nothing.
+// for? Family, Business or Both, one tap. It only decides which kind comes
+// first in Settings › Your vaults, and whether the drawer shows the Family |
+// Business switch to someone in no business (ProfileDrawer.tsx), and goes to
+// usage counts; it locks nothing.
 //
 // Asked only of someone whose only vault is their personal vault — a new
 // account; someone who joined by invitation is in a family already — and

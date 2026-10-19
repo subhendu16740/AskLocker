@@ -287,8 +287,6 @@ function homeScreen() {
         <div class="doc-meta"><span class="cat-badge" style="background:${color}">${cat}</span>
           <span class="vault-tag">${icon(vault ? 'users' : 'lock', 12, '#2A3D66')}<span>${vault ? STORY.familyName : 'Personal vault'}</span></span>
           <span>${line}</span></div></div></div>`;
-  const switchRow = `<div class="dr-switch"><div class="dr-mode on">${icon('users', 16, '#fff')}<span>Family</span></div>
-    <div class="dr-mode biz">${icon('briefcase', 16, '#0F5C57')}<span>Business</span></div></div>`;
   return `<section class="scr" id="scr-home">${sbFill}
     <div class="home-header">
       <div class="home-top"><div class="home-left"><div class="profile-btn" id="home-avatar">R</div>
@@ -313,7 +311,6 @@ function homeScreen() {
           <div class="dr-top"><div class="dr-av">R</div><span class="dr-x">${icon('x', 24, '#fff')}</span></div>
           <div class="dr-name">${STORY.youFull}${plusStar}</div><div class="dr-line">${STORY.email}</div><div class="dr-line">${STORY.familyName} · Admin</div>
         </div>
-        ${switchRow}
         <div class="dr-menu">
           ${[['dr-home', 'home', 'Home'], ['dr-tree', 'git-branch', 'Family tree'], ['dr-emerg', 'plus-square', 'Emergency cards'],
             ['dr-manage', 'users', 'Manage Family'], ['dr-rem', 'clock', 'Reminders', true], ['dr-plus', 'star', 'Family Plus'], ['dr-set', 'settings', 'Settings']]
