@@ -489,7 +489,7 @@ const styles = StyleSheet.create({
     borderColor: '#D6E2F5',
   },
   vaultTagDark: { backgroundColor: '#1C2433', borderColor: '#30363D' },
-  vaultTagBiz: { backgroundColor: biz.tint, borderColor: '#BFE3DE' },
+  vaultTagBiz: { backgroundColor: biz.tint, borderColor: '#F8CFAE' },
   vaultTagTextBiz: { color: biz.primary },
   vaultTagText: { ...type.meta, color: color.primary, fontWeight: '600', flexShrink: 1 },
   vaultTagTextDark: { color: '#9DB4E0' },

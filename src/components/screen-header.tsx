@@ -84,7 +84,7 @@ export function PlusTag({ link = false, name: fixedName }: { link?: boolean; nam
   // In a business (051) it is called Plus, unless the screen speaks of every vault.
   const { currentFamily } = useFamily();
   const name = fixedName ?? plusName(isBusinessVault(currentFamily));
-  // A business's Plus in its own colours, teal and gold; Family Plus in the family's.
+  // A business's Plus in its own colours, orange and gold; Family Plus in the family's.
   const business = fixedName ? fixedName !== 'Family Plus' : isBusinessVault(currentFamily);
   const tag = (
     <View style={[styles.plusTag, business && styles.plusTagBiz]} accessibilityLabel={`Part of ${name}, the paid plan`}>
