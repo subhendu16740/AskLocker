@@ -188,6 +188,16 @@ lines in `src/voice-lines.js` and listen to its voices before that version goes
 out. Maa calls her husband what a mother of that language would to her
 children's app (Papa, Baba, Appa, Nanna, Achan).
 
+Listen for every word, not only how it sounds: the model samples, and a take
+can drop words and still pass the pace check. A brisker Tamil take read the
+policy number without "A S H"; Tamil's first sentence is the one of six new
+takes that said the letters (it has the hiss of the S and H right after the
+number's mark, as every language's has). Gujarati is the model's weakest
+language (two speakers, 21 hours of training data, the lowest naturalness
+score on its model card) and reads slowly even at a brisker pace, with long
+pauses, which its lines cut to 0.3 s. Punjabi is supported unofficially. Tamil
+and Gujarati ask for a brisker app voice (`pace` in `LINES`).
+
 The main film's two Hindi lines are spoken by
 [Kokoro-82M](https://huggingface.co/hexgrad/Kokoro-82M) v1.0, an open
 text-to-speech model (Apache 2.0), from espeak-ng's Hindi phonemes, the way
