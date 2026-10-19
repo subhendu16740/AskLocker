@@ -3,7 +3,8 @@
 // pass          checked and correct
 // fail          checked and wrong — the run exits non-zero
 // inconclusive  could not be judged fairly (Groq rate-limited the step the
-//               answer depended on); retried on a later run, never a failure
+//               answer depended on, or HuggingFace refused the search vectors
+//               for want of credit); retried on a later run, never a failure
 // deferred      not asked, to protect the free budget
 // skipped       not applicable this run (a prerequisite failed, or no token)
 // known         a real defect that is already understood: listed in every
@@ -11,6 +12,13 @@
 //               so red keeps meaning "something new broke". When the defect
 //               is fixed the check passes and the report says so.
 // ────────────────────────────────────────────────────────────────
+
+// HuggingFace refusing the search vectors for want of credit (402) or for too
+// many calls (429): an outside allowance ran out, not the app. Chunks are kept
+// without vectors and found by keyword, and the rebuild adds the vectors once
+// there is credit again, so it is inconclusive, never a failure. Matched only
+// as _shared/embeddings.ts reports it, so any other embedding error still fails.
+export const EMBED_ALLOWANCE = /^HTTP (402|429)\b/;
 
 const ICON = { pass: '✅', fail: '❌', inconclusive: '⚠️', deferred: '⏸️', skipped: '➖', known: '🐞' };
 

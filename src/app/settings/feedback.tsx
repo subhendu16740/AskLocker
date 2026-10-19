@@ -9,6 +9,7 @@ import { appVersion } from '../../lib/app-info';
 import { ScreenHeader } from '../../components/screen-header';
 import { Card, CardTitle, Body, Field, PrimaryButton, SecondaryButton, Status, screenStyles } from '../../components/settings-ui';
 import { color, radius, space } from '../../constants/design';
+import { useVaultTheme } from '../../lib/vault-theme';
 
 const TOPICS: { id: FeedbackTopic; label: string }[] = [
   { id: 'problem', label: "Something isn't working" },
@@ -18,6 +19,8 @@ const TOPICS: { id: FeedbackTopic; label: string }[] = [
 ];
 
 export default function FeedbackScreen() {
+  // Settings follows the mode, Family or Business (the drawer's switch).
+  const theme = useVaultTheme();
   const [topic, setTopic] = useState<FeedbackTopic | null>(null);
   const [message, setMessage] = useState('');
   const [sending, setSending] = useState(false);
@@ -61,7 +64,7 @@ export default function FeedbackScreen() {
                 return (
                   <TouchableOpacity
                     key={t.id}
-                    style={[styles.topic, selected && styles.topicSelected]}
+                    style={[styles.topic, selected && styles.topicSelected, selected && { borderColor: theme.primary, backgroundColor: theme.primary }]}
                     onPress={() => setTopic(selected ? null : t.id)}
                     activeOpacity={0.8}
                     accessibilityRole="radio"

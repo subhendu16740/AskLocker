@@ -10,7 +10,7 @@ import { BackButton } from './back-button';
 import { useFamily } from '../lib/family-context';
 import { isBusinessVault } from '../lib/vaults';
 import { plusName } from '../lib/plans';
-import { color, size, space, type } from '../constants/design';
+import { biz, color, size, space, type } from '../constants/design';
 import { useVaultTheme } from '../lib/vault-theme';
 
 export function ScreenHeader({
@@ -84,10 +84,12 @@ export function PlusTag({ link = false, name: fixedName }: { link?: boolean; nam
   // In a business (051) it is called Plus, unless the screen speaks of every vault.
   const { currentFamily } = useFamily();
   const name = fixedName ?? plusName(isBusinessVault(currentFamily));
+  // A business's Plus in its own colours, teal and gold; Family Plus in the family's.
+  const business = fixedName ? fixedName !== 'Family Plus' : isBusinessVault(currentFamily);
   const tag = (
-    <View style={styles.plusTag} accessibilityLabel={`Part of ${name}, the paid plan`}>
-      <Text style={styles.plusStar}>★</Text>
-      <Text style={styles.plusText}>{name}</Text>
+    <View style={[styles.plusTag, business && styles.plusTagBiz]} accessibilityLabel={`Part of ${name}, the paid plan`}>
+      <Text style={[styles.plusStar, business && { color: biz.accent }]}>★</Text>
+      <Text style={[styles.plusText, business && { color: biz.primary }]}>{name}</Text>
     </View>
   );
   if (!link) return tag;
@@ -154,6 +156,7 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     backgroundColor: '#FBEDEB',
   },
+  plusTagBiz: { backgroundColor: '#FBF1DF' },
   plusStar: { fontSize: 12, color: color.accent },
   plusText: { fontSize: 12, fontWeight: '600', color: color.primary },
   nameStar: { color: color.accent },

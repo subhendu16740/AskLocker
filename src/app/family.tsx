@@ -13,8 +13,8 @@ import {
   addFamilyMember, cancelInvitation, fetchFamilyInvites, fetchPlanLimits, leaveFamily, removeFamilyMember, updateMemberRole,
   type PendingInvite,
 } from '../lib/api';
-import { plusPage, useFamilyPlan, useOnPlus } from '../lib/family-plan';
-import { DEFAULT_PLAN_LIMITS, businessPlanName, isBusinessPlan, nextBusinessPlan, type PlanLimits } from '../lib/plans';
+import { plusPage, useFamilyPlan, useModeOnPlus } from '../lib/family-plan';
+import { DEFAULT_PLAN_LIMITS, businessPlanName, isBusinessPlan, nextBusinessPlan, type PlanLimits, plusName } from '../lib/plans';
 import { ScreenHeader, HeaderButton, PlusStar } from '../components/screen-header';
 import { InvitationCards } from '../components/invitation-cards';
 import { longDate } from '../lib/dates';
@@ -60,7 +60,7 @@ export default function FamilyScreen() {
   const [pending, setPending] = useState<PendingInvite[]>([]);
   const [limits, setLimits] = useState<PlanLimits>(DEFAULT_PLAN_LIMITS);
   const { plan } = useFamilyPlan();
-  const onPlus = useOnPlus();
+  const onPlus = useModeOnPlus();
   const [confirmDialog, setConfirmDialog] = useState<{
     title: string; message: string; confirmLabel: string; destructive?: boolean; onConfirm: () => void;
   } | null>(null);
@@ -381,7 +381,7 @@ export default function FamilyScreen() {
                     </LinearGradient>
                     <View style={styles.memberInfo}>
                       <View style={styles.memberNameRow}>
-                        <Text style={styles.memberName} accessibilityLabel={starred ? `${name}, Family Plus` : undefined}>
+                        <Text style={styles.memberName} accessibilityLabel={starred ? `${name}, ${plusName(theme.business)}` : undefined}>
                           {name}{starred && <PlusStar />}
                         </Text>
                         {isCurrentUser && (

@@ -3,10 +3,12 @@
 // A drawer, not a screen: it slides in from the left over the page, the page
 // stays visible behind it, and it closes with the ✕, a tap outside it, or the
 // back button. Layout from the v4 design (who you are on top, then Home,
-// Family tree, Emergency cards, Manage Family, Reminders and Settings, Sign Out
-// at the bottom), in the app's own colours. In a business (051) there is no
-// family tree and no emergency cards, and Manage Family is Manage team; it has
-// its Overview and My notes instead (056). Under the header, Family or
+// Family tree, Emergency cards, Manage Family, Reminders, Family Plus and
+// Settings, Sign Out at the bottom), in the app's own colours. In a business
+// (051) there is no family tree and no emergency cards, Manage Family is
+// Manage team and Family Plus is Plans; it has its Overview and My notes
+// instead (056). Family Plus sits here, not in Settings (the owner's ask, 18
+// October 2026), its star in the ★'s colour. Under the header, Family or
 // Business: the mode the app runs in, which is the open vault's kind; a
 // business wears its own colours (vault-theme.ts).
 // ────────────────────────────────────────────────────────────────
@@ -23,14 +25,19 @@ import { useAuth } from '../lib/auth';
 import { useFamily, type AppMode } from '../lib/family-context';
 import { isBusinessVault, isPersonalVault, vaultName } from '../lib/vaults';
 import { useDrawer } from '../lib/drawer-context';
-import { useFamilyPlan, useOnPlus, type PlusFeature } from '../lib/family-plan';
+import { useFamilyPlan, useModeOnPlus, type PlusFeature } from '../lib/family-plan';
 import { appVersion } from '../lib/app-info';
 import { PlusStar, PlusTag } from './screen-header';
-import { color, radius, size, space, type } from '../constants/design';
+import { biz, color, radius, size, space, type } from '../constants/design';
 import { BUSINESS_THEME, FAMILY_THEME, useVaultTheme } from '../lib/vault-theme';
 import { track } from '../lib/analytics';
+import { plusName } from '../lib/plans';
 
-type MenuItem = { icon: string; label: string; route: string; plus?: PlusFeature; familyOnly?: boolean; businessOnly?: boolean };
+type MenuItem = {
+  icon: string; label: string; route: string; plus?: PlusFeature; familyOnly?: boolean; businessOnly?: boolean;
+  /** The paid plans' own page: its star in the ★'s colour. */
+  plans?: boolean;
+};
 
 const menuItems: MenuItem[] = [
   { icon: 'home', label: 'Home', route: '/home' },
@@ -42,6 +49,8 @@ const menuItems: MenuItem[] = [
   { icon: 'users', label: 'Manage Family', route: '/family' },
   // ★: part of Family Plus. A free family is shown the Family Plus page instead.
   { icon: 'clock', label: 'Reminders', route: '/reminders', plus: 'reminders' },
+  // Free beside the paid plans, and paying for Family Plus. Plans in a business.
+  { icon: 'star', label: 'Family Plus', route: '/plus', plans: true },
   { icon: 'settings', label: 'Settings', route: '/settings' },
 ];
 
@@ -54,7 +63,7 @@ export default function ProfileDrawer() {
   const theme = useVaultTheme();
   const { isDrawerOpen, closeDrawer } = useDrawer();
   const { routeFor } = useFamilyPlan();
-  const onPlus = useOnPlus();
+  const onPlus = useModeOnPlus();
   const { width } = useWindowDimensions();
   const drawerWidth = Math.min(300, Math.round(width * 0.86));
 
@@ -90,7 +99,10 @@ export default function ProfileDrawer() {
   const business = isBusinessVault(currentFamily);
   const items = menuItems
     .filter((item) => !(business && item.familyOnly) && !(!business && item.businessOnly))
-    .map((item) => (business && item.route === '/family' ? { ...item, icon: 'briefcase', label: 'Manage team' } : item));
+    .map((item) => (!business ? item
+      : item.route === '/family' ? { ...item, icon: 'briefcase', label: 'Manage team' }
+        : item.plans ? { ...item, label: 'Plans' }
+          : item));
 
   const handleNavigate = async (item: MenuItem) => {
     closeDrawer();
@@ -156,7 +168,7 @@ export default function ProfileDrawer() {
             <Text
               style={styles.profileName}
               numberOfLines={1}
-              accessibilityLabel={onPlus ? `${displayName}, Family Plus` : undefined}
+              accessibilityLabel={onPlus ? `${displayName}, ${plusName(theme.business)}` : undefined}
             >
               {displayName}{onPlus && <PlusStar onDark />}
             </Text>
@@ -195,7 +207,7 @@ export default function ProfileDrawer() {
                 accessibilityRole="button"
               >
                 <View style={[styles.menuIconWrap, { backgroundColor: theme.tint }]}>
-                  <Feather name={item.icon as any} size={16} color={theme.primary} />
+                  <Feather name={item.icon as any} size={16} color={item.plans ? (business ? biz.accent : color.accent) : theme.primary} />
                 </View>
                 <Text style={styles.menuLabel}>{item.label}</Text>
                 {item.plus ? <PlusTag /> : <Feather name="chevron-right" size={16} color="#9CA3AF" />}

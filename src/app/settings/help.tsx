@@ -18,6 +18,7 @@ import type { PaymentsStatus } from '../../lib/api';
 import { ScreenHeader } from '../../components/screen-header';
 import { Card, CardTitle, Body, PrimaryButton, screenStyles } from '../../components/settings-ui';
 import { color, radius, shadow, space, type } from '../../constants/design';
+import { useVaultTheme } from '../../lib/vault-theme';
 
 function faq(payments: PaymentsStatus | null): { q: string; a: string }[] {
   const forSale = payments?.available ?? PLUS_FOR_SALE;
@@ -108,7 +109,7 @@ function faq(payments: PaymentsStatus | null): { q: string; a: string }[] {
     },
     ...(forSale ? [{
       q: 'How do I pay for Family Plus?',
-      a: `Open Settings › Family Plus and pick a month or a year. You pay through Razorpay by UPI, card or net banking, and AskLocker never sees your card or UPI details. Nothing renews by itself. For now, you can pay only on the web app${payments?.currencies.includes('USD') ? '' : ', in Indian rupees'}.`,
+      a: `Open Family Plus from the menu and pick a month or a year. You pay through Razorpay by UPI, card or net banking, and AskLocker never sees your card or UPI details. Nothing renews by itself. For now, you can pay only on the web app${payments?.currencies.includes('USD') ? '' : ', in Indian rupees'}.`,
     }] : []),
     {
       q: 'How do I delete my account?',
@@ -121,10 +122,83 @@ function faq(payments: PaymentsStatus | null): { q: string; a: string }[] {
   ];
 }
 
+// In Business mode the answers are a business's: its plans (Plus, Pro and
+// Enterprise), its team and records, never Family Plus or the family tree.
+function businessFaq(): { q: string; a: string }[] {
+  const L = DEFAULT_PLAN_LIMITS;
+  const plus = L.business.business_plus;
+  const pro = L.business.business_pro;
+  const ent = L.business.business_enterprise;
+  return [
+    {
+      q: 'How do I add a record?',
+      a: 'Tap Upload, then Scan, Browse Files or Gallery. If you have more than one business, you choose which one it goes to. With ★ Plus, you can also bring records in From Gmail on a computer.',
+    },
+    {
+      q: 'How do I see or delete records?',
+      a: 'On Home, tap the document count or See all. Admins can delete any record, and everyone else only what they added. Deleting can\'t be undone.',
+    },
+    {
+      q: 'How do I find something?',
+      a: 'Tap the round Ask button and ask in your own words, like "When is the shop licence due for renewal?". AskLocker searches your business records and shows which document the answer came from.',
+    },
+    {
+      q: 'How many questions can I ask?',
+      a: `On Free, each person can ask ${L.questions.free} questions a month and try ${L.questionTriesPerDay.free} a day. With ★ Plus, Pro or Enterprise, each person gets ${plus.questionsFairUse} a month and ${plus.questionTriesPerDay} tries a day.`,
+    },
+    {
+      q: 'Are there other limits?',
+      a: `Files can be up to ${MAX_FILE_BYTES / (1024 * 1024)} MB. Each person can add ${L.uploadsPerDay.free} documents a day on Free and ${plus.uploadsPerDay} on a paid plan. On Free, you can create one family or one business besides your personal vault.`,
+    },
+    {
+      q: 'Can I ask by speaking?',
+      a: `Yes. Turn on Voice assistant in Settings › Accessibility, then tap the mic on Ask and speak. On Free, you get ${L.voiceAnswers.free} voice chats, and the paid plans have no limit.`,
+    },
+    {
+      q: 'How do I add someone to my team?',
+      a: `If you're an admin, open Manage team, tap Add and type the Google email they sign in with. They must have signed in to AskLocker once, and they join when they accept. Free has room for ${L.members.free} people, Plus ${plus.members}, Pro ${pro.members} and Enterprise ${ent.members}.`,
+    },
+    {
+      q: 'How much space do we get?',
+      a: `On Free, a business gets ${FREE_STORAGE_LABEL}. ★ Plus gives ${formatBytes(plus.storage)}, Pro ${formatBytes(pro.storage)} and Enterprise ${formatBytes(ent.storage)}. If a paid plan ends, nothing is removed, but you can't add records until you renew.`,
+    },
+    {
+      q: 'How do reminders work?',
+      a: 'With ★ Plus, Pro or Enterprise, everyone in the business is reminded 90, 30 and 7 days before a record expires, and on the day. To get them on your phone or computer, turn them on in Settings › Notifications.',
+    },
+    {
+      q: 'What does ★ Plus mean?',
+      a: `It marks what the paid plans add. Plus is ${businessPrice('business_plus')}, Pro ${businessPrice('business_pro')} and Enterprise ${businessPrice('business_enterprise')}. To get one, open Plans from the menu and tap Ask us.`,
+    },
+    {
+      q: 'How do I share with someone outside the business?',
+      a: 'Open the document, tap Share, then Make a link. Anyone with the link can open that document for 1 or 7 days, or 30 with ★ Plus, until you turn it off. Sharing works on the web app for now.',
+    },
+    {
+      q: 'Who can see our records?',
+      a: 'Only the people in a business can open its records in AskLocker, plus anyone with a share link to one. Records aren\'t end-to-end encrypted, so the people who run AskLocker can technically open them. Settings › Privacy has the details.',
+    },
+    {
+      q: 'How do I delete a business?',
+      a: 'Go to Settings › Your vaults and tap Delete under it. Only its owner, who created it, can delete it. Everyone in it loses it, so type its name to confirm.',
+    },
+    {
+      q: 'How do I delete my account?',
+      a: 'In Settings › Security, tap Delete account. If you\'re the last admin of a business, make someone else an admin or delete the business first. A business never goes with an account.',
+    },
+    {
+      q: 'Why can\'t AskLocker find something in my record?',
+      a: 'Blurry or dark photos are hard to read. Retake the photo in good light. If your records use another language, add it in Settings › Document languages.',
+    },
+  ];
+}
+
 export default function HelpScreen() {
+  // Settings follows the mode, Family or Business (the drawer's switch).
+  const theme = useVaultTheme();
   const [open, setOpen] = useState<number | null>(null);
   const payments = usePaymentsStatus();
-  const items = useMemo(() => faq(payments), [payments]);
+  const items = useMemo(() => (theme.business ? businessFaq() : faq(payments)), [payments, theme.business]);
 
   return (
     <SafeAreaView style={screenStyles.safe} edges={['top']}>
@@ -144,7 +218,7 @@ export default function HelpScreen() {
                   accessibilityState={{ expanded }}
                 >
                   <Text style={styles.faqQ}>{item.q}</Text>
-                  <Feather name={expanded ? 'chevron-up' : 'chevron-down'} size={18} color={color.secondary} />
+                  <Feather name={expanded ? 'chevron-up' : 'chevron-down'} size={18} color={theme.secondary} />
                 </TouchableOpacity>
                 {expanded && <Text style={styles.faqA}>{item.a}</Text>}
               </View>
@@ -166,8 +240,8 @@ export default function HelpScreen() {
               onPress={() => Linking.openURL(`mailto:${SUPPORT_EMAIL}`)}
               accessibilityRole="link"
             >
-              <Feather name="mail" size={16} color={color.primary} />
-              <Text style={styles.contactText}>{SUPPORT_EMAIL}</Text>
+              <Feather name="mail" size={16} color={theme.primary} />
+              <Text style={[styles.contactText, { color: theme.primary }]}>{SUPPORT_EMAIL}</Text>
             </TouchableOpacity>
           )}
           {!!SUPPORT_PHONE && (
@@ -176,8 +250,8 @@ export default function HelpScreen() {
               onPress={() => Linking.openURL(`tel:${SUPPORT_PHONE.replace(/[^\d+]/g, '')}`)}
               accessibilityRole="link"
             >
-              <Feather name="phone" size={16} color={color.primary} />
-              <Text style={styles.contactText}>{SUPPORT_PHONE}</Text>
+              <Feather name="phone" size={16} color={theme.primary} />
+              <Text style={[styles.contactText, { color: theme.primary }]}>{SUPPORT_PHONE}</Text>
             </TouchableOpacity>
           )}
           {!SUPPORT_EMAIL && !SUPPORT_PHONE && (
