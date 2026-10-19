@@ -129,11 +129,16 @@ class Parler:
         d = self.describe([STYLE[style].format(name=speaker, pace=LINES[lang].get('pace', PACE)[style])
                            for lang, _, speaker, style in items], return_tensors='pt', padding=True)
         p = self.tokenizer([text for _, text, _, _ in items], return_tensors='pt', padding=True)
+        # A take that never stops would run on to the model's 30 seconds, and
+        # the batch with it; none passes the check past 0.15 s a letter, so
+        # each stops at 0.2 s a letter and two seconds more.
+        longest = max(0.2 * letters(text) + 2 for _, text, _, _ in items)
+        steps = int(longest * self.rate / self.model.config.audio_encoder.hop_length) + 10
         self.torch.manual_seed(seed)
         with self.torch.no_grad():
             out = self.model.generate(input_ids=d.input_ids, attention_mask=d.attention_mask,
                                       prompt_input_ids=p.input_ids, prompt_attention_mask=p.attention_mask,
-                                      return_dict_in_generate=True)
+                                      max_new_tokens=steps, return_dict_in_generate=True)
         return [resample_poly(out.sequences[i, :n].cpu().numpy().astype(np.float64), SR, self.rate)
                 for i, n in enumerate(out.audios_length)]
 
@@ -164,10 +169,14 @@ class Parler:
         return [level(x) for x, _ in best]
 
 
+def letters(text):
+    """How many letters a line has, a measure of how long it takes to say."""
+    return len(re.sub(r'[\s,.!?।]', '', text))
+
+
 def check(x, text):
     """How far a take is from passing (0 when it passes), and why it fails."""
-    letters = len(re.sub(r'[\s,.!?।]', '', text))
-    per = len(x) / SR / max(1, letters)
+    per = len(x) / SR / max(1, letters(text))
     longest = max((b - a for a, b in pauses(x)), default=0.0)
     off = max(0.0, np.log(0.04 / per), np.log(per / 0.15)) + max(0.0, longest - 0.7)
     why = [f'{per * 1000:.0f} ms a letter'] if not 0.04 <= per <= 0.15 else []
