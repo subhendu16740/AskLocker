@@ -7,6 +7,15 @@ import type { Database, FamilyMemberWithUser, FamilyWithMembership } from './dat
 
 type Family = Database['public']['Tables']['families']['Row'];
 
+/**
+ * Family or Business: the drawer's switch. It is the open vault's kind, so
+ * nothing else can disagree with it; the personal vault is Family's.
+ */
+export type AppMode = 'family' | 'business';
+
+export const modeOf = (family: Partial<Pick<Family, 'kind'>> | null | undefined): AppMode =>
+  family?.kind === 'business' ? 'business' : 'family';
+
 interface FamilyContextType {
   currentFamily: Family | null;
   /** Every vault this person is in: their personal vault (046) and their families, oldest first. */
@@ -19,6 +28,14 @@ interface FamilyContextType {
   refreshMembers: () => Promise<void>;
   /** Show another of the user's families. Remembered on this device. */
   switchFamily: (familyId: string) => void;
+  /** Family or Business: the open vault's kind. */
+  mode: AppMode;
+  /** The vaults of that mode: a business's in Business; the personal vault and families in Family. */
+  modeVaults: FamilyWithMembership[];
+  /** Open the vault last open in that mode, or its first. False when there is none (no business yet). */
+  setMode: (mode: AppMode) => boolean;
+  /** The vaults of the other mode: nothing of theirs is shown in this one (notifications, documents). */
+  otherModeVaultIds: string[];
 }
 
 const FamilyContext = createContext<FamilyContextType>({
@@ -31,6 +48,10 @@ const FamilyContext = createContext<FamilyContextType>({
   refreshFamilies: async () => {},
   refreshMembers: async () => {},
   switchFamily: () => {},
+  mode: 'family',
+  modeVaults: [],
+  setMode: () => false,
+  otherModeVaultIds: [],
 });
 
 const selectionKey = accountKey.family;
@@ -51,10 +72,37 @@ export function FamilyProvider({ children }: { children: ReactNode }) {
   const currentFamily = membership?.families ?? null;
   const needsFamily = fetched && !!user && families.length === 0;
 
+  // The vault last open in each mode, so the switch goes back to it.
+  const [lastByMode, setLastByMode] = useState<Partial<Record<AppMode, string>>>({});
+
   const switchFamily = useCallback((familyId: string) => {
     setSelectedId(familyId);
-    if (user) storageSet(selectionKey(user.id), familyId);
-  }, [user?.id]);
+    if (!user) return;
+    storageSet(selectionKey(user.id), familyId);
+    const kind = families.find((f) => f.family_id === familyId)?.families;
+    if (kind) {
+      setLastByMode((prev) => {
+        const next = { ...prev, [modeOf(kind)]: familyId };
+        storageSet(accountKey.modeVaults(user.id), JSON.stringify(next));
+        return next;
+      });
+    }
+  }, [user?.id, families]);
+
+  const mode = modeOf(currentFamily);
+  const modeVaults = families.filter((f) => modeOf(f.families) === mode);
+  const otherModeVaultIds = families.filter((f) => modeOf(f.families) !== mode).map((f) => f.family_id);
+
+  const setMode = useCallback((next: AppMode): boolean => {
+    if (next === mode) return true;
+    const inMode = families.filter((f) => modeOf(f.families) === next);
+    if (!inMode.length) return false;
+    const remembered = inMode.find((f) => f.family_id === lastByMode[next]);
+    // In Family mode, a family before the personal vault: it is what "family" means.
+    const pick = remembered ?? inMode.find((f) => !isPersonalVault(f.families)) ?? inMode[0];
+    switchFamily(pick.family_id);
+    return true;
+  }, [mode, families, lastByMode, switchFamily]);
 
   // Lazy fetch — only loads when explicitly called
   const refreshFamilies = useCallback(async () => {
@@ -92,6 +140,10 @@ export function FamilyProvider({ children }: { children: ReactNode }) {
     }
     // Fetch silently on login — the remembered choice first, so screens never
     // load the default family only to switch a moment later.
+    setLastByMode({});
+    storageGet(accountKey.modeVaults(user.id))
+      .then((raw) => { try { if (raw) setLastByMode(JSON.parse(raw)); } catch { /* a bad value: start again */ } })
+      .catch(() => {});
     storageGet(selectionKey(user.id))
       .then((id) => setSelectedId(id))
       .then(() => fetchUserFamilies(user.id))
@@ -139,6 +191,10 @@ export function FamilyProvider({ children }: { children: ReactNode }) {
         refreshFamilies,
         refreshMembers,
         switchFamily,
+        mode,
+        modeVaults,
+        setMode,
+        otherModeVaultIds,
       }}
     >
       {children}

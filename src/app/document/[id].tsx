@@ -11,6 +11,7 @@ import * as WebBrowser from 'expo-web-browser';
 import { useAuth } from '../../lib/auth';
 import { useFamily } from '../../lib/family-context';
 import { useDocumentOwners } from '../../lib/family-people';
+import { canDeleteDocument, isBusinessVault } from '../../lib/vaults';
 import {
   fetchDocumentById, getDocumentSignedUrl, deleteDocument,
   updateDocument, fetchCategories,
@@ -20,6 +21,7 @@ import type { FamilyDocumentDetailRow } from '../../lib/database.types';
 import { ScreenHeader } from '../../components/screen-header';
 import { ShareSheet } from '../../components/share-sheet';
 import { color, radius, shadow, size, space, type } from '../../constants/design';
+import { categoryForAnalytics, track } from '../../lib/analytics';
 
 // Share makes a link that expires (036) for the web app's /s page, which
 // only the web app knows the address of: not offered in the phone app yet.
@@ -42,6 +44,27 @@ function formatDate(dateStr: string): string {
   });
 }
 
+// What ingest found (_shared/metadata.ts), in words; anything else as its key.
+const META_LABELS: Record<string, string> = {
+  expiry_date: 'Expiry date',
+  date_of_birth: 'Date of birth',
+  issue_date: 'Issue date',
+  passport_number: 'Passport number',
+  pan_number: 'PAN',
+  aadhaar_number: 'Aadhaar',
+  driving_license_number: 'Driving licence',
+  policy_number: 'Policy number',
+  holder_name: 'Name',
+  amount: 'Amount',
+  phone_number: 'Phone',
+  // A business's papers (051)
+  gstin: 'GSTIN',
+  invoice_number: 'Invoice number',
+  invoice_date: 'Invoice date',
+  total_amount: 'Total',
+  due_date: 'Due date',
+};
+
 function formatBytes(bytes: number | null): string {
   if (!bytes) return 'Unknown';
   if (bytes < 1024) return `${bytes} B`;
@@ -57,7 +80,10 @@ export default function DocumentViewerScreen() {
   // can save into any of them — and otherwise the open one. Opened in its own
   // vault, without switching: the open vault, and a chat on Ask, stay as they are.
   const currentFamily = (family ? families.find((f) => f.family_id === family)?.families : undefined) ?? openFamily;
-  const owners = useDocumentOwners(currentFamily?.id ?? null);
+  const vault = families.find((f) => f.family_id === currentFamily?.id) ?? null;
+  // A business has no "whose document" (051).
+  const familyOwners = useDocumentOwners(currentFamily?.id ?? null);
+  const owners = isBusinessVault(currentFamily) ? [] : familyOwners;
   const { user } = useAuth();
   const [doc, setDoc] = useState<FamilyDocumentDetailRow | null>(null);
   const [loading, setLoading] = useState(true);
@@ -83,6 +109,11 @@ export default function DocumentViewerScreen() {
       .catch((err) => console.error('Doc fetch error:', err))
       .finally(() => setLoading(false));
   }, [currentFamily?.id, id]);
+
+  // What kinds of documents people come back to: its category, nothing else.
+  useEffect(() => {
+    if (doc?.id) track('document_opened', { category: categoryForAnalytics({ name: doc.category_name }) });
+  }, [doc?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!doc?.storage_path) return;
@@ -220,8 +251,9 @@ export default function DocumentViewerScreen() {
   }
 
   // Only the person who added a document can delete it, admins included
-  // (047); the server refuses anyone else, so nobody else is offered it.
-  const addedByMe = !!user && doc.uploaded_by === user.id;
+  // (047) — and in a business any admin too (051); the server refuses
+  // anyone else, so nobody else is offered it.
+  const addedByMe = canDeleteDocument(vault, doc.uploaded_by, user?.id);
 
   const infoRows = [
     { label: 'Uploaded', value: formatDate(doc.created_at) },
@@ -346,7 +378,7 @@ export default function DocumentViewerScreen() {
               <Text style={[styles.cardTitle, styles.cardTitleLater]}>Extracted Data</Text>
               {doc.metadata.map((m, idx) => (
                 <View key={idx} style={[styles.infoRow, idx > 0 && styles.infoRowBorder]}>
-                  <Text style={styles.infoLabel}>{m.key.replace(/_/g, ' ')}</Text>
+                  <Text style={styles.infoLabel}>{META_LABELS[m.key] ?? m.key.replace(/_/g, ' ')}</Text>
                   <Text style={styles.infoValue}>{m.value}</Text>
                 </View>
               ))}

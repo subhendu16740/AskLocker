@@ -13,14 +13,15 @@ import {
   addFamilyMember, cancelInvitation, fetchFamilyInvites, fetchPlanLimits, leaveFamily, removeFamilyMember, updateMemberRole,
   type PendingInvite,
 } from '../lib/api';
-import { plusPage, useFamilyPlan, useOnPlus } from '../lib/family-plan';
-import { DEFAULT_PLAN_LIMITS, type PlanLimits } from '../lib/plans';
+import { plusPage, useFamilyPlan, useModeOnPlus } from '../lib/family-plan';
+import { DEFAULT_PLAN_LIMITS, businessPlanName, isBusinessPlan, nextBusinessPlan, type PlanLimits, plusName } from '../lib/plans';
 import { ScreenHeader, HeaderButton, PlusStar } from '../components/screen-header';
 import { InvitationCards } from '../components/invitation-cards';
 import { longDate } from '../lib/dates';
-import { isPersonalVault, vaultName, vaultSubtitle } from '../lib/vaults';
+import { isBusinessVault, isPersonalVault, vaultWord } from '../lib/vaults';
 import { color, radius, shadow, size, space, type } from '../constants/design';
 import { track } from '../lib/analytics';
+import { useVaultTheme } from '../lib/vault-theme';
 
 const relations = ['Father', 'Mother', 'Spouse', 'Son', 'Daughter', 'Brother', 'Sister', 'Other'];
 
@@ -37,10 +38,18 @@ const relations = ['Father', 'Mother', 'Spouse', 'Son', 'Daughter', 'Brother', '
 //
 // Results are shown on the screen, never with Alert.alert: react-native-web's
 // Alert is an empty function, so on the web build it would show nothing.
+//
+// A business (051) is managed here too, as a team: no family tree, no
+// relations, and its own words. Its last admin cannot leave (the server
+// refuses too).
+//
+// This screen manages the people in the open vault, nothing else. The
+// vaults themselves (opening one, creating one, Make it a business, Delete)
+// are in Settings › Your vaults (the owner's ask, 18 October 2026).
 
 export default function FamilyScreen() {
   const { user } = useAuth();
-  const { currentFamily, families, members, membership, refreshMembers, refreshFamilies, switchFamily } = useFamily();
+  const { currentFamily, members, membership, refreshMembers, refreshFamilies } = useFamily();
   const [showAddMember, setShowAddMember] = useState(false);
   const [email, setEmail] = useState('');
   const [selectedRelation, setSelectedRelation] = useState('');
@@ -51,12 +60,15 @@ export default function FamilyScreen() {
   const [pending, setPending] = useState<PendingInvite[]>([]);
   const [limits, setLimits] = useState<PlanLimits>(DEFAULT_PLAN_LIMITS);
   const { plan } = useFamilyPlan();
-  const onPlus = useOnPlus();
+  const onPlus = useModeOnPlus();
   const [confirmDialog, setConfirmDialog] = useState<{
     title: string; message: string; confirmLabel: string; destructive?: boolean; onConfirm: () => void;
   } | null>(null);
 
   const isAdmin = membership?.role === 'admin';
+  const business = isBusinessVault(currentFamily);
+  const theme = useVaultTheme();
+  const word = vaultWord(currentFamily);
   const adminCount = members.filter((m) => m.role === 'admin').length;
   // The last admin cannot leave: nobody would be left to manage the family.
   const canLeave = !!currentFamily && !(isAdmin && adminCount <= 1);
@@ -77,7 +89,10 @@ export default function FamilyScreen() {
   );
 
   // Members and waiting invitations together, against the plan's number.
-  const maxMembers = plan === 'plus' ? limits.members.plus : limits.members.free;
+  const maxMembers = isBusinessPlan(plan) ? limits.business[plan].members : plan === 'plus' ? limits.members.plus : limits.members.free;
+  // In a business, the plan above this one, if it allows more people (051).
+  const nextPlan = business && plan ? nextBusinessPlan(plan) : null;
+  const morePeople = nextPlan && limits.business[nextPlan].members > maxMembers ? limits.business[nextPlan].members : null;
   const full = members.length + pending.length >= maxMembers;
 
   const showConfirm = (title: string, message: string, onConfirm: () => void, destructive = true, confirmLabel = destructive ? 'Remove' : 'Confirm') => {
@@ -87,7 +102,9 @@ export default function FamilyScreen() {
   const familyName = currentFamily?.name || 'Family';
 
   const handleRemoveMember = (memberId: string, name: string) => {
-    showConfirm('Remove Member', `Remove ${name} from ${familyName} Vault? Documents they added stay, and nobody else can delete them.`, async () => {
+    showConfirm('Remove Member', business
+      ? `Remove ${name} from ${familyName}? Records they added stay, and an admin can delete them.`
+      : `Remove ${name} from ${familyName} Vault? Documents they added stay, and nobody else can delete them.`, async () => {
       try {
         await removeFamilyMember(memberId);
         refreshMembers().catch(() => {});
@@ -98,7 +115,9 @@ export default function FamilyScreen() {
   };
 
   const handleMakeAdmin = (memberId: string, name: string) => {
-    showConfirm('Make Admin', `Make ${name} an admin of ${familyName} Vault?\nThey'll be able to invite and remove members.`, async () => {
+    showConfirm('Make Admin', business
+      ? `Make ${name} an admin of ${familyName}?\nThey'll be able to invite and remove people, and delete any record.`
+      : `Make ${name} an admin of ${familyName} Vault?\nThey'll be able to invite and remove members.`, async () => {
       try {
         await updateMemberRole(memberId, 'admin');
         refreshMembers().catch(() => {});
@@ -122,13 +141,15 @@ export default function FamilyScreen() {
 
   const handleLeave = () => {
     if (!currentFamily || !user) return;
-    showConfirm('Leave Family', `Leave ${familyName} Vault? You'll lose access to its documents. Documents you added stay, and nobody can delete them. Delete any you want gone first.`, async () => {
+    showConfirm(business ? 'Leave Business' : 'Leave Family', business
+      ? `Leave ${familyName}? You'll lose access to its records. Records you added stay, and its admins can delete them.`
+      : `Leave ${familyName} Vault? You'll lose access to its documents. Documents you added stay, and nobody can delete them. Delete any you want gone first.`, async () => {
       try {
         await leaveFamily(currentFamily.id, user.id);
         await refreshFamilies();
         router.replace('/home' as any);
       } catch (err: any) {
-        setNotice(err.message || "Couldn't leave this family.");
+        setNotice(err.message || `Couldn't leave this ${word}.`);
       }
     }, true, 'Leave');
   };
@@ -150,7 +171,7 @@ export default function FamilyScreen() {
     try {
       const outcome = await addFamilyMember(currentFamily.id, address, {
         alias,
-        relationship: selectedRelation || undefined,
+        relationship: business ? undefined : selectedRelation || undefined,
       });
       switch (outcome.status) {
         case 'invited':
@@ -167,7 +188,7 @@ export default function FamilyScreen() {
           loadPending();
           break;
         case 'already_member':
-          setAddError(`${outcome.displayName} is already in this family.`);
+          setAddError(`${outcome.displayName} is already in this ${word}.`);
           break;
         case 'already_invited':
           setAddError(`${address} is already invited.`);
@@ -194,55 +215,6 @@ export default function FamilyScreen() {
     }
   };
 
-  // Every vault this person is in (046): their personal vault and each
-  // family. Tapping one opens it everywhere — Home, the family tree, Storage.
-  const vaultList = families.length > 1 && currentFamily && (
-    <View style={styles.section}>
-      <Text style={styles.sectionLabel}>Your vaults</Text>
-      <View style={styles.memberList}>
-        {families.map((f) => {
-          const isCurrent = f.family_id === currentFamily.id;
-          return (
-            <TouchableOpacity
-              key={f.family_id}
-              onPress={() => switchFamily(f.family_id)}
-              style={[styles.familyRow, isCurrent && styles.familyRowCurrent]}
-              activeOpacity={0.8}
-              accessibilityRole="button"
-              accessibilityState={{ selected: isCurrent }}
-            >
-              <Feather name={isPersonalVault(f.families) ? 'lock' : 'home'} size={16} color={isCurrent ? '#FFFFFF' : color.primary} />
-              <View style={styles.memberInfo}>
-                <Text style={[styles.familyRowName, isCurrent && styles.familyRowNameCurrent]}>{vaultName(f.families)}</Text>
-                <Text style={[styles.familyRowRole, isCurrent && styles.familyRowRoleCurrent]}>{vaultSubtitle(f)}</Text>
-              </View>
-              {isCurrent && <Feather name="check" size={16} color="#FFFFFF" />}
-            </TouchableOpacity>
-          );
-        })}
-      </View>
-    </View>
-  );
-
-  // A family is how documents are shared; anyone can make one, at any time.
-  const createFamily = (
-    <TouchableOpacity
-      onPress={() => router.push('/setup-family' as any)}
-      style={styles.treeLink}
-      activeOpacity={0.8}
-      accessibilityRole="button"
-    >
-      <View style={styles.treeIcon}>
-        <Feather name="plus" size={16} color={color.primary} />
-      </View>
-      <View style={styles.memberInfo}>
-        <Text style={styles.treeTitle}>Create a family</Text>
-        <Text style={styles.treeSub}>Share documents with your family</Text>
-      </View>
-      <Feather name="chevron-right" size={16} color="#9CA3AF" />
-    </TouchableOpacity>
-  );
-
   if (!currentFamily) {
     return (
       <SafeAreaView style={styles.safe} edges={['top']}>
@@ -252,7 +224,7 @@ export default function FamilyScreen() {
           <Feather name="users" size={32} color="#D1D5DB" />
           <Text style={styles.noFamilyTitle}>No Family Yet</Text>
           <Text style={styles.noFamilySub}>
-            Create a family to share documents, or ask your family's admin to invite you. Invitations show up here.
+            Create a family or a business to share documents, or ask its admin to invite you. Invitations show up here.
           </Text>
           <TouchableOpacity
             onPress={() => router.push('/setup-family' as any)}
@@ -266,6 +238,9 @@ export default function FamilyScreen() {
             >
               <Text style={styles.createFamilyText}>Create Family</Text>
             </LinearGradient>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => router.push('/setup-family?kind=business' as any)} accessibilityRole="link" hitSlop={8}>
+            <Text style={styles.fullNoteLink}>Create a business ›</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -295,13 +270,25 @@ export default function FamilyScreen() {
             <View style={styles.memberInfo}>
               <Text style={styles.treeTitle}>Nobody else can join it</Text>
               <Text style={styles.personalText}>
-                To share documents, create a family or accept an invitation. When you upload, you pick where each
-                document goes. Ask searches all your vaults at once.
+                To share documents, create a family or accept an invitation. Your vaults are in Settings.
               </Text>
             </View>
           </View>
-          {vaultList}
-          {createFamily}
+          <TouchableOpacity
+            style={styles.treeLink}
+            onPress={() => router.push('/settings/vaults' as any)}
+            activeOpacity={0.8}
+            accessibilityRole="button"
+          >
+            <View style={styles.treeIcon}>
+              <Feather name="layers" size={16} color={color.primary} />
+            </View>
+            <View style={styles.memberInfo}>
+              <Text style={styles.treeTitle}>Your vaults</Text>
+              <Text style={styles.treeSub}>Open, create or delete a vault</Text>
+            </View>
+            <Feather name="chevron-right" size={16} color="#9CA3AF" />
+          </TouchableOpacity>
           <View style={{ height: 24 }} />
         </ScrollView>
       </SafeAreaView>
@@ -337,54 +324,55 @@ export default function FamilyScreen() {
             <Text style={styles.fullNoteText}>
               {familyName} is full at {maxMembers} members
               {pending.length > 0 ? ', counting invitations' : ''}. To invite someone,{' '}
-              {pending.length > 0 ? 'withdraw an invitation or remove a member' : 'remove a member'}. You can still add
-              anyone to the family tree.
-              {plan !== 'plus' && limits.members.plus > maxMembers ? ` Family Plus allows up to ${limits.members.plus} members.` : ''}
+              {pending.length > 0 ? 'withdraw an invitation or remove a member' : 'remove a member'}.
+              {business ? '' : ' You can still add anyone to the family tree.'}
+              {business
+                ? (nextPlan && morePeople ? ` ${businessPlanName(nextPlan)} allows up to ${morePeople}.` : '')
+                : (plan !== 'plus' && limits.members.plus > maxMembers ? ` Family Plus allows up to ${limits.members.plus} members.` : '')}
             </Text>
-            {plan !== 'plus' && limits.members.plus > maxMembers && (
+            {(business ? !!morePeople : plan !== 'plus' && limits.members.plus > maxMembers) && (
               <TouchableOpacity onPress={() => router.push(plusPage('members') as any)} accessibilityRole="link" hitSlop={8}>
-                <Text style={styles.fullNoteLink}>Family Plus ›</Text>
+                <Text style={styles.fullNoteLink}>{business ? 'Plans ›' : 'Family Plus ›'}</Text>
               </TouchableOpacity>
             )}
           </View>
         )}
 
-        {/* The tree holds everyone, accounts or not; this screen is who can sign in. */}
-        <TouchableOpacity
-          style={styles.treeLink}
-          onPress={() => router.push('/family-tree' as any)}
-          activeOpacity={0.8}
-          accessibilityRole="button"
-        >
-          <View style={styles.treeIcon}>
-            <Feather name="git-branch" size={16} color={color.primary} />
-          </View>
-          <View style={styles.memberInfo}>
-            <Text style={styles.treeTitle}>Family tree</Text>
-            <Text style={styles.treeSub}>Everyone in the family, and their documents</Text>
-          </View>
-          <Feather name="chevron-right" size={16} color="#9CA3AF" />
-        </TouchableOpacity>
-
-        {/* Every vault this person is in, and a family of their own to start (046) */}
-        {vaultList}
+        {/* The tree holds everyone, accounts or not; this screen is who can sign in. A business has none (051). */}
+        {!business && (
+          <TouchableOpacity
+            style={styles.treeLink}
+            onPress={() => router.push('/family-tree' as any)}
+            activeOpacity={0.8}
+            accessibilityRole="button"
+          >
+            <View style={styles.treeIcon}>
+              <Feather name="git-branch" size={16} color={color.primary} />
+            </View>
+            <View style={styles.memberInfo}>
+              <Text style={styles.treeTitle}>Family tree</Text>
+              <Text style={styles.treeSub}>Everyone in the family, and their documents</Text>
+            </View>
+            <Feather name="chevron-right" size={16} color="#9CA3AF" />
+          </TouchableOpacity>
+        )}
 
         {/* Members */}
         {members.length > 0 && (
           <View style={styles.section}>
-            <Text style={styles.sectionLabel}>Members</Text>
+            <Text style={styles.sectionLabel}>{business ? 'Team' : 'Members'}</Text>
             <View style={styles.memberList}>
               {members.map((m) => {
                 const name = m.alias || m.users.display_name;
                 const initial = name.charAt(0).toUpperCase();
                 const isCurrentUser = m.user_id === user?.id;
                 const isMemberAdmin = m.role === 'admin';
-                // Everyone in a family on Plus is on Plus; you may be through another vault.
-                const starred = plan === 'plus' || (isCurrentUser && onPlus);
+                // Everyone in a vault on a paid plan is on Plus; you may be through another vault.
+                const starred = (!!plan && plan !== 'free') || (isCurrentUser && onPlus);
                 return (
                   <View key={m.id} style={styles.memberCard}>
                     <LinearGradient
-                      colors={isCurrentUser ? ['#D4807B', '#2A3D66'] : ['#2A3D66', '#4A6491']}
+                      colors={isCurrentUser ? [business ? '#B7791F' : '#D4807B', theme.primary] : theme.gradient}
                       start={{ x: 0, y: 0 }}
                       end={{ x: 1, y: 1 }}
                       style={styles.memberAvatar}
@@ -393,8 +381,8 @@ export default function FamilyScreen() {
                     </LinearGradient>
                     <View style={styles.memberInfo}>
                       <View style={styles.memberNameRow}>
-                        <Text style={styles.memberName} accessibilityLabel={starred ? `${name}, Family Plus` : undefined}>
-                          {starred && <PlusStar />}{name}
+                        <Text style={styles.memberName} accessibilityLabel={starred ? `${name}, ${plusName(theme.business)}` : undefined}>
+                          {name}{starred && <PlusStar />}
                         </Text>
                         {isCurrentUser && (
                           <View style={styles.youBadge}>
@@ -490,17 +478,21 @@ export default function FamilyScreen() {
           <View style={styles.emptyState}>
             <Feather name="users" size={32} color="#D1D5DB" />
             <Text style={styles.emptyTitle}>No members yet</Text>
-            <Text style={styles.emptySubtitle}>Invite your family to get started</Text>
+            <Text style={styles.emptySubtitle}>{business ? 'Invite your team to get started' : 'Invite your family to get started'}</Text>
           </View>
         )}
-
-        {createFamily}
 
         {canLeave && (
           <TouchableOpacity onPress={handleLeave} style={styles.leaveBtn} activeOpacity={0.8}>
             <Feather name="log-out" size={16} color="#EF4444" />
             <Text style={styles.leaveBtnText}>Leave {familyName}</Text>
           </TouchableOpacity>
+        )}
+
+        {business && isAdmin && adminCount <= 1 && (
+          <Text style={styles.lastAdminNote}>
+            You're its only admin. To leave, make someone else an admin first.
+          </Text>
         )}
 
         <View style={{ height: 24 }} />
@@ -514,7 +506,7 @@ export default function FamilyScreen() {
 
           <ScrollView showsVerticalScrollIndicator={false}>
             <View style={styles.sheetHeader}>
-              <Text style={styles.sheetTitle}>Add Family Member</Text>
+              <Text style={styles.sheetTitle}>{business ? 'Add to the team' : 'Add Family Member'}</Text>
               <TouchableOpacity
                 onPress={closeAddMember}
                 style={styles.closeBtn}
@@ -528,9 +520,11 @@ export default function FamilyScreen() {
             <Text style={styles.sheetIntro}>
               Enter the email they use for AskLocker. They join as a viewer when they accept. Until then they show as Pending approval.
             </Text>
-            <Text style={styles.sheetIntro}>
-              Already in the family tree? Open them there and tap Link to their AskLocker account instead. They keep their documents and emergency card.
-            </Text>
+            {!business && (
+              <Text style={styles.sheetIntro}>
+                Already in the family tree? Open them there and tap Link to their AskLocker account instead. They keep their documents and emergency card.
+              </Text>
+            )}
 
             {/* Email */}
             <View style={styles.field}>
@@ -547,8 +541,8 @@ export default function FamilyScreen() {
               />
             </View>
 
-            {/* Relationship */}
-            <View style={styles.field}>
+            {/* Relationship: a family's only */}
+            {!business && <View style={styles.field}>
               <Text style={styles.fieldLabel}>
                 Relationship <Text style={styles.fieldLabelOptional}>(optional)</Text>
               </Text>
@@ -560,6 +554,7 @@ export default function FamilyScreen() {
                     style={[
                       styles.relationChip,
                       selectedRelation === r && styles.relationChipSelected,
+                      selectedRelation === r && { backgroundColor: theme.primary, borderColor: theme.primary },
                     ]}
                   >
                     <Text style={[
@@ -571,15 +566,15 @@ export default function FamilyScreen() {
                   </TouchableOpacity>
                 ))}
               </View>
-            </View>
+            </View>}
 
             {/* What the family calls them */}
             <View style={styles.field}>
               <Text style={styles.fieldLabel}>
-                Called at home <Text style={styles.fieldLabelOptional}>(optional)</Text>
+                {business ? 'Shown as' : 'Called at home'} <Text style={styles.fieldLabelOptional}>(optional)</Text>
               </Text>
               <TextInput
-                placeholder="e.g. Papa"
+                placeholder={business ? 'e.g. Ravi, accounts' : 'e.g. Papa'}
                 placeholderTextColor="#9CA3AF"
                 value={alias}
                 onChangeText={setAlias}
@@ -598,7 +593,7 @@ export default function FamilyScreen() {
               disabled={adding}
             >
               <LinearGradient
-                colors={['#2A3D66', '#4A6491']}
+                colors={theme.gradient}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 0 }}
                 style={[styles.addMemberBtn, adding && { opacity: 0.7 }]}
@@ -634,6 +629,7 @@ export default function FamilyScreen() {
                 }}
                 style={[
                   styles.dialogConfirmBtn,
+                  { backgroundColor: theme.primary },
                   confirmDialog?.destructive !== false && styles.dialogConfirmBtnDestructive,
                 ]}
               >
@@ -766,22 +762,6 @@ const styles = StyleSheet.create({
   fullNoteText: { flex: 1, fontSize: 14, lineHeight: 20, color: '#7A5200' },
   fullNoteLink: { fontSize: 14, lineHeight: 20, fontWeight: '600', color: '#2A3D66' },
   // Family switcher
-  familyRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.md,
-    backgroundColor: color.surface,
-    borderRadius: radius.control,
-    paddingHorizontal: space.lg,
-    paddingVertical: 10,
-    minHeight: size.row,
-    ...shadow.card,
-  },
-  familyRowCurrent: { backgroundColor: color.primary },
-  familyRowName: type.label,
-  familyRowNameCurrent: { color: '#FFFFFF' },
-  familyRowRole: type.caption,
-  familyRowRoleCurrent: { color: 'rgba(255,255,255,0.8)' },
   leaveBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -796,6 +776,7 @@ const styles = StyleSheet.create({
     minHeight: size.control,
   },
   leaveBtnText: { ...type.button, color: color.danger },
+  lastAdminNote: { ...type.caption, textAlign: 'center', marginTop: space.sm, marginHorizontal: space.lg },
   // Modal
   modalOverlay: {
     ...StyleSheet.absoluteFillObject,

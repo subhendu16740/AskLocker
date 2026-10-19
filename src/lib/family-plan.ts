@@ -12,6 +12,10 @@
 // Plus, and Gmail import refuses a free family on the server as well.
 // Birthday reminders reach every family.
 //
+// A business (051) has its own plans, Plus, Pro and Enterprise, never Family Plus. Its ★
+// features open the same /plus page, which shows a business its plans. Its
+// plan ending closes adding (`closed`) instead of removing anything.
+//
 // The plan comes from family_storage_status() (038, 039), kept for a minute
 // per family. When it cannot be read (before 038, or offline) nothing is
 // gated here: the app never locks a family out because it could not ask.
@@ -25,12 +29,18 @@ import type { PlanName } from './plans';
 
 /** What a starred feature is called in /plus?feature=… */
 export type PlusFeature = 'reminders' | 'gmail' | 'storage' | 'voice' | 'questions' | 'members' | 'links';
+/** What only a business's paid plans bring (056): the overview's lists, money in and out, reminders on notes. */
+export type BusinessFeature = 'overview' | 'money' | 'notes';
 
 interface KnownPlan {
   plan: PlanName | null;
   paidUntil: string | null;
   /** Plus has ended and the family is above the free limit: when the newest documents above it go (040). */
   removalAt: string | null;
+  /** A business whose paid plan ended: it keeps every record and adds nothing until renewed (051). */
+  closed: boolean;
+  /** The plan running now was switched on for a demo (051). */
+  trial: boolean;
   at: number;
 }
 
@@ -46,12 +56,14 @@ async function readPlan(familyId: string, force: boolean): Promise<KnownPlan> {
       plan: status?.plan ?? null,
       paidUntil: status?.paidUntil ?? null,
       removalAt: status?.removalAt ?? null,
+      closed: status?.closed === true,
+      trial: status?.trial === true,
       at: Date.now(),
     };
     known.set(familyId, fresh);
     return fresh;
   } catch {
-    return hit ?? { plan: null, paidUntil: null, removalAt: null, at: 0 };
+    return hit ?? { plan: null, paidUntil: null, removalAt: null, closed: false, trial: false, at: 0 };
   }
 }
 
@@ -70,7 +82,7 @@ export function usePaymentsStatus(): PaymentsStatus | null {
 }
 
 /** The page a free family sees instead of a starred feature. */
-export function plusPage(feature?: PlusFeature): string {
+export function plusPage(feature?: PlusFeature | BusinessFeature): string {
   return feature ? `/plus?feature=${feature}` : '/plus';
 }
 
@@ -119,6 +131,8 @@ export function useFamilyPlan() {
     plan: plan?.plan ?? null,
     paidUntil: plan?.paidUntil ?? null,
     removalAt: plan?.removalAt ?? null,
+    closed: plan?.closed === true,
+    trial: plan?.trial === true,
     isFree: plan?.plan === 'free',
     loading,
     refresh,
@@ -155,6 +169,40 @@ async function readOnPlus(userId: string, force: boolean): Promise<boolean> {
 export function forgetOnPlus() {
   mine = null;
   listeners.forEach((l) => l());
+}
+
+// ─── Am I on a paid plan here? ──────────────────────────────────
+//
+// The ★ after your own name follows the mode (the owner's ask, 18 October
+// 2026): in Family mode, a family or personal vault of yours on Family Plus;
+// in Business mode, a business of yours on a paid plan. A family's Family Plus
+// never stars you in a business, nor a business plan in your family. Read
+// from each of the mode's vaults' plans (kept a minute, shared with
+// useFamilyPlan()); unknown shows no star.
+
+const paidUp = (p: KnownPlan | null | undefined) => !!p?.plan && p.plan !== 'free' && !p.closed;
+
+/** Is any vault of the open mode on a paid plan? False until known. */
+export function useModeOnPlus(): boolean {
+  const { modeVaults } = useFamily();
+  const ids = modeVaults.map((v) => v.family_id).join(',');
+  const [plus, setPlus] = useState(() => modeVaults.some((v) => paidUp(known.get(v.family_id))));
+
+  useEffect(() => {
+    const list = ids ? ids.split(',') : [];
+    let cancelled = false;
+    const read = (force: boolean) => {
+      Promise.all(list.map((id) => readPlan(id, force))).then((plans) => { if (!cancelled) setPlus(plans.some(paidUp)); });
+    };
+    setPlus(list.some((id) => paidUp(known.get(id))));
+    read(false);
+    // After a payment (forgetOnPlus), ask again.
+    const onForget = () => read(true);
+    listeners.add(onForget);
+    return () => { cancelled = true; listeners.delete(onForget); };
+  }, [ids]);
+
+  return plus;
 }
 
 /** Is the signed-in person on Family Plus, in any vault? False until known. */

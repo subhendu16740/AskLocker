@@ -13,7 +13,7 @@ import { Feather } from '@expo/vector-icons';
 import { useFocusEffect } from 'expo-router';
 import { useFamily } from '../lib/family-context';
 import { acceptInvitation, declineInvitation, fetchMyInvitations, type Invitation } from '../lib/api';
-import { color, radius, shadow, size, space, type } from '../constants/design';
+import { biz, color, radius, shadow, size, space, type } from '../constants/design';
 
 export function InvitationCards({ style }: { style?: StyleProp<ViewStyle> }) {
   const { refreshFamilies, switchFamily } = useFamily();
@@ -87,15 +87,19 @@ export function InvitationCards({ style }: { style?: StyleProp<ViewStyle> }) {
         return (
           <View key={invite.id} style={styles.card}>
             <View style={styles.top}>
-              <View style={styles.icon}>
-                <Feather name="mail" size={16} color={color.primary} />
+              <View style={[styles.icon, invite.familyKind === 'business' && { backgroundColor: biz.tint }]}>
+                <Feather name={invite.familyKind === 'business' ? 'briefcase' : 'mail'} size={16} color={invite.familyKind === 'business' ? biz.primary : color.primary} />
               </View>
               <View style={styles.text}>
-                <Text style={styles.who}>{invite.invitedByName || 'A family admin'} invited you to join</Text>
-                <Text style={styles.family}>{invite.familyName}</Text>
-                {!!invite.personName && <Text style={styles.sub}>as {invite.personName} in the family tree</Text>}
+                <Text style={styles.who}>
+                  {invite.invitedByName || (invite.familyKind === 'business' ? 'An admin' : 'A family admin')} invited you to join
+                </Text>
+                <Text style={styles.family}>
+                  {invite.familyName}{invite.familyKind === 'business' ? ' (business)' : ''}
+                </Text>
+                {!!invite.personName && invite.familyKind !== 'business' && <Text style={styles.sub}>as {invite.personName} in the family tree</Text>}
                 <Text style={styles.sub}>
-                  Accept to see its documents, as {invite.role === 'admin' ? 'an admin' : 'a viewer'}. You can leave any
+                  Accept to see its {invite.familyKind === 'business' ? 'records' : 'documents'}, as {invite.role === 'admin' ? 'an admin' : 'a viewer'}. You can leave any
                   time.
                 </Text>
               </View>
@@ -117,7 +121,7 @@ export function InvitationCards({ style }: { style?: StyleProp<ViewStyle> }) {
                 <TouchableOpacity style={styles.secondary} onPress={() => setConfirming(invite.id)} disabled={working} accessibilityRole="button" accessibilityLabel={`Decline ${invite.familyName}`}>
                   <Text style={styles.secondaryText}>Decline</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.primary} onPress={() => accept(invite)} disabled={working} accessibilityRole="button" accessibilityLabel={`Accept and join ${invite.familyName}`}>
+                <TouchableOpacity style={[styles.primary, invite.familyKind === 'business' && { backgroundColor: biz.primary }]} onPress={() => accept(invite)} disabled={working} accessibilityRole="button" accessibilityLabel={`Accept and join ${invite.familyName}`}>
                   {working ? <ActivityIndicator size="small" color="#FFFFFF" /> : <Text style={styles.primaryText}>Accept</Text>}
                 </TouchableOpacity>
               </View>

@@ -21,16 +21,38 @@ import { Platform } from 'react-native';
 import { appVersion } from './app-info';
 import { isProduction } from './environment';
 import { deviceKey, storageGet, storageRemove, storageSet } from './storage';
+import { countedCategory } from '../../supabase/functions/_shared/doc-category';
 
 /** What each event may carry. Nothing outside this list is sent. */
 export interface AnalyticsEvents {
   screen_viewed: { screen: string };
-  document_added: { category: string; file_type: string; vault: 'personal' | 'family' };
+  // How a document's category came about: Upload's suggestion kept or
+  // changed, picked with no suggestion, or none at all.
+  document_added: {
+    category: string; file_type: string; vault: 'personal' | 'family' | 'business';
+    category_source: 'suggested' | 'changed' | 'chosen' | 'none';
+  };
+  // What kinds of documents people come back to: opened, and used in an answer.
+  document_opened: { category: string };
+  document_used_in_answer: { category: string };
   question_asked: { voice: boolean; scope: 'all' | 'one' };
   chat_saved: Record<string, never>;
   share_link_made: { days: number };
   member_invited: Record<string, never>;
-  family_created: Record<string, never>;
+  family_created: { kind: 'family' | 'business' };
+  use_for_chosen: { choice: 'family' | 'business' | 'both' | 'skipped' };
+  business_deleted: Record<string, never>;
+  // A family vault deleted by its owner, from Settings › Your vaults (057).
+  family_deleted: Record<string, never>;
+  // A family vault made a business vault (054): the small business that
+  // started on Family Plus and grew.
+  vault_made_business: Record<string, never>;
+  // A business's own notes and bills (056): whether a note has a reminder,
+  // never what it says.
+  note_added: { reminder: boolean };
+  // The drawer's Family or Business switch: which mode people run in.
+  mode_switched: { mode: 'family' | 'business' };
+  bill_marked_paid: Record<string, never>;
   plus_viewed: { feature: string };
   pay_started: { period: 'monthly' | 'yearly'; currency: 'INR' | 'USD' };
   payment_done: { period: 'monthly' | 'yearly'; currency: 'INR' | 'USD' };
@@ -161,20 +183,13 @@ export async function setAnalyticsOn(on: boolean) {
   }
 }
 
-// Built-in categories as the database seeds them; anything else (a family's
-// own category, whose name could say something private) is "Other".
-const SYSTEM_CATEGORIES = new Set([
-  'Passport', 'National ID / Aadhaar', 'PAN Card', 'Driving License', 'Voter ID', 'Birth Certificate',
-  'Marriage Certificate', 'Death Certificate', 'Health Insurance', 'Life Insurance', 'Vehicle Insurance',
-  'Property Documents', 'Tax Returns', 'Bank Statements', 'Medical Records', 'Prescriptions',
-  'Educational Certificates', 'Employment Letters', 'Legal Documents', 'Utility Bills', 'Visa / Travel Docs',
-  'Warranty Cards', 'Other',
-]);
-
-/** A category's name only when it is one of the built-in ones. */
-export function categoryForAnalytics(category: { name: string; is_system?: boolean | null } | null | undefined): string {
-  if (!category) return 'None';
-  return category.is_system !== false && SYSTEM_CATEGORIES.has(category.name) ? category.name : 'Other';
+/**
+ * A category as counted: its built-in name (a family's or a business's), "Other"
+ * for a vault's own (whose name could say something private), "None" for no
+ * category.
+ */
+export function categoryForAnalytics(category: { name: string | null; is_system?: boolean | null } | null | undefined): string {
+  return countedCategory(category?.name, category?.is_system);
 }
 
 /** A screen as its route: "/document/[id]", groups like "(tabs)" left out. */

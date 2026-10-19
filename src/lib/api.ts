@@ -1,12 +1,15 @@
 import { supabase } from './supabase';
+import { accountKey, storageGet, storageSet } from './storage';
 import { longDate, parseDocumentDate } from './dates';
 import { isSaveable, mimeTypeFor, unsupportedFileMessage } from './file-types';
+import { parseAmount, readDate, type MoneyRow } from './overview';
 import type { Gender, KinLink, KinPerson } from '../../supabase/functions/_shared/kinship';
 import { parseAllowance, type QuestionAllowance } from '../../supabase/functions/_shared/questions';
 import { isBloodGroup, type EmergencyCard, type EmergencyCardInput, type EmergencyContact } from './emergency';
 import {
   DEFAULT_PLAN_LIMITS, MAX_FILE_BYTES, PLUS_FOR_SALE, chatStorageFullMessage, deviceTimeZone, fileTooLargeMessage, fits,
-  limitHint, localPlusPrices, setPayerCurrency, storageFullMessage, type PlanLimits, type PlanName, type StorageRoom,
+  limitHint, localPlusPrices, setPayerCurrency, storageFullMessage, type BusinessPlan, type BusinessPlanLimits, type PlanLimits,
+  type PlanName, type StorageRoom,
 } from './plans';
 import type {
   FamilyWithMembership,
@@ -56,21 +59,59 @@ export async function fetchUserFamilies(userId: string): Promise<FamilyWithMembe
     })) as unknown as FamilyWithMembership[];
 }
 
+/**
+ * A new family, or (051) a business. A family is made with the four
+ * arguments that have always existed, so it works on any database; a
+ * business names p_kind, which a database before 051 does not know — that
+ * says so, rather than quietly making a family.
+ */
 export async function createNewFamily(
   userId: string,
   name: string,
   description?: string,
   icon?: string,
+  kind: 'family' | 'business' = 'family',
 ): Promise<string> {
   const { data, error } = await supabase.rpc('create_family', {
     p_user_id: userId,
     p_family_name: name,
     p_description: description ?? undefined,
     p_family_icon: icon ?? undefined,
+    ...(kind === 'business' ? { p_kind: 'business' } : {}),
   });
 
-  if (error) throw error;
+  if (error) {
+    if (kind === 'business' && (error.code === 'PGRST202' || /could not find the function/i.test(error.message))) {
+      throw new Error("Business vaults aren't switched on yet.");
+    }
+    throw error;
+  }
   return data as string;
+}
+
+export type UseFor = 'family' | 'business' | 'both';
+
+const USE_FOR = new Set<UseFor>(['family', 'business', 'both']);
+
+/**
+ * What this person said they would use AskLocker for (051): on their own
+ * users row, so a new device knows; on the device before 051. Null: not
+ * answered. 'skipped' on this device: they tapped Not now.
+ */
+export async function fetchUseFor(userId: string): Promise<UseFor | 'skipped' | null> {
+  const { data, error } = await supabase.from('users').select('use_for').eq('id', userId).maybeSingle();
+  const saved = !error ? (data as { use_for?: string | null } | null)?.use_for : null;
+  if (saved && USE_FOR.has(saved as UseFor)) return saved as UseFor;
+  const here = await storageGet(accountKey.useFor(userId));
+  return here === 'skipped' || USE_FOR.has(here as UseFor) ? (here as UseFor | 'skipped') : null;
+}
+
+/** Keeps the answer: on the users row where 051 is applied, and on this device either way. */
+export async function saveUseFor(userId: string, choice: UseFor | 'skipped'): Promise<void> {
+  await storageSet(accountKey.useFor(userId), choice);
+  if (choice === 'skipped') return;
+  const { error } = await supabase.from('users').update({ use_for: choice }).eq('id', userId);
+  if (error) console.warn('[use-for] kept on this device only (is 051 applied?):', error.message);
 }
 
 /**
@@ -539,6 +580,8 @@ export interface Invitation {
   id: string;
   familyId: string;
   familyName: string;
+  /** 'business' for a business (051); 'family' otherwise, and before 051. */
+  familyKind: 'family' | 'business';
   invitedByName: string | null;
   /** The tree entry they would be, when the invitation came from a link. */
   personName: string | null;
@@ -557,6 +600,7 @@ export async function fetchMyInvitations(): Promise<Invitation[]> {
     id: row.id,
     familyId: row.family_id,
     familyName: row.family_name,
+    familyKind: (row as { family_kind?: string | null }).family_kind === 'business' ? 'business' : 'family',
     invitedByName: row.invited_by_name ?? null,
     personName: row.person_name ?? null,
     role: row.role,
@@ -853,7 +897,7 @@ export async function uploadDocument(params: UploadDocumentParams): Promise<stri
     // The bucket's policy refuses a family at its limit (038): say so in words.
     if (/row-level security|policy/i.test(storageErr.message)) {
       const now = await fetchStorageStatus(familyId).catch(() => null);
-      if (now && now.usedBytes >= now.limitBytes) {
+      if (now && (now.closed || now.usedBytes >= now.limitBytes)) {
         await fetchPaymentsStatus();
         throw new StorageFullError(now, fileSizeBytes);
       }
@@ -1089,12 +1133,18 @@ export async function openSharedDocument(token: string): Promise<SharedDocument 
 
 // ─── Notifications ───────────────────────────────────────────────
 
-export async function fetchUnreadNotificationCount(userId: string): Promise<number> {
-  const { count, error } = await supabase
+/**
+ * Unread notifications, leaving out those of `exceptVaults`: the vaults of
+ * the other mode, Family or Business, whose news is not shown in this one.
+ */
+export async function fetchUnreadNotificationCount(userId: string, exceptVaults: string[] = []): Promise<number> {
+  let query = supabase
     .from('notifications')
     .select('*', { count: 'exact', head: true })
     .eq('user_id', userId)
     .eq('is_read', false);
+  if (exceptVaults.length) query = query.not('family_id', 'in', `(${exceptVaults.join(',')})`);
+  const { count, error } = await query;
 
   if (error) throw error;
   return count ?? 0;
@@ -1280,6 +1330,27 @@ export interface FamilyPlanStatus extends StorageRoom {
   removalAt: string | null;
   /** How much of usedBytes is saved chats (042); 0 before. */
   chatsBytes: number;
+  /** The plan running now was switched on for a demo (051). */
+  trial: boolean;
+}
+
+/**
+ * How a family on Family Plus last paid: for a month or for a year. Since 039
+ * family_plans keeps no period, but each payment (set_family_plan) sets
+ * updated_at, so paid_until less updated_at is the time it added, plus any
+ * left over: a month, or a year. Null when the vault has no paid-up row.
+ */
+export async function fetchPlusPeriod(familyId: string): Promise<'monthly' | 'yearly' | null> {
+  const { data, error } = await supabase
+    .from('family_plans')
+    .select('paid_until, updated_at')
+    .eq('family_id', familyId)
+    .maybeSingle();
+  if (error || !data) return null;
+  const until = Date.parse(data.paid_until);
+  if (!(until > Date.now())) return null;
+  // Six months: a month paid with another left is two; a year is twelve.
+  return until - Date.parse(data.updated_at) > 183 * 86_400_000 ? 'yearly' : 'monthly';
 }
 
 /** A family's plan, its limit and what its files (and, since 042, saved chats) add up to; null before 038. */
@@ -1301,15 +1372,25 @@ export async function fetchStorageStatus(familyId: string): Promise<FamilyPlanSt
     removalAt: (row as { removal_at?: string | null }).removal_at ?? null,
     chatsBytes: Number((row as { chats_bytes?: number | null }).chats_bytes ?? 0),
     personal: (row as { personal?: boolean | null }).personal === true,
+    // 051: a business, whether its adding is closed, whether this is a trial.
+    business: (row as { business?: boolean | null }).business === true,
+    closed: (row as { closed?: boolean | null }).closed === true,
+    trial: (row as { trial?: boolean | null }).trial === true,
   };
 }
 
 // Each set of columns arrived with a migration (040: grace_days; 041:
 // max_members and voice_answers; 048: personal_storage_bytes; 049:
 // questions_per_month and questions_fair_use; 050: question_tries_per_day,
-// uploads_per_day and families_per_person). A column that is not there yet
+// uploads_per_day and families_per_person; 051: invites_per_day and
+// businesses_per_person, and the business plans' rows; 053:
+// family_questions_per_month; 054: vaults_per_person; 056: notes_per_person). A column that is not there yet
 // fails the whole select, so each one missing asks again with the set before it.
 const PLAN_LIMIT_COLUMNS = [
+  'plan, storage_bytes, grace_days, max_members, voice_answers, personal_storage_bytes, questions_per_month, questions_fair_use, question_tries_per_day, uploads_per_day, families_per_person, invites_per_day, businesses_per_person, family_questions_per_month, vaults_per_person, notes_per_person',
+  'plan, storage_bytes, grace_days, max_members, voice_answers, personal_storage_bytes, questions_per_month, questions_fair_use, question_tries_per_day, uploads_per_day, families_per_person, invites_per_day, businesses_per_person, family_questions_per_month, vaults_per_person',
+  'plan, storage_bytes, grace_days, max_members, voice_answers, personal_storage_bytes, questions_per_month, questions_fair_use, question_tries_per_day, uploads_per_day, families_per_person, invites_per_day, businesses_per_person, family_questions_per_month',
+  'plan, storage_bytes, grace_days, max_members, voice_answers, personal_storage_bytes, questions_per_month, questions_fair_use, question_tries_per_day, uploads_per_day, families_per_person, invites_per_day, businesses_per_person',
   'plan, storage_bytes, grace_days, max_members, voice_answers, personal_storage_bytes, questions_per_month, questions_fair_use, question_tries_per_day, uploads_per_day, families_per_person',
   'plan, storage_bytes, grace_days, max_members, voice_answers, personal_storage_bytes, questions_per_month, questions_fair_use',
   'plan, storage_bytes, grace_days, max_members, voice_answers, personal_storage_bytes',
@@ -1326,11 +1407,13 @@ export async function fetchPlanLimits(): Promise<PlanLimits> {
     personal_storage_bytes?: number | null;
     questions_per_month?: number | null; questions_fair_use?: number | null;
     question_tries_per_day?: number | null; uploads_per_day?: number | null; families_per_person?: number | null;
+    invites_per_day?: number | null; businesses_per_person?: number | null;
+    family_questions_per_month?: number | null; vaults_per_person?: number | null; notes_per_person?: number | null;
   };
   let answer: { data: unknown; error: { message?: string } | null } = { data: null, error: null };
   for (const columns of PLAN_LIMIT_COLUMNS) {
     answer = await supabase.from('plan_limits').select(columns);
-    if (!answer.error || !/grace_days|max_members|voice_answers|personal_storage_bytes|questions_per_month|questions_fair_use|question_tries_per_day|uploads_per_day|families_per_person/.test(answer.error.message ?? '')) break;
+    if (!answer.error || !/grace_days|max_members|voice_answers|personal_storage_bytes|questions_per_month|questions_fair_use|question_tries_per_day|uploads_per_day|families_per_person|invites_per_day|businesses_per_person|family_questions_per_month|vaults_per_person|notes_per_person/.test(answer.error.message ?? '')) break;
   }
   const rows = (answer.data ?? []) as Row[];
   if (answer.error || !rows.length) return DEFAULT_PLAN_LIMITS;
@@ -1359,12 +1442,39 @@ export async function fetchPlanLimits(): Promise<PlanLimits> {
     return row.questions_per_month == null ? null : Number(row.questions_per_month);
   };
   const fairUse = rows.find((r) => r.plan === 'plus')?.questions_fair_use;
+  // The family's shared month (053): NULL is a real answer (no family number);
+  // a row without the column is a database before 053, which keeps none.
+  const plusRow = rows.find((r) => r.plan === 'plus');
+  const familyQuestions = plusRow && 'family_questions_per_month' in plusRow
+    ? (plusRow.family_questions_per_month == null ? null : Number(plusRow.family_questions_per_month))
+    : null;
   // The day's numbers (050): NULL is a real answer (no limit); a row without
   // the column is a database before 050, which keeps none.
   const perDay = (plan: 'free' | 'plus', column: 'question_tries_per_day' | 'uploads_per_day') => {
     const row = rows.find((r) => r.plan === plan);
     if (!row || !(column in row)) return null;
     return row[column] == null ? null : Number(row[column]);
+  };
+  // Invitations a day (051); before it, 20 for every vault (050).
+  const invites = (plan: 'free' | 'plus') => {
+    const n = rows.find((r) => r.plan === plan)?.invites_per_day;
+    return n ? Number(n) : DEFAULT_PLAN_LIMITS.invitesPerDay[plan];
+  };
+  // A business's plans (051): their rows, or 051's numbers before it.
+  const businessPlan = (plan: BusinessPlan): BusinessPlanLimits => {
+    const row = rows.find((r) => r.plan === plan);
+    const d = DEFAULT_PLAN_LIMITS.business[plan];
+    if (!row) return d;
+    const perDay = (v: number | null | undefined, fallback: number | null) =>
+      v === undefined ? fallback : v == null ? null : Number(v);
+    return {
+      storage: Number(row.storage_bytes),
+      members: row.max_members ? Number(row.max_members) : d.members,
+      questionsFairUse: row.questions_fair_use ? Number(row.questions_fair_use) : d.questionsFairUse,
+      questionTriesPerDay: perDay(row.question_tries_per_day, d.questionTriesPerDay),
+      uploadsPerDay: perDay(row.uploads_per_day, d.uploadsPerDay),
+      invitesPerDay: row.invites_per_day ? Number(row.invites_per_day) : d.invitesPerDay,
+    };
   };
   const free = of('free', DEFAULT_PLAN_LIMITS.free);
   // A personal vault's own number (048), where the plan has one; before 048
@@ -1380,11 +1490,36 @@ export async function fetchPlanLimits(): Promise<PlanLimits> {
     voiceAnswers: { free: voice('free'), plus: voice('plus') },
     questions: { free: questions('free'), plus: questions('plus') },
     questionsFairUse: fairUse ? Number(fairUse) : DEFAULT_PLAN_LIMITS.questionsFairUse,
+    familyQuestions,
     questionTriesPerDay: { free: perDay('free', 'question_tries_per_day'), plus: perDay('plus', 'question_tries_per_day') },
     uploadsPerDay: { free: perDay('free', 'uploads_per_day'), plus: perDay('plus', 'uploads_per_day') },
     familiesPerPerson: freeRow && 'families_per_person' in freeRow
       ? (freeRow.families_per_person == null ? null : Number(freeRow.families_per_person))
       : null,
+    // Before 051 a business counts with the families.
+    businessesPerPerson: freeRow && 'businesses_per_person' in freeRow
+      ? (freeRow.businesses_per_person == null ? null : Number(freeRow.businesses_per_person))
+      : 0,
+    // Before 054 there is no combined number: one of each kind.
+    vaultsPerPerson: freeRow && 'vaults_per_person' in freeRow
+      ? (freeRow.vaults_per_person == null ? null : Number(freeRow.vaults_per_person))
+      : null,
+    // Before 056 there are no notes; the numbers they would have.
+    notesPerPerson: {
+      free: freeRow && 'notes_per_person' in freeRow
+        ? (freeRow.notes_per_person == null ? null : Number(freeRow.notes_per_person)) : DEFAULT_PLAN_LIMITS.notesPerPerson.free,
+      paid: (() => {
+        const row = rows.find((r) => r.plan === 'business_plus');
+        return row && 'notes_per_person' in row
+          ? (row.notes_per_person == null ? null : Number(row.notes_per_person)) : DEFAULT_PLAN_LIMITS.notesPerPerson.paid;
+      })(),
+    },
+    invitesPerDay: { free: invites('free'), plus: invites('plus') },
+    business: {
+      business_plus: businessPlan('business_plus'),
+      business_pro: businessPlan('business_pro'),
+      business_enterprise: businessPlan('business_enterprise'),
+    },
   };
 }
 
@@ -1555,7 +1690,7 @@ export async function fetchVoiceStatus(familyId: string): Promise<VoiceStatus | 
 // ─── Questions each month (049) ──────────────────────────────────
 //
 // On the free plan each person asks 20 questions a month; on Family Plus
-// there is no monthly limit (fair use: 500 a month each). rag-search counts
+// the family shares 200 a month (053; fair use of 500 each before). rag-search counts
 // each question before it answers, gives it back when no answer came, and
 // says where the count stands in its response; question_status() says the
 // same without asking anything. Before 049, or offline, nothing is counted
@@ -1819,15 +1954,20 @@ export interface AccountDeletionFamily {
   yourDocuments: number;
   /** Deleted with the account, rather than left. */
   deleted: boolean;
+  /** 'business' for a business (051). */
+  kind: 'family' | 'business';
+  /** A business whose last admin this person is: the account cannot go until it has another admin, or is deleted (051). */
+  blocked: boolean;
 }
 
 /**
- * `unavailable` (the function or migration 029 is not on this server yet) or
- * `error`, with a sentence for the person.
+ * `unavailable` (the function or migration 029 is not on this server yet),
+ * `blocked` (the last admin of a business, 051) or `error`, with a sentence
+ * for the person.
  */
 export class AccountDeletionError extends Error {
-  status: 'unavailable' | 'error';
-  constructor(status: 'unavailable' | 'error', message: string) {
+  status: 'unavailable' | 'blocked' | 'error';
+  constructor(status: 'unavailable' | 'blocked' | 'error', message: string) {
     super(message);
     this.status = status;
   }
@@ -1840,7 +1980,10 @@ async function deleteAccountInvoke<T>(body: Record<string, unknown>): Promise<T>
   const payload = (await readFunctionError(error)) as { status?: string; error?: string } | null;
   // The gateway's own 404 (not deployed here), or the database update missing.
   if ((httpStatus === 404 && !payload?.status) || payload?.status === 'needs_migration') {
-    throw new AccountDeletionError('unavailable', "Deleting your account in the app isn't available yet.");
+    throw new AccountDeletionError('unavailable', payload?.error ?? "Deleting your account in the app isn't available yet.");
+  }
+  if (payload?.status === 'business_admin') {
+    throw new AccountDeletionError('blocked', payload.error ?? "You're the last admin of a business. Make someone else an admin, or delete the business, first.");
   }
   throw new AccountDeletionError('error', payload?.error ?? error.message);
 }
@@ -1851,6 +1994,7 @@ export async function previewAccountDeletion(): Promise<AccountDeletionFamily[]>
     families: Array<{
       family_id: string; name: string; role: string; other_members: number;
       document_count: number; your_documents: number; deleted: boolean;
+      kind?: string; blocked?: boolean;
     }>;
   }>({ action: 'preview' });
   return (families ?? []).map((f) => ({
@@ -1861,7 +2005,286 @@ export async function previewAccountDeletion(): Promise<AccountDeletionFamily[]>
     documentCount: f.document_count,
     yourDocuments: f.your_documents,
     deleted: f.deleted,
+    kind: f.kind === 'business' ? 'business' : 'family',
+    blocked: f.blocked === true,
   }));
+}
+
+/**
+ * What deleting a vault would take: its documents, and who loses it. Any
+ * admin may look; only its owner (its creator while an admin, else its
+ * longest-standing admin, 057) may delete, and `ownerName` says who that is.
+ */
+export interface BusinessDeletion {
+  familyId: string;
+  name: string;
+  otherMembers: string[];
+  documentCount: number;
+  canDelete: boolean;
+  ownerName: string | null;
+}
+
+export async function previewBusinessDeletion(familyId: string): Promise<BusinessDeletion> {
+  const { business } = await deleteAccountInvoke<{
+    business: {
+      family_id: string; name: string; other_members: string[]; document_count: number;
+      can_delete?: boolean; owner_name?: string | null;
+    };
+  }>({ action: 'business_preview', family_id: familyId });
+  return {
+    familyId: business.family_id,
+    name: business.name,
+    otherMembers: business.other_members ?? [],
+    documentCount: business.document_count ?? 0,
+    // A delete-account from before 057 says nothing: 051's functions decide.
+    canDelete: business.can_delete !== false,
+    ownerName: business.owner_name ?? null,
+  };
+}
+
+/** Delete a business, its records and files, for everyone. The name must be typed. There is no undo. */
+export async function deleteBusiness(familyId: string, typedName: string): Promise<{ filesDeleted: number }> {
+  const result = await deleteAccountInvoke<{ files_deleted: number }>({
+    action: 'delete_business',
+    family_id: familyId,
+    confirm_name: typedName,
+  });
+  return { filesDeleted: result.files_deleted ?? 0 };
+}
+
+/** What deleting a family vault would take (057): the same as a business's. */
+export type FamilyDeletion = BusinessDeletion;
+
+export async function previewFamilyDeletion(familyId: string): Promise<FamilyDeletion> {
+  const { family } = await deleteAccountInvoke<{
+    family: {
+      family_id: string; name: string; can_delete: boolean; owner_name: string | null;
+      other_members: string[]; document_count: number;
+    };
+  }>({ action: 'family_preview', family_id: familyId });
+  return {
+    familyId: family.family_id,
+    name: family.name,
+    canDelete: family.can_delete === true,
+    ownerName: family.owner_name ?? null,
+    otherMembers: family.other_members ?? [],
+    documentCount: family.document_count ?? 0,
+  };
+}
+
+/** Delete a family vault, its documents and files, for everyone in it. Its owner only; the name must be typed. */
+export async function deleteFamilyVault(familyId: string, typedName: string): Promise<{ filesDeleted: number }> {
+  const result = await deleteAccountInvoke<{ files_deleted: number }>({
+    action: 'delete_family',
+    family_id: familyId,
+    confirm_name: typedName,
+  });
+  return { filesDeleted: result.files_deleted ?? 0 };
+}
+
+// ─── Making a family vault a business (054) ──────────────────────
+//
+// A small business may start in a family vault and move when it grows: an
+// admin makes it a business vault, keeping every document, member and link.
+// One way only. The server decides (business_vault_preview,
+// make_business_vault, the caller from the session) and says why not in its
+// own words: Family Plus still paid up, more than a free business keeps, a
+// personal vault. Before 054 neither function exists, and the screen says
+// the move isn't switched on yet.
+
+export type BusinessVaultBlocker = 'personal_vault' | 'already_business' | 'plan_active' | 'storage_over' | 'missing';
+
+export interface BusinessVaultPreview {
+  allowed: boolean;
+  reason: BusinessVaultBlocker | null;
+  /** The server's words for why not; null when allowed. */
+  message: string | null;
+  documents: number;
+  members: number;
+  /** People a free business may have; above it nobody is removed, nobody new is invited. */
+  freeMembers: number;
+  /** What goes: emergency cards, people in the tree without an account, the tree's links. */
+  cards: number;
+  people: number;
+  links: number;
+}
+
+export class BusinessVaultUnavailable extends Error {}
+
+const missingFunction = (error: { code?: string; message?: string }) =>
+  error.code === 'PGRST202' || error.code === '42883' || /could not find the function/i.test(error.message ?? '');
+
+export async function previewBusinessVault(familyId: string): Promise<BusinessVaultPreview> {
+  const { data, error } = await supabase.rpc('business_vault_preview', { p_family_id: familyId });
+  if (error) {
+    if (missingFunction(error)) throw new BusinessVaultUnavailable("Making a family vault a business isn't switched on yet.");
+    throw error;
+  }
+  const r = (data ?? {}) as Record<string, unknown>;
+  const n = (v: unknown) => (typeof v === 'number' ? v : Number(v ?? 0)) || 0;
+  return {
+    allowed: r.allowed === true,
+    reason: (r.reason as BusinessVaultBlocker | null) ?? null,
+    message: typeof r.message === 'string' ? r.message : null,
+    documents: n(r.documents),
+    members: n(r.members),
+    freeMembers: n(r.free_members),
+    cards: n(r.cards),
+    people: n(r.people),
+    links: n(r.links),
+  };
+}
+
+/** Make the family vault a business vault. One way: there is no undo. */
+export async function makeBusinessVault(familyId: string): Promise<void> {
+  const { error } = await supabase.rpc('make_business_vault', { p_family_id: familyId });
+  if (error) {
+    if (missingFunction(error)) throw new BusinessVaultUnavailable("Making a family vault a business isn't switched on yet.");
+    throw error;
+  }
+}
+
+// ─── Business overview and notes (056) ───────────────────────────
+//
+// What a business's papers say, as far as its plan goes: counts on every
+// plan, renewals and bills due on Business Plus, money in and out on Pro
+// and Enterprise. The server decides what to send (business_overview); the
+// app reads the dates and amounts as ingest stored them. Notes are each
+// person's own (scratch_notes: RLS on the owner), and a reminder on one is
+// for a paid plan, which the server keeps. Before 056 neither exists, and
+// the screens say they aren't switched on yet.
+
+export type OverviewTier = 'free' | 'plus' | 'pro';
+
+export interface OverviewRenewal {
+  documentId: string;
+  fileName: string;
+  category: string | null;
+  expiry: Date;
+}
+
+export interface OverviewBill {
+  documentId: string;
+  fileName: string;
+  category: string | null;
+  /** Null when the due date could not be read. */
+  due: Date | null;
+  amount: number | null;
+  invoiceNumber: string | null;
+  /** A sales invoice: money owed to the business, not by it. */
+  collect: boolean;
+}
+
+export interface BusinessOverview {
+  tier: OverviewTier;
+  counts: { renewals: number; expired: number; bills: number; invoices: number; documents: number };
+  renewals: OverviewRenewal[] | null;
+  bills: OverviewBill[] | null;
+  money: MoneyRow[] | null;
+}
+
+export class FeatureUnavailable extends Error {}
+
+export async function fetchBusinessOverview(familyId: string): Promise<BusinessOverview> {
+  const { data, error } = await supabase.rpc('business_overview', { p_family_id: familyId });
+  if (error) {
+    if (missingFunction(error)) throw new FeatureUnavailable("The overview isn't switched on yet.");
+    throw error;
+  }
+  type Raw = {
+    tier?: string;
+    counts?: Record<string, number>;
+    renewals?: { document_id: string; file_name: string; category: string | null; expiry_date: string }[] | null;
+    bills?: { document_id: string; file_name: string; category: string | null; due_date: string | null; total_amount: string | null; invoice_number: string | null }[] | null;
+    money?: { kind: 'in' | 'out'; invoice_date: string | null; total_amount: string | null; created_at: string }[] | null;
+  };
+  const r = (data ?? {}) as Raw;
+  const n = (k: string) => Number(r.counts?.[k] ?? 0) || 0;
+  return {
+    tier: r.tier === 'pro' || r.tier === 'plus' ? r.tier : 'free',
+    counts: { renewals: n('renewals'), expired: n('expired'), bills: n('bills'), invoices: n('invoices'), documents: n('documents') },
+    renewals: r.renewals
+      ? r.renewals
+        .map((x) => ({ documentId: x.document_id, fileName: x.file_name, category: x.category, expiry: parseDocumentDate(x.expiry_date) }))
+        .filter((x): x is OverviewRenewal => x.expiry !== null)
+      : null,
+    bills: r.bills
+      ? r.bills.map((x) => ({
+        documentId: x.document_id,
+        fileName: x.file_name,
+        category: x.category,
+        due: x.due_date ? parseDocumentDate(x.due_date) : null,
+        amount: parseAmount(x.total_amount),
+        invoiceNumber: x.invoice_number,
+        collect: x.category === 'Sales Invoices',
+      }))
+      : null,
+    money: r.money
+      ? r.money.map((x) => ({ kind: x.kind, date: readDate(x.invoice_date, new Date(x.created_at)), amount: parseAmount(x.total_amount) }))
+      : null,
+  };
+}
+
+/** Mark a bill paid (or not paid again): it leaves bills due. A paid plan's. */
+export async function setBillPaid(familyId: string, documentId: string, paid = true): Promise<void> {
+  const { error } = await supabase.rpc('set_bill_paid', { p_family_id: familyId, p_document_id: documentId, p_paid: paid });
+  if (error) {
+    if (missingFunction(error)) throw new FeatureUnavailable("Bills due aren't switched on yet.");
+    throw error;
+  }
+}
+
+export interface Note {
+  id: string;
+  body: string;
+  /** "2026-10-21", or null. */
+  remindOn: string | null;
+  done: boolean;
+  createdAt: string;
+}
+
+const NOTE_COLUMNS = 'id, body, remind_on, done, created_at';
+type NoteRow = { id: string; body: string; remind_on: string | null; done: boolean; created_at: string };
+const toNote = (r: NoteRow): Note => ({ id: r.id, body: r.body, remindOn: r.remind_on, done: r.done, createdAt: r.created_at });
+const notesUnavailable = () => new FeatureUnavailable("Notes aren't switched on yet.");
+
+/** Your own notes in a business, open ones first. */
+export async function fetchNotes(familyId: string): Promise<Note[]> {
+  const { data, error } = await supabase
+    .from('scratch_notes')
+    .select(NOTE_COLUMNS)
+    .eq('family_id', familyId)
+    .order('created_at', { ascending: false })
+    .limit(1000);
+  if (error) {
+    if (isMissingMigration(error)) throw notesUnavailable();
+    throw error;
+  }
+  return ((data ?? []) as NoteRow[]).map(toNote);
+}
+
+export async function addNote(familyId: string, body: string, remindOn: string | null): Promise<Note> {
+  const { data, error } = await supabase
+    .from('scratch_notes')
+    .insert({ family_id: familyId, body, remind_on: remindOn })
+    .select(NOTE_COLUMNS)
+    .single();
+  if (error) {
+    if (isMissingMigration(error)) throw notesUnavailable();
+    throw error;
+  }
+  return toNote(data as NoteRow);
+}
+
+export async function updateNote(id: string, patch: { body?: string; remind_on?: string | null; done?: boolean }): Promise<Note> {
+  const { data, error } = await supabase.from('scratch_notes').update(patch).eq('id', id).select(NOTE_COLUMNS).single();
+  if (error) throw error;
+  return toNote(data as NoteRow);
+}
+
+export async function deleteNote(id: string): Promise<void> {
+  const { error } = await supabase.from('scratch_notes').delete().eq('id', id);
+  if (error) throw error;
 }
 
 /** Delete the signed-in account, as the preview described. There is no undo. */

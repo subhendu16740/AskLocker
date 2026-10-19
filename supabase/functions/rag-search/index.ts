@@ -5,7 +5,7 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { embedQuery, EMBEDDING_MODEL } from '../_shared/embeddings.ts';
-import { requireFamilyMember, requireVaults, type Vault } from '../_shared/auth.ts';
+import { requireFamilyMember, requireVaults, selectVaultRows, vaultKind, type Vault } from '../_shared/auth.ts';
 import { runReembed, afterResponse } from '../_shared/reembed.ts';
 import { groqChat, groqText, hasGroqKey } from '../_shared/groq.ts';
 import { buildGraph, relativesNamedIn, type KinGraph, type NamedRelative } from '../_shared/kinship.ts';
@@ -179,12 +179,8 @@ Deno.serve(async (req) => {
       userId = auth.member.userId;
 
       // 1. Get family schema
-      const { data: family, error: famErr } = await supabase
-        .from('families')
-        .select('name, storage_namespace, is_personal')
-        .eq('id', family_id)
-        .single();
-
+      const { rows, error: famErr } = await selectVaultRows(supabase, [family_id]);
+      const family = rows[0];
       if (famErr || !family) {
         return jsonResponse({ error: 'Family not found' }, 404);
       }
@@ -194,6 +190,7 @@ Deno.serve(async (req) => {
         name: family.name,
         schema: family.storage_namespace,
         isPersonal: family.is_personal === true,
+        kind: vaultKind(family),
       }];
     }
     const skipped = vaults.slice(MAX_VAULTS).map(vaultLabel);
@@ -225,7 +222,9 @@ Deno.serve(async (req) => {
     if (claim && !claim.allowed) {
       console.log(claim.allowance.reason === 'tries'
         ? `[rag] Tries for today used up (${claim.allowance.tries}/${claim.allowance.triesLimit})`
-        : `[rag] Question limit reached (${claim.allowance.used}/${claim.allowance.ceiling})`);
+        : claim.allowance.reason === 'family'
+          ? `[rag] The family's questions used up (${claim.allowance.familyUsed}/${claim.allowance.familyLimit})`
+          : `[rag] Question limit reached (${claim.allowance.used}/${claim.allowance.ceiling})`);
       return jsonResponse({
         answer: questionLimitMessage(claim.allowance, language),
         sources: [],
@@ -543,8 +542,12 @@ async function searchVault(v: Vault, ctx: {
   const label = vaultLabel(v);
 
   // Who is asking, in this vault's family tree — so "Mom" and "Nani" mean the
-  // asker's mother and grandmother. Absent before 031: nothing changes.
-  const tree = await loadTree(v.familyId, ctx.userId);
+  // asker's mother and grandmother. Absent before 031: nothing changes. A
+  // business (051) has no relations to read: "Sharma" there is a supplier,
+  // not an uncle, so its tree is not read at all.
+  const tree = v.kind === 'business'
+    ? { graph: null, meId: null, meName: null } as FamilyTreeForSearch
+    : await loadTree(v.familyId, ctx.userId);
 
   // Relations become names: "Nani's pension" is searched as "… Meena Rao".
   // Checked against the question as asked, as translated and as condensed.

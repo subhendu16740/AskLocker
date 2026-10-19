@@ -19,6 +19,7 @@ const typeConfig: Record<string, { icon: string; bg: string; color: string }> = 
   invite: { icon: 'mail', bg: '#EFF6FF', color: '#2563EB' },
   // "Priya joined Verma Family" / "… said no" (037), or "You were added to <family>" (025).
   member: { icon: 'user-plus', bg: '#F0FDF4', color: '#16A34A' },
+  note: { icon: 'edit-3', bg: '#EFF6FF', color: '#2A3D66' },
   // "Today is Kamala Verma's 78th birthday" — migration 035.
   birthday: { icon: 'gift', bg: '#FDF2F8', color: '#DB2777' },
   // "Rohan shared your PAN by link" — migration 036; opens the document.
@@ -42,7 +43,7 @@ function getRelativeTime(dateStr: string): string {
 
 export default function NotificationsScreen() {
   const { user } = useAuth();
-  const { currentFamily, switchFamily } = useFamily();
+  const { currentFamily, switchFamily, otherModeVaultIds } = useFamily();
   const { notificationsEnabled, setNotificationsEnabled } = usePreferences();
   const [notifications, setNotifications] = useState<NotificationRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -51,11 +52,16 @@ export default function NotificationsScreen() {
     // Switched off in Settings: the list is hidden, so there is nothing to load.
     if (!user || !notificationsEnabled) return;
     setLoading(true);
-    fetchNotifications(user.id)
+    fetchNotifications(user.id, 50)
       .then(setNotifications)
       .catch(console.error)
       .finally(() => setLoading(false));
   }, [user?.id, notificationsEnabled]);
+
+  // Family or Business (the drawer's switch): news of the other mode's vaults
+  // is not shown here, so a business never lists a family's documents, nor the
+  // other way round. Invitations, and vaults since left, show in both.
+  const shown = notifications.filter((n) => !otherModeVaultIds.includes(n.family_id));
 
   const handlePress = useCallback(async (notif: NotificationRow) => {
     if (!user) return;
@@ -73,7 +79,7 @@ export default function NotificationsScreen() {
     // so a tap that opens something opens it in the notification's own. (A
     // family the person has since left falls back to their default, as any
     // stale choice does.)
-    const opens = !!notif.document_ref || notif.type === 'member' || notif.type === 'birthday' || notif.type === 'plan';
+    const opens = !!notif.document_ref || notif.type === 'member' || notif.type === 'birthday' || notif.type === 'plan' || notif.type === 'note';
     if (opens && notif.family_id && notif.family_id !== currentFamily?.id) {
       switchFamily(notif.family_id);
     }
@@ -87,6 +93,9 @@ export default function NotificationsScreen() {
       router.push('/family-tree' as any);
     } else if (notif.type === 'plan') {
       router.push('/settings/storage' as any);
+    } else if (notif.type === 'note') {
+      // A reminder on one of your notes (056), in its business.
+      router.push('/notes' as any);
     } else if (notif.type === 'invite') {
       // Not their family yet, so no switching: the invitation is answered there.
       router.push('/family' as any);
@@ -138,7 +147,7 @@ export default function NotificationsScreen() {
         <View style={styles.center}>
           <ActivityIndicator color={color.primary} />
         </View>
-      ) : notifications.length === 0 ? (
+      ) : shown.length === 0 ? (
         <View style={styles.center}>
           <Feather name="bell-off" size={32} color="#D1D5DB" />
           <Text style={styles.emptyTitle}>No notifications</Text>
@@ -146,7 +155,7 @@ export default function NotificationsScreen() {
         </View>
       ) : (
         <FlatList
-          data={notifications}
+          data={shown}
           keyExtractor={(item) => item.id}
           renderItem={renderItem}
           contentContainerStyle={styles.list}

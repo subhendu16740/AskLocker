@@ -3,8 +3,14 @@
 // A drawer, not a screen: it slides in from the left over the page, the page
 // stays visible behind it, and it closes with the ✕, a tap outside it, or the
 // back button. Layout from the v4 design (who you are on top, then Home,
-// Family tree, Emergency cards, Manage Family, Reminders and Settings, Sign Out
-// at the bottom), in the app's own colours.
+// Family tree, Emergency cards, Manage Family, Reminders, Family Plus and
+// Settings, Sign Out at the bottom), in the app's own colours. In a business
+// (051) there is no family tree and no emergency cards, Manage Family is
+// Manage team and Family Plus is Plans; it has its Overview and My notes
+// instead (056). Family Plus sits here, not in Settings (the owner's ask, 18
+// October 2026), its star in the ★'s colour. Under the header, Family or
+// Business: the mode the app runs in, which is the open vault's kind; a
+// business wears its own colours (vault-theme.ts).
 // ────────────────────────────────────────────────────────────────
 
 import { useEffect, useRef, useState } from 'react';
@@ -16,23 +22,35 @@ import { Feather } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { useAuth } from '../lib/auth';
-import { useFamily } from '../lib/family-context';
-import { isPersonalVault, vaultName } from '../lib/vaults';
+import { useFamily, type AppMode } from '../lib/family-context';
+import { isBusinessVault, isPersonalVault, vaultName } from '../lib/vaults';
 import { useDrawer } from '../lib/drawer-context';
-import { useFamilyPlan, useOnPlus, type PlusFeature } from '../lib/family-plan';
+import { useFamilyPlan, useModeOnPlus, type PlusFeature } from '../lib/family-plan';
 import { appVersion } from '../lib/app-info';
 import { PlusStar, PlusTag } from './screen-header';
-import { color, radius, size, space, type } from '../constants/design';
+import { biz, color, radius, size, space, type } from '../constants/design';
+import { BUSINESS_THEME, FAMILY_THEME, useVaultTheme } from '../lib/vault-theme';
+import { track } from '../lib/analytics';
+import { plusName } from '../lib/plans';
 
-type MenuItem = { icon: string; label: string; route: string; plus?: PlusFeature };
+type MenuItem = {
+  icon: string; label: string; route: string; plus?: PlusFeature; familyOnly?: boolean; businessOnly?: boolean;
+  /** The paid plans' own page: its star in the ★'s colour. */
+  plans?: boolean;
+};
 
 const menuItems: MenuItem[] = [
   { icon: 'home', label: 'Home', route: '/home' },
-  { icon: 'git-branch', label: 'Family tree', route: '/family-tree' },
-  { icon: 'plus-square', label: 'Emergency cards', route: '/emergency' },
+  // A business's own (056): what its papers say, and each person's notes.
+  { icon: 'bar-chart-2', label: 'Overview', route: '/overview', businessOnly: true },
+  { icon: 'edit-3', label: 'My notes', route: '/notes', businessOnly: true },
+  { icon: 'git-branch', label: 'Family tree', route: '/family-tree', familyOnly: true },
+  { icon: 'plus-square', label: 'Emergency cards', route: '/emergency', familyOnly: true },
   { icon: 'users', label: 'Manage Family', route: '/family' },
   // ★: part of Family Plus. A free family is shown the Family Plus page instead.
   { icon: 'clock', label: 'Reminders', route: '/reminders', plus: 'reminders' },
+  // Free beside the paid plans, and paying for Family Plus. Plans in a business.
+  { icon: 'star', label: 'Family Plus', route: '/plus', plans: true },
   { icon: 'settings', label: 'Settings', route: '/settings' },
 ];
 
@@ -41,10 +59,11 @@ const useNativeDriver = Platform.OS !== 'web';
 
 export default function ProfileDrawer() {
   const { user, signOut } = useAuth();
-  const { currentFamily, membership } = useFamily();
+  const { currentFamily, membership, mode, setMode } = useFamily();
+  const theme = useVaultTheme();
   const { isDrawerOpen, closeDrawer } = useDrawer();
   const { routeFor } = useFamilyPlan();
-  const onPlus = useOnPlus();
+  const onPlus = useModeOnPlus();
   const { width } = useWindowDimensions();
   const drawerWidth = Math.min(300, Math.round(width * 0.86));
 
@@ -77,10 +96,29 @@ export default function ProfileDrawer() {
     ? `${vaultName(currentFamily)} · yours alone`
     : [currentFamily?.name, role].filter(Boolean).join(' · ');
 
+  const business = isBusinessVault(currentFamily);
+  const items = menuItems
+    .filter((item) => !(business && item.familyOnly) && !(!business && item.businessOnly))
+    .map((item) => (!business ? item
+      : item.route === '/family' ? { ...item, icon: 'briefcase', label: 'Manage team' }
+        : item.plans ? { ...item, label: 'Plans' }
+          : item));
+
   const handleNavigate = async (item: MenuItem) => {
     closeDrawer();
     const route = item.plus ? await routeFor(item.plus, item.route) : item.route;
     setTimeout(() => router.navigate(route as any), 150);
+  };
+
+  // Family or Business (the switch under the header): opens the vault last
+  // open in that mode. Someone with no business yet is taken to make one.
+  const chooseMode = (next: AppMode) => {
+    if (next === mode) return;
+    track('mode_switched', { mode: next });
+    if (!setMode(next)) {
+      closeDrawer();
+      setTimeout(() => router.navigate('/setup-family?kind=business' as any), 150);
+    }
   };
 
   const handleSignOut = async () => {
@@ -108,7 +146,7 @@ export default function ProfileDrawer() {
           accessibilityViewIsModal
         >
           <LinearGradient
-            colors={['#2A3D66', '#4A6491']}
+            colors={theme.gradient}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={styles.profileHeader}
@@ -130,16 +168,37 @@ export default function ProfileDrawer() {
             <Text
               style={styles.profileName}
               numberOfLines={1}
-              accessibilityLabel={onPlus ? `${displayName}, Family Plus` : undefined}
+              accessibilityLabel={onPlus ? `${displayName}, ${plusName(theme.business)}` : undefined}
             >
-              {onPlus && <PlusStar onDark />}{displayName}
+              {displayName}{onPlus && <PlusStar onDark />}
             </Text>
             {!!email && <Text style={styles.profileSub} numberOfLines={1}>{email}</Text>}
             {!!familyLine && <Text style={styles.profileSub} numberOfLines={1}>{familyLine}</Text>}
           </LinearGradient>
 
+          <View style={styles.modeRow} accessibilityRole="radiogroup" accessibilityLabel="Use AskLocker for">
+            {([['family', 'users', 'Family'], ['business', 'briefcase', 'Business']] as const).map(([m, icon, label]) => {
+              const on = mode === m;
+              const tone = m === 'business' ? BUSINESS_THEME : FAMILY_THEME;
+              return (
+                <TouchableOpacity
+                  key={m}
+                  onPress={() => chooseMode(m)}
+                  style={[styles.modeBtn, on && { backgroundColor: tone.primary, borderColor: tone.primary }]}
+                  activeOpacity={0.8}
+                  accessibilityRole="radio"
+                  accessibilityState={{ checked: on }}
+                  aria-checked={on}
+                >
+                  <Feather name={icon} size={16} color={on ? '#FFFFFF' : tone.primary} />
+                  <Text style={[styles.modeText, { color: on ? '#FFFFFF' : tone.primary }]}>{label}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
           <View style={styles.menuList}>
-            {menuItems.map((item) => (
+            {items.map((item) => (
               <TouchableOpacity
                 key={item.route}
                 style={styles.menuItem}
@@ -147,8 +206,8 @@ export default function ProfileDrawer() {
                 activeOpacity={0.7}
                 accessibilityRole="button"
               >
-                <View style={styles.menuIconWrap}>
-                  <Feather name={item.icon as any} size={16} color={color.primary} />
+                <View style={[styles.menuIconWrap, { backgroundColor: theme.tint }]}>
+                  <Feather name={item.icon as any} size={16} color={item.plans ? (business ? biz.accent : color.accent) : theme.primary} />
                 </View>
                 <Text style={styles.menuLabel}>{item.label}</Text>
                 {item.plus ? <PlusTag /> : <Feather name="chevron-right" size={16} color="#9CA3AF" />}
@@ -192,6 +251,15 @@ const styles = StyleSheet.create({
     boxShadow: '8px 0px 24px rgba(13, 17, 23, 0.25)',
     elevation: 16,
   },
+  modeRow: {
+    flexDirection: 'row', gap: space.sm, paddingHorizontal: space.md, paddingTop: space.md,
+  },
+  modeBtn: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+    minHeight: 40, borderRadius: radius.control, borderWidth: 1, borderColor: color.inputBorder,
+    backgroundColor: color.surface,
+  },
+  modeText: { ...type.label, fontSize: 14 },
   profileHeader: {
     paddingTop: space.sm,
     paddingBottom: space.lg,
