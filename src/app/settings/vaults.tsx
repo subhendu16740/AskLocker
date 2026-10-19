@@ -4,19 +4,22 @@
 // actions sit under its row: Make it a business (054) and Delete — by the
 // vault's owner only, family or business (057; the screen tells another
 // admin who that is), a personal vault never, since it goes with the account.
+//
+// Above them, what the welcome questions asked (welcome.tsx): which one
+// AskLocker opens in, and the other too, which puts the Family | Business
+// switch in the menu (the owner's ask, 19 October 2026).
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useAuth } from '../../lib/auth';
-import { useFamily } from '../../lib/family-context';
-import { fetchUseFor, type UseFor } from '../../lib/api';
+import { useFamily, otherMode, type Uses } from '../../lib/family-context';
 import { isBusinessVault, isPersonalVault, vaultIcon, vaultName, vaultSubtitle } from '../../lib/vaults';
 import { BUSINESS_THEME, FAMILY_THEME, type VaultTheme } from '../../lib/vault-theme';
+import { track } from '../../lib/analytics';
 import { ScreenHeader } from '../../components/screen-header';
-import { Muted, screenStyles } from '../../components/settings-ui';
+import { Muted, OnOff, Status, screenStyles } from '../../components/settings-ui';
 import { color, radius, shadow, size, space, type } from '../../constants/design';
 import type { FamilyWithMembership } from '../../lib/database.types';
 
@@ -86,14 +89,55 @@ function CreateRow({ kind, theme }: { kind: 'family' | 'business'; theme: VaultT
   );
 }
 
+const LABEL = { family: 'Family', business: 'Business' } as const;
+
+// Which one AskLocker opens in, and the other too (the drawer's switch).
+function UsesCard() {
+  const { uses, setUses } = useFamily();
+  const [problem, setProblem] = useState(false);
+  const other = otherMode(uses.primary);
+  const change = (next: Uses) => {
+    if (next.primary === uses.primary && next.both === uses.both) return;
+    setProblem(false);
+    track('uses_chosen', { primary: next.primary, both: next.both, where: 'settings' });
+    setUses(next).catch(() => setProblem(true));
+  };
+  return (
+    <View style={styles.group}>
+      <Text style={styles.groupTitle}>How you use AskLocker</Text>
+      <View style={[styles.groupCard, styles.usesCard]}>
+        <Text style={styles.usesLabel}>Opens in</Text>
+        <View style={styles.kinds} accessibilityRole="radiogroup" accessibilityLabel="Opens in">
+          {(['family', 'business'] as const).map((m) => {
+            const theme = m === 'business' ? BUSINESS_THEME : FAMILY_THEME;
+            const on = uses.primary === m;
+            return (
+              <TouchableOpacity
+                key={m}
+                onPress={() => change({ primary: m, both: uses.both })}
+                style={[styles.kind, on && { backgroundColor: theme.primary, borderColor: theme.primary }]}
+                activeOpacity={0.8}
+                accessibilityRole="radio"
+                accessibilityState={{ checked: on }}
+                aria-checked={on}
+              >
+                <Feather name={m === 'business' ? 'briefcase' : 'users'} size={16} color={on ? '#FFFFFF' : theme.primary} />
+                <Text style={[styles.kindText, { color: on ? '#FFFFFF' : theme.primary }]}>{LABEL[m]}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+        <Text style={[styles.usesLabel, styles.usesLabelNext]}>{LABEL[other]} too</Text>
+        <OnOff value={uses.both} onChange={(on) => change({ primary: uses.primary, both: on })} label={`${LABEL[other]} too`} />
+        <Muted>With it on, the menu has a Family | Business switch.</Muted>
+        {problem && <Status kind="error">Saved on this device. AskLocker saves it to your account next time it opens.</Status>}
+      </View>
+    </View>
+  );
+}
+
 export default function VaultsScreen() {
-  const { user } = useAuth();
-  const { families, currentFamily, switchFamily, refreshFamilies } = useFamily();
-  // What the person said they use AskLocker for puts that kind first (051).
-  const [useFor, setUseFor] = useState<UseFor | 'skipped' | null>(null);
-  useEffect(() => {
-    if (user) fetchUseFor(user.id).then(setUseFor).catch(() => {});
-  }, [user?.id]);
+  const { families, currentFamily, switchFamily, refreshFamilies, uses } = useFamily();
   useFocusEffect(useCallback(() => { refreshFamilies().catch(() => {}); }, [refreshFamilies]));
 
   const familyVaults = [
@@ -160,8 +204,9 @@ export default function VaultsScreen() {
     <SafeAreaView style={screenStyles.safe} edges={['top']}>
       <ScreenHeader title="Your vaults" fallback="/settings" />
       <ScrollView contentContainerStyle={styles.body}>
+        <UsesCard />
         <Text style={styles.intro}>Tap a vault to open it.</Text>
-        {useFor === 'business' ? sections.reverse() : sections}
+        {uses.primary === 'business' ? sections.reverse() : sections}
       </ScrollView>
     </SafeAreaView>
   );
@@ -191,4 +236,13 @@ const styles = StyleSheet.create({
   actionText: { ...type.caption, fontWeight: '600' },
   createText: { ...type.label, fontWeight: '600' },
   empty: { paddingHorizontal: space.lg, paddingVertical: space.md },
+  usesCard: { padding: space.lg, gap: space.sm },
+  usesLabel: type.label,
+  usesLabelNext: { marginTop: space.sm },
+  kinds: { flexDirection: 'row', gap: space.sm },
+  kind: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.sm,
+    minHeight: 40, borderRadius: radius.control, borderWidth: 1, borderColor: color.inputBorder, backgroundColor: color.surface,
+  },
+  kindText: type.label,
 });

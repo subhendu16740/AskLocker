@@ -60,6 +60,8 @@ export const accountKey = {
   appLock: (userId: string) => `fv:app-lock:${userId}`, // fingerprint sign-in on this device: its passkey at Supabase (app-lock.tsx)
   lockOffer: (userId: string) => `fv:lock-offer:${userId}`, // "Not now" to Home's offer of fingerprint sign-in (lock-offer.tsx)
   useFor: (userId: string) => `fv:use-for:${userId}`, // what they said they use AskLocker for, or "skipped" (051, use-for-offer.tsx)
+  uses: (userId: string) => `fv:uses:${userId}`, // Family or Business first, and the other too: the account's copy, until it is saved there (family-context.tsx)
+  setupLater: (userId: string) => `fv:setup-later:${userId}`, // "Later" to Home's "Set up your family/business" (use-for-offer.tsx)
 };
 
 // What this device keeps for every account on it at once.

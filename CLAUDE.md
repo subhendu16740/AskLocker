@@ -688,6 +688,7 @@ src/
     _layout.tsx              # root Stack + AuthGate
     index.tsx                # redirect -> /onboarding or /home
     onboarding.tsx           # 3-slide intro
+    welcome.tsx              # after the first sign-in: Family or Business first, and the other too? (the drawer's switch)
     login.tsx                # Google; the first sign-in makes the account (google-sign-in.tsx: Google's own button on the web where set up); "Sign in with fingerprint" first where turned on (fingerprint-sign-in.tsx); test builds add email and password (password-sign-in.tsx)
     setup-family.tsx         # creating a vault: Family or Business at the top (051), and the first one
     notifications.tsx        # expiry alerts, uploads, invites, Family Plus
@@ -752,7 +753,7 @@ tabs. `(tabs)` is a layout group, so routes are `/home`, `/search`, `/upload`.
 | `supabase.ts` | Client init. AsyncStorage for session persistence on native only. |
 | `auth.tsx` | `AuthProvider`: session, signInWithGoogle (the redirect), signInWithGoogleToken (Google's own button's ID token), signOut. Google is the only way in; `signInWithPassword` / `signUpWithPassword` serve only the test builds' form |
 | `app-lock.tsx` | Fingerprint sign-in (`AppLockProvider`, `useAppLock()`): a Supabase passkey — turning it on and off (`registerPasskey`, `passkey.delete`), signing in with it (`signIn`, the login screen's button), the lock (opened signed in; back after `LOCK_AFTER_MS`) and unlocking with it, checking the passkey is still there (`entryStillWorks()`), and errors in words (`passkeyErrorText()`). What the device can do is `app-lock-device.ts` / `app-lock-device.web.ts`; the screen, `components/app-lock-screen.tsx`. See [Fingerprint sign-in](#fingerprint-sign-in--a-passkey-after-google-once) |
-| `family-context.tsx` | `FamilyProvider`: currentFamily, members, membership, needsFamily; `families` is every vault, the personal one included, which it makes the first time it sees an account without one (`ensurePersonalVault()`, 046); `mode` (Family or Business, the open vault's kind), `modeVaults` and `setMode()` for the drawer's switch |
+| `family-context.tsx` | `FamilyProvider`: currentFamily, members, membership, needsFamily; `families` is every vault, the personal one included, which it makes the first time it sees an account without one (`ensurePersonalVault()`, 046); `mode` (Family or Business, the open vault's kind), `modeVaults` and `setMode()` for the drawer's switch; `uses` (Family or Business first, and the other too), `needsWelcome`, `showModeSwitch` and `setUses()` (welcome.tsx, Settings › Your vaults) |
 | `vault-theme.ts` | A vault's colours: `useVaultTheme()` (the open vault's, so the mode's), `vaultTheme(family)`, `FAMILY_THEME` and `BUSINESS_THEME` (design.ts's `biz`) |
 | `vaults.ts` | Personal vault, family or business (046, 051): `vaultName()` ("Personal vault" everywhere), `isBusinessVault()`, `vaultWord()`, `vaultIcon()`, `splitVaults()`, `vaultSubtitle()`, `canDeleteDocument()` (whoever added it, or any admin in a business) |
 | `family-only.ts` | `useFamilyOnly()`: the family tree, a person's page and emergency cards send a business to Manage team (051) |
@@ -2107,17 +2108,16 @@ so storage policies live only in `019`.
   Free's limits, so demos fit the free tiers. The app cannot give the plan;
   only the SQL editor can.
 - **What a person said they use AskLocker for** (`users.use_for`, family,
-  business or both, its own column grant; the device before 051): asked
-  once on Home of someone whose only vault is their personal vault
-  (`UseForOffer`), sent to usage counts (`use_for_chosen`). It decides which
-  kind comes first in Settings › Your vaults, and whether the drawer shows
-  the Family | Business switch to someone in no business, and nothing else.
-- **An account made before 051 finds it too.** Someone in a family and no
-  business (or the other way round) who never answered is offered the other
-  kind once on Home, "Have a business too?", with Create and Not now;
-  creating one saves "both". Create a family and Create a business sit
-  under Manage Family's "Your vaults", where they move between vaults, not
-  at the foot of the member list.
+  business or both, its own column grant; the device before 051): written
+  by the welcome questions and Settings › Your vaults since 19 October 2026
+  (see [Family or Business first](#family-or-business-first--asked-after-signing-up)),
+  which keep which one comes first in the account's metadata. Home asked
+  it once before that (`UseForOffer`).
+- **An account made before the welcome questions finds the other kind too.**
+  Someone in a family and no business (or the other way round) who never
+  answered is offered the other kind once on Home, "Have a business too?",
+  with Create and Not now; either keeps the answer, Create turning the
+  other mode on.
 - **Business papers**: business categories (`document_categories.audience`:
   Sales Invoices, Purchase Bills, GST Returns, Contracts & Agreements,
   Licences & Registrations, Bank & Loans, Business Insurance, Employee
@@ -2262,11 +2262,10 @@ so storage policies live only in `019`.
   `family-context.tsx`), never a setting of its own, so nothing can
   disagree with it; the personal vault belongs to Family. No server change:
   it is which vaults the app shows.
-- **Only someone who uses AskLocker for a business sees the switch**: in a
-  business vault, or who said business or both on Home (`users.use_for`,
-  asked again each time the drawer opens). Someone here only for their
-  family never sees Business in the drawer (the owner's ask, 19 October
-  2026); Settings › Your vaults still creates a business for anyone.
+- **Only someone who chose both sees the switch** (the welcome questions,
+  or Settings › Your vaults), or someone in the other mode now, so they can
+  get back (`showModeSwitch`); see
+  [Family or Business first](#family-or-business-first--asked-after-signing-up).
 - **Home, Ask and Upload show only the mode's vaults** (`modeVaults`):
   Business lists, asks across and saves to businesses alone; Family the
   personal vault and families. Ask sends `family_ids` for them (`'all'`
@@ -2301,6 +2300,48 @@ so storage policies live only in `019`.
   Make this a business vault, and the business-only screens (Plans,
   Overview, My notes, Delete this business). One place to change it: `biz`.
 - **Usage counts**: `mode_switched`, with the mode chosen.
+
+### Family or Business first — asked after signing up
+
+- **Two questions after the first sign-in** (`src/app/welcome.tsx`, the
+  owner's ask, 19 October 2026): what will you use AskLocker for, Family or
+  Business, then the other too? One tap each. AskLocker opens in the first;
+  with the other too, the drawer has the Family | Business switch, and
+  without, it never shows the other. Settings › Your vaults changes both
+  ("Opens in", and "Business too" or "Family too", On or Off).
+- **Asked of a new account only** (`needsWelcome`): in no family or business
+  yet and never answered. Right after signing up that is known at once,
+  from when the account was made (15 minutes); for an older account with
+  only its personal vault and no answer to Home's older question, once
+  those are in. The AuthGate sends it from the tabs to `/welcome`.
+- **Business first goes on to create the business**, since Business mode
+  needs one, unless an invitation from one is waiting on Home. Family first
+  lands on Home in the personal vault, where "Set up your family" offers a
+  family vault (`UseForOffer`; Later hides it on the device). Business
+  first without a business gets "Set up your business" there.
+- **Kept on the account, not in a table**: the sign-in account's metadata
+  (`primary_mode`, `both_modes`; `saveUses()` in `api.ts`), which every
+  device has the moment it signs in, so the app opens in the first mode
+  with no query, and no migration was needed. `users.use_for` is written
+  too ('family', 'business' or 'both'), as 051 had it. A choice the account
+  could not take (offline) stays on the device (`accountKey.uses`) and is
+  offered to the account at the next start.
+- **It opens in the first mode** (`family-context.tsx`): at the vault last
+  open there on this device, else (in Family) a family before the personal
+  vault. Switching during a visit is free; the next start opens the first
+  again. Without a vault of that kind (a business not made yet), where they
+  last were.
+- **The switch shows with both on, or while in the other mode**, so someone
+  who opened a vault of the other kind from Settings › Your vaults can get
+  back. Creating a vault of the other kind, or accepting an invitation to
+  one, turns the other mode on: they use both now. Turning it off while in
+  it goes back to the first.
+- **Someone who never answered** (an account from before) is worked out from
+  Home's older answer, else their vaults: in both kinds, both on; in
+  businesses only, Business first. Nothing is written for them until they
+  choose.
+- **Usage counts**: `uses_chosen`, with the first mode, whether both, and
+  where (welcome, settings or home).
 
 ### Your vaults — in Settings, and a vault deleted by its owner (057)
 

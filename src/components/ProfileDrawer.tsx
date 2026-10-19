@@ -11,8 +11,9 @@
 // October 2026), its star in the ★'s colour. Under the header, Family or
 // Business: the mode the app runs in, which is the open vault's kind; a
 // business wears its own colours (vault-theme.ts). The switch is only for
-// someone who uses AskLocker for a business: someone here only for their
-// family never sees it (the owner's ask, 19 October 2026).
+// someone who chose both after signing up (welcome.tsx) or in Settings ›
+// Your vaults: someone here for one never sees the other (the owner's ask,
+// 19 October 2026).
 // ────────────────────────────────────────────────────────────────
 
 import { useEffect, useRef, useState } from 'react';
@@ -24,7 +25,6 @@ import { Feather } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { useAuth } from '../lib/auth';
-import { fetchUseFor } from '../lib/api';
 import { useFamily, type AppMode } from '../lib/family-context';
 import { isBusinessVault, isPersonalVault, vaultName } from '../lib/vaults';
 import { useDrawer } from '../lib/drawer-context';
@@ -62,7 +62,7 @@ const useNativeDriver = Platform.OS !== 'web';
 
 export default function ProfileDrawer() {
   const { user, signOut } = useAuth();
-  const { currentFamily, families, membership, mode, setMode } = useFamily();
+  const { currentFamily, membership, mode, setMode, showModeSwitch } = useFamily();
   const theme = useVaultTheme();
   const { isDrawerOpen, closeDrawer } = useDrawer();
   const { routeFor } = useFamilyPlan();
@@ -113,25 +113,11 @@ export default function ProfileDrawer() {
     setTimeout(() => router.navigate(route as any), 150);
   };
 
-  // Family or Business (the switch under the header), shown to someone in a
-  // business, or who said on Home they use AskLocker for business or both
-  // (users.use_for, 051). Asked again each time the drawer opens, since they
-  // may have just answered. Anyone else creates a business from Settings ›
-  // Your vaults.
-  const inBusiness = families.some((f) => isBusinessVault(f.families));
-  const [saidBusiness, setSaidBusiness] = useState(false);
-  useEffect(() => {
-    if (!user || inBusiness) return;
-    let cancelled = false;
-    fetchUseFor(user.id)
-      .then((u) => { if (!cancelled) setSaidBusiness(u === 'business' || u === 'both'); })
-      .catch(() => {});
-    return () => { cancelled = true; };
-  }, [user?.id, inBusiness, isDrawerOpen]);
-  const showModes = inBusiness || saidBusiness;
-
-  // The switch opens the vault last open in that mode. Someone with no
-  // business yet is taken to make one.
+  // Family or Business (the switch under the header), only for someone who
+  // chose both (the welcome questions, Settings › Your vaults), or who is in
+  // the other mode now and needs a way back (family-context.tsx). It opens
+  // the vault last open in that mode; someone with no business yet is taken
+  // to make one.
   const chooseMode = (next: AppMode) => {
     if (next === mode) return;
     track('mode_switched', { mode: next });
@@ -196,7 +182,7 @@ export default function ProfileDrawer() {
             {!!familyLine && <Text style={styles.profileSub} numberOfLines={1}>{familyLine}</Text>}
           </LinearGradient>
 
-          {showModes && (
+          {showModeSwitch && (
             <View style={styles.modeRow} accessibilityRole="radiogroup" accessibilityLabel="Use AskLocker for">
               {([['family', 'users', 'Family'], ['business', 'briefcase', 'Business']] as const).map(([m, icon, label]) => {
                 const on = mode === m;
