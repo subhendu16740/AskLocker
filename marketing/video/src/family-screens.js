@@ -291,7 +291,8 @@ function homeScreen() {
         <div class="bell-btn" id="home-bell">${icon('bell', 20, '#fff')}</div></div>
       <div class="home-search">${icon('search', 18, 'rgba(255,255,255,0.8)')}<span class="ph">Search documents...</span>${icon('mic', 18, 'rgba(255,255,255,0.8)')}</div>
     </div>
-    <div class="section"><div class="stats-bar"><span class="stat-link"><u>33 Documents</u>${icon('chevron-right', 14, '#2A3D66')}</span><span class="div">|</span><span>2 Vaults</span></div></div>
+    <div class="section"><div class="stats-bar">${['33 Documents', '4 Members', '11 Categories']
+      .map((l) => `<span class="stat-link"><u>${l}</u>${icon('chevron-right', 14, '#2A3D66')}</span>`).join('<span class="div">|</span>')}</div></div>
     <div class="section"><div class="section-head"><div class="section-title">Recent Documents</div><span class="see-all">See all</span></div><div class="doc-list">
       ${doc(STORY.scanFile, 'image', 'Health Insurance', '#22C55E', true, `Father · ${STORY.papa} · Today`)}
       ${doc('Car Insurance.pdf', 'file-text', 'Vehicle Insurance', '#6B7280', true, `${STORY.youFull} · Today`)}
@@ -310,8 +311,8 @@ function homeScreen() {
         ${switchRow}
         <div class="dr-menu">
           ${[['dr-home', 'home', 'Home'], ['dr-tree', 'git-branch', 'Family tree'], ['dr-emerg', 'plus-square', 'Emergency cards'],
-            ['dr-manage', 'users', 'Manage Family'], ['dr-rem', 'clock', 'Reminders', true], ['dr-set', 'settings', 'Settings']]
-            .map(([id, ic, label, plus]) => `<div class="dr-row" id="${id}"><span class="dr-ic">${icon(ic, 16, '#2A3D66')}</span><span class="dr-l">${label}</span>
+            ['dr-manage', 'users', 'Manage Family'], ['dr-rem', 'clock', 'Reminders', true], ['dr-plus', 'star', 'Family Plus'], ['dr-set', 'settings', 'Settings']]
+            .map(([id, ic, label, plus]) => `<div class="dr-row" id="${id}"><span class="dr-ic">${icon(ic, 16, ic === 'star' ? '#D4807B' : '#2A3D66')}</span><span class="dr-l">${label}</span>
               ${plus ? plusTag() : icon('chevron-right', 16, '#9CA3AF')}</div>`).join('')}
         </div>
         <div class="dr-foot"><div class="dr-out">${icon('log-out', 16, '#DC2626')}<span>Sign Out</span></div><div class="dr-ver">AskLocker 1.0.0</div></div>

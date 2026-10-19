@@ -1,25 +1,25 @@
-// HTML for the business film. The phone screens are ports of the real screens
-// in Business mode (src/app/** with src/lib/vault-theme.ts's teal), filled with
-// a fictional business: Arora Electric, an electrical-supplies distributor in
-// Pune, on the Pro plan. Its owner Kavita is the only admin; her CA, Pooja,
-// joins as a viewer. Every name, number and GSTIN here is made up; the GSTINs
-// carry valid check characters so the app's extractor would read them.
+// HTML for the business film: a formal product film, not a story. Its layers
+// are a title, the challenge (what a business keeps, and the dates in it), the
+// product in five parts, five numbered chapters beside the phone, access and
+// control, the plans and a closing card. The phone screens are ports of the
+// real screens in Business mode (src/app/** with src/lib/vault-theme.ts's
+// teal), filled with a fictional business as sample data: Arora Electric, an
+// electrical-supplies distributor in Pune, on the Pro plan. Every name, number
+// and GSTIN is made up; the GSTINs carry valid check characters so the app's
+// extractor would read them.
 import {
-  icon, spinner, sbFill, plusTag, plusStar, header, tabBar, avatar, words, categoryChips, ocrSlot, uploadedDialog,
-  lockScreen, lockNotif, pushNotif, callScreen, cameraScreen, phoneShell, askMessages, askHeader, searchIn, saveBar,
-  askInput, whyHow, trustBlock, brand, THEME,
+  icon, spinner, sbFill, plusTag, plusStar, header, tabBar, words, categoryChips, ocrSlot, uploadedDialog,
+  lockScreen, pushNotif, cameraScreen, phoneShell, askMessages, askHeader, saveBar, askInput, brand, THEME,
 } from './parts.js';
 
 const TEAL = THEME.business.primary;
 
-// ─── Story data (edit here to re-cast the film) ──────────────────────────
+// ─── Sample data (edit here to re-cast the film) ─────────────────────────
 export const BIZ = {
   name: 'Arora Electric',
   owner: 'Kavita Arora',
   email: 'kavita@example.com',
   gstin: '27BQKPA4821M1ZP',
-  family: 'Arora Family',
-  ca: 'Pooja Joshi',
   caShown: 'Pooja, our CA',
   caEmail: 'pooja@example.com',
   supplier: 'Mehta Cables',
@@ -28,8 +28,11 @@ export const BIZ = {
   // A camera scan is saved as scan_<Date.now()>.jpg (upload.tsx): this one was
   // taken at 10:14 on Saturday 3 October 2026.
   scanFile: 'scan_1791002692000.jpg',
+  // The closing card. Leave url empty to show no address.
+  tagline: 'Every bill, licence and contract. One question away.',
   cta: 'Start your business vault',
   ctaNote: 'Free to start · Plans from ₹500 a month + GST',
+  url: 'asklocker.com',
 };
 
 // Upload offers a business's twelve categories, in this order, before More…
@@ -142,89 +145,60 @@ function askScreen() {
   </section>`;
 }
 
-// The CA's phone, the same evening. She is in her clients' businesses too, so
-// she asks in one of them, and each source says which.
-function caAskScreen() {
-  const bills = [['MC-7702', 'Mehta Cables', '₹84,960'], ['SS-0861', 'Shakti Switchgear', '₹36,580'],
-    ['KL-551', 'Kiran Lighting', '₹22,420'], ['SC-1093', 'Sai Conduits', '₹15,340']];
-  const sources = bills.map(([no, who]) => `<div class="src-chip">${icon('file-text', 12, '#2A3D66')}<span>${who} ${no}.pdf</span><span class="src-vault">· ${BIZ.name}</span></div>`).join('');
-  return `<section class="scr biz" id="scr-ca">${sbFill}
-    ${askHeader('ca', 'business')}
-    ${searchIn(BIZ.name)}
-    <div class="ask-area" id="ca-area"><div class="chat-stack" id="ca-stack">
-      <div class="msg user" id="ca-q1"><div class="bubble">Show me September's purchase bills</div></div>
-      <div class="msg ai" id="ca-a1"><div class="ai-avatar">${icon('cpu', 14, '#2A3D66')}</div>
-        <div class="bubble"><div>I found 4 purchase bills from September 2026:</div>
-          <ul class="ans-list">${bills.map(([no, who, amt]) => `<li>${who}, ${no}: <b>${amt}</b></li>`).join('')}</ul>
-          <div class="sources">${sources}</div></div></div>
-    </div></div>
-    <div class="ask-bottom">${saveBar('ca')}${askInput('ca')}</div>
-    ${tabBar('search', 'ca', 'business')}
-  </section>`;
-}
+// ─── Home and the drawer (home.tsx, ProfileDrawer.tsx), in Business mode ─
 
-// ─── Home and the drawer, in both modes ──────────────────────────────────
-
-function drawerPanel(mode) {
-  const biz = mode === 'business';
-  const c = THEME[mode].primary;
-  const items = biz
-    ? [['home', 'Home'], ['bar-chart-2', 'Overview', '', 'dr-overview'], ['edit-3', 'My notes'], ['briefcase', 'Manage team', '', 'dr-team'], ['clock', 'Reminders', 'Plus'], ['settings', 'Settings']]
-    : [['home', 'Home'], ['git-branch', 'Family tree'], ['plus-square', 'Emergency cards'], ['users', 'Manage Family'], ['clock', 'Reminders', 'Family Plus'], ['settings', 'Settings']];
+function drawerPanel() {
+  // Plans is the business's Family Plus row: its star in the business's gold.
+  const items = [['home', 'Home'], ['bar-chart-2', 'Overview', '', 'dr-overview'], ['edit-3', 'My notes'],
+    ['briefcase', 'Manage team', '', 'dr-team'], ['clock', 'Reminders', 'Plus'], ['star', 'Plans'], ['settings', 'Settings']];
   const modeBtn = (m, ic, label) => {
-    const on = m === mode;
+    const on = m === 'business';
     const tone = THEME[m].primary;
-    return `<div class="dr-mode${on ? ' on' : ''}" id="${mode}-mode-${m}" style="${on ? `background:${tone};border-color:${tone}` : ''}">${icon(ic, 16, on ? '#fff' : tone)}<span style="color:${on ? '#fff' : tone}">${label}</span></div>`;
+    return `<div class="dr-mode${on ? ' on' : ''}" style="${on ? `background:${tone};border-color:${tone}` : ''}">${icon(ic, 16, on ? '#fff' : tone)}<span style="color:${on ? '#fff' : tone}">${label}</span></div>`;
   };
-  return `<div class="drawer-panel${biz ? ' biz' : ''}">
+  return `<div class="drawer-panel biz">
     <div class="dr-head">
       <div class="dr-top"><div class="dr-av">K</div><span class="dr-x">${icon('x', 24, '#fff')}</span></div>
-      <div class="dr-name">${BIZ.owner}${plusStar}</div><div class="dr-line">${BIZ.email}</div><div class="dr-line">${biz ? BIZ.name : BIZ.family} · Admin</div>
+      <div class="dr-name">${BIZ.owner}${plusStar}</div><div class="dr-line">${BIZ.email}</div><div class="dr-line">${BIZ.name} · Admin</div>
     </div>
     <div class="dr-switch">${modeBtn('family', 'users', 'Family')}${modeBtn('business', 'briefcase', 'Business')}</div>
     <div class="dr-menu">
-      ${items.map(([ic, label, plus, id]) => `<div class="dr-row"${id ? ` id="${id}"` : ''}><span class="dr-ic">${icon(ic, 16, c)}</span><span class="dr-l">${label}</span>
+      ${items.map(([ic, label, plus, id]) => `<div class="dr-row"${id ? ` id="${id}"` : ''}><span class="dr-ic">${icon(ic, 16, ic === 'star' ? '#B7791F' : TEAL)}</span><span class="dr-l">${label}</span>
         ${plus ? plusTag(plus) : icon('chevron-right', 16, '#9CA3AF')}</div>`).join('')}
     </div>
     <div class="dr-foot"><div class="dr-out">${icon('log-out', 16, '#DC2626')}<span>Sign Out</span></div><div class="dr-ver">AskLocker 1.0.0</div></div>
   </div>`;
 }
 
-function homeScreen(mode) {
-  const biz = mode === 'business';
-  const id = biz ? 'scr-home' : 'scr-fhome';
-  // Business categories are grey on Home; a family's take home.tsx's colours.
-  const doc = (name, ic, cat, color, vaultIcon, vault, line) => `<div class="doc-card">
-      <div class="doc-icon ${biz ? 'grad-biz' : 'grad'}">${icon(ic, 18, '#fff')}</div>
+function homeScreen() {
+  // Business categories are grey on Home, and each document wears the business's tag.
+  const doc = (name, ic, cat, line) => `<div class="doc-card">
+      <div class="doc-icon grad-biz">${icon(ic, 18, '#fff')}</div>
       <div class="doc-info"><div class="doc-title">${name}</div>
-        <div class="doc-meta"><span class="cat-badge" style="background:${color}">${cat}</span>
-          <span class="vault-tag${biz ? ' biz' : ''}">${icon(vaultIcon, 12, biz ? TEAL : '#2A3D66')}<span>${vault}</span></span>
+        <div class="doc-meta"><span class="cat-badge" style="background:#6B7280">${cat}</span>
+          <span class="vault-tag biz">${icon('briefcase', 12, TEAL)}<span>${BIZ.name}</span></span>
           <span>${line}</span></div></div></div>`;
-  const docs = biz ? `
-      ${doc('Tax Invoice AE-0142.pdf', 'file-text', 'Sales Invoices', '#6B7280', 'briefcase', BIZ.name, 'Today')}
-      ${doc('Shakti Switchgear SS-0889.pdf', 'file-text', 'Purchase Bills', '#6B7280', 'briefcase', BIZ.name, 'Yesterday')}
-      ${doc('Salary Register Sep 2026.pdf', 'file-text', 'Payroll', '#6B7280', 'briefcase', BIZ.name, '3 days ago')}
-      ${doc(BIZ.scanFile, 'image', 'Purchase Bills', '#6B7280', 'briefcase', BIZ.name, '2 weeks ago')}
-      ${doc('Shop Insurance 2025-26.pdf', 'file-text', 'Business Insurance', '#6B7280', 'briefcase', BIZ.name, '2 weeks ago')}` : `
-      ${doc('Raj_Passport.pdf', 'file-text', 'Passport', '#3B82F6', 'users', BIZ.family, 'Husband · Raj Arora · Today')}
-      ${doc('Health Policy 2026.pdf', 'file-text', 'Health Insurance', '#22C55E', 'users', BIZ.family, 'Kavita Arora · Yesterday')}
-      ${doc('Ishaan_School_Fees.pdf', 'file-text', 'Educational Certificates', '#6B7280', 'users', BIZ.family, 'Son · Ishaan Arora · 4 days ago')}
-      ${doc('PAN_Card_Kavita.pdf', 'file-text', 'PAN Card', '#6B7280', 'lock', 'Personal vault', 'Kavita Arora · 1 week ago')}`;
-  const stats = biz
-    ? `<span class="stat-link"><u>214 Documents</u>${icon('chevron-right', 14, TEAL)}</span><span class="div">|</span><span>3 Members</span><span class="div">|</span><span>9 Categories</span>`
-    : `<span class="stat-link"><u>41 Documents</u>${icon('chevron-right', 14, '#2A3D66')}</span><span class="div">|</span><span>2 Vaults</span>`;
-  return `<section class="scr${biz ? ' biz' : ''}" id="${id}">${sbFill}
+  // Each count opens All documents at its own tab.
+  const stats = ['214 Documents', '3 Members', '9 Categories']
+    .map((l) => `<span class="stat-link"><u>${l}</u>${icon('chevron-right', 14, TEAL)}</span>`).join('<span class="div">|</span>');
+  return `<section class="scr biz" id="scr-home">${sbFill}
     <div class="home-header">
-      <div class="home-top"><div class="home-left"><div class="profile-btn" id="${id}-avatar">K</div>
+      <div class="home-top"><div class="home-left"><div class="profile-btn" id="scr-home-avatar">K</div>
         <div><div class="greeting">Good morning</div><div class="header-title">${BIZ.owner}${plusStar}</div></div></div>
         <div class="bell-btn">${icon('bell', 20, '#fff')}</div></div>
       <div class="home-search">${icon('search', 18, 'rgba(255,255,255,0.8)')}<span class="ph">Search documents...</span>${icon('mic', 18, 'rgba(255,255,255,0.8)')}</div>
     </div>
     <div class="section"><div class="stats-bar">${stats}</div></div>
     <div class="section"><div class="section-head"><div class="section-title">Recent Documents</div><span class="see-all">See all</span></div>
-      <div class="doc-list">${docs}</div></div>
-    ${tabBar('home', biz ? 'home' : 'fhome', mode)}
-    <div class="drawer" id="${biz ? 'drawer' : 'fdrawer'}"><div class="drawer-dim"></div>${drawerPanel(mode)}</div>
+      <div class="doc-list">
+        ${doc('Tax Invoice AE-0142.pdf', 'file-text', 'Sales Invoices', 'Today')}
+        ${doc('Shakti Switchgear SS-0889.pdf', 'file-text', 'Purchase Bills', 'Yesterday')}
+        ${doc('Salary Register Sep 2026.pdf', 'file-text', 'Payroll', '3 days ago')}
+        ${doc(BIZ.scanFile, 'image', 'Purchase Bills', '2 weeks ago')}
+        ${doc('Shop Insurance 2025-26.pdf', 'file-text', 'Business Insurance', '2 weeks ago')}
+      </div></div>
+    ${tabBar('home', 'home', 'business')}
+    <div class="drawer" id="drawer"><div class="drawer-dim"></div>${drawerPanel()}</div>
   </section>`;
 }
 
@@ -354,137 +328,161 @@ function teamScreen() {
 
 export function phone() {
   return phoneShell(`
-    ${lockScreen('scr-lock', '8:40', 'Sunday, 18 October', lockNotif('ln1', `${BIZ.ca} (CA)`, [
-      'Kavita ji, September ke saare purchase bills bhej dijiye 🙏',
-      '20 tareekh ko 3B file karna hai. Kal subah tak chahiye.',
-    ]))}
-    ${callScreen({ label: 'Calling…', name: 'Ravi (Accounts)', sub: 'Mobile', outgoing: true, missed: 'No answer' })}
     ${uploadScreen()}
     ${cameraScreen(billPaper())}
     ${tagScreen()}
     ${askScreen()}
-    ${homeScreen('business')}
-    ${homeScreen('family')}
+    ${homeScreen()}
     ${overviewScreen()}
     ${lockScreen('scr-lockday', '9:05', 'Monday, 19 October', `<div class="lstack">
       ${pushNotif('pn1', 'Shop Insurance 2025-26 expires in 30 days', 'Expires on 18 Nov 2026. A good time to renew it.')}
       ${pushNotif('pn2', `Call ${BIZ.supplier} about the credit note`, `Your note in ${BIZ.name}`)}</div>`)}
     ${notesScreen()}
-    ${teamScreen()}
-    ${caAskScreen()}
-    ${lockScreen('scr-lock2', '8:46', 'Sunday, 18 October', lockNotif('ln2', `${BIZ.ca} (CA)`, ['September ke bills mil gaye, AskLocker mein 👍 Kal file kar dungi.']))}`, '8:40');
+    ${teamScreen()}`, '10:14');
 }
 
 // ─── Film layers ─────────────────────────────────────────────────────────
 
-export function scrambleCards() {
-  const row = (who, what, when) => `<div class="sc-row"><span><b>${who}</b> · ${what}</span><span>${when}</span></div>`;
-  return `
-  <div class="sc" id="sc-chat" style="width:460px">
-    <div class="sc-top">${icon('message-circle', 18, '#6B7280')}<b>Chats</b></div>
-    <div class="sc-search">${icon('search', 18, '#6B7280')}<span class="sc-q" id="sc-q"></span><span class="caret" id="sc-caret"></span></div>
-    <div class="sc-count" id="sc-count">318 messages</div>
-    ${row(BIZ.supplier, '📄 MC-7781.pdf', '2 Oct')}
-    ${row('Shakti Switchgear', '📷 Photo', '29 Sep')}
-    ${row('Ravi (Accounts)', 'sept bills FINAL.zip', '1 Oct')}
-  </div>
-  <div class="sc" id="sc-mail" style="width:450px">
-    <div class="sc-top">${icon('inbox', 18, '#6B7280')}<b>${BIZ.email}</b></div>
-    <div class="sc-search">${icon('search', 18, '#6B7280')}<span>invoice september</span></div>
-    <div class="sc-count" style="opacity:1">1,206 results</div>
-    ${row('Tax Invoice SS-0861', 'Please find attached…', 'Sep 2026')}
-    ${row('Re: Re: Fwd: bill', 'sending again, last one…', 'Sep 2026')}
-  </div>
-  <div class="sc sc-note" id="sc-note" style="width:340px"><i class="tape"></i>
-    Sept bills:<br><u>blue file</u>, counter,<br>bottom drawer (ask Ravi)
-  </div>
-  <div class="sc" id="sc-photos" style="width:400px">
-    <div class="sc-top">${icon('image', 18, '#6B7280')}<b>Photos</b><span class="sc-dim">2,931 items</span></div>
-    <div class="sc-grid">${Array.from({ length: 12 }, (_, i) => `<i class="ph${i % 3}"></i>`).join('')}</div>
-  </div>
-  <div class="sc" id="sc-pc" style="width:430px">
-    <div class="sc-top">${icon('monitor', 18, '#6B7280')}<b>\\\\RAVI-PC\\Accounts\\2026</b></div>
-    <div class="sc-alert">${icon('alert-triangle', 22, '#B91C1C')}<div><b>Ravi-PC is not reachable.</b><br>Check that the computer is on and connected to the network.</div></div>
+// The five parts of the product, in the order the chapters show them.
+export const CHAPTERS = [
+  ['ch-capture', 'Capture', 'upload', 'Scan or upload. AskLocker files it and reads it.'],
+  ['ch-ask', 'Ask', 'message-circle', 'Plain questions, answered from your documents.'],
+  ['ch-overview', 'Overview', 'bar-chart-2', 'Renewals, bills due, money in and out.'],
+  ['ch-alerts', 'Reminders', 'bell', 'Alerts before a licence or policy lapses.'],
+  ['ch-team', 'Team', 'users', 'Your team and your accountant, by invitation.'],
+];
+const num = (i) => String(i + 1).padStart(2, '0');
+
+/** A full-screen statement: a small label, a heading, and what follows it. */
+function block(id, eyebrow, heading, inner = '', note = '') {
+  return `<div class="fm-block" id="${id}">
+    <div class="fm-eyebrow">${eyebrow}</div>
+    <div class="fm-h">${words(heading)}</div>
+    ${inner}${note ? `<div class="fm-p">${note}</div>` : ''}
   </div>`;
 }
 
-export function textBlocks() {
+/** A chapter beside the phone: its number and name, a heading, three points,
+ * and the plan it needs where it needs one. In 9:16 a callout takes the place
+ * of the points and the plan line (the engine hides .sub). */
+function chapter(i, heading, points, plan = '') {
+  const [id, name] = CHAPTERS[i];
+  return `<div class="fm-chapter" id="${id}">
+    <div class="fm-label"><span class="fm-num">${num(i)}</span><span>${name}</span></div>
+    <div class="fm-h2">${words(heading)}</div>
+    <div class="sub fm-bullets">${points.map((p) => `<div class="fm-b"><span class="fm-bi">${icon('check', 18, THEME.business.primary, 2.6)}</span><span>${p}</span></div>`).join('')}
+      ${plan ? `<div class="fm-plan">${icon('star', 16, '#B7791F', 2.4)}<span>${plan}</span></div>` : ''}</div>
+  </div>`;
+}
+
+// The next 90 days at Arora Electric, from "today", Monday 19 October 2026:
+// the dates its own documents carry, the same ones Overview lists (bills to
+// pay and to collect, renewals). Nothing here is a date AskLocker does not read.
+const DUE = [
+  ['25 Oct', 'In 6 days', 'Supplier bill due', 'Mehta Cables, ₹1,18,000', 'soon'],
+  ['2 Nov', 'In 14 days', 'Supplier bill due', 'Shakti Switchgear, ₹36,580'],
+  ['13 Nov', 'In 25 days', 'Payment to collect', 'Patil Builders, ₹47,200'],
+  ['18 Nov', 'In 30 days', 'Policy expires', 'Shop insurance', 'soon'],
+  ['31 Dec', 'In 73 days', 'Lease ends', 'Godown leave and licence'],
+];
+
+function timeline() {
+  return `<div class="fm-tl"><i class="fm-line" id="fm-line"></i>
+    ${DUE.map(([date, when, what, detail, tone], i) => `<div class="fm-node" id="node-${i + 1}"><i class="fm-dot"></i>
+      <div class="fm-nd"><b>${date}</b><span class="fm-when${tone ? ` ${tone}` : ''}">${when}</span></div>
+      <div class="fm-nw">${what}</div><div class="fm-nx">${detail}</div></div>`).join('')}
+  </div>`;
+}
+
+export function textBlocks(short) {
+  const docs = [['file-text', 'Sales Invoices'], ['clipboard', 'Purchase Bills'], ['percent', 'GST Returns'],
+    ['award', 'Licences & Registrations'], ['pen-tool', 'Contracts & Agreements'], ['umbrella', 'Business Insurance'],
+    ['credit-card', 'Bank & Loans'], ['users', 'Payroll']];
+  const shown = short ? CHAPTERS.slice(0, 3) : CHAPTERS;
+  const tick = (on) => (on ? icon('check', 22, THEME.business.primary, 2.6) : icon('minus', 22, '#B8C4C2', 2.4));
+  const row = (label, cells, cls = '') => `<tr class="${cls}"><td>${label}</td>${cells.map((c) => `<td>${typeof c === 'boolean' ? tick(c) : c}</td>`).join('')}</tr>`;
   return `
-  <div class="tblock on-dark" id="t-hook">
-    <div class="clock-big"><span class="t">8:40</span><span class="ampm">PM</span></div>
-    <div class="where">Kavita runs <b>${BIZ.name}</b> in Pune.<br>The GST return is due on the <b>20th</b>.</div>
-  </div>
-  <div class="time-chip" id="time-chip">${icon('clock', 24, '#D4807B', 2.4)}<span id="chip-time">8:42 PM</span></div>
-  <div class="cap-top" id="caps">
-    <div class="cap-line" id="cap1">${words('Some came in chats…')}</div>
-    <div class="cap-line" id="cap2">${words('…some by email…')}</div>
-    <div class="cap-line" id="cap3">${words('…some on paper, somewhere in the shop.')}</div>
-    <div class="cap-line" id="cap4">${words('…some are photos, among 2,931.')}</div>
-    <div class="cap-line" id="cap5">${words("The rest are on Ravi's computer.")}</div>
-  </div>
-  <div class="center-block on-dark" id="t-insight">
-    <div class="big" id="ins-1">${words('The bills are somewhere.')}</div>
-    <div class="big-em" id="ins-2">${words("The deadline isn't.")}</div>
-  </div>
-  <div class="q-block on-dark" id="t-question"><div class="big">${words('Now imagine Ravi leaves for good.')}</div></div>
-  ${brand('brand', 'Every bill, licence and contract. One question away.', { badge: 'for Business' })}
-  ${whyHow('t-scan', 'Scan and file', 'camera', 'Bills turn up everywhere.|*Nobody files them.*',
-    'Snap it. AskLocker files it.', 'It picks the category and reads the GSTIN, bill number, total and due date.')}
-  ${whyHow('t-ask', 'Ask', 'message-circle', 'Your CA asks for one bill.|*You scroll for an hour.*',
-    "Ask, the way you'd ask your accountant.", 'The answer comes from your own papers, with the bill attached.')}
-  ${whyHow('t-overview', 'Overview', 'bar-chart-2', 'Renewal dates and payments hide *inside the papers.*',
-    'Overview reads them out for you.', "What's up for renewal, what's due to pay and to collect. Mark a bill paid when it's done.", { plus: '★ Plus · Money in and out ★ Pro' })}
-  ${whyHow('t-alerts', 'Reminders', 'bell', 'A policy or licence lapses quietly.|You find out *when someone asks for~it.*',
-    'The whole team is reminded in time.', '90, 30 and 7 days before a licence, policy or lease runs out. Your own notes can remind you too.', { plus: '★ Plus' })}
-  ${whyHow('t-team', 'Team', 'users', 'When the accountant leaves,|*the files leave with him.*',
-    'Invite your team. The records stay.', 'People join only when they say yes. Everyone sees the same records, and a business always keeps an admin.')}
-  ${whyHow('t-apart', 'Family and Business', 'briefcase', "Shop papers and family papers *don't belong in one pile.*",
-    'One switch. Two vaults, kept apart.', "Business records never mix with your family's documents. Each has its own people.")}
-  ${trustBlock('GST bills, bank papers, contracts: *your whole business,* on paper.', 'In AskLocker, only your team can open them.', [
-    ['lock', 'Invite-only', 'Nobody joins unless an admin asks and they say yes.'],
-    ['archive', 'Records stay', 'When someone leaves, the records stay with the business.'],
-    ['link', 'Links that expire', 'Share one document for 1 or 7 days, or 30 on a paid plan. Turn it off any time.'],
-    ['shield', 'An admin in charge', 'Admins can delete any record. A business always keeps an admin.'],
-  ], 'Search sends passages of your documents to outside AI services. Settings › Privacy names them.')}
-  <div class="tblock on-dark res-block" id="t-res">
-    <div class="kicker">${icon('check-circle', 22, 'currentColor', 2.4)}<span>The same evening, with AskLocker</span></div>
-    <div class="clock-big"><span class="t" id="res-time">8:40</span><span class="ampm">PM</span></div>
-    <div class="res-lines"><div class="h1" id="res-h1a">${words("Pooja's on the team.")}</div>
-      <div class="h1" id="res-h1b">${words('Sorted before dinner.')}</div></div>
-    <div class="sub" id="res-sub">No chat hunt. No calls to Ravi. No digging through email.</div>
-  </div>
-  ${brand('endcard', 'Every bill, licence and contract. One question away.', { badge: 'for Business', cta: BIZ.cta, ctaNote: BIZ.ctaNote, end: true })}`;
+  ${brand('brand', 'The document vault for small businesses.', { badge: 'for Business' })}
+  ${block('f-docs', 'The challenge', 'A business runs on documents.',
+    `<div class="fm-grid">${docs.map(([ic, n]) => `<div class="fm-tile"><span class="fm-ti">${icon(ic, 22, THEME.business.primary)}</span><span>${n}</span></div>`).join('')}</div>`,
+    'They arrive by email, on chat apps and on paper, and stay wherever they land.')}
+  ${block('f-dates', 'The next 90 days', 'Each one carries a date that matters.', timeline(),
+    'Five dates in five documents. Missing one means late fees, a lapsed policy or an unpaid invoice.')}
+  ${block('f-pillars', 'AskLocker for Business', 'One place for every business document.',
+    `<div class="fm-pillars">${CHAPTERS.map(([id, name, ic, line], i) => `<div class="fm-pillar" id="pl-${i + 1}">
+      <div class="fm-pn">${num(i)}</div><div class="fm-pi">${icon(ic, 24, THEME.business.primary)}</div>
+      <div class="fm-pt">${name}</div><div class="fm-pd">${line}</div></div>`).join('')}</div>`)}
+  <div class="fm-chapters" id="fm-chapters">${shown.map(([id, name], i) => `<span id="cb-${i}"><b>${num(i)}</b>${name}</span>`).join('')}<i class="fm-ind" id="fm-ind"></i></div>
+  ${chapter(0, 'Scan or upload. AskLocker files it.', [
+    'Category suggested from the text',
+    'Reads the GSTIN, dates and total',
+    'PDF, JPG or PNG, up to 10 MB',
+  ])}
+  ${chapter(1, 'Ask anything. Get the answer and its source.', [
+    'Plain words, no folders to search',
+    'Answers come from your documents',
+    'Ask by voice in Hindi and 9 more languages',
+  ])}
+  ${chapter(2, 'See what is due, at a glance.', [
+    'Renewals in the next 90 days',
+    'Bills to pay and to collect',
+    'Money in and out, month by month',
+  ], 'Renewals and bills due from Plus. Money in and out from Pro.')}
+  ${chapter(3, 'Reminders before anything lapses.', [
+    '90, 30 and 7 days before expiry',
+    'Sent to everyone in the business',
+    'Your own notes, with a reminder',
+  ], 'Expiry and note reminders from Plus.')}
+  ${chapter(4, 'Your team and your CA, by invitation.', [
+    'People join only when they accept',
+    'Admin and viewer roles',
+    'Records stay when people leave',
+  ])}
+  ${block('f-trust', 'Access and control', 'In AskLocker, only your team can open your records.',
+    `<div class="fm-cards">${[
+      ['lock', 'Access by invitation', 'Nobody joins unless an admin asks and they accept.'],
+      ['shield', 'Admins in charge', 'Admins manage the team and can remove any record. A business always keeps one.'],
+      ['archive', 'Records that stay', 'When someone leaves, what they added stays with the business.'],
+      ['link', 'Sharing with limits', 'Share one document by link for 1 or 7 days, or 30 on a paid plan. Turn it off any time.'],
+    ].map(([ic, t, b], i) => `<div class="fm-card" id="fc-${i + 1}"><div class="fm-ci">${icon(ic, 26, THEME.business.primary)}</div><b>${t}</b><span>${b}</span></div>`).join('')}</div>`,
+    'To answer questions, AskLocker sends passages of your documents to outside AI services. Settings › Privacy names them.')}
+  ${block('f-plans', 'Plans', 'Start free. Move up as you grow.',
+    `<table class="fm-table" id="fm-table"><thead><tr><th></th><th>Free</th><th>Plus</th><th>Pro</th><th>Enterprise</th></tr></thead><tbody>
+      ${row('Price a month', ['Free', '₹500', '₹1,000', '₹4,000'], 'price')}
+      ${row('People', ['4', '10', '15', '50'])}
+      ${row('Space', ['200 MB', '10 GB', '25 GB', '100 GB'])}
+      ${row('Questions each a month', ['20', '100', '100', '100'])}
+      ${row('Expiry reminders', [false, true, true, true])}
+      ${row('Renewals and bills due', [false, true, true, true])}
+      ${row('Money in and out', [false, false, true, true])}
+    </tbody></table>`,
+    'Prices before GST. Pay for a year and get one month free. Paid plans are set up on request.')}
+  ${brand('endcard', BIZ.tagline, { badge: 'for Business', cta: BIZ.cta, ctaNote: BIZ.ctaNote, url: BIZ.url, end: true })}`;
 }
 
 export function callouts() {
-  const check = (t) => `<div class="co-check">${icon('check', 16, '#16A34A', 2.6)}<span>${t}</span></div>`;
+  const T = THEME.business.primary;
+  const check = (t) => `<div class="co-check">${icon('check', 16, T, 2.6)}<span>${t}</span></div>`;
   return `
   <div class="callout" id="co-bill" style="width:390px">
-    <div class="co-label">${icon('zap', 14, '#D4807B', 2.6)}<span>Read off the bill</span></div>
-    <div class="co-row"><span class="co-k">GSTIN</span><span class="co-v">${BIZ.supplierGstin}</span></div>
+    <div class="co-label">${icon('file-text', 14, T, 2.6)}<span>Read from the bill</span></div>
+    <div class="co-row"><span class="co-k">Supplier GSTIN</span><span class="co-v">${BIZ.supplierGstin}</span></div>
     <div class="co-row"><span class="co-k">Bill no.</span><span class="co-v">${BIZ.billNo}</span></div>
     <div class="co-row"><span class="co-k">Total</span><span class="co-v">₹1,18,000.00</span></div>
     <div class="co-row"><span class="co-k">Due date</span><span class="co-v">25 Oct 2026</span></div>
-    <div class="co-foot">${icon('file-text', 14, '#16A34A', 2.6)}<span>Added to Bills due</span></div>
+    <div class="co-foot">${icon('check', 14, '#16A34A', 2.6)}<span>Filed under Purchase Bills</span></div>
   </div>
   <div class="callout" id="co-overview" style="width:390px">
-    <div class="co-label">${icon('bar-chart-2', 14, '#D4807B', 2.6)}<span>Nothing to type in</span></div>
+    <div class="co-label">${icon('bar-chart-2', 14, T, 2.6)}<span>Read from your documents</span></div>
     ${check('Renewals, from expiry dates')}
     ${check('Bills due, from due dates')}
     ${check('Money in and out, from invoice totals')}
-    <div class="co-quiet">Read from your documents. Open one to check it.</div>
+    <div class="co-quiet">Nothing to type in. Open a document to check it.</div>
   </div>
   <div class="callout" id="co-alerts" style="width:400px">
-    <div class="co-label">${icon('bell', 14, '#D4807B', 2.6)}<span>Before it expires</span></div>
+    <div class="co-label">${icon('bell', 14, T, 2.6)}<span>Before it expires</span></div>
     <div class="co-steps"><i class="track"></i>
       ${[['90', 'days'], ['30', 'days'], ['7', 'days'], ['On the', 'day']].map(([a, b]) => `<div class="co-step"><i class="dot"></i><b>${a}</b><span>${b}</span></div>`).join('')}</div>
     <div class="co-foot">${icon('edit-3', 14, '#16A34A', 2.6)}<span>Notes remind you on the day you pick</span></div>
   </div>`;
-}
-
-export function subtitles() {
-  return `
-    <div class="subline" id="sub-1">Kavita ji, please send me all of September's purchase bills.</div>
-    <div class="subline" id="sub-2">GSTR-3B is due on the 20th. I need them by tomorrow morning.</div>
-    <div class="subline" id="sub-5">“Got September's bills in AskLocker. I'll file tomorrow.”</div>`;
 }

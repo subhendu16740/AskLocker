@@ -25,8 +25,8 @@ export const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 const stage = document.getElementById('stage');
 
 // ─── Build the stage ─────────────────────────────────────────────────────
-export async function build({ cards, texts, phone, callouts, subs }) {
-  stage.className = PORTRAIT ? 'portrait' : 'landscape';
+export async function build({ cards, texts, phone, callouts, subs, look = '' }) {
+  stage.className = `${PORTRAIT ? 'portrait' : 'landscape'}${look ? ` ${look}` : ''}`;
   stage.innerHTML = `
     <div id="bg-night" class="layer"></div>
     <div id="bg-day" class="layer"><div class="blob b1"></div><div class="blob b2"></div><div class="blob b3"></div><div class="grid"></div></div>
@@ -123,27 +123,29 @@ export const place = (el, [x, y, s = 1], extra = {}) => gsap.set(el, { xPercent:
 
 /** What every film hides before its first frame. Each film then hides its own. */
 export function initialState() {
+  // Each film has only some of these; a set on nothing would make GSAP warn.
+  const set = (els, vars) => { if (els.length) gsap.set(els, vars); };
   gsap.set('#bg-day', { autoAlpha: 0, clipPath: 'circle(0% at 50% 50%)' });
   gsap.set('#vignette', { autoAlpha: 1 });
   gsap.set('#fade', { autoAlpha: 1 });
-  gsap.set($$('#texts > *'), { autoAlpha: 0 });
-  gsap.set($$('#texts .wi'), { yPercent: 118 });
-  gsap.set($$('.wh-how'), { autoAlpha: 0 });
-  gsap.set($$('.trust-card, .trust-note'), { autoAlpha: 0 });
+  set($$('#texts > *'), { autoAlpha: 0 });
+  set($$('#texts .wi'), { yPercent: 118 });
+  set($$('.wh-how'), { autoAlpha: 0 });
+  set($$('.trust-card, .trust-note'), { autoAlpha: 0 });
   // The brand reveal and the end card build up piece by piece: nothing in them
   // shows before its own entrance.
-  gsap.set($$('#logo, #tagline, #badge, #end-logo, #end-tag, #end-badge, #end-cta, #end-note, #end-url'), { autoAlpha: 0 });
-  gsap.set($$('#wordmark, #end-word'), { clipPath: 'inset(0% 100% 0% 0%)' });
-  gsap.set($$('.brand .lm-bubble'), { scale: 0, transformOrigin: '17% 100%' });
-  gsap.set($$('.cap-line, .subline, .callout, #wave'), { autoAlpha: 0 });
-  gsap.set($$('.scr'), { autoAlpha: 0 });
+  set($$('#logo, #tagline, #badge, #end-logo, #end-tag, #end-badge, #end-cta, #end-note, #end-url'), { autoAlpha: 0 });
+  set($$('#wordmark, #end-word'), { clipPath: 'inset(0% 100% 0% 0%)' });
+  set($$('.brand .lm-bubble'), { scale: 0, transformOrigin: '17% 100%' });
+  set($$('.cap-line, .subline, .callout, #wave'), { autoAlpha: 0 });
+  set($$('.scr'), { autoAlpha: 0 });
   gsap.set(['#touch', '#shutter', '#hb-dark'], { autoAlpha: 0 });
-  gsap.set($$('.lnotif'), { autoAlpha: 0 });
-  gsap.set($$('.ln-more'), { height: 0, autoAlpha: 0 });
-  gsap.set($$('.msg, #call-missed, .call-av .ring, #cam-scan, #ocr-done'), { autoAlpha: 0 });
-  gsap.set($$('.drawer'), { autoAlpha: 0 });
-  gsap.set($$('.drawer-dim'), { opacity: 0 });
-  gsap.set($$('.drawer-panel'), { x: -330 });
+  set($$('.lnotif'), { autoAlpha: 0 });
+  set($$('.ln-more'), { height: 0, autoAlpha: 0 });
+  set($$('.msg, #call-missed, .call-av .ring, #cam-scan, #ocr-done'), { autoAlpha: 0 });
+  set($$('.drawer'), { autoAlpha: 0 });
+  set($$('.drawer-dim'), { opacity: 0 });
+  set($$('.drawer-panel'), { x: -330 });
 }
 
 // The film's layout (positions that differ between 16:9 and 9:16) and its

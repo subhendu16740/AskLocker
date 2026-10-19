@@ -4,16 +4,18 @@ Two launch films, as code: one for families, one for business. `src/intro.html`
 builds either as a GSAP timeline (`?film=family` or `?film=business`) that
 recreates the app's real screens (same layouts, copy, colours and Feather icons
 as `src/app/**`, sized by `src/constants/design.ts`; a business's screens in the
-app's teal, as Business mode has them) around a short story. `tools/render.mjs`
-seeks the paused timeline frame by frame in headless Chromium and pipes PNGs to
-ffmpeg, so every frame is deterministic. `audio/score.py` synthesises the
-soundtrack from the cue sheet the page emits, so sound lands on the exact frame
-of each tap, and mixes in the family film's two spoken lines from
-`audio/voices/`.
+app's teal, as Business mode has them). `tools/render.mjs` seeks the paused
+timeline frame by frame in headless Chromium and pipes PNGs to ffmpeg, so every
+frame is deterministic. `audio/score.py` synthesises the soundtrack from the cue
+sheet the page emits, so sound lands on the exact frame of each tap, and mixes
+in the family film's two spoken lines from `audio/voices/`.
 
-Every product scene in both films opens with a **Why**, the problem it exists
-for, read first and large, and then shows the **How**, AskLocker's answer,
-while the phone does it.
+The two films are told differently, on purpose. The family film is a story: a
+night when a document can't be found, then the same night with AskLocker, and
+every product scene opens with a **Why**, the problem it exists for, read first
+and large, before the **How**, AskLocker's answer, while the phone does it. The
+business film is a formal product film: no story, a structure an owner or their
+CA can follow at a glance.
 
 **For families** (`src/family.js`): a 2:14 AM hospital admission, a son who
 can't find his father's policy, and the same night with AskLocker. The product
@@ -26,15 +28,19 @@ ten voice languages in their own scripts, and you hear it work: Maa asks her
 question aloud in Hindi, and the app reads its answer back to her, policy
 number spelled out, with English subtitles under both.
 
-**For business** (`src/business.js`): 8:40 PM, the GST return due on the 20th,
-the CA wants September's purchase bills, and they are in chats, inboxes, a
-drawer and on the accounts clerk's computer. Then, with AskLocker: a supplier's
-bill photographed, filed under Purchase Bills and read (GSTIN, bill number,
-total, due date); a question answered with the bill attached; Overview's
-renewals and bills due, one marked paid, and money in and out (★ Plus, ★ Pro);
-an expiry reminder and a note's reminder on the lock screen (★ Plus); the CA
-invited to the team; the Family | Business switch; and who can open what. The
-same evening, the CA finds the bills herself.
+**For business** (`src/business.js`): a title card, then the challenge in two
+statements: what a business keeps (eight kinds of papers), and the dates inside
+them, Arora Electric's next 90 days on one timeline. Then the product in five
+parts, and the five as numbered chapters, each a heading, three points and the
+plan it needs, beside the phone doing it: **01 Capture**, a supplier's bill
+photographed, filed under Purchase Bills and read (GSTIN, bill number, total,
+due date); **02 Ask**, a question answered from that bill; **03 Overview**,
+renewals and bills due, one marked paid, and money in and out (Plus, and Pro
+for the money); **04 Reminders**, an expiry reminder and a note's reminder on
+the lock screen (Plus); **05 Team**, the CA invited. In 16:9 a bar across the
+top marks the chapter. Then access and control in four cards, the four plans
+side by side, and a closing card. It stays in daylight throughout, in Business
+mode's teal with its gold for numbers, and its music is one steady piece.
 
 Both phones are the installed web app on Android, so the status bar takes the
 app's theme colour, navy in both modes.
@@ -45,10 +51,10 @@ app's theme colour, navy in both modes.
 | `asklocker-family-9x16.mp4` | 2:15 | Full-length vertical posts |
 | `asklocker-family-9x16-short.mp4` | 1:11 | Reels, Shorts, WhatsApp forwards |
 | `asklocker-family-16x9-short.mp4` | 1:11 | LinkedIn and X feeds |
-| `asklocker-business-16x9.mp4` | 1:48 | Landing page, YouTube, LinkedIn, pitches to businesses and CAs |
-| `asklocker-business-9x16.mp4` | 1:48 | Full-length vertical posts |
-| `asklocker-business-9x16-short.mp4` | 1:01 | Reels, Shorts, WhatsApp forwards |
-| `asklocker-business-16x9-short.mp4` | 1:01 | LinkedIn and X feeds |
+| `asklocker-business-16x9.mp4` | 1:31 | Landing page, YouTube, LinkedIn, pitches to businesses and CAs |
+| `asklocker-business-9x16.mp4` | 1:31 | Full-length vertical posts |
+| `asklocker-business-9x16-short.mp4` | 0:59 | Reels, Shorts, WhatsApp forwards |
+| `asklocker-business-16x9-short.mp4` | 0:59 | LinkedIn and X feeds |
 | `…-sfx-only.mp4` | same | Posting with a platform's own music: effects and voices, no music |
 
 The family short keeps the story and one pass through the product: Gmail
@@ -56,8 +62,9 @@ import, Ask, and the Hindi voice answer. It drops the statistic, Scan, the
 family tree, the emergency card, Reminders and Privacy, and leaves the voice
 scene after the answer's first sentence, the policy number; the second sentence
 carries on over the night scene, on Maa's phone. The business short keeps the
-story, Scan and file, Ask and Overview; it drops the unanswered call,
-Reminders and notes, Team, Family and Business, and Privacy.
+title, the challenge, the five parts, chapters 01 to 03 (Capture, Ask and
+Overview), the plans and the closing card; it drops Reminders, Team, and access
+and control.
 
 Rendered files go to `out/`, which is not committed.
 
@@ -107,14 +114,28 @@ keys jump to tenths of the film.
   `src/family-screens.js` and `BIZ` at the top of `src/business-screens.js`.
   `ctaNote` is the line under the call to action (the price); set `STORY.url`
   before publishing to show an address.
-- **Headlines and captions**: `textBlocks()` and `subtitles()` in each film's
-  screens file. Each feature scene is one `whyHow()` call: the problem, then the
-  fix and its paragraph. In the why, `*stars*` mark the coral emphasis, `|`
-  breaks the line and `~` is a space that never breaks.
+- **Headlines and captions**: `textBlocks()` in each film's screens file. In
+  the family film (with `subtitles()` for the Hindi lines) each feature scene is
+  one `whyHow()` call: the problem, then the fix and its paragraph. In the why,
+  `*stars*` mark the coral emphasis, `|` breaks the line and `~` is a space that
+  never breaks. In the business film each statement is a `block()` (label,
+  heading, what follows) and each chapter a `chapter()` (heading, three points,
+  the plan it needs); `CHAPTERS` names the five parts and `DUE` holds the
+  timeline's dates. In 9:16 a chapter's callout takes the place of its points.
+- **The business film's look**: `build({ look: 'formal' })` puts `formal` on
+  the stage, and the `.formal` and `.fm-*` rules at the end of `src/styles.css`
+  style it, 16:9 and 9:16 apart.
 - **Timing and choreography**: the numbered scenes in `src/family.js` and
   `src/business.js`. Each scene starts where the previous one ends, so
   lengthening one shifts the rest; the soundtrack follows automatically because
   it is built from the cue sheet.
+- **The music**: `audio/score.py`. The family film's follows its story (night,
+  day, night again). The business film's is `formal_music()`, one piece in
+  D major at 100 bpm: pad and piano under the title and the challenge, a groove
+  (bass, arpeggio, soft kick and shaker) from the five parts on, a rest for
+  access and control, the groove again with a bell line for the plans, and a
+  resolve on D for the closing card. Each part starts on a `section` cue from
+  the timeline, so a downbeat lands on each change of scene.
 - **The spoken lines**: `LINES` in `tools/voices.py`, then run it (below). It
   writes `audio/voices/ask-hi.wav` and `answer-hi.wav`, and `src/voices.js`
   with how long each runs and where the policy number starts in the answer;
@@ -159,9 +180,23 @@ deliberately:
 - **★ marks what needs a plan**, as the app does: Gmail import, expiry
   reminders (048) and 30-day share links are Family Plus for a family; a
   business's Overview renewals and bills, reminders and notes' reminders need a
-  paid plan (Plus and up), and money in and out needs Pro. The Sharmas are on
-  Family Plus and Arora Electric on Pro, so every screen shown is one they
-  would see.
+  paid plan (Plus and up), and money in and out needs Pro, which the business
+  film's chapters say in their plan lines ("from Plus", "from Pro"). The
+  Sharmas are on Family Plus and Arora Electric on Pro, so every screen shown
+  is one they would see.
+- **The business film's timeline holds only dates AskLocker reads.** Its
+  challenge shows Arora Electric's next 90 days: two supplier bills due, an
+  invoice to collect, the shop insurance and the godown lease, the same five
+  that Overview lists later. It shows no GST filing dates or other deadlines
+  from the tax calendar: AskLocker does not track them, and the film must not
+  suggest it does.
+- **The plans table is `plan_limits`** as 051, 052, 054 and 058 left it:
+  people 4, 10, 15 and 50; space 200 MB, 10 GB, 25 GB and 100 GB (058 lowered
+  the paid plans' space); questions 20 a person a month on Free and 100 on
+  every paid plan. The prices are `BUSINESS_PRICE`, before GST, and a year
+  costs eleven months. Paid business plans are given by hand, so the film says
+  they are set up on request. The limits are rows that change without a
+  release: check the table against the app before publishing.
 - **Gmail import's rows are what the app would show.** Each file name, sender
   and subject was run through `classifyAttachment` in
   `supabase/functions/_shared/gmail-rules.ts`; the reasons ("file name says
@@ -203,11 +238,13 @@ deliberately:
 - **The CA joins by invitation.** She shows as Pending approval until she
   accepts, and once in, as a viewer, she sees every record the business keeps:
   there are no per-folder permissions yet, and the film does not suggest any.
-  She asks in one business, because a CA is in her clients' businesses too.
 - **The voice languages** are the list in `src/lib/voice-languages.ts`:
   English (India), Hindi, Bengali, Tamil, Telugu, Marathi, Gujarati, Kannada,
   Malayalam and Punjabi. Whether a phone can speak a language depends on the
-  voices it has, which the line under the cards says.
+  voices it has, which the line under the cards says. The business film's
+  "Ask by voice in Hindi and 9 more languages" is the same list: Ask sends the
+  voice language with a spoken question, and rag-search answers in it. Typed
+  questions carry no language, so the film claims it for voice only.
 - **The spoken answer is what the app would say.** It is the answer on the
   screen as `toSpeech()` (`src/lib/speech-text.ts`) hands it to the phone's
   voice: the policy number spelled out, in groups of four ("A S H 2, 3 1 1 4,

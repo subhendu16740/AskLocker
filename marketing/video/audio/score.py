@@ -10,7 +10,7 @@ film's two spoken lines, Maa's question and the app reading its answer, are the
 WAVs in audio/voices/ (made by tools/voices.py); the music dips under them, and
 --sfx-only keeps them.
 
-The music follows the story in three moods, in both films:
+The family film's music follows its story in three moods:
   night   (0 -> brand reveal)  D minor pad, a low pulse, a ticking clock during
                                the scramble, a boom on the insight's second line,
                                a call nobody answers, then silence
@@ -18,6 +18,14 @@ The music follows the story in three moods, in both films:
                                arpeggio, soft kick and shaker once it settles
   night2 + end                 the same progression, slow and sparse, resolving
                                on F for the end card
+
+The business film is a formal product film, and its music is one steady piece
+in D major at 100 bpm (formal_music):
+  title + challenge            pad and piano, vi-IV-I-V
+  the product + chapters       bass, an arpeggio, soft kick and shaker, I-V-vi-IV
+  access and control           the drums rest
+  plans                        the groove again, with a bell line
+  closing card                 resolves on D
 """
 import json
 import pathlib
@@ -457,6 +465,75 @@ def resolution_music(bus, t0, t_end, total):
         place(bus, t_end + 1.2 + k * 0.31, pluck(midi(n), 1.8, bright=0.7), 0.09)
 
 
+# The business film's chords: bass, pad voicing, arpeggio (eighth notes).
+CHORDS = {
+    'D': (38, [50, 54, 57, 62], [57, 62, 66, 69, 74, 69, 66, 62]),
+    'A': (33, [45, 52, 57, 61], [57, 61, 64, 69, 73, 69, 64, 61]),
+    'Bm7': (35, [47, 54, 57, 62], [59, 62, 66, 69, 74, 69, 66, 62]),
+    'G': (31, [43, 54, 59, 62], [55, 59, 62, 66, 71, 66, 62, 59]),
+}
+
+
+def formal_music(bus, sec, total):
+    """D major, 100 bpm. Calm parts are pad, piano and a soft bass; the groove
+    adds an arpeggio, a moving bass, kick and shaker. Each part starts its bars
+    on its own section, so a downbeat lands on every change of scene."""
+    beat = 60 / 100
+    bar = 4 * beat
+    sol, end = sec['solution'], sec['end']
+    trust, plans = sec.get('trust'), sec.get('plans', end)
+    calm, groove = ['Bm7', 'G', 'D', 'A'], ['D', 'A', 'Bm7', 'G']
+    parts = [(0.0, sol, calm, False), (sol, trust or plans, groove, True)]
+    if trust:
+        parts.append((trust, plans, calm, False))
+    parts.append((plans, end, groove, True))
+    for a, b, prog, drums in parts:
+        t, k = a, 0
+        while t < b - 0.3:
+            bass, voicing, arp = CHORDS[prog[k % 4]]
+            span = min(bar, b - t)
+            first = a == 0 and k == 0
+            place(bus, t, pad([midi(n) for n in voicing], span + 1.0, attack=0.8 if first else 0.3, release=1.0,
+                              cutoff=1500 if drums else 1200), 0.2)
+            if drums:
+                for q, n in enumerate(arp):
+                    at = t + q * beat / 2
+                    if at < b - 0.05:
+                        place(bus, at, pluck(midi(n), 1.3), 0.13 * (0.9 if q % 2 == 0 else 0.65), pan=-0.25 + 0.5 * (q % 4) / 3)
+                for h in range(2):
+                    at = t + h * 2 * beat
+                    if at < b - 0.05:
+                        place(bus, at, sine_bass(midi(bass), min(2 * beat, b - at) * 0.95, attack=0.01, release=0.3), 0.19)
+                for q in range(4):
+                    at = t + q * beat
+                    if at < b - 0.05:
+                        if q in (0, 2):
+                            place(bus, at, kick(0.7), 0.4)
+                        place(bus, at + beat / 2, shaker(), 0.06, pan=0.3)
+                        place(bus, at, shaker(0.6), 0.035, pan=-0.3)
+            else:
+                for q in range(4):
+                    at = t + q * beat
+                    if at < b - 0.05:
+                        place(bus, at, pluck(midi(arp[q * 2]), 1.8, bright=0.6, decay=1.2), 0.12 * (1.0 if q == 0 else 0.75),
+                              pan=-0.2 + 0.13 * q)
+                if not first:
+                    place(bus, t, sine_bass(midi(bass), span * 0.95, attack=0.3, release=0.6), 0.11)
+            t += bar
+            k += 1
+    # The plans: a bell line over the groove.
+    if plans < end:
+        for i, n in enumerate([74, 78, 81, 86]):
+            place(bus, plans + 0.1 + i * 0.16, bell(midi(n), 2.2), 0.1, pan=-0.3 + 0.2 * i)
+    # The closing card: resolve on D, with a rising shimmer.
+    place(bus, end, pad([midi(n) for n in [38, 50, 57, 62, 64, 66, 69]], total - end + 0.5, attack=0.4, release=2.2, cutoff=2000), 0.2)
+    place(bus, end, sine_bass(midi(38), total - end, attack=0.05, release=2.0), 0.18)
+    for i, n in enumerate([69, 74, 78, 81]):
+        place(bus, end + 0.3 + i * 0.13, bell(midi(n), 2.6), 0.11, pan=-0.3 + 0.2 * i)
+    for k, n in enumerate([62, 66, 69, 74, 69, 66]):
+        place(bus, end + 1.2 + k * 0.31, pluck(midi(n), 1.8, bright=0.7), 0.09)
+
+
 # ─── Assembly ───────────────────────────────────────────────────────────────
 
 def main():
@@ -473,20 +550,26 @@ def main():
     voice = np.zeros((2, n))
     spoken = []
 
-    reveal, day, night2, end = sec['reveal'], sec['day'], sec['night2'], sec['end']
-    # A cut without the unanswered call goes quiet just before the reveal.
-    hit, ring_stop = first('hit'), first('ring-stop', reveal - 0.45)
-    ticks = [c['t'] for c in cues if c['type'] == 'tick']
-    scramble_a = ticks[0] - 1.9 if ticks else 7.0
-    scramble_b = ticks[-1] + 1.9 if ticks else 16.0
+    # The family film tells a story (night, day, night again); the business
+    # film is formal and has none of those sections.
+    story = 'reveal' in sec
+    if story:
+        reveal, day, night2, end = sec['reveal'], sec['day'], sec['night2'], sec['end']
+        # A cut without the unanswered call goes quiet just before the reveal.
+        hit, ring_stop = first('hit'), first('ring-stop', reveal - 0.45)
+        ticks = [c['t'] for c in cues if c['type'] == 'tick']
+        scramble_a = ticks[0] - 1.9 if ticks else 7.0
+        scramble_b = ticks[-1] + 1.9 if ticks else 16.0
 
-    if not sfx_only:
+    if not sfx_only and story:
         night_music(music, 0.0, reveal, hit, ring_stop)
         pulse(music, scramble_a, scramble_b)
         day_music(music, day, night2 + 0.4, reveal, build_at=day + 10.0,
                   breath=(sec['night2'] - 5.5, sec['night2']))
         resolution_music(music, night2, end, total)
         clock(fx, scramble_a, scramble_b)
+    elif not sfx_only:
+        formal_music(music, sec, total)
 
     makers = {
         'tap': lambda c: (sfx_tap(), 0.55), 'buzz': lambda c: (sfx_buzz(), 0.6), 'notif': lambda c: (sfx_notif(), 0.7),
@@ -516,7 +599,7 @@ def main():
             place(fx, c['t'] - (0.35 if kind == 'whoosh' else 0.0), sig, gain)
 
     # Nobody answers: everything drops away until the reveal.
-    gap_a, gap_b = int((ring_stop + 0.1) * SR), int(reveal * SR)
+    gap_a, gap_b = (int((ring_stop + 0.1) * SR), int(reveal * SR)) if story else (0, 0)
     if gap_b > gap_a:
         fade = np.linspace(1, 0, min(int(0.35 * SR), gap_b - gap_a))
         music[:, gap_a:gap_a + len(fade)] *= fade
