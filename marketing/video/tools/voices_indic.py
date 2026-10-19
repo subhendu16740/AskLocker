@@ -56,7 +56,7 @@ LINES = {
                lead='বাবার হেলথ ইনস্যুরেন্স পলিসির নম্বর',
                number='এ এস এইচ দুই, তিন এক এক চার, পাঁচ আট নয়।',
                a2='এই পলিসি চোদ্দো মার্চ দু হাজার সাতাশ পর্যন্ত ভ্যালিড।'),
-    'ta': dict(maa='Jaya', app='Kavitha',
+    'ta': dict(maa='Jaya', app='Kavitha', pace={'maa': 'slightly slow', 'app': 'slightly fast'},
                ask='அப்பாவோட ஹெல்த் இன்சூரன்ஸ் பாலிசி நம்பர் என்ன?',
                lead='அப்பாவோட ஹெல்த் இன்சூரன்ஸ் பாலிசி நம்பர்',
                number='ஏ எஸ் ஹெச் இரண்டு, மூன்று ஒன்று ஒன்று நான்கு, ஐந்து எட்டு ஒன்பது.',
@@ -71,7 +71,7 @@ LINES = {
                lead='बाबांच्या हेल्थ इन्शुरन्स पॉलिसीचा नंबर',
                number='ए एस एच दोन, तीन एक एक चार, पाच आठ नऊ आहे.',
                a2='ही पॉलिसी चौदा मार्च दोन हजार सत्तावीस पर्यंत वैध आहे.'),
-    'gu': dict(maa='Neha', app='Yash',
+    'gu': dict(maa='Neha', app='Yash', pace={'maa': 'moderate', 'app': 'slightly fast'},
                ask='પપ્પાના હેલ્થ ઇન્શ્યોરન્સનો પોલિસી નંબર શું છે?',
                lead='પપ્પાના હેલ્થ ઇન્શ્યોરન્સ પોલિસીનો નંબર',
                number='એ એસ એચ બે, ત્રણ એક એક ચાર, પાંચ આઠ નવ છે.',
@@ -94,13 +94,17 @@ LINES = {
 }
 
 # How each speaker is asked to sound: Maa a little slower, as she was in the
-# Hindi; the app even and clear. Parler-TTS reads these as plain English.
+# Hindi; the app even and clear. Parler-TTS reads these as plain English. A
+# language's `pace` changes a voice's where it reads slowly: Tamil's and
+# Gujarati's app voices took nine and six seconds over the policy number at a
+# moderate pace, where Kannada's took five.
 STYLE = {
-    'maa': '{name} speaks at a slightly slow pace with a natural, conversational tone. '
+    'maa': '{name} speaks at a {pace} pace with a natural, conversational tone. '
            'The recording is very clear and close-sounding, with no background noise.',
-    'app': '{name} speaks clearly at a moderate pace with a calm, friendly tone. '
+    'app': '{name} speaks clearly at a {pace} pace with a calm, friendly tone. '
            'The recording is very clear and close-sounding, with no background noise.',
 }
+PACE = {'maa': 'slightly slow', 'app': 'moderate'}
 SENTENCE_GAP = 0.4       # between the answer's two sentences, as tools/voices.py
 SEEDS = (7, 11, 23, 31)  # a take that fails its check is drawn again
 HOP = 0.01               # seconds between the frames the checks and the timing read
@@ -119,11 +123,11 @@ class Parler:
         self.rate = self.model.config.sampling_rate
 
     def batch(self, items, seed):
-        """Each (name, text, speaker, style) said once, all in one batch: on a
+        """Each (lang, text, speaker, style) said once, all in one batch: on a
         CPU ten lines take about four times as long as one. Audio at SR."""
         from scipy.signal import resample_poly
-        d = self.describe([STYLE[style].format(name=speaker) for _, _, speaker, style in items],
-                          return_tensors='pt', padding=True)
+        d = self.describe([STYLE[style].format(name=speaker, pace=LINES[lang].get('pace', PACE)[style])
+                           for lang, _, speaker, style in items], return_tensors='pt', padding=True)
         p = self.tokenizer([text for _, text, _, _ in items], return_tensors='pt', padding=True)
         self.torch.manual_seed(seed)
         with self.torch.no_grad():
@@ -207,8 +211,8 @@ def number_onset(lead, sentence):
     said in one take so it flows. The words before the number, said alone, are
     matched against the sentence's start by dynamic time warping (each side at
     most twice the other's pace, the end left free): their last frame lands
-    where the number begins. A pause there is split down the middle, as
-    tools/voices.py does."""
+    where the number begins. The longest pause there (it can start a beat
+    later) is split down the middle, as tools/voices.py does."""
     from scipy.spatial.distance import cdist
     a, _ = speech(lead)
     b, times = speech(sentence)
@@ -230,9 +234,10 @@ def number_onset(lead, sentence):
                 acc[i, j] = best
     end = int(np.argmin(acc[n - 1] / (n + np.arange(1, m + 1))))
     t = times[end] + HOP
-    for p, q in pauses(sentence):
-        if p - 0.1 <= t <= q:
-            return (p + q) / 2
+    near = [(q - p, p, q) for p, q in pauses(sentence) if p - 0.3 <= t <= q + 0.1]
+    if near:
+        _, p, q = max(near)
+        return (p + q) / 2
     return t
 
 
