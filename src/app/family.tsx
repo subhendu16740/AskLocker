@@ -19,7 +19,7 @@ import { ScreenHeader, HeaderButton, PlusStar } from '../components/screen-heade
 import { InvitationCards } from '../components/invitation-cards';
 import { longDate } from '../lib/dates';
 import { isBusinessVault, isPersonalVault, vaultWord } from '../lib/vaults';
-import { biz, color, radius, shadow, size, space, type } from '../constants/design';
+import { color, radius, shadow, size, space, type } from '../constants/design';
 import { track } from '../lib/analytics';
 import { useVaultTheme } from '../lib/vault-theme';
 
@@ -372,7 +372,7 @@ export default function FamilyScreen() {
                 return (
                   <View key={m.id} style={styles.memberCard}>
                     <LinearGradient
-                      colors={isCurrentUser ? [business ? biz.accent : '#D4807B', theme.primary] : theme.gradient}
+                      colors={isCurrentUser ? [business ? '#B7791F' : '#D4807B', theme.primary] : theme.gradient}
                       start={{ x: 0, y: 0 }}
                       end={{ x: 1, y: 1 }}
                       style={styles.memberAvatar}

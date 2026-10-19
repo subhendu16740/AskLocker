@@ -38,14 +38,13 @@ export const color = {
 
 /**
  * A business's colours (business mode, and every business vault wherever it
- * is listed): orange with a gold mark, so a business never looks like the
- * family's navy and coral (teal until 18 October 2026, the owner's ask).
- * Text in primary or secondary on white passes WCAG AA (7.3:1 and 5.2:1).
+ * is listed): a deep teal with a gold mark, so a business never looks like
+ * the family's navy and coral. Text on white passes WCAG AA.
  */
 export const biz = {
-  primary: '#9A3412',
-  secondary: '#C2410C',
-  tint: '#FFF1E6',
+  primary: '#0F5C57',
+  secondary: '#1A7A72',
+  tint: '#E7F4F2',
   accent: '#B7791F',
 } as const;
 

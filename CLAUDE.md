@@ -2278,19 +2278,17 @@ so storage policies live only in `019`.
   the first of the mode, a family before the personal vault. Someone with
   no business is taken to Create a business; creating one opens it, and so
   Business mode. Settings › Your vaults opens any vault, of either kind.
-- **A business wears orange and gold** (`biz` in `design.ts`: primary
-  `#9A3412`, secondary `#C2410C`, tint `#FFF1E6`, accent `#B7791F`; teal
-  until the owner asked for orange, 18 October 2026), a family the app's
-  navy. Both oranges pass WCAG AA as text on white (7.3:1 and 5.2:1), since
-  the secondary is used for small text too (On/Off, tab counts, a note's
-  reminder date). `useVaultTheme()` (`src/lib/vault-theme.ts`) is the
+- **A business wears teal and gold** (`biz` in `design.ts`: primary
+  `#0F5C57`, secondary `#1A7A72`, tint `#E7F4F2`, accent `#B7791F`), a
+  family the app's navy. Orange was tried (subhendu16740/FamilyVault#92)
+  and reverted the next day at the owner's ask: teal it stays. `useVaultTheme()` (`src/lib/vault-theme.ts`) is the
   open vault's colours, and the shared pieces follow it: the top bar, back
   arrow and header buttons, `settings-ui` cards, buttons and On/Off, Home's
   header, the tab bar and its Ask button, the drawer, the ★ Plus tag (gold
   on a business), and every Settings screen (Storage's rows keep each
   vault's own colours; Help, Notifications and the voice row say ★ Plus and
   answer for a business). Anything about a business
-  wears orange wherever it is listed, whichever mode is open
+  wears teal wherever it is listed, whichever mode is open
   (`vaultTheme(family)`): its row in Manage Family, Create a business, its
   documents on Home, a business's invitation, the vault picker, Upload's
   buttons when saving to one, the creation screen when Business is picked,
@@ -2811,7 +2809,7 @@ rule again once pinned chunks are mixed in.
   Colours are hex literals in older files; `color` in `design.ts` holds the
   same values: primary `#2A3D66`, secondary `#4A6491`, accent `#D4807B`,
   background `#F8F9FC`, dark bg `#0D1117`, dark card `#161B22`. A business
-  has its own, `biz` (orange `#9A3412`, gold `#B7791F`); a new screen takes
+  has its own, `biz` (teal `#0F5C57`, gold `#B7791F`); a new screen takes
   `useVaultTheme()` where it should follow the mode, and `vaultTheme(family)`
   for a row about a particular vault (see
   [Family or Business](#family-or-business--the-drawers-switch-and-a-businesss-colours)).
