@@ -44,6 +44,11 @@ LINES = {
         'यह पॉलिसी 14 मार्च 2027 तक वैध है।',
     ]),
 }
+# Words the voices say better from their English spelling. espeak reads हेल्थ
+# with Hindi's long e and an aspirated t (hˈeːltʰ), which Kokoro holds long
+# enough to say "hayl-t-huh"; from "health" it takes English's hˈɛlθ, as people
+# say it. Only what the voice is given changes: the screen keeps हेल्थ.
+SAY = {'हेल्थ': 'health'}
 # The policy number starts after these words of the answer's first sentence:
 # the film highlights it from there, and the night scene picks the reading up
 # there.
@@ -88,6 +93,8 @@ class Kokoro:
                                  tie='^', language_switch='remove-flags')
 
     def phonemes(self, text):
+        for word, said in SAY.items():
+            text = text.replace(word, said)
         # The danda ends a sentence; Kokoro knows the full stop.
         ps = self.g2p.phonemize([text.replace('।', '.')])[0].strip()
         for old, new in E2M:

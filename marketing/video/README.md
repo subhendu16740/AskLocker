@@ -165,7 +165,10 @@ python3 tools/voices.py --model model.onnx --voices voices/
 Word timings come from the model itself (each sound's length, read out of the
 graph), not from the waveform, so the night scene starts on the number's first
 letter. Kokoro's Hindi voices are its least practised, so have a Hindi speaker
-listen to both lines before the film goes out.
+listen to both lines before the film goes out. One word is already handed to
+them in English spelling (`SAY` in `tools/voices.py`): from हेल्थ espeak gives
+Hindi's long e and an aspirated t, which came out as "hayl-t-huh", so the voice
+is given "health" while the screen keeps हेल्थ.
 
 ## Keep it honest
 
