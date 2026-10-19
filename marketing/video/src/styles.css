@@ -431,6 +431,10 @@ body { -webkit-font-smoothing: antialiased; text-rendering: geometricPrecision; 
 .plus-tag { display: inline-flex; align-items: center; gap: 3px; padding: 3px 8px; border-radius: 999px; background: #FBEDEB; font-size: 12px; line-height: normal; white-space: nowrap; }
 .plus-tag .st { color: var(--coral); font-weight: 400; }
 .plus-tag .pl { color: var(--navy); font-weight: 600; }
+/* A business's Plus in its own colours (PlusTag's plusTagBiz). */
+.scr.biz .plus-tag { background: #FBF1DF; }
+.scr.biz .plus-tag .st { color: #B7791F; }
+.scr.biz .plus-tag .pl { color: var(--teal); }
 .overline { font: 600 12px/16px var(--ui); color: var(--gray); text-transform: uppercase; letter-spacing: 0.6px; margin-left: 4px; }
 .muted { font: 400 13px/18px var(--ui); color: var(--gray); }
 .card { background: #fff; border-radius: 16px; padding: 16px; display: flex; flex-direction: column; gap: 12px; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06); }
