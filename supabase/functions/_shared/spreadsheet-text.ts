@@ -28,6 +28,8 @@
 // name, beside the next row, and the answer read them as that row's.
 // ────────────────────────────────────────────────────────────────
 
+import { estimateTokens } from './tokens.ts';
+
 export type SheetCell = string | number | boolean | Date | null | undefined;
 
 export interface SheetInput {
@@ -64,12 +66,11 @@ export function isSpreadsheetText(text: string): boolean {
 }
 
 /**
- * The longest a line may be, so one fits in a passage by itself (chunking.ts
- * aims at 320 tokens, about 1,280 Latin characters). Other scripts count
- * double, as there.
+ * The longest a line may be, in tokens (tokens.ts), so one fits in a passage
+ * by itself: chunking.ts aims at 320. A row of numbers runs about 2
+ * characters a token, so a wide one is written as several lines.
  */
-export const MAX_ROW_LINE = 1_200;
-const lineWeight = (s: string) => s.length + (s.match(/[^\x00-\x7f]/g)?.length ?? 0);
+export const MAX_ROW_TOKENS = 300;
 
 const pad = (n: number) => String(n).padStart(2, '0');
 
@@ -179,20 +180,20 @@ function columnName(i: number): string {
 }
 
 /**
- * One row as lines no longer than MAX_ROW_LINE: usually one. A wider row is
+ * One row as lines of at most MAX_ROW_TOKENS: usually one. A wider row is
  * written as several, each opening with what the row is, its leading words
  * ("RowId: FIN-035 | Segment: Treasury | Country: India | Metric: Loans"), so
  * no line holds numbers without the row they belong to.
  */
 function splitRow(parts: (readonly [text: string, value: string])[], prefix: string): string[] {
   const whole = prefix + parts.map(([t]) => t).join(' | ');
-  if (lineWeight(whole) <= MAX_ROW_LINE) return [whole];
-  if (parts.length === 1) return slices(parts[0][0], MAX_ROW_LINE - lineWeight(prefix)).map((t) => prefix + t);
+  if (estimateTokens(whole) <= MAX_ROW_TOKENS) return [whole];
+  if (parts.length === 1) return slices(parts[0][0], MAX_ROW_TOKENS - estimateTokens(prefix)).map((t) => prefix + t);
   let named = 0;
   while (named < parts.length - 1 && named < 4 && !isValue(parts[named][1])) named++;
   let start = Math.max(1, named);
   let head = prefix + parts.slice(0, start).map(([t]) => t).join(' | ');
-  if (lineWeight(head) > MAX_ROW_LINE / 4) {
+  if (estimateTokens(head) > MAX_ROW_TOKENS / 4) {
     // A name too long to repeat: its opening names each line, and it is
     // written in full on the lines.
     head = prefix + parts[0][0].slice(0, 120);
@@ -200,13 +201,13 @@ function splitRow(parts: (readonly [text: string, value: string])[], prefix: str
   }
   // A cell too long for a line with the name (a paragraph of notes) is
   // written across several.
-  const room = MAX_ROW_LINE - lineWeight(head) - 3;
+  const room = MAX_ROW_TOKENS - estimateTokens(head) - 2;
   const pieces = parts.slice(start).flatMap(([t]) => slices(t, room));
   const lines: string[] = [];
   let line = head;
   let has = false;
   for (const piece of pieces) {
-    if (has && lineWeight(`${line} | ${piece}`) > MAX_ROW_LINE) {
+    if (has && estimateTokens(`${line} | ${piece}`) > MAX_ROW_TOKENS) {
       lines.push(line);
       line = head;
       has = false;
@@ -218,12 +219,12 @@ function splitRow(parts: (readonly [text: string, value: string])[], prefix: str
   return lines;
 }
 
-/** Text cut on spaces into pieces that each weigh no more than `room`. */
+/** Text cut on spaces into pieces of no more than `room` tokens. */
 function slices(text: string, room: number): string[] {
   const out: string[] = [];
   let rest = text;
-  while (lineWeight(rest) > room) {
-    const fit = Math.max(20, Math.floor((room * rest.length) / lineWeight(rest)));
+  while (estimateTokens(rest) > room) {
+    const fit = Math.max(20, Math.floor((room * rest.length) / estimateTokens(rest)));
     const space = rest.lastIndexOf(' ', fit);
     const cut = space > fit / 2 ? space : fit;
     out.push(rest.slice(0, cut).trim());

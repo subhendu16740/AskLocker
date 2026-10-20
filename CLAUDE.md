@@ -2736,7 +2736,7 @@ rules sort the rest (`_shared/gmail-rules.ts`).
   figure" in a sheet whose columns said 2025M01, the judge kept the wrong
   passage.
 - **No passage holds a row without its name.** A row too long for one
-  passage (`MAX_ROW_LINE`, 1,200 characters) is written as several lines,
+  passage (`MAX_ROW_TOKENS`, 300 tokens) is written as several lines,
   each opening with the row's leading words ("RowId: FIN-035 | Segment:
   Treasury | Country: India"), and `chunkText()` cuts a spreadsheet's text
   (`isSpreadsheetText()`: it starts "Spreadsheet: ") only between lines,
@@ -2746,6 +2746,21 @@ rules sort the rest (`_shared/gmail-rules.ts`).
   is among the passages, the judge and the answer are told a number belongs
   to the row it is on (`SPREADSHEET_ROWS_RULE` in rag-search). A
   spreadsheet stored before this keeps its old passages: add it again.
+- **Numbers cost twice the tokens of words**, and Groq refuses a request
+  over the model's allowance for a minute outright (413, 8,000 tokens on
+  the free tier, the reply's room included). Measured against o200k on 20
+  October 2026, a workbook's rows were 10,472 tokens where counting
+  characters said 5,524, so the judge was sent 8,660 tokens and refused,
+  and the answer, given 500 tokens, used them all thinking and returned
+  nothing ("the AI service is unavailable"). `estimateTokens()`
+  (`_shared/tokens.ts`, shared by chunking, spreadsheet lines and
+  rag-search) counts each number as its digits in threes plus one, which
+  reads 0.84–1.0 of the real count for every fixture; the judge is shown
+  passages whole, in retrieval order, up to `RERANK_LISTING_TOKENS`
+  (4,500), and the answer has 1,200 tokens. `tsconfig.json` allows `.ts`
+  in imports (`allowImportingTsExtensions`), which Deno needs and the
+  app's TypeScript otherwise refuses, so a shared file the app uses can
+  import another.
 - **The reader is read-excel-file** (MIT, `read-excel-file/universal`, plain
   JavaScript with fflate and saxen; its own lazily loaded web bundle). Not
   SheetJS: the npm copy is 0.18.5, without the fixes for its known reading
@@ -2855,9 +2870,12 @@ reads ✅ by itself, and the offline self-test guards the first two:
 - **Tokens are not characters, and the ratio depends on the script.** "1 token
   ≈ 4 characters" holds for English and is roughly double the truth for
   Devanagari, Bengali and Tamil, where the tokenizer emits a token every 1-2
-  characters. `estimateTokens()` counts non-ASCII at double weight, so Indic
-  documents chunk smaller by themselves. Sizing Hindi by the English rule
-  overflows the window badly.
+  characters. `estimateTokens()` (`_shared/tokens.ts`) counts non-ASCII at
+  double weight, so Indic documents chunk smaller by themselves. Sizing
+  Hindi by the English rule overflows the window badly. Numbers count by
+  their digits, in threes plus one (since 20 October 2026): by characters a
+  table of numbers read at half its real count, so its passages ran past
+  the window too.
 - **The cascade matters more than it looks.** Paragraphs → lines → sentences
   (including the danda `।`) → clauses → a hard cut. OCR output often has no
   blank lines and sometimes no punctuation at all; the previous splitter gave

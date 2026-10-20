@@ -12,6 +12,7 @@ import { buildGraph, relativesNamedIn, type KinGraph, type NamedRelative } from 
 import { ticketCodeNotes, ticketSearchTerms } from '../_shared/tickets.ts';
 import { digitsFromWords, restoreCodes } from '../_shared/numbers.ts';
 import { isSpreadsheetType } from '../_shared/spreadsheet-text.ts';
+import { estimateTokens } from '../_shared/tokens.ts';
 import { takeInTurn, uniqueRelatives } from '../_shared/vaults.ts';
 import { USED_PASSAGES_RULE, passagesUsed, splitUsedPassages } from '../_shared/used-passages.ts';
 import { allowanceJson, givenBack, parseAllowance, questionLimitMessage, type QuestionAllowance } from '../_shared/questions.ts';
@@ -67,6 +68,12 @@ const RERANK_MIN_SCORE = 4;        // 0–10; below this a chunk is dropped outr
 // question. The chunker already caps a chunk at 400 tokens (~1,600
 // characters) precisely so a passage is small enough to handle whole.
 const RERANK_SNIPPET_CHARS = 1600; // per candidate: a full chunk, not its opening
+// Groq refuses a request over the model's allowance for a minute outright
+// (413; 8,000 tokens on the free tier, the judge's 2,000 to reply included),
+// and numbers cost about twice the tokens of words: fifteen passages of
+// spreadsheet rows came to 8,660 (20 October 2026). Passages go to the judge
+// whole, in retrieval order, while they fit this; the rest are not judged.
+const RERANK_LISTING_TOKENS = 4_500;
 
 // Spreadsheet rows arrive as "Column: value | Column: value", one row a line
 // (_shared/spreadsheet-text.ts). Said to the judge and the answer only when a
@@ -926,7 +933,9 @@ async function rerankChunks(
   if (candidates.length === 0) return { kept: [] };
   if (!hasGroqKey) return fallback('no api key');
 
-  const listing = candidates.map((c, i) => {
+  const entries: string[] = [];
+  let spent = 0;
+  for (const [i, c] of candidates.entries()) {
     const type = c.category_name ? ` · ${c.category_name}` : '';
     const whose = c.owner ? ` · marked as ${c.owner}'s` : '';
     // Do NOT flatten whitespace. The line breaks and the two-space column
@@ -938,8 +947,17 @@ async function rerankChunks(
       .replace(/[ \t]+$/gm, '')
       .replace(/\n{3,}/g, '\n\n')
       .trim();
-    return `[${i}] ${c.file_name}${type}${whose}\n${snippet}`;
-  }).join('\n\n');
+    const entry = `[${i}] ${c.file_name}${type}${whose}\n${snippet}`;
+    const cost = estimateTokens(entry);
+    if (entries.length && spent + cost > RERANK_LISTING_TOKENS) break;
+    entries.push(entry);
+    spent += cost;
+  }
+  const judged = candidates.slice(0, entries.length);
+  const listing = entries.join('\n\n');
+  if (judged.length < candidates.length) {
+    console.log(`[rag] Judge shown ${judged.length}/${candidates.length} passages (~${spent} tokens)`);
+  }
 
   try {
     const { response, model } = await groqChat('rerank', {
@@ -957,7 +975,7 @@ Score how well each passage answers the question, 0 to 10.
 10 = directly contains the answer. 5 = related, partial. 0 = unrelated, even if it shares a word or a year with the question.
 Use the document type: an insurance question is not answered by a tax return, a placements question is not answered by a resume.
 A passage may be a TABLE, one row per line with columns separated by two spaces. Read every row before scoring it: the row that answers the question is often not the first one, and a table whose other rows are irrelevant still scores 10 if any single row answers it.
-${candidates.some((c) => isSpreadsheetType(c.file_type)) ? `${SPREADSHEET_ROWS_RULE} A passage holding the row that matches every part of the question scores 10.\n` : ''}Reply with JSON only: {"scores":[{"i":0,"s":7}, ...]} — one entry for EVERY passage index, including the ones you score 0.${codeNotes.length
+${judged.some((c) => isSpreadsheetType(c.file_type)) ? `${SPREADSHEET_ROWS_RULE} A passage holding the row that matches every part of the question scores 10.\n` : ''}Reply with JSON only: {"scores":[{"i":0,"s":7}, ...]} — one entry for EVERY passage index, including the ones you score 0.${codeNotes.length
   ? `\nTicket codes in these passages, explained: ${codeNotes.join(' ')} On a train ticket the seat is this berth, in Booking Status or Current Status.`
   : ''}`,
         },
@@ -988,14 +1006,14 @@ ${candidates.some((c) => isSpreadsheetType(c.file_type)) ? `${SPREADSHEET_ROWS_R
     // models routinely score ten of fifteen and stop; defaulting the rest to
     // zero threw away passages nobody had looked at. Neutral keeps them in
     // their retrieval order, behind anything explicitly scored higher.
-    const kept = candidates
+    const kept = judged
       .map((c, i) => ({ c, s: score.get(i) ?? RERANK_MIN_SCORE }))
       .filter(x => x.s >= RERANK_MIN_SCORE)
       .sort((a, b) => b.s - a.s)
       .slice(0, RERANK_KEEP)
       .map(x => x.c);
 
-    console.log(`[rag] Rerank scores: ${candidates.map((c, i) => `${c.file_name.slice(0, 18)}=${score.get(i) ?? '?'}`).join(', ')}`);
+    console.log(`[rag] Rerank scores: ${judged.map((c, i) => `${c.file_name.slice(0, 18)}=${score.get(i) ?? '?'}`).join(', ')}`);
 
     // A judge that rejects EVERY passage has failed, not filtered. Retrieval
     // had already ranked these by meaning and by keyword; discarding the lot
@@ -1301,7 +1319,9 @@ The passages in the context are numbered: [Passage 1 | …], [Passage 2 | …]. 
         },
       ],
       temperature: 0.1,
-      max_tokens: 500,
+      // Room to think as well as answer: these models reason first, and
+      // 500 ran out mid-thought over a table of numbers, leaving no answer.
+      max_tokens: 1200,
     });
     usedModel = model;
 
@@ -1326,7 +1346,7 @@ The passages in the context are numbered: [Passage 1 | …], [Passage 2 | …]. 
     const result = await response.json();
     const text = result.choices?.[0]?.message?.content;
     if (!text) {
-      console.warn('[rag] Groq returned no content');
+      console.warn(`[rag] Groq returned no content (finish: ${result.choices?.[0]?.finish_reason ?? '?'}, ${JSON.stringify(result.usage ?? {})})`);
       return { answer: buildFallbackAnswer(chunks, 'unavailable'), degraded: true, model };
     }
 
