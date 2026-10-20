@@ -2,8 +2,10 @@
 //
 // Every plan has a storage limit; none is unlimited:
 //
-//   Free          a family 200 MB, a personal vault 100 MB, in total —
-//                 not a monthly allowance
+//   Free          50 MB for each person to add, across their free vaults;
+//                 a family 100 MB and a business 200 MB, everyone
+//                 together; a personal vault 50 MB (060) — in total, not
+//                 a monthly allowance
 //   Family Plus   10 GB, either kind of vault — in India ₹100 a month or
 //                 ₹1,100 a year, elsewhere $10 a month or $110 a year
 //
@@ -42,22 +44,30 @@ export {
 
 export {
   BUSINESS_PLANS, BUSINESS_PRICE, CLOSED_MESSAGE, DEFAULT_PLAN_LIMITS, PLUS_FOR_SALE, PLUS_PRICE, businessAmount, businessPlanName, businessPrice,
-  businessYearPrice, chatStorageFullMessage, fits, formatBytes, isBusinessPlan, nextBusinessPlan, planLabel, plusAmount, plusName,
-  plusPrice, plusPrices, plusTwelveMonths, plusYearlyOffer, plusYearlySaving, storageFullMessage,
-  type BusinessPlan, type BusinessPlanLimits, type PlanLimits, type PlanName, type PriceCurrency, type PricePeriod, type StorageRoom,
+  businessYearPrice, chatStorageFullMessage, fits, formatBytes, freeVaultsText, isBusinessPlan, nextBusinessPlan, personFits,
+  personStorageFullMessage, planLabel, plusAmount, plusName, plusPrice, plusPrices, plusTwelveMonths, plusYearlyOffer, plusYearlySaving,
+  storageFullMessage,
+  type BusinessPlan, type BusinessPlanLimits, type PersonRoom, type PlanLimits, type PlanName, type PriceCurrency, type PricePeriod,
+  type StorageRoom,
 } from '../../supabase/functions/_shared/plan-text';
 
 /** Free space for a family, in bytes, when the database cannot be asked. */
 export const FREE_STORAGE_BYTES = DEFAULT_PLAN_LIMITS.free;
 
-/** "200 MB", for sentences. */
+/** "100 MB", for sentences. */
 export const FREE_STORAGE_LABEL = formatBytes(FREE_STORAGE_BYTES);
 
 /** Free space for a personal vault (048), in bytes, when the database cannot be asked. */
 export const FREE_PERSONAL_STORAGE_BYTES = DEFAULT_PLAN_LIMITS.freePersonal;
 
-/** "100 MB", for sentences. */
+/** "50 MB", for sentences. */
 export const FREE_PERSONAL_STORAGE_LABEL = formatBytes(FREE_PERSONAL_STORAGE_BYTES);
+
+/** "200 MB": what a business keeps on Free (060), for sentences. */
+export const FREE_BUSINESS_STORAGE_LABEL = formatBytes(DEFAULT_PLAN_LIMITS.freeBusiness);
+
+/** "50 MB": what each person can add on Free, across their free vaults (060), for sentences. */
+export const FREE_PERSON_STORAGE_LABEL = formatBytes(DEFAULT_PLAN_LIMITS.freePerson ?? DEFAULT_PLAN_LIMITS.freePersonal);
 
 /** The device's time zone ("Asia/Kolkata"), or '' when it cannot say. */
 export function deviceTimeZone(): string {

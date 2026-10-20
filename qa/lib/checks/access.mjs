@@ -220,6 +220,13 @@ const chatsVoiceJudge = (expect) => (outcome) => {
   if (String(outcome.error?.code) === 'PGRST202') return ['skipped', 'migration 042 is not applied to DEV yet'];
   return judge(expect, outcome);
 };
+// Free space per person (060): what someone's files in their free vaults add
+// up to is the server's, and a logged-out visitor has no number to ask.
+// Skipped until 060 is on DEV (PGRST202: no such function).
+const freeSpaceJudge = (expect) => (outcome) => {
+  if (String(outcome.error?.code) === 'PGRST202') return ['skipped', 'migration 060 is not applied to DEV yet'];
+  return judge(expect, outcome);
+};
 // Voice chats per person (043): each person's count is in member_usage,
 // which no client reads. Skipped until 043 is on DEV (the table is missing).
 const perPersonJudge = (expect) => (outcome) => {
@@ -1132,6 +1139,8 @@ export async function runAccessChecks(cfg, { a, b, anon, vaultA, vaultB, docsA }
     ['anon', "read how many voice chats QA Vault A has left", chatsVoiceJudge('refused'), rpc(anon, 'family_voice_status', { p_family_id: A.family })],
     ['B', "read how many voice chats QA Vault A has left", chatsVoiceJudge('refused'), rpc(b, 'family_voice_status', { p_family_id: A.family })],
     ['B', "add up QA Vault A's saved chats (server-only)", chatsVoiceJudge('refused'), rpc(b, 'family_chats_bytes', { p_family_id: A.family })],
+    ['anon', 'ask what it has added on Free', freeSpaceJudge('refused'), rpc(anon, 'person_storage_status', {})],
+    ['B', "add up account A's files on Free (server-only)", freeSpaceJudge('refused'), rpc(b, 'person_free_files_bytes', { p_user: A.user })],
     // Questions each month (049): each person's count is the server's.
     ['anon', 'read how many questions anyone has left', questionsJudge('refused'), onQuestions(rpc(anon, 'question_status', {}))],
     ['B', 'count a question for account A (server-only)', questionsJudge('refused'), onQuestions(rpc(b, 'claim_question', { p_user_id: A.user }))],

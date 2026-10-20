@@ -951,6 +951,7 @@ export type Database = {
       }
       plan_limits: {
         Row: {
+          business_storage_bytes: number | null
           businesses_per_person: number | null
           families_per_person: number | null
           family_questions_per_month: number | null
@@ -958,6 +959,7 @@ export type Database = {
           invites_per_day: number
           max_members: number
           personal_storage_bytes: number | null
+          person_storage_bytes: number | null
           plan: string
           question_tries_per_day: number | null
           questions_fair_use: number
@@ -969,6 +971,7 @@ export type Database = {
           voice_answers: number | null
         }
         Insert: {
+          business_storage_bytes?: number | null
           businesses_per_person?: number | null
           families_per_person?: number | null
           family_questions_per_month?: number | null
@@ -976,6 +979,7 @@ export type Database = {
           invites_per_day?: number
           max_members?: number
           personal_storage_bytes?: number | null
+          person_storage_bytes?: number | null
           plan: string
           question_tries_per_day?: number | null
           questions_fair_use?: number
@@ -987,6 +991,7 @@ export type Database = {
           voice_answers?: number | null
         }
         Update: {
+          business_storage_bytes?: number | null
           businesses_per_person?: number | null
           families_per_person?: number | null
           family_questions_per_month?: number | null
@@ -994,6 +999,7 @@ export type Database = {
           invites_per_day?: number
           max_members?: number
           personal_storage_bytes?: number | null
+          person_storage_bytes?: number | null
           plan?: string
           question_tries_per_day?: number | null
           questions_fair_use?: number
@@ -1662,6 +1668,11 @@ export type Database = {
       person_daily_limit: { Args: { p_user_id: string; p_what: string }; Returns: number }
       is_business_vault: { Args: { p_family_id: string }; Returns: boolean }
       person_on_plus: { Args: { p_user_id: string }; Returns: boolean }
+      person_free_files_bytes: { Args: { p_user: string }; Returns: number }
+      person_storage_status: {
+        Args: never
+        Returns: { limit_bytes: number | null; used_bytes: number }[]
+      }
       person_plans: { Args: { p_user_id: string }; Returns: string[] }
       purge_business: {
         Args: { p_confirm_name: string; p_family_id: string; p_user_id: string }

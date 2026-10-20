@@ -9,8 +9,9 @@ import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { SUPPORT_EMAIL, SUPPORT_PHONE } from '../../lib/app-info';
 import {
-  DEFAULT_PLAN_LIMITS, FREE_PERSONAL_STORAGE_LABEL, businessPrice, FREE_STORAGE_LABEL, MAX_FILE_BYTES, PLUS_FOR_SALE, formatBytes, plusPrice, plusPrices,
-  plusYearlyOffer, plusYearlySaving,
+  DEFAULT_PLAN_LIMITS, FREE_BUSINESS_STORAGE_LABEL, FREE_PERSONAL_STORAGE_LABEL, FREE_PERSON_STORAGE_LABEL, businessPrice, FREE_STORAGE_LABEL,
+  MAX_FILE_BYTES, PLUS_FOR_SALE, formatBytes, freeVaultsText,
+  plusPrice, plusPrices, plusYearlyOffer, plusYearlySaving,
 } from '../../lib/plans';
 import { usePaymentsStatus } from '../../lib/family-plan';
 import { lockAfterText } from '../../lib/app-lock';
@@ -45,7 +46,7 @@ function faq(payments: PaymentsStatus | null): { q: string; a: string }[] {
     },
     {
       q: 'Are there other limits?',
-      a: `Files can be up to ${MAX_FILE_BYTES / (1024 * 1024)} MB. On Free, you can add ${DEFAULT_PLAN_LIMITS.uploadsPerDay.free} documents a day (${DEFAULT_PLAN_LIMITS.uploadsPerDay.plus} with ★ Family Plus) and create one family or one business besides your personal vault. Saved chats, the family tree, share links and invitations have caps too, and AskLocker tells you if you reach one.`,
+      a: `Files can be up to ${MAX_FILE_BYTES / (1024 * 1024)} MB. On Free, you can add ${DEFAULT_PLAN_LIMITS.uploadsPerDay.free} documents a day (${DEFAULT_PLAN_LIMITS.uploadsPerDay.plus} with ★ Family Plus) and create ${freeVaultsText(DEFAULT_PLAN_LIMITS)} besides your personal vault. Saved chats, the family tree, share links and invitations have caps too, and AskLocker tells you if you reach one.`,
     },
     {
       q: 'Can I ask by speaking?',
@@ -97,7 +98,7 @@ function faq(payments: PaymentsStatus | null): { q: string; a: string }[] {
     },
     {
       q: 'How much space do we get?',
-      a: `On Free, a family gets ${FREE_STORAGE_LABEL} and your personal vault ${FREE_PERSONAL_STORAGE_LABEL}, saved chats included. ★ Family Plus gives a vault ${formatBytes(DEFAULT_PLAN_LIMITS.plus)}, for ${plusPrices('inr')} in India or ${plusPrices('usd')} elsewhere. If Plus ends while a vault is over its free space, you have ${DEFAULT_PLAN_LIMITS.graceDays} days to renew or delete documents, or the newest ones above it are removed.`,
+      a: `On Free, each person can add ${FREE_PERSON_STORAGE_LABEL} in all. A family vault holds ${FREE_STORAGE_LABEL} from everyone together, and your personal vault ${FREE_PERSONAL_STORAGE_LABEL}, saved chats included. ★ Family Plus gives a vault ${formatBytes(DEFAULT_PLAN_LIMITS.plus)}, for ${plusPrices('inr')} in India or ${plusPrices('usd')} elsewhere. If Plus ends while a vault is over its free space, you have ${DEFAULT_PLAN_LIMITS.graceDays} days to renew or delete documents, or the newest ones above it are removed.`,
     },
     {
       q: 'How do reminders work?',
@@ -148,7 +149,7 @@ function businessFaq(): { q: string; a: string }[] {
     },
     {
       q: 'Are there other limits?',
-      a: `Files can be up to ${MAX_FILE_BYTES / (1024 * 1024)} MB. Each person can add ${L.uploadsPerDay.free} documents a day on Free and ${plus.uploadsPerDay} on a paid plan. On Free, you can create one family or one business besides your personal vault.`,
+      a: `Files can be up to ${MAX_FILE_BYTES / (1024 * 1024)} MB. Each person can add ${L.uploadsPerDay.free} documents a day on Free and ${plus.uploadsPerDay} on a paid plan. On Free, you can create ${freeVaultsText(L)} besides your personal vault.`,
     },
     {
       q: 'Can I ask by speaking?',
@@ -160,7 +161,7 @@ function businessFaq(): { q: string; a: string }[] {
     },
     {
       q: 'How much space do we get?',
-      a: `On Free, a business gets ${FREE_STORAGE_LABEL}. ★ Plus gives ${formatBytes(plus.storage)}, Pro ${formatBytes(pro.storage)} and Enterprise ${formatBytes(ent.storage)}. If a paid plan ends, nothing is removed, but you can't add records until you renew.`,
+      a: `On Free, a business holds ${FREE_BUSINESS_STORAGE_LABEL} from everyone together, and each person can add ${FREE_PERSON_STORAGE_LABEL} in all. ★ Plus gives ${formatBytes(plus.storage)}, Pro ${formatBytes(pro.storage)} and Enterprise ${formatBytes(ent.storage)}. If a paid plan ends, nothing is removed, but you can't add records until you renew.`,
     },
     {
       q: 'How do reminders work?',
