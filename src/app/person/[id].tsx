@@ -333,7 +333,7 @@ export default function PersonScreen() {
                     onPress={() => router.push(`/document/${d.id}` as any)}
                     accessibilityRole="button"
                   >
-                    <Feather name={d.file_type === 'pdf' ? 'file-text' : 'image'} size={16} color={color.primary} />
+                    <Feather name={d.file_type === 'pdf' ? 'file-text' : d.file_type === 'xlsx' || d.file_type === 'csv' ? 'grid' : 'image'} size={16} color={color.primary} />
                     <View style={styles.docText}>
                       <Text style={styles.docName} numberOfLines={1}>{d.file_name}</Text>
                       {!!d.category_name && <Text style={styles.docSub}>{d.category_name}</Text>}

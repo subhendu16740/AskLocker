@@ -58,9 +58,10 @@ function addedOn(iso: string): string {
   return new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
-function docIcon(fileType: string): 'file-text' | 'image' | 'file' {
+function docIcon(fileType: string): 'file-text' | 'image' | 'grid' | 'file' {
   if (fileType === 'pdf') return 'file-text';
   if (['jpg', 'jpeg', 'png', 'heic'].includes(fileType)) return 'image';
+  if (fileType === 'xlsx' || fileType === 'csv') return 'grid';
   return 'file';
 }
 

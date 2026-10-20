@@ -9,6 +9,9 @@
 // said "PDF Document", and the database refused the document (`file_type` is
 // 20 characters) after the file was already in Storage. Native uris end in a
 // real file name, which is why the phone app never showed it.
+//
+// Spreadsheets (.xlsx and .csv) are kept too: the app reads their rows
+// itself (spreadsheet.ts). An old .xls is not: Excel saves it as .xlsx.
 // ────────────────────────────────────────────────────────────────
 
 /** What the `documents` bucket accepts: its allowed_mime_types, by type. */
@@ -16,6 +19,8 @@ const SAVEABLE = {
   pdf: 'application/pdf',
   jpg: 'image/jpeg',
   png: 'image/png',
+  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  csv: 'text/csv',
 } as const;
 
 export type SaveableType = keyof typeof SAVEABLE;
@@ -32,6 +37,13 @@ const FROM_MIME: Record<string, string> = {
   'image/gif': 'gif',
   'image/bmp': 'bmp',
   'image/tiff': 'tiff',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
+  'text/csv': 'csv',
+  'application/csv': 'csv',
+  'text/comma-separated-values': 'csv',
+  'application/vnd.oasis.opendocument.spreadsheet': 'ods',
+  // Not 'application/vnd.ms-excel': Windows gives it to .xls and to .csv
+  // alike, so the file's name decides.
 };
 
 const SAME_TYPE: Record<string, string> = { jpeg: 'jpg', jpe: 'jpg', heif: 'heic', tif: 'tiff' };
@@ -78,6 +90,9 @@ export function nameWithType(name: string | null | undefined, type: string, fall
 
 /** Said instead of trying to save a file the bucket would refuse. */
 export function unsupportedFileMessage(type: string | null | undefined): string {
+  if (type === 'xls' || type === 'ods') {
+    return `AskLocker reads Excel files saved as .xlsx. Open it in Excel or Sheets, save it as .xlsx, then add it.`;
+  }
   const what = type ? `a ${type.toUpperCase()} file` : 'this kind of file';
-  return `AskLocker can't keep ${what}. Use a PDF, JPG or PNG.`;
+  return `AskLocker can't keep ${what}. Use a PDF, a photo (JPG or PNG), an Excel file (.xlsx) or a CSV.`;
 }

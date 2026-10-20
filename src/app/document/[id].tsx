@@ -336,6 +336,20 @@ export default function DocumentViewerScreen() {
                 <Text style={styles.viewPdfBtnText}>Open PDF</Text>
               </TouchableOpacity>
             </View>
+          ) : doc.file_type === 'xlsx' || doc.file_type === 'csv' ? (
+            // A spreadsheet opens in Excel or Sheets, not here: download it.
+            // Ask reads its rows (spreadsheet.ts).
+            <View style={styles.previewBody}>
+              <View style={styles.previewIconWrap}>
+                <Feather name="grid" size={32} color="#16A34A" />
+              </View>
+              <Text style={styles.previewTitle}>{doc.file_type === 'csv' ? 'CSV file' : 'Excel spreadsheet'}</Text>
+              <Text style={styles.previewSub}>{doc.file_name}</Text>
+              <TouchableOpacity style={styles.viewPdfBtn} onPress={handleDownload}>
+                <Feather name="download" size={16} color="#FFFFFF" />
+                <Text style={styles.viewPdfBtnText}>Download</Text>
+              </TouchableOpacity>
+            </View>
           ) : (
             <View style={styles.previewBody}>
               <View style={styles.previewIconWrap}>

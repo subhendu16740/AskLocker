@@ -80,14 +80,24 @@ export default function SharedDocumentScreen() {
               <Image source={{ uri: state.url }} style={styles.preview} resizeMode="contain" accessibilityLabel={state.fileName} />
             )}
 
-            <TouchableOpacity style={styles.primary} onPress={() => open(state.url)} accessibilityRole="button">
-              <Feather name="external-link" size={16} color="#FFFFFF" />
-              <Text style={styles.primaryText}>Open</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.secondary} onPress={() => open(state.downloadUrl)} accessibilityRole="button">
-              <Feather name="download" size={16} color={color.primary} />
-              <Text style={styles.secondaryText}>Download</Text>
-            </TouchableOpacity>
+            {/* A spreadsheet has nothing to open in a browser: Download only. */}
+            {['xlsx', 'csv'].includes(state.fileType.toLowerCase()) ? (
+              <TouchableOpacity style={styles.primary} onPress={() => open(state.downloadUrl)} accessibilityRole="button">
+                <Feather name="download" size={16} color="#FFFFFF" />
+                <Text style={styles.primaryText}>Download</Text>
+              </TouchableOpacity>
+            ) : (
+              <>
+                <TouchableOpacity style={styles.primary} onPress={() => open(state.url)} accessibilityRole="button">
+                  <Feather name="external-link" size={16} color="#FFFFFF" />
+                  <Text style={styles.primaryText}>Open</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.secondary} onPress={() => open(state.downloadUrl)} accessibilityRole="button">
+                  <Feather name="download" size={16} color={color.primary} />
+                  <Text style={styles.secondaryText}>Download</Text>
+                </TouchableOpacity>
+              </>
+            )}
           </View>
         )}
 

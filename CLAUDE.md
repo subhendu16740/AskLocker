@@ -772,7 +772,8 @@ tabs. `(tabs)` is a layout group, so routes are `/home`, `/search`, `/upload`.
 | `family-people.ts` | Whose a document can be: everyone in the tree, you first (`useDocumentOwners()`, members only before 031), and a person's expiry badge (`badgeFromExpiries()`) |
 | `plans.ts` | What each plan allows (038–048): the limits as 039–048 set them — storage (on Free 100 MB for a family, 50 MB for a personal vault, `freePersonal`, 200 MB for a business, `freeBusiness`, and 50 MB for each person across their free vaults, `freePerson`, 060; 10 GB on Plus; a person at their 50 MB: `personFits()`, `personStorageFullMessage()`), 4 members on Free and 8 on Plus, 10 voice chats and 20 questions a month for each person on Free (049; on Plus 200 a month the whole family shares, `familyQuestions`, 053) (`DEFAULT_PLAN_LIMITS`, used only when the database cannot be asked), Family Plus's prices, monthly and yearly (`PLUS_PRICE`; `localPlusPrice()` / `localPlusPrices()` show rupees in India, dollars elsewhere, by the device's time zone; the yearly one against twelve months, crossed out, and the months it saves: `plusTwelveMonths()`, `plusYearlySaving()`), `storageLevel()`, and the words for a full vault (`storageFullMessage()`; for a chat, `chatStorageFullMessage()`), which live in `supabase/functions/_shared/plan-text.ts` so Gmail import says the same; 050's file limit and the words for its refusals (`MAX_FILE_BYTES`, `fileTooLargeMessage()`, `limitHint()`, `QUESTION_INPUT_MAX`) come from `_shared/limits.ts`. Whether Plus can be bought is the payments function's answer (044: `usePaymentsStatus()`, `plusForSale()`); `PLUS_FOR_SALE` (false) is only what the words assume before it answers |
 | `family-plan.ts` | Is the current family on Family Plus? `useFamilyPlan()` (from `family_storage_status()`, kept a minute per family): `isFree`, `closed` and `trial` (051), and `routeFor(feature, route)`, which sends a free family to `/plus?feature=…` instead of a starred feature. Unknown (before 038, offline) gates nothing. `usePaymentsStatus()`: can Family Plus be bought here (044). `useOnPlus()`: is the signed-in person on Plus in any vault (from `question_status()`, a minute, shared; `forgetOnPlus()` after paying), for the creation screen's "On Free" line. `useModeOnPlus()`: is any vault of the open mode on a paid plan, for the ★ after their name |
-| `file-types.ts` | What a picked file is (`detectFileType()`: MIME type, then name, never a web `blob:` uri) and whether the vault can keep it (PDF, JPG, PNG) |
+| `file-types.ts` | What a picked file is (`detectFileType()`: MIME type, then name, never a web `blob:` uri) and whether the vault can keep it (PDF, JPG, PNG, and since 061 .xlsx and .csv; an old .xls is asked to be saved as .xlsx) |
+| `spreadsheet.ts` | Reading a spreadsheet when it is added (`readSpreadsheet()`): .xlsx with read-excel-file's universal build, loaded only then, .csv with the shared parser, both into `_shared/spreadsheet-text.ts`'s rows; see [Spreadsheets](#spreadsheets--xlsx-and-csv-read-in-the-app-061) |
 | `app-info.ts` | Version, release date and commit (stamped into `extra` by `app.config.ts` at build time), and the support contact Help shows |
 | `ocr.ts` | Platform-split OCR with progress callback; reads the person's chosen languages |
 | `ocr-languages.ts` | The document-language picker list, and `resolveOcrLanguages()` which always appends English |
@@ -1034,7 +1035,10 @@ applied to a database belongs in a migration file, in the same change.
 
 **Still true:** the `documents` storage bucket is created by hand in the
 dashboard (no CLI, no migration), and `db dump` excludes the `storage` schema,
-so storage policies live only in `019`.
+so storage policies live only in `019`. Its settings are changed by SQL
+where Supabase lets a migration (050's 10 MB file limit, 061's allowed
+types: PDF, JPEG, PNG, .xlsx and .csv), each with a notice to do it by hand
+where it does not.
 
 ### Settings writes — your own name, a switch, feedback (027)
 
@@ -2700,6 +2704,60 @@ rules sort the rest (`_shared/gmail-rules.ts`).
   for it since goes back to the list, not to "failed". The app stops there
   and leaves the rest ticked for tomorrow.
 
+### Spreadsheets — .xlsx and .csv, read in the app (061)
+
+- **Business vaults keep their accounts in Excel** (the owner, 20 October
+  2026), so Upload's Browse Files takes .xlsx and .csv beside PDFs and
+  photos. The app reads a spreadsheet when it is added, as it reads a photo
+  (`src/lib/spreadsheet.ts`), shows "Read 245 rows from 3 sheets", and sends
+  the rows as the document's text; the file is kept in the bucket to
+  download. An old .xls (and .ods) is turned away with what to do: save it
+  as .xlsx (`unsupportedFileMessage()`). Nothing is saved without its rows:
+  a broken or password-protected file says so and is not kept.
+- **Every row says what its numbers are** (`spreadsheetText()`,
+  `_shared/spreadsheet-text.ts`, shared by the app, ingest and the
+  self-test): `Date: 02/09/2026 | Description: UPI/Sharma Kirana | Debit:
+  1240 | Balance: 47010`. Measured on 20 October 2026, a table read as plain
+  lines loses which column a number is in once a cell is blank (debit or
+  credit?), and a long table's header stays in its first passage only; here
+  each row carries its column names, blank cells are left out, and a
+  workbook with several sheets puts `[Sheet name]` before every row. The
+  header is the first row of words with numbers or dates under it (else the
+  first row of words, for a list); lines above it (a title, "GSTIN | …")
+  stay as they are, and a second table after a blank row gets its own.
+  Dates come out DD/MM/YYYY, so a licence's "Valid up to" reaches the
+  expiry reader; numbers come out as stored (1240, not 1,240.00).
+- **The reader is read-excel-file** (MIT, `read-excel-file/universal`, plain
+  JavaScript with fflate and saxen; its own lazily loaded web bundle). Not
+  SheetJS: the npm copy is 0.18.5, without the fixes for its known reading
+  bugs, and the fixed builds come only from SheetJS's own site. It reads
+  cached formula values, so a workbook saved by Excel reads as shown; one
+  written by a script without them shows those cells blank. CSV is
+  `parseCsv()`: quotes, doubled quotes, line breaks in a cell, a BOM, and
+  comma, semicolon, tab or bar, whichever the first line uses most.
+- **The server keeps what the app sends**, up to twenty times the file's
+  size for a spreadsheet (`providedTextLimit(bytes, true)`: an .xlsx is
+  zipped, and 1,000 rows of a 35 KB ledger read out at 86,000 characters),
+  under the same 500,000 ceiling. A .csv sent without text (an older app,
+  the rebuild) is read on the server the same way; an .xlsx without text
+  is marked unreadable ("added without its rows"), since the server has no
+  reader for one.
+- **061 adds the two types to the bucket** (`allowed_mime_types`:
+  `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`,
+  `text/csv`, what `uploadDocument()` sends). Apply it before the release:
+  without it Storage refuses the file and the app says it couldn't upload.
+  The fingerprint compares the buckets, so DEV and PROD differ until both
+  have it.
+- **Where it shows**: a grid icon on Home, All documents and a person's
+  page; the viewer says Excel spreadsheet or CSV file with Download (there
+  is no preview); a share link opens to Download only. Help names the
+  types; Privacy says photos and spreadsheets are read on the device.
+- **Not yet**: Gmail import of spreadsheet attachments (`sniffType` takes
+  PDF, JPEG and PNG); the phone app, which reads the file the same way with
+  a fallback for a Blob without `arrayBuffer()`, untried until EAS builds
+  exist; the business overview's money in and out, which reads invoices
+  ingest found, not ledger rows.
+
 ### PDF text — read by position, not by content-stream order
 
 `_shared/pdf-text.ts` extracts PDF text with PDF.js (`pdfjs-serverless`, a
@@ -2897,7 +2955,7 @@ OCR'd on the client in the chosen languages; a *scanned Indian-language PDF*
 is the case still limited to English.
 
 ```
-INGEST  upload → client OCR (Tesseract web / ML Kit native) → upload file + text
+INGEST  upload → client OCR (Tesseract web / ML Kit native), or a spreadsheet's rows → upload file + text
         → ingest-document → OCR.space fallback if needed → chunk → embed
         → document_chunks (+vectors) + document_metadata → expiry alerts
 
