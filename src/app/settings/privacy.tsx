@@ -64,7 +64,7 @@ export default function PrivacyScreen() {
         <Card>
           <CardTitle icon="file-text">Reading your documents</CardTitle>
           <Body>
-            Photos you upload are read on your device. Scanned PDFs and photos from Gmail may be read by OCR.space.
+            Photos and spreadsheets you upload are read on your device. Scanned PDFs and photos from Gmail may be read by OCR.space.
           </Body>
           <Body>
             To make search work, passages of your documents and your questions go to HuggingFace.

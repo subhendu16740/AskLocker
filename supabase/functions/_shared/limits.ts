@@ -46,9 +46,12 @@ export const MAX_DOCUMENT_TEXT = 500_000;
  * characters, never more than the file has bytes. Without a cap, a tiny file
  * could carry any amount of "text" into the shared database.
  */
-export function providedTextLimit(fileBytes: number | null | undefined): number {
+export function providedTextLimit(fileBytes: number | null | undefined, spreadsheet = false): number {
   const bytes = typeof fileBytes === 'number' && Number.isFinite(fileBytes) && fileBytes > 0 ? fileBytes : 0;
-  return Math.min(MAX_DOCUMENT_TEXT, 20_000 + bytes);
+  // A spreadsheet is the exception: an .xlsx is zipped, and its text names
+  // the columns on every row (spreadsheet-text.ts), so it reads out at many
+  // times its size. Twenty times, still under the same ceiling.
+  return Math.min(MAX_DOCUMENT_TEXT, 20_000 + bytes * (spreadsheet ? 20 : 1));
 }
 
 /** The longest question the server reads; Ask's box takes QUESTION_INPUT_MAX. */

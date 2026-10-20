@@ -37,6 +37,7 @@ import { buildGraph, relationTo, relationLabel, relativesForPrompt, relativesNam
 import { encryptPayload, vapidAuthorization, generateVapidKeys, isPushServiceEndpoint, MAX_PLAINTEXT } from '../../supabase/functions/_shared/webpush.ts';
 import { phoneLooksRight, cardProblem, cardIsEmpty, emptyCard, bloodGroupLabel, bloodGroupSpoken, telHref } from '../../src/lib/emergency.ts';
 import { allowanceJson, givenBack, parseAllowance, questionLimitMessage, questionsLeftText, resetDay } from '../../supabase/functions/_shared/questions.ts';
+import { isSpreadsheetType, parseCsv, spreadsheetText } from '../../supabase/functions/_shared/spreadsheet-text.ts';
 import { MAX_DOCUMENT_TEXT, MAX_FILE_BYTES, QUESTION_INPUT_MAX, MAX_QUESTION_CHARS, fileTooLargeMessage, inVaultFolder, limitHint, providedTextLimit } from '../../supabase/functions/_shared/limits.ts';
 import { MAX_IMPORT_BYTES } from '../../supabase/functions/_shared/gmail-rules.ts';
 import { BUSINESS_PLANS, BUSINESS_PRICE, CLOSED_MESSAGE, DEFAULT_PLAN_LIMITS, PLUS_FOR_SALE, PLUS_PRICE, businessAmount, businessPrice, businessYearPrice, chatStorageFullMessage, fits, formatBytes, freeVaultsText, isBusinessPlan, nextBusinessPlan, personFits, personStorageFullMessage, planLabel, plusName, plusAmount, plusPrice, plusPrices, plusTwelveMonths, plusYearlyOffer, plusYearlySaving, storageFullMessage } from '../../supabase/functions/_shared/plan-text.ts';
@@ -1184,6 +1185,73 @@ await test('business plans: Plus, Pro and Enterprise, their prices and words, an
   for (const text of [shopFull, chatStorageFullMessage({ ...shop, usedBytes: 200 * MB }, { forSale: true, price: plusPrice('inr') })]) {
     assert.doesNotMatch(text, /₹100|Family Plus/, 'a business is never offered Family Plus');
   }
+});
+
+await test('spreadsheets: every row says what its numbers are, and a CSV read as Excel writes it', () => {
+  // A household sheet: a title row, a header, a date, a blank cell, float noise.
+  const house = spreadsheetText('Household expenses 2026.xlsx', [{
+    name: 'Expenses',
+    rows: [
+      ['SPECIMEN Household expenses 2026', null, null, null],
+      [],
+      ['Month', 'Rent', 'Electricity', 'Paid on'],
+      ['Jan', 18000, 2210.5, new Date(Date.UTC(2026, 0, 5))],
+      ['Feb', 18000, null, new Date(Date.UTC(2026, 1, 4))],
+      ['Mar', 18000, 0.1 + 0.2, null],
+    ],
+  }]);
+  assert.equal(house.text, [
+    'Spreadsheet: Household expenses 2026.xlsx',
+    'Sheet: Expenses',
+    'SPECIMEN Household expenses 2026',
+    'Month: Jan | Rent: 18000 | Electricity: 2210.5 | Paid on: 05/01/2026',
+    'Month: Feb | Rent: 18000 | Paid on: 04/02/2026',
+    'Month: Mar | Rent: 18000 | Electricity: 0.3',
+  ].join('\n'));
+  assert.deepEqual([house.sheets, house.rows, house.truncated], [1, 3, false]);
+  // A bank statement: the blank Credit cell no longer hides which column 1,240.00 is in.
+  const bank = spreadsheetText('Statement.xlsx', [{ name: 'Sept', rows: [
+    ['Date', 'Description', 'Debit', 'Credit', 'Balance'],
+    ['02/09/2026', 'UPI/Sharma Kirana', '1,240.00', '', '47,010.00'],
+    ['05/09/2026', 'Salary Sept', '', '62,500.00', '1,09,510.00'],
+  ] }]);
+  assert.match(bank.text, /^Date: 02\/09\/2026 \| Description: UPI\/Sharma Kirana \| Debit: 1,240\.00 \| Balance: 47,010\.00$/m);
+  assert.match(bank.text, /^Date: 05\/09\/2026 \| Description: Salary Sept \| Credit: 62,500\.00 \| Balance: 1,09,510\.00$/m);
+  // Two sheets: each row names its sheet, so a passage cut from the middle still says where it came from.
+  const two = spreadsheetText('Sales.xlsx', [
+    { name: '2025', rows: [['Month', 'Sales'], ['Jan', 41000]] },
+    { name: '2026', rows: [['Month', 'Sales'], ['Jan', 52000]] },
+    { name: 'Empty', rows: [[], [null]] },
+  ]);
+  assert.match(two.text, /^\[2025\] Month: Jan \| Sales: 41000$/m);
+  assert.match(two.text, /^\[2026\] Month: Jan \| Sales: 52000$/m);
+  assert.equal(two.sheets, 2, 'an empty sheet is left out');
+  // A list of words only (no numbers under the header) still finds its header; a time alone keeps its time.
+  const list = spreadsheetText('Contacts.xlsx', [{ name: 'People', rows: [['Name', 'Relation', 'Call at'], ['Asha Verma', 'Self', new Date(Date.UTC(1899, 11, 30, 9, 30))]] }]);
+  assert.match(list.text, /^Name: Asha Verma \| Relation: Self \| Call at: 09:30$/m);
+  // Lines above the header stay as they are; a second table after a blank row has its own header.
+  const second = spreadsheetText('Invoice.xlsx', [{ name: 'Inv', rows: [
+    ['Company', 'Sharma Traders'], ['GSTIN', '21ABCDE1234F1Z5'], [],
+    ['Item', 'Qty', 'Amount'], ['Rice 25 kg', 4, 5200], [],
+    ['Tax', 'Rate'], ['CGST', '2.5%'],
+  ] }]);
+  assert.match(second.text, /^Company \| Sharma Traders$/m);
+  assert.match(second.text, /^Item: Rice 25 kg \| Qty: 4 \| Amount: 5200$/m);
+  assert.match(second.text, /^Tax: CGST \| Rate: 2\.5%$/m);
+  // A huge sheet is cut, and says how much was left.
+  const big = spreadsheetText('Big.xlsx', [{ name: 'Rows', rows: [['Item', 'Amount'], ...Array.from({ length: 5000 }, (_, i) => [`Item ${i}`, i])] }], 2000);
+  assert.ok(big.truncated && big.text.length <= 2100 && /more rows not read\)$/.test(big.text), big.text.slice(-80));
+  // CSV: quotes, a doubled quote, a line break inside a quoted cell, CRLF, a BOM, and Excel's semicolons in some regions.
+  assert.deepEqual(parseCsv('\uFEFFName,Note,Amount\r\n"Verma, Asha","said ""hi""",500\r\n"Two\nlines",,\r\n'),
+    [['Name', 'Note', 'Amount'], ['Verma, Asha', 'said "hi"', '500'], ['Two\nlines', '', '']]);
+  assert.deepEqual(parseCsv('Month;Rent\nJan;18000\n'), [['Month', 'Rent'], ['Jan', '18000']]);
+  assert.equal(spreadsheetText('Rent.csv', [{ name: '', rows: parseCsv('Month,Rent\nJan,18000') }]).text,
+    'Spreadsheet: Rent.csv\nMonth: Jan | Rent: 18000', 'a CSV has no sheet line');
+  assert.ok(isSpreadsheetType('xlsx') && isSpreadsheetType('csv') && !isSpreadsheetType('xls') && !isSpreadsheetType('pdf'));
+  // The app may send a spreadsheet twenty times its size in text, under the same ceiling.
+  assert.equal(providedTextLimit(10_000, true), 220_000);
+  assert.equal(providedTextLimit(10_000), 30_000);
+  assert.equal(providedTextLimit(5_000_000, true), MAX_DOCUMENT_TEXT);
 });
 
 if (failures.length) {

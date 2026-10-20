@@ -26,7 +26,7 @@ function faq(payments: PaymentsStatus | null): { q: string; a: string }[] {
   return [
     {
       q: 'How do I add a document?',
-      a: 'Tap Upload, then Scan, Browse Files or Gallery. If you\'re in a family, you choose which vault it goes to. With ★ Family Plus, you can also bring documents in From Gmail on a computer.',
+      a: 'Tap Upload, then Scan, Browse Files or Gallery. Browse Files takes PDFs, photos, Excel files (.xlsx) and CSVs. If you\'re in a family, you choose which vault it goes to. With ★ Family Plus, you can also bring documents in From Gmail on a computer.',
     },
     {
       q: 'What is my personal vault?',
@@ -133,7 +133,7 @@ function businessFaq(): { q: string; a: string }[] {
   return [
     {
       q: 'How do I add a record?',
-      a: 'Tap Upload, then Scan, Browse Files or Gallery. If you have more than one business, you choose which one it goes to. With ★ Plus, you can also bring records in From Gmail on a computer.',
+      a: 'Tap Upload, then Scan, Browse Files or Gallery. Browse Files takes PDFs, photos, Excel files (.xlsx) and CSVs. If you have more than one business, you choose which one it goes to. With ★ Plus, you can also bring records in From Gmail on a computer.',
     },
     {
       q: 'How do I see or delete records?',

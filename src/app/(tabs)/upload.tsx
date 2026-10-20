@@ -24,6 +24,7 @@ import { describeOcrLanguages } from '../../lib/ocr-languages';
 import {
   detectFileType, isSaveable, mimeTypeFor, nameWithType, unsupportedFileMessage, type SaveableType,
 } from '../../lib/file-types';
+import { isSpreadsheetType, readSpreadsheet, type SpreadsheetText } from '../../lib/spreadsheet';
 import type { Database } from '../../lib/database.types';
 import { ScreenHeader, PlusTag } from '../../components/screen-header';
 import { VaultDropdown, type VaultChoice } from '../../components/vault-sheet';
@@ -106,6 +107,8 @@ export default function UploadScreen() {
   const [ocrText, setOcrText] = useState<string | null>(null);
   const [ocrProgress, setOcrProgress] = useState<OcrProgress | null>(null);
   const [ocrRunning, setOcrRunning] = useState(false);
+  // A spreadsheet's rows, read here like a photo's text (spreadsheet.ts).
+  const [sheetRead, setSheetRead] = useState<SpreadsheetText | null>(null);
 
   useEffect(() => {
     fetchCategories().then(setCategories).catch(console.error);
@@ -186,6 +189,7 @@ export default function UploadScreen() {
     };
     setPickedFile(file);
     setOcrText(null);
+    setSheetRead(null);
     setCategoryTouched(false);
     setAllCategories(false);
     runOcr(file);
@@ -194,7 +198,13 @@ export default function UploadScreen() {
   const pickDocument = async () => {
     try {
       const result = await DocumentPicker.getDocumentAsync({
-        type: ['application/pdf', 'image/png', 'image/jpeg', 'image/jpg'],
+        // Spreadsheets too; 'application/vnd.ms-excel' is how Windows names a
+        // .csv (and an .xls, which takeFile turns away with what to do).
+        type: [
+          'application/pdf', 'image/png', 'image/jpeg', 'image/jpg',
+          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          'text/csv', 'text/comma-separated-values', 'application/vnd.ms-excel',
+        ],
         copyToCacheDirectory: true,
       });
 
@@ -249,6 +259,7 @@ export default function UploadScreen() {
   // ─── OCR Processing ────────────────────────────────────────────
 
   const runOcr = async (file: PickedFile) => {
+    if (isSpreadsheetType(file.type)) return readSheet(file);
     if (!isImageFile(file.type)) return;
     setOcrRunning(true);
     setOcrProgress({ stage: 'loading', progress: 0 });
@@ -260,6 +271,31 @@ export default function UploadScreen() {
       console.warn('[OCR] Failed:', err);
       // Non-blocking — upload proceeds without OCR text
       setOcrText(null);
+    } finally {
+      setOcrRunning(false);
+      setOcrProgress(null);
+    }
+  };
+
+  // A spreadsheet is read here, and nothing is saved without its rows: the
+  // server cannot read an .xlsx itself.
+  const readSheet = async (file: PickedFile) => {
+    setOcrRunning(true);
+    setOcrProgress({ stage: 'recognizing', progress: 0.5 });
+    try {
+      const read = await readSpreadsheet(file.uri, file.name, file.type as 'xlsx' | 'csv');
+      if (read.rows === 0 && read.text.split('\n').length <= 2) {
+        setPickedFile(null);
+        setFullPlan(null);
+        setErrorMsg('This spreadsheet is empty.');
+        return;
+      }
+      setOcrText(read.text);
+      setSheetRead(read);
+    } catch (err: any) {
+      setPickedFile(null);
+      setFullPlan(null);
+      setErrorMsg(err?.message ?? "Couldn't read this spreadsheet.");
     } finally {
       setOcrRunning(false);
       setOcrProgress(null);
@@ -325,6 +361,7 @@ export default function UploadScreen() {
   // ─── Helpers ──────────────────────────────────────────────────
 
   const isImage = pickedFile && ['jpg', 'jpeg', 'png', 'heic'].includes(pickedFile.type);
+  const isSheet = !!pickedFile && isSpreadsheetType(pickedFile.type);
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
@@ -404,16 +441,18 @@ export default function UploadScreen() {
               ) : (
                 <View style={styles.previewPlaceholder}>
                   <View style={styles.previewIconWrap}>
-                    <Feather name="file-text" size={32} color="#2A3D66" />
+                    <Feather name={isSheet ? 'grid' : 'file-text'} size={32} color="#2A3D66" />
                   </View>
-                  <Text style={styles.previewLabel}>PDF Document</Text>
+                  <Text style={styles.previewLabel}>
+                    {pickedFile.type === 'csv' ? 'CSV file' : isSheet ? 'Excel spreadsheet' : 'PDF Document'}
+                  </Text>
                 </View>
               )}
             </View>
 
             {/* File info */}
             <View style={styles.fileInfoRow}>
-              <Feather name={isImage ? 'image' : 'file-text'} size={16} color="#6B7280" />
+              <Feather name={isImage ? 'image' : isSheet ? 'grid' : 'file-text'} size={16} color="#6B7280" />
               <Text style={styles.fileInfoName} numberOfLines={1}>{pickedFile.name}</Text>
               <Text style={styles.fileInfoSize}>
                 {pickedFile.size > 1024 * 1024
@@ -423,7 +462,7 @@ export default function UploadScreen() {
             </View>
 
             {/* This build cannot read a script the person chose */}
-            {languageGap.length > 0 && (
+            {languageGap.length > 0 && !isSheet && (
               <View style={styles.ocrGapCard}>
                 <Feather name="alert-triangle" size={16} color="#9A6200" />
                 <Text style={styles.ocrGapText}>
@@ -439,7 +478,8 @@ export default function UploadScreen() {
                 <View style={styles.ocrHeader}>
                   <ActivityIndicator size="small" color="#2A3D66" />
                   <Text style={styles.ocrLabel}>
-                    {ocrProgress.downloading ? `Getting ${languageLabel} language data...` :
+                    {isSheet ? 'Reading the spreadsheet...' :
+                     ocrProgress.downloading ? `Getting ${languageLabel} language data...` :
                      ocrProgress.stage === 'loading' ? 'Getting ready...' :
                      ocrProgress.stage === 'recognizing' ? `Reading ${languageLabel} text...` : 'Done'}
                   </Text>
@@ -455,7 +495,9 @@ export default function UploadScreen() {
               <View style={styles.ocrDoneCard}>
                 <Feather name="check-circle" size={16} color="#16A34A" />
                 <Text style={styles.ocrDoneText}>
-                  Found {ocrText.length} characters of text
+                  {sheetRead
+                    ? `Read ${sheetRead.rows} ${sheetRead.rows === 1 ? 'row' : 'rows'}${sheetRead.sheets > 1 ? ` from ${sheetRead.sheets} sheets` : ''}${sheetRead.truncated ? '. It is very large, so only the first part was read' : ''}`
+                    : `Found ${ocrText.length} characters of text`}
                 </Text>
               </View>
             )}
@@ -463,7 +505,7 @@ export default function UploadScreen() {
             {/* Change file */}
             <TouchableOpacity
               style={styles.changeFileBtn}
-              onPress={() => { setPickedFile(null); setOcrText(null); setOcrProgress(null); }}
+              onPress={() => { setPickedFile(null); setOcrText(null); setSheetRead(null); setOcrProgress(null); }}
             >
               <Feather name="refresh-cw" size={16} color={color.primary} />
               <Text style={styles.changeFileBtnText}>Choose different file</Text>

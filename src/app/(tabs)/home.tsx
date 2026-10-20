@@ -47,6 +47,7 @@ function getCategoryColor(name: string | null): string {
 function getDocIcon(fileType: string): string {
   if (fileType === 'pdf') return 'file-text';
   if (['jpg', 'jpeg', 'png', 'heic'].includes(fileType)) return 'image';
+  if (fileType === 'xlsx' || fileType === 'csv') return 'grid';
   return 'file';
 }
 
