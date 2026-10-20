@@ -18,6 +18,14 @@
 //
 // Blank cells are left out, so a row says only what it holds. Dates are
 // written DD/MM/YYYY, as ingest's expiry reader expects (metadata.ts).
+//
+// A column named by a period is named as a person says it: "2025M01",
+// "2025-01", "Jan-25" and Excel's month dates become "Jan 2025", so "the Jan
+// 2025 figure" finds it. A row too long for one passage is written as
+// several lines, each starting with what the row is ("Segment: Treasury |
+// Country: India"), and chunking.ts never cuts a spreadsheet mid-line: on 20
+// October 2026 a passage held the end of one row, its numbers without its
+// name, beside the next row, and the answer read them as that row's.
 // ────────────────────────────────────────────────────────────────
 
 export type SheetCell = string | number | boolean | Date | null | undefined;
@@ -48,6 +56,21 @@ export function isSpreadsheetType(type: string | null | undefined): type is Spre
 /** Leaves room under the server's 500,000 characters (limits.ts) for the lines around the rows. */
 export const SPREADSHEET_TEXT_MAX = 400_000;
 
+/** Every spreadsheet's text starts with this line; chunking.ts splits such text only between lines. */
+const FIRST_LINE = 'Spreadsheet: ';
+
+export function isSpreadsheetText(text: string): boolean {
+  return text.startsWith(FIRST_LINE);
+}
+
+/**
+ * The longest a line may be, so one fits in a passage by itself (chunking.ts
+ * aims at 320 tokens, about 1,280 Latin characters). Other scripts count
+ * double, as there.
+ */
+export const MAX_ROW_LINE = 1_200;
+const lineWeight = (s: string) => s.length + (s.match(/[^\x00-\x7f]/g)?.length ?? 0);
+
 const pad = (n: number) => String(n).padStart(2, '0');
 
 /** One cell as a person would read it: dates DD/MM/YYYY, whole numbers without ".0", no float noise. */
@@ -74,11 +97,74 @@ export function cellText(value: SheetCell): string {
 const isNumberLike = (s: string) => /^[-+(]?[\d,]*\.?\d+\)?%?$/.test(s.replace(/[₹$€£\s]|Rs\.?|INR/gi, ''));
 const isDateLike = (s: string) => /^\d{1,4}[/.-]\d{1,2}[/.-]\d{1,4}( \d{1,2}:\d{2})?$/.test(s) || /^\d{1,2}:\d{2}$/.test(s);
 const isValue = (s: string) => isNumberLike(s) || isDateLike(s);
+const isYear = (s: string) => /^(19|20)\d{2}$/.test(s);
 
-/** A header is two or more words in a row, none of them a number or a date. */
+/** Two or more words in a row, none of them a number or a date. */
 function wordsOnly(cells: string[]): boolean {
   const filled = cells.filter(Boolean);
   return filled.length >= 2 && !filled.some(isValue);
+}
+
+/**
+ * A header names its columns: words, or periods over the numbers under them
+ * ("Segment | Jan 2025 | Feb 2025" saved as Excel dates, "Item | 2023 |
+ * 2024"). A row of dates over dates, or with amounts in it, is data.
+ */
+function headerLike(cells: string[], next: string[] | null): boolean {
+  if (wordsOnly(cells)) return true;
+  if (!next) return false;
+  const values = cells.map((c, i) => [c, i] as const).filter(([c]) => !!c && isValue(c));
+  return values.length >= 2
+    && values.every(([c, i]) => (isDateLike(c) || isYear(c)) && (!next[i] || isNumberLike(next[i])))
+    && values.some(([, i]) => !!next[i]);
+}
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const MONTH_NAMES = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
+const monthIndex = (word: string) => {
+  const w = word.toLowerCase();
+  return w.length < 3 ? -1 : MONTH_NAMES.findIndex((m) => m.startsWith(w));
+};
+const fullYear = (y: string) => (y.length === 2 ? 2000 + Number(y) : Number(y));
+
+/**
+ * A column named by a period in a code, as a person says it: "2025M01",
+ * "2025-01", "01/2025", "Jan-25" → "Jan 2025"; "2025Q1", "Q1-25" →
+ * "Q1 2025". Anything else stays as written: "January 2025", a financial
+ * year ("2011-12"), and "Dec 31", which may be a day.
+ */
+export function periodLabel(label: string): string {
+  const s = label.trim();
+  const month = (y: number, mo: number) => (mo >= 1 && mo <= 12 && y >= 1900 && y <= 2100 ? `${MONTHS[mo - 1]} ${y}` : s);
+  let m: RegExpMatchArray | null;
+  if ((m = s.match(/^(\d{4})\s*[-/. ]?\s*M(\d{1,2})$/i))) return month(+m[1], +m[2]);
+  if ((m = s.match(/^(\d{4})[-/.](\d{1,2})$/))) {
+    return (+m[1] + 1) % 100 === +m[2] && m[2].length === 2 ? s : month(+m[1], +m[2]);
+  }
+  if ((m = s.match(/^(\d{1,2})[-/.](\d{4})$/))) return month(+m[2], +m[1]);
+  if ((m = s.match(/^([A-Za-z]{3,9})\.?(?:\s*[-'’_/.]\s*)?(\d{2}|\d{4})$/))) {
+    const i = monthIndex(m[1]);
+    if (i >= 0) return `${MONTHS[i]} ${fullYear(m[2])}`;
+  }
+  if ((m = s.match(/^(\d{4})\s*[-/ ]?\s*Q([1-4])$/i))) return `Q${m[2]} ${m[1]}`;
+  if ((m = s.match(/^Q([1-4])\s*[-/ '’]?\s*(\d{2}|\d{4})$/i))) return `Q${m[1]} ${fullYear(m[2])}`;
+  return s;
+}
+
+/**
+ * A header's names as rows will carry them. Dates across a header that all
+ * fall on the 1st, or all on the last day of their month, are months, as
+ * Excel shows a column formatted "Jan-25".
+ */
+function headerLabels(header: string[]): string[] {
+  const dates = header.map((c) => c.match(/^(\d{2})\/(\d{2})\/(\d{4})$/));
+  const found = dates.filter((d): d is RegExpMatchArray => !!d);
+  const lastDay = (d: RegExpMatchArray) => +d[1] === new Date(Date.UTC(+d[3], +d[2], 0)).getUTCDate();
+  const monthly = found.length >= 2 && (found.every((d) => d[1] === '01') || found.every(lastDay));
+  return header.map((c, i) => {
+    const d = dates[i];
+    return d && monthly ? `${MONTHS[+d[2] - 1]} ${d[3]}` : periodLabel(c);
+  });
 }
 
 /** The row under a header holds a number or a date where the header holds a word. */
@@ -90,6 +176,61 @@ function columnName(i: number): string {
   let n = i + 1, s = '';
   while (n > 0) { const r = (n - 1) % 26; s = String.fromCharCode(65 + r) + s; n = Math.floor((n - 1) / 26); }
   return `Column ${s}`;
+}
+
+/**
+ * One row as lines no longer than MAX_ROW_LINE: usually one. A wider row is
+ * written as several, each opening with what the row is, its leading words
+ * ("RowId: FIN-035 | Segment: Treasury | Country: India | Metric: Loans"), so
+ * no line holds numbers without the row they belong to.
+ */
+function splitRow(parts: (readonly [text: string, value: string])[], prefix: string): string[] {
+  const whole = prefix + parts.map(([t]) => t).join(' | ');
+  if (lineWeight(whole) <= MAX_ROW_LINE) return [whole];
+  if (parts.length === 1) return slices(parts[0][0], MAX_ROW_LINE - lineWeight(prefix)).map((t) => prefix + t);
+  let named = 0;
+  while (named < parts.length - 1 && named < 4 && !isValue(parts[named][1])) named++;
+  let start = Math.max(1, named);
+  let head = prefix + parts.slice(0, start).map(([t]) => t).join(' | ');
+  if (lineWeight(head) > MAX_ROW_LINE / 4) {
+    // A name too long to repeat: its opening names each line, and it is
+    // written in full on the lines.
+    head = prefix + parts[0][0].slice(0, 120);
+    start = 0;
+  }
+  // A cell too long for a line with the name (a paragraph of notes) is
+  // written across several.
+  const room = MAX_ROW_LINE - lineWeight(head) - 3;
+  const pieces = parts.slice(start).flatMap(([t]) => slices(t, room));
+  const lines: string[] = [];
+  let line = head;
+  let has = false;
+  for (const piece of pieces) {
+    if (has && lineWeight(`${line} | ${piece}`) > MAX_ROW_LINE) {
+      lines.push(line);
+      line = head;
+      has = false;
+    }
+    line = `${line} | ${piece}`;
+    has = true;
+  }
+  if (has || !lines.length) lines.push(line);
+  return lines;
+}
+
+/** Text cut on spaces into pieces that each weigh no more than `room`. */
+function slices(text: string, room: number): string[] {
+  const out: string[] = [];
+  let rest = text;
+  while (lineWeight(rest) > room) {
+    const fit = Math.max(20, Math.floor((room * rest.length) / lineWeight(rest)));
+    const space = rest.lastIndexOf(' ', fit);
+    const cut = space > fit / 2 ? space : fit;
+    out.push(rest.slice(0, cut).trim());
+    rest = rest.slice(cut).trim();
+  }
+  if (rest) out.push(rest);
+  return out;
 }
 
 /**
@@ -132,7 +273,7 @@ export function spreadsheetText(fileName: string, input: SheetInput[], maxChars 
       if (!all[i].some(Boolean)) continue;
       seen++;
       const next = nextFilled(i);
-      if (next && wordsOnly(all[i]) && valuesUnder(all[i], next)) { firstHeader = i; break; }
+      if (next && headerLike(all[i], next) && valuesUnder(all[i], next)) { firstHeader = i; break; }
     }
     if (firstHeader < 0) {
       seen = 0;
@@ -145,27 +286,27 @@ export function spreadsheetText(fileName: string, input: SheetInput[], maxChars 
 
     let header: string[] | null = null;
     let afterBlank = false;
+    const prefix = several ? `[${sheet.name || 'Sheet'}] ` : '';
     for (let i = 0; i < all.length; i++) {
       const row = all[i];
       if (!row.some(Boolean)) { afterBlank = true; continue; }
       // A second table further down, after a blank row, has its own header.
       const next = nextFilled(i);
-      if (i === firstHeader || (afterBlank && header && next && wordsOnly(row) && valuesUnder(row, next))) {
-        header = row;
+      if (i === firstHeader || (afterBlank && header && next && headerLike(row, next) && valuesUnder(row, next))) {
+        header = headerLabels(row);
         afterBlank = false;
         continue;
       }
       afterBlank = false;
       const filled = row.map((c, j) => [c, j] as const).filter(([c]) => !!c);
-      let line: string;
+      let rowLines: string[];
       if (header && filled.length >= 2) {
-        line = filled.map(([c, j]) => `${header![j] || columnName(j)}: ${c}`).join(' | ');
+        rowLines = splitRow(filled.map(([c, j]) => [`${header![j] || columnName(j)}: ${c}`, c] as const), prefix);
         rows++;
       } else {
-        line = filled.map(([c]) => c).join(' | ');
+        rowLines = splitRow(filled.map(([c]) => [c, c] as const), prefix);
       }
-      if (several) line = `[${sheet.name || 'Sheet'}] ${line}`;
-      if (!push(line)) {
+      if (!rowLines.every(push)) {
         left += all.slice(i).filter((r) => r.some(Boolean)).length;
         break;
       }
