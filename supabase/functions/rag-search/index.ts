@@ -11,6 +11,7 @@ import { groqChat, groqText, hasGroqKey } from '../_shared/groq.ts';
 import { buildGraph, relativesNamedIn, type KinGraph, type NamedRelative } from '../_shared/kinship.ts';
 import { ticketCodeNotes, ticketSearchTerms } from '../_shared/tickets.ts';
 import { digitsFromWords, restoreCodes } from '../_shared/numbers.ts';
+import { isSpreadsheetType } from '../_shared/spreadsheet-text.ts';
 import { takeInTurn, uniqueRelatives } from '../_shared/vaults.ts';
 import { USED_PASSAGES_RULE, passagesUsed, splitUsedPassages } from '../_shared/used-passages.ts';
 import { allowanceJson, givenBack, parseAllowance, questionLimitMessage, type QuestionAllowance } from '../_shared/questions.ts';
@@ -66,6 +67,12 @@ const RERANK_MIN_SCORE = 4;        // 0–10; below this a chunk is dropped outr
 // question. The chunker already caps a chunk at 400 tokens (~1,600
 // characters) precisely so a passage is small enough to handle whole.
 const RERANK_SNIPPET_CHARS = 1600; // per candidate: a full chunk, not its opening
+
+// Spreadsheet rows arrive as "Column: value | Column: value", one row a line
+// (_shared/spreadsheet-text.ts). Said to the judge and the answer only when a
+// spreadsheet is among the passages, so other questions cost nothing more.
+const SPREADSHEET_ROWS_RULE =
+  'Spreadsheet passages hold one row per line, as "Column: value | Column: value". A number belongs only to the row it is on: the row\'s own columns (its segment, country, item, month…) say what it is.';
 
 /** A document an earlier answer cited — enough to rebuild a ChunkResult. */
 interface CitedSource {
@@ -950,7 +957,7 @@ Score how well each passage answers the question, 0 to 10.
 10 = directly contains the answer. 5 = related, partial. 0 = unrelated, even if it shares a word or a year with the question.
 Use the document type: an insurance question is not answered by a tax return, a placements question is not answered by a resume.
 A passage may be a TABLE, one row per line with columns separated by two spaces. Read every row before scoring it: the row that answers the question is often not the first one, and a table whose other rows are irrelevant still scores 10 if any single row answers it.
-Reply with JSON only: {"scores":[{"i":0,"s":7}, ...]} — one entry for EVERY passage index, including the ones you score 0.${codeNotes.length
+${candidates.some((c) => isSpreadsheetType(c.file_type)) ? `${SPREADSHEET_ROWS_RULE} A passage holding the row that matches every part of the question scores 10.\n` : ''}Reply with JSON only: {"scores":[{"i":0,"s":7}, ...]} — one entry for EVERY passage index, including the ones you score 0.${codeNotes.length
   ? `\nTicket codes in these passages, explained: ${codeNotes.join(' ')} On a train ticket the seat is this berth, in Booking Status or Current Status.`
   : ''}`,
         },
@@ -1283,7 +1290,7 @@ You ONLY answer based on the provided document context.
 The context is whatever search returned — it may not actually answer the question. If it doesn't, say so plainly and, if a related document exists, say what it does cover instead. NEVER answer a different question just because the context happens to contain information about it.
 This is an ongoing conversation: use earlier turns to understand what the user is referring to.
 Keep answers concise (1-3 sentences). Include specific details like dates, amounts, and document names.
-Copy every number exactly as the document writes it, in digits: train, PNR, seat, berth, policy, account, phone and ID numbers, and amounts. Never write a number in words, and never reorder, round or respell its digits.${opts.family ? `\n${opts.family} Answer about that person, and say whose document it is.` : ''}${opts.notes?.length ? `\nTicket codes in the context, explained: ${opts.notes.join(' ')} On a train ticket the seat is this berth (coach and berth number), shown in Booking Status or Current Status.` : ''}${languageRule}${voiceRule}
+Copy every number exactly as the document writes it, in digits: train, PNR, seat, berth, policy, account, phone and ID numbers, and amounts. Never write a number in words, and never reorder, round or respell its digits.${chunks.some((c) => isSpreadsheetType(c.file_type)) ? `\n${SPREADSHEET_ROWS_RULE} Answer from the row whose own columns match what was asked, and say which column you read.` : ''}${opts.family ? `\n${opts.family} Answer about that person, and say whose document it is.` : ''}${opts.notes?.length ? `\nTicket codes in the context, explained: ${opts.notes.join(' ')} On a train ticket the seat is this berth (coach and berth number), shown in Booking Status or Current Status.` : ''}${languageRule}${voiceRule}
 The passages in the context are numbered: [Passage 1 | …], [Passage 2 | …]. ${USED_PASSAGES_RULE}`,
         },
         // Prior turns, so "this one" and "that policy" resolve naturally.

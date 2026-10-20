@@ -18,7 +18,15 @@
 // produces chunks that overflow the window by a wide margin — so the
 // estimate below counts non-ASCII characters at twice the weight, and
 // Indian-language documents chunk smaller of their own accord.
+//
+// A SPREADSHEET IS CUT ONLY BETWEEN ITS LINES, with no overlap. Each line is
+// a row that says what it is (spreadsheet-text.ts), so nothing needs carrying
+// across; an overlap carried the end of one row, its numbers without its
+// name, into the next passage beside another row, and the answer read them
+// as that row's (20 October 2026).
 // ────────────────────────────────────────────────────────────────
+
+import { isSpreadsheetText } from './spreadsheet-text.ts';
 
 export interface Chunk {
   content: string;
@@ -73,6 +81,7 @@ export function chunkText(
 ): Chunk[] {
   const cleaned = text.replace(/\r\n/g, '\n').trim();
   if (!cleaned) return [];
+  if (isSpreadsheetText(cleaned)) overlapTokens = 0;
 
   // Atoms are the largest pieces that already fit; packing only ever joins
   // them, so no chunk can exceed the ceiling by construction.

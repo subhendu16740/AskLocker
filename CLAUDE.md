@@ -2727,6 +2727,25 @@ rules sort the rest (`_shared/gmail-rules.ts`).
   stay as they are, and a second table after a blank row gets its own.
   Dates come out DD/MM/YYYY, so a licence's "Valid up to" reaches the
   expiry reader; numbers come out as stored (1240, not 1,240.00).
+- **A month column is named as people say it** (`periodLabel()`):
+  "2025M01", "2025-01", "01/2025" and "Jan-25" become "Jan 2025", "2025Q1"
+  "Q1 2025", and a header of Excel dates (all on the 1st, or all on the
+  month's last day) months too; a financial year ("2024-25") and "Dec 31"
+  stay as written. A header of dates or years over numbers counts as a
+  header. Found on 20 October 2026: asked for "the Jan 2025
+  figure" in a sheet whose columns said 2025M01, the judge kept the wrong
+  passage.
+- **No passage holds a row without its name.** A row too long for one
+  passage (`MAX_ROW_LINE`, 1,200 characters) is written as several lines,
+  each opening with the row's leading words ("RowId: FIN-035 | Segment:
+  Treasury | Country: India"), and `chunkText()` cuts a spreadsheet's text
+  (`isSpreadsheetText()`: it starts "Spreadsheet: ") only between lines,
+  with no overlap. The overlap used for other text had carried the end of
+  one row, its numbers without its name, into the next passage beside
+  another row, and the answer read them as that row's. When a spreadsheet
+  is among the passages, the judge and the answer are told a number belongs
+  to the row it is on (`SPREADSHEET_ROWS_RULE` in rag-search). A
+  spreadsheet stored before this keeps its old passages: add it again.
 - **The reader is read-excel-file** (MIT, `read-excel-file/universal`, plain
   JavaScript with fflate and saxen; its own lazily loaded web bundle). Not
   SheetJS: the npm copy is 0.18.5, without the fixes for its known reading
@@ -2843,6 +2862,9 @@ reads ✅ by itself, and the offline self-test guards the first two:
   (including the danda `।`) → clauses → a hard cut. OCR output often has no
   blank lines and sometimes no punctuation at all; the previous splitter gave
   up on exactly that case and emitted one enormous chunk.
+- **A spreadsheet is cut only between its lines, with no overlap**: each
+  line is a whole row that names itself (see
+  [Spreadsheets](#spreadsheets--xlsx-and-csv-read-in-the-app-061)).
 - Changing the target means re-splitting stored documents: migration 016's
   `rechunked_at` drives that as the first phase of `reembed-index`.
 

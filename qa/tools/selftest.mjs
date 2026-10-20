@@ -37,7 +37,8 @@ import { buildGraph, relationTo, relationLabel, relativesForPrompt, relativesNam
 import { encryptPayload, vapidAuthorization, generateVapidKeys, isPushServiceEndpoint, MAX_PLAINTEXT } from '../../supabase/functions/_shared/webpush.ts';
 import { phoneLooksRight, cardProblem, cardIsEmpty, emptyCard, bloodGroupLabel, bloodGroupSpoken, telHref } from '../../src/lib/emergency.ts';
 import { allowanceJson, givenBack, parseAllowance, questionLimitMessage, questionsLeftText, resetDay } from '../../supabase/functions/_shared/questions.ts';
-import { isSpreadsheetType, parseCsv, spreadsheetText } from '../../supabase/functions/_shared/spreadsheet-text.ts';
+import { isSpreadsheetText, isSpreadsheetType, MAX_ROW_LINE, parseCsv, periodLabel, spreadsheetText } from '../../supabase/functions/_shared/spreadsheet-text.ts';
+import { chunkText } from '../../supabase/functions/_shared/chunking.ts';
 import { MAX_DOCUMENT_TEXT, MAX_FILE_BYTES, QUESTION_INPUT_MAX, MAX_QUESTION_CHARS, fileTooLargeMessage, inVaultFolder, limitHint, providedTextLimit } from '../../supabase/functions/_shared/limits.ts';
 import { MAX_IMPORT_BYTES } from '../../supabase/functions/_shared/gmail-rules.ts';
 import { BUSINESS_PLANS, BUSINESS_PRICE, CLOSED_MESSAGE, DEFAULT_PLAN_LIMITS, PLUS_FOR_SALE, PLUS_PRICE, businessAmount, businessPrice, businessYearPrice, chatStorageFullMessage, fits, formatBytes, freeVaultsText, isBusinessPlan, nextBusinessPlan, personFits, personStorageFullMessage, planLabel, plusName, plusAmount, plusPrice, plusPrices, plusTwelveMonths, plusYearlyOffer, plusYearlySaving, storageFullMessage } from '../../supabase/functions/_shared/plan-text.ts';
@@ -1252,6 +1253,77 @@ await test('spreadsheets: every row says what its numbers are, and a CSV read as
   assert.equal(providedTextLimit(10_000, true), 220_000);
   assert.equal(providedTextLimit(10_000), 30_000);
   assert.equal(providedTextLimit(5_000_000, true), MAX_DOCUMENT_TEXT);
+});
+
+await test('spreadsheets: a month column is named as people say it, and no passage holds a row without its name', () => {
+  // "the Jan 2025 figure" must meet a column named 2025M01 (found on 20 October 2026).
+  for (const [code, said] of [
+    ['2025M01', 'Jan 2025'], ['2025-03', 'Mar 2025'], ['03/2025', 'Mar 2025'], ['Jan-25', 'Jan 2025'],
+    ["Sept'24", 'Sep 2024'], ['2025Q1', 'Q1 2025'], ['Q2-25', 'Q2 2025'],
+    ['Jan25', 'Jan 2025'], ['Mar.2025', 'Mar 2025'], ['January 2025', 'January 2025'], ['Jan 2025', 'Jan 2025'],
+    ['2011-12', '2011-12'], ['2024-25', '2024-25'], ['Dec 31', 'Dec 31'],
+    ['2025M13', '2025M13'], ['Marks 25', 'Marks 25'], ['May', 'May'], ['Total', 'Total'],
+  ]) assert.equal(periodLabel(code), said, code);
+  const months = spreadsheetText('Loans.xlsx', [{ name: 'L', rows: [
+    ['RowId', 'Segment', 'Country', 'Metric', '2024M12', '2025M01'],
+    ['FIN-035', 'Treasury', 'India', 'Loans', 22581, 22872],
+  ] }]);
+  assert.match(months.text, /^RowId: FIN-035 \| Segment: Treasury \| Country: India \| Metric: Loans \| Dec 2024: 22581 \| Jan 2025: 22872$/m);
+  // Excel month columns are dates: a header of dates over numbers is a header, the 1st or the month's end is a month.
+  const excel = spreadsheetText('Excel months.xlsx', [{ name: 'E', rows: [
+    ['Segment', 'Country', new Date(Date.UTC(2025, 0, 1)), new Date(Date.UTC(2025, 1, 1))],
+    ['Treasury', 'India', 22872, 23068],
+  ] }, { name: 'F', rows: [
+    ['Item', new Date(Date.UTC(2025, 0, 31)), new Date(Date.UTC(2025, 1, 28))],
+    ['Rent', 18000, 18000],
+  ] }]);
+  assert.match(excel.text, /^\[E\] Segment: Treasury \| Country: India \| Jan 2025: 22872 \| Feb 2025: 23068$/m);
+  assert.match(excel.text, /^\[F\] Item: Rent \| Jan 2025: 18000 \| Feb 2025: 18000$/m);
+  const years = spreadsheetText('Years.xlsx', [{ name: '', rows: [['Item', 2023, 2024], ['Rent', 216000, 228000]] }]);
+  assert.match(years.text, /^Item: Rent \| 2023: 216000 \| 2024: 228000$/m);
+  // A pivot: no name over the first column, a month with nothing in it on the first row.
+  const pivot = spreadsheetText('Pivot.xlsx', [{ name: '', rows: [
+    [null, new Date(Date.UTC(2025, 0, 1)), new Date(Date.UTC(2025, 1, 1)), new Date(Date.UTC(2025, 2, 1))],
+    ['Rent', 18000, null, 18000],
+  ] }]);
+  assert.match(pivot.text, /^Column A: Rent \| Jan 2025: 18000 \| Mar 2025: 18000$/m);
+  // A statement with no header row is not given one: its dates sit over dates, its amounts are amounts.
+  const bare = spreadsheetText('Bare.csv', [{ name: '', rows: [['02/09/2026', 'UPI', '1240'], ['03/09/2026', 'ATM', '500']] }]);
+  assert.match(bare.text, /^02\/09\/2026 \| UPI \| 1240$/m);
+  assert.equal(bare.rows, 0);
+
+  // A row too wide for one passage: every line opens with what the row is, and every value is kept once.
+  const codes = Array.from({ length: 120 }, (_, i) => `${2015 + Math.floor(i / 12)}M${String((i % 12) + 1).padStart(2, '0')}`);
+  const wide = spreadsheetText('Wide.xlsx', [{ name: 'W', rows: [
+    ['RowId', 'Segment', 'Country', 'Metric', ...codes, 'Notes'],
+    ['FIN-035', 'Treasury', 'India', 'Loans', ...codes.map((_, i) => 20000 + i), `SPECIMEN ${'restated after audit '.repeat(150)}end of note`],
+  ] }]);
+  const wideRows = wide.text.split('\n').slice(2);
+  assert.ok(wideRows.length > 2, `${wideRows.length} lines`);
+  for (const line of wideRows) {
+    assert.ok(line.startsWith('RowId: FIN-035 | Segment: Treasury | Country: India | Metric: Loans | '), line.slice(0, 90));
+    assert.ok(line.length <= MAX_ROW_LINE, `${line.length} characters`);
+  }
+  for (let i = 0; i < 120; i++) assert.equal(wide.text.split(`: ${20000 + i}`).length - 1, 1, `value ${20000 + i}`);
+  assert.match(wide.text, /end of note$/, 'a long note is written across lines, not cut');
+  assert.equal(wide.rows, 1);
+
+  // Passages: a spreadsheet is cut only between its lines, with no overlap, so every line of every
+  // passage is a whole line of the text. (An overlap once carried 2025M01 of one row beside the next row.)
+  const sheet = spreadsheetText('Financials.xlsx', [{ name: 'Financials', rows: [
+    ['RowId', 'Segment', 'Country', 'Metric', ...codes.slice(96)],
+    ...Array.from({ length: 36 }, (_, r) => [`FIN-${String(r + 1).padStart(3, '0')}`, ['Retail', 'Treasury', 'Wealth'][r % 3], ['India', 'UK', 'USA'][r % 3], 'Loans', ...codes.slice(96).map((_, i) => 1000 * r + i)]),
+  ] }, { name: 'Metrics', rows: [['Metric', 'Shown as'], ['Loans', 'USD thousands']] }]);
+  assert.ok(isSpreadsheetText(sheet.text) && !isSpreadsheetText('Passport\nSpreadsheet: no'));
+  const whole = new Set(sheet.text.split('\n'));
+  const passages = chunkText(sheet.text);
+  assert.ok(passages.length > 5, `${passages.length} passages`);
+  for (const p of passages) for (const line of p.content.split('\n')) assert.ok(whole.has(line), `cut line: ${line.slice(0, 60)}`);
+  assert.equal(passages.map((p) => p.content).join('\n'), sheet.text, 'nothing repeated, nothing lost');
+  // Other text keeps its overlap.
+  const prose = Array.from({ length: 60 }, (_, i) => `Clause ${i} of the SPECIMEN agreement says the rent is paid by the fifth.`).join('\n');
+  const proseParts = chunkText(prose);
+  assert.ok(proseParts.length > 1 && proseParts[0].content.endsWith(proseParts[1].content.split('\n')[0].slice(-20)), 'prose overlaps');
 });
 
 if (failures.length) {
