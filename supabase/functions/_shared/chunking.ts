@@ -17,7 +17,8 @@
 // emits a token every 1-2 characters. Sizing Hindi by the English rule
 // produces chunks that overflow the window by a wide margin — so the
 // estimate below counts non-ASCII characters at twice the weight, and
-// Indian-language documents chunk smaller of their own accord.
+// Indian-language documents chunk smaller of their own accord. Numbers
+// count by their digits, which ran at twice the old estimate (tokens.ts).
 //
 // A SPREADSHEET IS CUT ONLY BETWEEN ITS LINES, with no overlap. Each line is
 // a row that says what it is (spreadsheet-text.ts), so nothing needs carrying
@@ -27,6 +28,7 @@
 // ────────────────────────────────────────────────────────────────
 
 import { isSpreadsheetText } from './spreadsheet-text.ts';
+import { estimateTokens } from './tokens.ts';
 
 export interface Chunk {
   content: string;
@@ -43,23 +45,9 @@ export const TARGET_CHUNK_TOKENS = 320;
  *  boundary is still whole in one of them. */
 export const CHUNK_OVERLAP_TOKENS = 50;
 
-/**
- * Tokens a piece of text is worth, near enough to size a chunk by.
- *
- * Latin text runs about 4 characters per token. Indic scripts run closer to
- * 2 — the tokenizer was trained mostly on Latin text, so it splits Devanagari
- * and friends far more finely. Counting non-ASCII at double weight keeps a
- * Hindi chunk inside the same window as an English one.
- */
-export function estimateTokens(text: string): number {
-  let ascii = 0;
-  let wide = 0;
-  for (const ch of text) {
-    if (ch.charCodeAt(0) < 128) ascii++;
-    else wide++;
-  }
-  return Math.ceil(ascii / 4 + wide / 2);
-}
+// Tokens a piece of text is worth, near enough to size a chunk by: Indic
+// scripts at double weight, numbers by their digits (tokens.ts).
+export { estimateTokens };
 
 /** Characters that end a sentence, including the Devanagari danda. */
 const SENTENCE_END = /(?<=[.!?।॥])\s+/;

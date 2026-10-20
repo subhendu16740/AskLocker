@@ -37,7 +37,8 @@ import { buildGraph, relationTo, relationLabel, relativesForPrompt, relativesNam
 import { encryptPayload, vapidAuthorization, generateVapidKeys, isPushServiceEndpoint, MAX_PLAINTEXT } from '../../supabase/functions/_shared/webpush.ts';
 import { phoneLooksRight, cardProblem, cardIsEmpty, emptyCard, bloodGroupLabel, bloodGroupSpoken, telHref } from '../../src/lib/emergency.ts';
 import { allowanceJson, givenBack, parseAllowance, questionLimitMessage, questionsLeftText, resetDay } from '../../supabase/functions/_shared/questions.ts';
-import { isSpreadsheetText, isSpreadsheetType, MAX_ROW_LINE, parseCsv, periodLabel, spreadsheetText } from '../../supabase/functions/_shared/spreadsheet-text.ts';
+import { isSpreadsheetText, isSpreadsheetType, MAX_ROW_TOKENS, parseCsv, periodLabel, spreadsheetText } from '../../supabase/functions/_shared/spreadsheet-text.ts';
+import { estimateTokens } from '../../supabase/functions/_shared/tokens.ts';
 import { chunkText } from '../../supabase/functions/_shared/chunking.ts';
 import { MAX_DOCUMENT_TEXT, MAX_FILE_BYTES, QUESTION_INPUT_MAX, MAX_QUESTION_CHARS, fileTooLargeMessage, inVaultFolder, limitHint, providedTextLimit } from '../../supabase/functions/_shared/limits.ts';
 import { MAX_IMPORT_BYTES } from '../../supabase/functions/_shared/gmail-rules.ts';
@@ -1302,11 +1303,24 @@ await test('spreadsheets: a month column is named as people say it, and no passa
   assert.ok(wideRows.length > 2, `${wideRows.length} lines`);
   for (const line of wideRows) {
     assert.ok(line.startsWith('RowId: FIN-035 | Segment: Treasury | Country: India | Metric: Loans | '), line.slice(0, 90));
-    assert.ok(line.length <= MAX_ROW_LINE, `${line.length} characters`);
+    assert.ok(estimateTokens(line) <= MAX_ROW_TOKENS, `${estimateTokens(line)} tokens`);
   }
   for (let i = 0; i < 120; i++) assert.equal(wide.text.split(`: ${20000 + i}`).length - 1, 1, `value ${20000 + i}`);
   assert.match(wide.text, /end of note$/, 'a long note is written across lines, not cut');
   assert.equal(wide.rows, 1);
+
+  // Numbers cost about twice the tokens of words (o200k, 20 October 2026: a spreadsheet's rows were
+  // 10,472 tokens, which characters alone put at 5,524), so a row of 60 months is two lines, both named.
+  const row = 'RowId: FIN-035 | Segment: Treasury | Country: India | Metric: Loans | ' + codes.slice(0, 30).map((c, i) => `${periodLabel(c)}: ${20085 + i * 97}`).join(' | ');
+  assert.ok(estimateTokens(row) > 1.6 * Math.ceil(row.length / 4), `${estimateTokens(row)} tokens for ${row.length} characters`);
+  assert.equal(estimateTokens('The rent is paid by the fifth.'), Math.ceil('The rent is paid by the fifth.'.length / 4), 'words alone count as before');
+  assert.equal(estimateTokens('आशा'), 2, 'Indic text at double weight, as before');
+  const sixty = spreadsheetText('Financials.xlsx', [{ name: '', rows: [
+    ['RowId', 'Segment', 'Country', 'Metric', ...codes.slice(0, 60)],
+    ['FIN-035', 'Treasury', 'India', 'Loans', ...codes.slice(0, 60).map((_, i) => 20085 + i * 97)],
+  ] }]).text.split('\n').slice(1);
+  assert.equal(sixty.length, 2, sixty.join('\n'));
+  assert.ok(sixty.every((l) => l.startsWith('RowId: FIN-035 | Segment: Treasury | Country: India | Metric: Loans | ')));
 
   // Passages: a spreadsheet is cut only between its lines, with no overlap, so every line of every
   // passage is a whole line of the text. (An overlap once carried 2025M01 of one row beside the next row.)
