@@ -123,7 +123,11 @@ Four things will mislead you if you assume otherwise:
    `family_deletion_plan`, `purge_family_vault`, and 051's
    `business_deletion_plan` and `purge_business`, which ask for the owner
    too) are service role only: see
-   [Your vaults](#your-vaults--in-settings-and-a-vault-deleted-by-its-owner-057)).
+   [Your vaults](#your-vaults--in-settings-and-a-vault-deleted-by-its-owner-057);
+   060's free space per person is added up by the server alone
+   (`person_free_files_bytes`, service role only), and a person reads only
+   their own (`person_storage_status()`, from `auth.uid()`): see
+   [Free space per person](#free-space-per-person--50-mb-each-a-family-100-mb-a-business-200-mb-060)).
    **A new writable
    column needs its own `GRANT` in a migration.** Nobody joins a family
    without saying yes: only an admin asks a person in, through the
@@ -173,7 +177,7 @@ errors**) and `npm run build` are the local gates.
 at 03:10 IST, and on pushes that change `qa/`. It uploads synthetic SPECIMEN
 documents to its own vault (QA Vault A, account A), asks questions about
 them, and checks the answers on facts and sources, never wording. It also
-runs the 023 sweep and the 024 DEV/PROD fingerprint, 166 access probes (a
+runs the 023 sweep and the 024 DEV/PROD fingerprint, 168 access probes (a
 logged-out visitor and a second account must be refused everywhere, Gmail
 import's endpoints, the family tree and its nicknames, emergency cards, linking,
 notification devices, share links, invitations, plans and personal vaults
@@ -182,7 +186,8 @@ searches only the asker's own; a share
 link must open without an account, and stop once it is turned off; nobody
 can give a family Plus, raise a limit, read another family's storage, read
 or count anyone's questions this month (and a free vault cannot make a
-30-day link), read or change anyone's counts for the day, have another
+30-day link), read or change anyone's counts for the day, ask or add up
+anyone's free space (060), have another
 vault's file read into their own (050: neither by adding a document for it
 nor by sending its address to ingest-document; a document already read is
 not read again, and a second free family is refused), end
@@ -709,7 +714,7 @@ src/
     settings/                # (NOT a tab) its own Stack, so Back returns to Settings
       index.tsx              # the list; every row opens a screen
       profile.tsx  security.tsx  notifications.tsx  privacy.tsx   # notifications: the switch, and this device (034)
-      storage.tsx  help.tsx  feedback.tsx  about.tsx   # storage: one table, a row per vault: used, space, its plan, ★ for a paid one (038, 039); help: a business's answers in Business mode
+      storage.tsx  help.tsx  feedback.tsx  about.tsx   # storage: one table, a row per vault: used, space, its plan, ★ for a paid one (038, 039), and first what you added on Free (060); help: a business's answers in Business mode
       vaults.tsx             # Your vaults: Family vaults and Business vaults, open, create, Make it a business, Delete (057)
       delete-account.tsx     # Security › Delete account: shows what goes, asks for DELETE (029)
     document/[id].tsx        # document viewer; Share opens the share sheet (036, web only)
@@ -765,7 +770,7 @@ tabs. `(tabs)` is a layout group, so routes are `/home`, `/search`, `/upload`.
 | `dates.ts` | `parseDocumentDate()`: expiry dates exactly as ingest stores them (DD/MM/YYYY and kin, YYYY-MM-DD, "19 October 2026") |
 | `emergency.ts` | The emergency card's shape, blood groups (`bloodGroupLabel()`: "A−", "Bombay (hh)"), `telHref()`, and `cardProblem()` — the same checks and messages as `save_emergency_card()`, so the form can say what is wrong before saving |
 | `family-people.ts` | Whose a document can be: everyone in the tree, you first (`useDocumentOwners()`, members only before 031), and a person's expiry badge (`badgeFromExpiries()`) |
-| `plans.ts` | What each plan allows (038–048): the limits as 039–048 set them — storage (on Free 200 MB for a family and 100 MB for a personal vault, `freePersonal`; 10 GB on Plus), 4 members on Free and 8 on Plus, 10 voice chats and 20 questions a month for each person on Free (049; on Plus 200 a month the whole family shares, `familyQuestions`, 053) (`DEFAULT_PLAN_LIMITS`, used only when the database cannot be asked), Family Plus's prices, monthly and yearly (`PLUS_PRICE`; `localPlusPrice()` / `localPlusPrices()` show rupees in India, dollars elsewhere, by the device's time zone; the yearly one against twelve months, crossed out, and the months it saves: `plusTwelveMonths()`, `plusYearlySaving()`), `storageLevel()`, and the words for a full vault (`storageFullMessage()`; for a chat, `chatStorageFullMessage()`), which live in `supabase/functions/_shared/plan-text.ts` so Gmail import says the same; 050's file limit and the words for its refusals (`MAX_FILE_BYTES`, `fileTooLargeMessage()`, `limitHint()`, `QUESTION_INPUT_MAX`) come from `_shared/limits.ts`. Whether Plus can be bought is the payments function's answer (044: `usePaymentsStatus()`, `plusForSale()`); `PLUS_FOR_SALE` (false) is only what the words assume before it answers |
+| `plans.ts` | What each plan allows (038–048): the limits as 039–048 set them — storage (on Free 100 MB for a family, 50 MB for a personal vault, `freePersonal`, 200 MB for a business, `freeBusiness`, and 50 MB for each person across their free vaults, `freePerson`, 060; 10 GB on Plus; a person at their 50 MB: `personFits()`, `personStorageFullMessage()`), 4 members on Free and 8 on Plus, 10 voice chats and 20 questions a month for each person on Free (049; on Plus 200 a month the whole family shares, `familyQuestions`, 053) (`DEFAULT_PLAN_LIMITS`, used only when the database cannot be asked), Family Plus's prices, monthly and yearly (`PLUS_PRICE`; `localPlusPrice()` / `localPlusPrices()` show rupees in India, dollars elsewhere, by the device's time zone; the yearly one against twelve months, crossed out, and the months it saves: `plusTwelveMonths()`, `plusYearlySaving()`), `storageLevel()`, and the words for a full vault (`storageFullMessage()`; for a chat, `chatStorageFullMessage()`), which live in `supabase/functions/_shared/plan-text.ts` so Gmail import says the same; 050's file limit and the words for its refusals (`MAX_FILE_BYTES`, `fileTooLargeMessage()`, `limitHint()`, `QUESTION_INPUT_MAX`) come from `_shared/limits.ts`. Whether Plus can be bought is the payments function's answer (044: `usePaymentsStatus()`, `plusForSale()`); `PLUS_FOR_SALE` (false) is only what the words assume before it answers |
 | `family-plan.ts` | Is the current family on Family Plus? `useFamilyPlan()` (from `family_storage_status()`, kept a minute per family): `isFree`, `closed` and `trial` (051), and `routeFor(feature, route)`, which sends a free family to `/plus?feature=…` instead of a starred feature. Unknown (before 038, offline) gates nothing. `usePaymentsStatus()`: can Family Plus be bought here (044). `useOnPlus()`: is the signed-in person on Plus in any vault (from `question_status()`, a minute, shared; `forgetOnPlus()` after paying), for the creation screen's "On Free" line. `useModeOnPlus()`: is any vault of the open mode on a paid plan, for the ★ after their name |
 | `file-types.ts` | What a picked file is (`detectFileType()`: MIME type, then name, never a web `blob:` uri) and whether the vault can keep it (PDF, JPG, PNG) |
 | `app-info.ts` | Version, release date and commit (stamped into `extra` by `app.config.ts` at build time), and the support contact Help shows |
@@ -780,7 +785,7 @@ tabs. `(tabs)` is a layout group, so routes are `/home`, `/search`, `/upload`.
 | `speech-text.ts` | `toSpeech()`: strips markdown and spells out ID numbers before they are read aloud — and a number named as one ("train number 16782", "PNR: 4512", "PIN 751001", "नंबर 16782") digit by digit, from its digits; the screen keeps the digits |
 | `voice-languages.ts` | The language picker list and the few phrases the app itself says, per language |
 | `storage.ts` | Key-value cache: localStorage on web, AsyncStorage on native |
-| `database.types.ts` | Generated Supabase types, current to 057 (030, 052, 055, 058 and 059 changed nothing in them; 049's, 050's, 051's, 053's, 054's, 056's and 057's added by hand). Regenerate after every migration and re-append the hand-written block at the bottom (see the typecheck note) |
+| `database.types.ts` | Generated Supabase types, current to 060 (030, 052, 055, 058 and 059 changed nothing in them; 049's, 050's, 051's, 053's, 054's, 056's, 057's and 060's added by hand). Regenerate after every migration and re-append the hand-written block at the bottom (see the typecheck note) |
 
 ---
 
@@ -878,12 +883,13 @@ DEV's test files and QA traffic use the same allowance as PROD's families
 
 - **Going over is not a bill, it is a stop.** Supabase emails, allows a grace
   period, then may restrict every project in the organisation: paused,
-  read-only, or 402 on every request. 048's limits keep each vault in bounds,
-  and one family and one business a person on Free (050, 051, 059) keep one
-  account to about 500 MB (300 MB under 054's one vault in all),
-  but nothing keeps all the vaults together under 1 GB: at 048's free limits
-  that is about five full families or ten full personal vaults, less what DEV
-  keeps (64 MB, 141 files, on 7 October 2026).
+  read-only, or 402 on every request. 060's limits keep each vault in
+  bounds and each person on Free to 50 MB of their own uploads (500 MB
+  under 059's free family and free business, 300 MB under 054's one vault
+  in all), but nothing keeps all the vaults together under 1 GB: at 060's
+  free limits that is about ten full families, five full businesses or
+  twenty people's full 50 MB, less what DEV keeps (64 MB, 141 files, on 7
+  October 2026).
 - **The database fills with vaults, not only documents.** Every vault is a
   schema of its own (Layer 2): 20 tables and indexes, about 250 KB with
   nothing in it (184 KB of relations and about 70 KB of catalog rows,
@@ -1061,7 +1067,7 @@ so storage policies live only in `019`.
   shows the free limit, unenforced. Mind the platform underneath: the
   Supabase organisation is on the **Free plan, which holds 1 GB of files for
   the whole organisation** — every vault, and DEV's test files too — about
-  five full families or ten full personal vaults at 048's free limits (see
+  ten full families or twenty people's full 50 MB at 060's free limits (see
   [The Supabase plan](#the-supabase-plan--free-one-organisation-dev-and-prod-together)).
   PROD needs Pro (100 GB
   included, then about $0.02/GB a month) past that, and before anyone is
@@ -1467,9 +1473,11 @@ so storage policies live only in `019`.
 
 ### Plans and storage limits — every plan has a limit (038, 039)
 
-- **What a vault may keep, never unlimited**: on Free, a family 200 MB and a
-  personal vault 100 MB, in total (048; 1 GB for every vault before it; not
-  a monthly allowance), Family Plus 10 GB for either — in India ₹100 a month or ₹1,100 a
+- **What a vault may keep, never unlimited**: on Free, each person 50 MB
+  of their own uploads across their free vaults, a family 100 MB and a
+  business 200 MB from everyone together, and a personal vault 50 MB, in
+  total (060; a family 200 MB and a personal vault 100 MB from 048, 1 GB for
+  every vault before it; not a monthly allowance), Family Plus 10 GB for either — in India ₹100 a month or ₹1,100 a
   year, elsewhere $10 a month or $110 a year. A year costs eleven months,
   and ₹1,100 stays under the ₹2,000 above which UPI charges merchants 0.4%.
   The yearly price is shown as a discount on twelve months at the monthly
@@ -1948,7 +1956,9 @@ so storage policies live only in `019`.
 
 ### Free space by vault, and expiry reminders on Plus (048)
 
-- **Free is 200 MB for a family and 100 MB for a personal vault**; Family
+- **Free is 200 MB for a family and 100 MB for a personal vault**
+  (since 060, 100 MB and 50 MB, a business 200 MB, and 50 MB for each
+  person: see [Free space per person](#free-space-per-person--50-mb-each-a-family-100-mb-a-business-200-mb-060)); Family
   Plus is 10 GB for either. Before 048 Free was 1 GB for every vault, which
   Supabase's Free plan (1 GB for the whole organisation, DEV included) could not
   hold past the first full one. `plan_limits.personal_storage_bytes` is a
@@ -1977,6 +1987,55 @@ so storage policies live only in `019`.
   vault, as the server then keeps), and a status without `personal` reads as
   a family. QA's upload check expects no reminder on a free vault once
   `family_storage_status()` has `personal`, and one before.
+
+### Free space per person — 50 MB each, a family 100 MB, a business 200 MB (060)
+
+- **On Free, each person can add 50 MB in all** (the owner's rule, 19
+  October 2026), whichever free vaults it goes to; a family vault holds
+  100 MB from everyone together, a business 200 MB, and a personal vault
+  50 MB. 059 had let one account on Free keep 500 MB (a 100 MB personal
+  vault, a 200 MB family and a 200 MB business). Paid plans are unchanged:
+  a vault's plan, no number per person.
+- **Two numbers on `plan_limits`**, to change in the Table editor:
+  `business_storage_bytes` (a business's own number on a plan; NULL: the
+  family number, as 048's `personal_storage_bytes`) and
+  `person_storage_bytes` (what one person may add across their free vaults;
+  only the free row is read; NULL: no number per person). Free has 200 MB
+  and 50 MB, and 060 lowered `storage_bytes` to 100 MB and
+  `personal_storage_bytes` to 50 MB, each only where it still had 048's
+  number. `vault_storage_bytes()` reads the business number for a business,
+  and `business_vault_blocker()` (054) compares a family becoming a
+  business with what a free business keeps.
+- **A person's 50 MB is what they uploaded themselves** to vaults they are
+  in that are on Free: `person_free_files_bytes(user)` adds up
+  `storage.objects` by `owner_id`, which Storage sets from the uploader's
+  session (service role only; it takes an id). Files in a vault on a paid
+  plan do not count, nor files in a vault they have left; deleting a
+  document gives its space back. Files the server stores have no owner and
+  count for nobody: Gmail import (a Family Plus feature). QA uploads as its
+  own accounts, so its files count toward their 50 MB. A vault's own limit
+  still holds every file.
+- **The server keeps it.** `family_storage_has_room()`, which the documents
+  bucket's upload policy asks (038), also refuses a file into a free vault
+  once the uploader's own files there reach their number. As for a vault,
+  a policy cannot see the size of the file arriving, so the last file may
+  go past it by that one file (10 MB at most). The app asks first with the
+  file's size (`person_storage_status()`, from `auth.uid()`;
+  `fetchPersonStorage()`), and `uploadDocument` throws `StorageFullError`
+  with the person's words (`personStorageFullMessage()`): what is left of
+  the 50 MB each person can add on Free, and to delete what they added or
+  move the vault to Family Plus.
+- **Where it shows**: the Family Plus page and a business's Plans page have
+  "Each person can add, in all" (Free: 50 MB) above "Space for the family,
+  together" (100 MB) or "Space for the business, together" (200 MB); Settings
+  › Storage's table starts with a "You" row (On Free: what they added to
+  free vaults, of 50 MB) whenever the person is in a free vault; Help says it for both
+  kinds. Before 060 the app reads the plan without the two columns (no
+  person row, a business on the family number), and the server keeps 048's.
+- **Lowering it deletes nothing** (048): a vault or a person over the new
+  number keeps everything and adds nothing until under it. A vault whose
+  Family Plus ends is cleaned up down to its own free limit (040), now
+  100 MB for a family and 50 MB for a personal vault; a business never is.
 
 ### Business vaults — a pilot for small businesses (051)
 
@@ -2032,7 +2091,8 @@ so storage policies live only in `019`.
   | Price a month, + GST | — | ₹500 | ₹1,000 | ₹4,000 |
   | Price a year (eleven months), + GST | — | ₹5,500 | ₹11,000 | ₹44,000 |
   | People who sign in | 4 | 10 (5 before 054) | 15 | 50 |
-  | Space | 200 MB | 10 GB (25 before 058) | 25 GB (100 before 058) | 100 GB (200 before 058) |
+  | Space, everyone together | 200 MB | 10 GB (25 before 058) | 25 GB (100 before 058) | 100 GB (200 before 058) |
+  | Each person adds, across free vaults | 50 MB (060) | — | — | — |
   | Questions each a month | 20 | 100 (fair use) | 100 | 100 |
   | Question tries a day each | 10 | 30 | 30 | 30 |
   | Uploads a day each | 50 | 300 | 300 | 300 |
@@ -2204,9 +2264,10 @@ so storage policies live only in `019`.
   `vaults_per_person` to NULL, only where it was 054's 1, so
   `create_family()` (unchanged) checks only 050's `families_per_person`
   and 051's `businesses_per_person`, both 1: a second free family or a
-  second free business is still refused. One account on Free can keep
+  second free business is still refused. One account on Free could keep
   500 MB (100 MB personal, 200 MB family, 200 MB business) instead of
-  300 MB. The creation screen and Help say "one family and one business"
+  300 MB, until 060 kept each person to 50 MB of their own uploads
+  (below). The creation screen and Help say "one family and one business"
   (`freeVaultsText()` in `_shared/plan-text.ts`, which follows the numbers
   and says "one family or one business" where 059 is not applied). Data
   only, so the fingerprint cannot see it: check the free row by hand.
@@ -2968,7 +3029,8 @@ rule again once pinned chunks are mixed in.
   this file, not on a screen.
 - **★ Family Plus marks what only Plus families get** (`<PlusTag />`; in a
   business it reads ★ Plus, `plusName()`, 051):
-  10 GB instead of 200 MB (100 MB for a personal vault), 200 questions a
+  10 GB instead of 100 MB a family (50 MB for a personal vault, and 50 MB
+  for each person to add across their free vaults, 060), 200 questions a
   month the whole family shares (053; on Free, each person has 20 a month, 049), voice chats with
   no limit (on Free, each person has 10), up to 8 members (4 on Free),
   share links that last 30 days (7 on Free), expiry reminders and the

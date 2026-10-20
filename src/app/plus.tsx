@@ -51,7 +51,10 @@ const questionsCell = (n: number | null): Cell => (n == null ? true : `${n} a mo
 
 function rows(limits: PlanLimits): Row[] {
   const all: Array<Row | null> = [
-    { label: 'Space for a family', free: formatBytes(limits.free), plus: formatBytes(limits.plus), feature: 'storage' },
+    // 060: on Free, what each person can add across their free vaults; a
+    // vault on Plus has no number per person. Before 060, no such row.
+    limits.freePerson != null ? { label: 'Each person can add, in all', free: formatBytes(limits.freePerson), plus: true } : null,
+    { label: 'Space for the family, together', free: formatBytes(limits.free), plus: formatBytes(limits.plus), feature: 'storage' },
     { label: 'Space in your personal vault', free: formatBytes(limits.freePersonal), plus: formatBytes(limits.plus) },
     {
       label: limits.members.plus > limits.members.free ? '★ Members who sign in' : 'Members who sign in',
@@ -451,7 +454,11 @@ function businessRows(limits: PlanLimits): BusinessRow[] {
   const freeVoice = limits.voiceAnswers.free;
   return [
     { label: '★ People', cells: row(String(limits.members.free), (p) => String(limits.business[p].members)), feature: 'members' },
-    { label: 'Space', cells: row(formatBytes(limits.free), (p) => formatBytes(limits.business[p].storage)), feature: 'storage' },
+    // 060: on Free, each person's own number across their free vaults, and the business's for everyone together.
+    ...(limits.freePerson != null
+      ? [{ label: 'Each person can add, in all', cells: row(formatBytes(limits.freePerson), () => true) }]
+      : []),
+    { label: 'Space for the business, together', cells: row(formatBytes(limits.freeBusiness), (p) => formatBytes(limits.business[p].storage)), feature: 'storage' },
     {
       label: '★ Each person\'s questions',
       cells: row(`${limits.questions.free ?? 20} a month`, (p) => `${limits.business[p].questionsFairUse} a month`),

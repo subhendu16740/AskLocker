@@ -9,7 +9,8 @@ import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { SUPPORT_EMAIL, SUPPORT_PHONE } from '../../lib/app-info';
 import {
-  DEFAULT_PLAN_LIMITS, FREE_PERSONAL_STORAGE_LABEL, businessPrice, FREE_STORAGE_LABEL, MAX_FILE_BYTES, PLUS_FOR_SALE, formatBytes, freeVaultsText,
+  DEFAULT_PLAN_LIMITS, FREE_BUSINESS_STORAGE_LABEL, FREE_PERSONAL_STORAGE_LABEL, FREE_PERSON_STORAGE_LABEL, businessPrice, FREE_STORAGE_LABEL,
+  MAX_FILE_BYTES, PLUS_FOR_SALE, formatBytes, freeVaultsText,
   plusPrice, plusPrices, plusYearlyOffer, plusYearlySaving,
 } from '../../lib/plans';
 import { usePaymentsStatus } from '../../lib/family-plan';
@@ -97,7 +98,7 @@ function faq(payments: PaymentsStatus | null): { q: string; a: string }[] {
     },
     {
       q: 'How much space do we get?',
-      a: `On Free, a family gets ${FREE_STORAGE_LABEL} and your personal vault ${FREE_PERSONAL_STORAGE_LABEL}, saved chats included. ★ Family Plus gives a vault ${formatBytes(DEFAULT_PLAN_LIMITS.plus)}, for ${plusPrices('inr')} in India or ${plusPrices('usd')} elsewhere. If Plus ends while a vault is over its free space, you have ${DEFAULT_PLAN_LIMITS.graceDays} days to renew or delete documents, or the newest ones above it are removed.`,
+      a: `On Free, each person can add ${FREE_PERSON_STORAGE_LABEL} in all. A family vault holds ${FREE_STORAGE_LABEL} from everyone together, and your personal vault ${FREE_PERSONAL_STORAGE_LABEL}, saved chats included. ★ Family Plus gives a vault ${formatBytes(DEFAULT_PLAN_LIMITS.plus)}, for ${plusPrices('inr')} in India or ${plusPrices('usd')} elsewhere. If Plus ends while a vault is over its free space, you have ${DEFAULT_PLAN_LIMITS.graceDays} days to renew or delete documents, or the newest ones above it are removed.`,
     },
     {
       q: 'How do reminders work?',
@@ -160,7 +161,7 @@ function businessFaq(): { q: string; a: string }[] {
     },
     {
       q: 'How much space do we get?',
-      a: `On Free, a business gets ${FREE_STORAGE_LABEL}. ★ Plus gives ${formatBytes(plus.storage)}, Pro ${formatBytes(pro.storage)} and Enterprise ${formatBytes(ent.storage)}. If a paid plan ends, nothing is removed, but you can't add records until you renew.`,
+      a: `On Free, a business holds ${FREE_BUSINESS_STORAGE_LABEL} from everyone together, and each person can add ${FREE_PERSON_STORAGE_LABEL} in all. ★ Plus gives ${formatBytes(plus.storage)}, Pro ${formatBytes(pro.storage)} and Enterprise ${formatBytes(ent.storage)}. If a paid plan ends, nothing is removed, but you can't add records until you renew.`,
     },
     {
       q: 'How do reminders work?',

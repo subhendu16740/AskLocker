@@ -39,7 +39,7 @@ import { phoneLooksRight, cardProblem, cardIsEmpty, emptyCard, bloodGroupLabel, 
 import { allowanceJson, givenBack, parseAllowance, questionLimitMessage, questionsLeftText, resetDay } from '../../supabase/functions/_shared/questions.ts';
 import { MAX_DOCUMENT_TEXT, MAX_FILE_BYTES, QUESTION_INPUT_MAX, MAX_QUESTION_CHARS, fileTooLargeMessage, inVaultFolder, limitHint, providedTextLimit } from '../../supabase/functions/_shared/limits.ts';
 import { MAX_IMPORT_BYTES } from '../../supabase/functions/_shared/gmail-rules.ts';
-import { BUSINESS_PLANS, BUSINESS_PRICE, CLOSED_MESSAGE, DEFAULT_PLAN_LIMITS, PLUS_FOR_SALE, PLUS_PRICE, businessAmount, businessPrice, businessYearPrice, chatStorageFullMessage, fits, formatBytes, freeVaultsText, isBusinessPlan, nextBusinessPlan, planLabel, plusName, plusAmount, plusPrice, plusPrices, plusTwelveMonths, plusYearlyOffer, plusYearlySaving, storageFullMessage } from '../../supabase/functions/_shared/plan-text.ts';
+import { BUSINESS_PLANS, BUSINESS_PRICE, CLOSED_MESSAGE, DEFAULT_PLAN_LIMITS, PLUS_FOR_SALE, PLUS_PRICE, businessAmount, businessPrice, businessYearPrice, chatStorageFullMessage, fits, formatBytes, freeVaultsText, isBusinessPlan, nextBusinessPlan, personFits, personStorageFullMessage, planLabel, plusName, plusAmount, plusPrice, plusPrices, plusTwelveMonths, plusYearlyOffer, plusYearlySaving, storageFullMessage } from '../../supabase/functions/_shared/plan-text.ts';
 import { mentionsDate, mentionsAmount, mentionsPhone, mentionsText, refuses, devanagariShare, scriptShare, hasMarkdown } from '../lib/match.mjs';
 import { judgeAnswer } from '../lib/checks/ask.mjs';
 import { EMBED_ALLOWANCE } from '../lib/results.mjs';
@@ -677,8 +677,10 @@ await test('every suite stays inside its Groq budget', () => {
 
 await test('plans: every limit is finite, and a full vault says why and what to do (038–048)', () => {
   const GB = 1024 ** 3, MB = 1024 ** 2;
-  // What 039–048 leave in plan_limits: one row per plan; Free 200 MB for a
-  // family and 100 MB for a personal vault (048), Plus 10 GB for either;
+  // What 039–060 leave in plan_limits: one row per plan; on Free 50 MB for
+  // each person to add across their free vaults, 100 MB for a family and
+  // 200 MB for a business, everyone together, and 50 MB for a personal
+  // vault (060), Plus 10 GB for either;
   // 30 days after Plus ends before anything above Free goes, 4 members on
   // Free and 8 on Plus (049), 10 voice chats for each person on Free (043),
   // and 20 questions a month for each person on Free, none on Plus up to
@@ -687,7 +689,7 @@ await test('plans: every limit is finite, and a full vault says why and what to 
   // and one business (059; one of either under 054), and Family Plus adds
   // 100 documents and 50 question tries a day.
   assert.deepEqual(DEFAULT_PLAN_LIMITS, {
-    free: 200 * MB, freePersonal: 100 * MB, plus: 10 * GB, graceDays: 30,
+    free: 100 * MB, freePersonal: 50 * MB, freeBusiness: 200 * MB, freePerson: 50 * MB, plus: 10 * GB, graceDays: 30,
     members: { free: 4, plus: 8 },
     voiceAnswers: { free: 10, plus: null },
     questions: { free: 20, plus: null },
@@ -740,8 +742,20 @@ await test('plans: every limit is finite, and a full vault says why and what to 
   assert.equal(formatBytes(2048), '2 KB');
   assert.equal(formatBytes(1.25 * MB), '1.3 MB');
   assert.equal(formatBytes(250 * MB), '250 MB');
-  assert.equal(formatBytes(DEFAULT_PLAN_LIMITS.free), '200 MB');
-  assert.equal(formatBytes(DEFAULT_PLAN_LIMITS.freePersonal), '100 MB');
+  assert.equal(formatBytes(DEFAULT_PLAN_LIMITS.free), '100 MB');
+  assert.equal(formatBytes(DEFAULT_PLAN_LIMITS.freePersonal), '50 MB');
+  assert.equal(formatBytes(DEFAULT_PLAN_LIMITS.freeBusiness), '200 MB');
+  assert.equal(formatBytes(DEFAULT_PLAN_LIMITS.freePerson), '50 MB');
+  // A person on Free who has added their 50 MB across their free vaults (060).
+  const me = { usedBytes: 48 * MB, limitBytes: 50 * MB };
+  assert.ok(personFits(me, 2 * MB), 'a file that exactly fills what is left fits');
+  assert.ok(!personFits(me, 3 * MB));
+  assert.equal(personStorageFullMessage(me, 3 * MB, { forSale: true }),
+    'This file is 3 MB, but you have only 2 MB left of the 50 MB each person can add on Free. Delete documents you added, or move this vault to Family Plus.');
+  assert.equal(personStorageFullMessage({ ...me, usedBytes: 50 * MB }, 0, { forSale: false }),
+    "You've added 50 MB of the 50 MB each person can add on Free. Delete documents you added to make room. Family Plus is coming soon.");
+  assert.equal(personStorageFullMessage({ ...me, usedBytes: 50 * MB }, 1 * MB, { business: true }),
+    "You've added 50 MB of the 50 MB each person can add on Free. Delete records you added, or move this business to a paid plan.");
   assert.equal(formatBytes(GB), '1 GB');
   assert.equal(formatBytes(1.5 * GB), '1.5 GB');
   const free = { plan: 'free', limitBytes: GB, usedBytes: GB - 2 * MB };

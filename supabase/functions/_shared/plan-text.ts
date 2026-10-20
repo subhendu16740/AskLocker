@@ -5,7 +5,10 @@
 //
 // Two plans, each with a limit (039, 048):
 //
-//   Free          a family 200 MB, a personal vault 100 MB, in total
+//   Free          50 MB for each person to add, across their free vaults;
+//                 a family 100 MB and a business 200 MB, everyone together;
+//                 a personal vault 50 MB (060; a family 200 MB and a
+//                 personal vault 100 MB from 048, and no number per person)
 //   Family Plus   10 GB, either kind of vault — in India ₹100 a month or
 //                 ₹1,100 a year, elsewhere $10 a month or $110 a year
 //
@@ -82,10 +85,14 @@ export interface BusinessPlanLimits {
 }
 
 export interface PlanLimits {
-  /** What a family may keep on Free. */
+  /** What a family may keep on Free, everyone together. */
   free: number;
   /** What a personal vault may keep on Free (048). */
   freePersonal: number;
+  /** What a business may keep on Free, everyone together (060; the family number before it). */
+  freeBusiness: number;
+  /** What one person may add across the vaults they are in on Free (060); null: no number per person. */
+  freePerson: number | null;
   /** What a vault may keep on Family Plus, either kind. */
   plus: number;
   /** Days a family keeps what is above the free limit after Plus ends (040). */
@@ -122,10 +129,12 @@ const GB = 1024 ** 3;
 
 const MB = 1024 ** 2;
 
-/** What 039–056 set; plan_limits is the truth. */
+/** What 039–060 set; plan_limits is the truth. */
 export const DEFAULT_PLAN_LIMITS: PlanLimits = {
-  free: 200 * MB,
-  freePersonal: 100 * MB,
+  free: 100 * MB,
+  freePersonal: 50 * MB,
+  freeBusiness: 200 * MB,
+  freePerson: 50 * MB,
   plus: 10 * GB,
   graceDays: 30,
   members: { free: 4, plus: 8 },
@@ -351,6 +360,40 @@ export function storageFullMessage(room: StorageRoom, fileBytes = 0, options: St
   } else {
     more = `${free} to make room.`;
   }
+  return `${head} ${more}`;
+}
+
+/** What one person on Free has added across their free vaults, and their number (060). */
+export interface PersonRoom {
+  usedBytes: number;
+  limitBytes: number;
+}
+
+/** Whether a file of this size fits in what the person has left on Free (060). */
+export function personFits(person: PersonRoom, fileBytes: number): boolean {
+  return person.usedBytes + fileBytes <= person.limitBytes;
+}
+
+/**
+ * Why a file does not fit in what one person may add on Free (060), and what
+ * they can do: delete what they added, or move the vault to a paid plan,
+ * where their files no longer count.
+ */
+export function personStorageFullMessage(
+  person: PersonRoom, fileBytes = 0, options: { business?: boolean; forSale?: boolean } = {},
+): string {
+  const { business = false, forSale = PLUS_FOR_SALE } = options;
+  const left = Math.max(0, person.limitBytes - person.usedBytes);
+  const each = `the ${formatBytes(person.limitBytes)} each person can add on Free`;
+  const head = left === 0 || fileBytes === 0
+    ? `You've added ${formatBytes(person.usedBytes)} of ${each}.`
+    : `This file is ${formatBytes(fileBytes)}, but you have only ${formatBytes(left)} left of ${each}.`;
+  const name = plusName(business);
+  const more = business
+    ? "Delete records you added, or move this business to a paid plan."
+    : forSale
+      ? `Delete documents you added, or move this vault to ${name}.`
+      : `Delete documents you added to make room. ${name} is coming soon.`;
   return `${head} ${more}`;
 }
 

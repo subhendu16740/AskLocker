@@ -8,8 +8,8 @@ import { parseAllowance, type QuestionAllowance } from '../../supabase/functions
 import { isBloodGroup, type EmergencyCard, type EmergencyCardInput, type EmergencyContact } from './emergency';
 import {
   DEFAULT_PLAN_LIMITS, MAX_FILE_BYTES, PLUS_FOR_SALE, chatStorageFullMessage, deviceTimeZone, fileTooLargeMessage, fits,
-  limitHint, localPlusPrices, setPayerCurrency, storageFullMessage, type BusinessPlan, type BusinessPlanLimits, type PlanLimits,
-  type PlanName, type StorageRoom,
+  limitHint, localPlusPrices, personFits, personStorageFullMessage, setPayerCurrency, storageFullMessage, type BusinessPlan,
+  type BusinessPlanLimits, type PersonRoom, type PlanLimits, type PlanName, type StorageRoom,
 } from './plans';
 import type {
   FamilyWithMembership,
@@ -897,6 +897,12 @@ export async function uploadDocument(params: UploadDocumentParams): Promise<stri
     await fetchPaymentsStatus();   // so the words say whether Family Plus can be bought
     throw new StorageFullError(room, fileSizeBytes);
   }
+  // And on Free, what this person may add across their free vaults (060).
+  const person = room?.plan === 'free' ? await fetchPersonStorage().catch(() => null) : null;
+  if (room && person && !personFits(person, fileSizeBytes)) {
+    await fetchPaymentsStatus();
+    throw new StorageFullError(room, fileSizeBytes, person);
+  }
 
   // 1. Upload to Supabase Storage
   const storagePath = `${storageNamespace}/${Date.now()}_${fileName}`;
@@ -907,12 +913,18 @@ export async function uploadDocument(params: UploadDocumentParams): Promise<stri
     .upload(storagePath, fileBlob, { contentType: mimeType, upsert: false });
 
   if (storageErr) {
-    // The bucket's policy refuses a family at its limit (038): say so in words.
+    // The bucket's policy refuses a family at its limit (038), and on Free a
+    // person at theirs (060): say so in words.
     if (/row-level security|policy/i.test(storageErr.message)) {
       const now = await fetchStorageStatus(familyId).catch(() => null);
       if (now && (now.closed || now.usedBytes >= now.limitBytes)) {
         await fetchPaymentsStatus();
         throw new StorageFullError(now, fileSizeBytes);
+      }
+      const mine = now?.plan === 'free' ? await fetchPersonStorage().catch(() => null) : null;
+      if (now && mine && mine.usedBytes >= mine.limitBytes) {
+        await fetchPaymentsStatus();
+        throw new StorageFullError(now, fileSizeBytes, mine);
       }
     }
     throw new Error(`Couldn't upload the file. ${storageErr.message}`);
@@ -1366,6 +1378,22 @@ export async function fetchPlusPeriod(familyId: string): Promise<'monthly' | 'ye
   return until - Date.parse(data.updated_at) > 183 * 86_400_000 ? 'yearly' : 'monthly';
 }
 
+/**
+ * What the signed-in person has added to the vaults they are in on Free, and
+ * the most each person may (060). Null before 060, and where there is no
+ * number per person.
+ */
+export async function fetchPersonStorage(): Promise<PersonRoom | null> {
+  const { data, error } = await supabase.rpc('person_storage_status');
+  if (error) {
+    if (isMissingMigration(error)) return null;
+    throw error;
+  }
+  const row = (data ?? [])[0];
+  if (!row || row.limit_bytes == null) return null;
+  return { usedBytes: Number(row.used_bytes), limitBytes: Number(row.limit_bytes) };
+}
+
 /** A family's plan, its limit and what its files (and, since 042, saved chats) add up to; null before 038. */
 export async function fetchStorageStatus(familyId: string): Promise<FamilyPlanStatus | null> {
   const { data, error } = await supabase.rpc('family_storage_status', { p_family_id: familyId });
@@ -1397,9 +1425,11 @@ export async function fetchStorageStatus(familyId: string): Promise<FamilyPlanSt
 // questions_per_month and questions_fair_use; 050: question_tries_per_day,
 // uploads_per_day and families_per_person; 051: invites_per_day and
 // businesses_per_person, and the business plans' rows; 053:
-// family_questions_per_month; 054: vaults_per_person; 056: notes_per_person). A column that is not there yet
+// family_questions_per_month; 054: vaults_per_person; 056: notes_per_person; 060: business_storage_bytes and
+// person_storage_bytes). A column that is not there yet
 // fails the whole select, so each one missing asks again with the set before it.
 const PLAN_LIMIT_COLUMNS = [
+  'plan, storage_bytes, grace_days, max_members, voice_answers, personal_storage_bytes, questions_per_month, questions_fair_use, question_tries_per_day, uploads_per_day, families_per_person, invites_per_day, businesses_per_person, family_questions_per_month, vaults_per_person, notes_per_person, business_storage_bytes, person_storage_bytes',
   'plan, storage_bytes, grace_days, max_members, voice_answers, personal_storage_bytes, questions_per_month, questions_fair_use, question_tries_per_day, uploads_per_day, families_per_person, invites_per_day, businesses_per_person, family_questions_per_month, vaults_per_person, notes_per_person',
   'plan, storage_bytes, grace_days, max_members, voice_answers, personal_storage_bytes, questions_per_month, questions_fair_use, question_tries_per_day, uploads_per_day, families_per_person, invites_per_day, businesses_per_person, family_questions_per_month, vaults_per_person',
   'plan, storage_bytes, grace_days, max_members, voice_answers, personal_storage_bytes, questions_per_month, questions_fair_use, question_tries_per_day, uploads_per_day, families_per_person, invites_per_day, businesses_per_person, family_questions_per_month',
@@ -1422,11 +1452,12 @@ export async function fetchPlanLimits(): Promise<PlanLimits> {
     question_tries_per_day?: number | null; uploads_per_day?: number | null; families_per_person?: number | null;
     invites_per_day?: number | null; businesses_per_person?: number | null;
     family_questions_per_month?: number | null; vaults_per_person?: number | null; notes_per_person?: number | null;
+    business_storage_bytes?: number | null; person_storage_bytes?: number | null;
   };
   let answer: { data: unknown; error: { message?: string } | null } = { data: null, error: null };
   for (const columns of PLAN_LIMIT_COLUMNS) {
     answer = await supabase.from('plan_limits').select(columns);
-    if (!answer.error || !/grace_days|max_members|voice_answers|personal_storage_bytes|questions_per_month|questions_fair_use|question_tries_per_day|uploads_per_day|families_per_person|invites_per_day|businesses_per_person|family_questions_per_month|vaults_per_person|notes_per_person/.test(answer.error.message ?? '')) break;
+    if (!answer.error || !/grace_days|max_members|voice_answers|personal_storage_bytes|questions_per_month|questions_fair_use|question_tries_per_day|uploads_per_day|families_per_person|invites_per_day|businesses_per_person|family_questions_per_month|vaults_per_person|notes_per_person|business_storage_bytes|person_storage_bytes/.test(answer.error.message ?? '')) break;
   }
   const rows = (answer.data ?? []) as Row[];
   if (answer.error || !rows.length) return DEFAULT_PLAN_LIMITS;
@@ -1494,9 +1525,15 @@ export async function fetchPlanLimits(): Promise<PlanLimits> {
   // the server keeps one limit for every vault, so that one.
   const freeRow = rows.find((r) => r.plan === 'free');
   const freePersonal = freeRow?.personal_storage_bytes != null ? Number(freeRow.personal_storage_bytes) : free;
+  // A business's own number and each person's (060); before 060 a business
+  // keeps the family number and nobody has a number of their own.
+  const freeBusiness = freeRow?.business_storage_bytes != null ? Number(freeRow.business_storage_bytes) : free;
+  const freePerson = freeRow?.person_storage_bytes != null ? Number(freeRow.person_storage_bytes) : null;
   return {
     free,
     freePersonal,
+    freeBusiness,
+    freePerson,
     plus: of('plus', DEFAULT_PLAN_LIMITS.plus),
     graceDays: grace ? Number(grace) : DEFAULT_PLAN_LIMITS.graceDays,
     members: { free: members('free'), plus: members('plus') },
@@ -1716,16 +1753,22 @@ export async function fetchQuestionStatus(): Promise<QuestionAllowance | null> {
   return parseAllowance(data);
 }
 
-/** The family's storage is full, in words the person can act on. */
+/**
+ * The family's storage is full, in words the person can act on; or, with
+ * `person`, the vault has room but this person on Free has added all they
+ * may across their free vaults (060).
+ */
 export class StorageFullError extends Error {
   room: StorageRoom;
 
-  constructor(room: StorageRoom & { removalAt?: string | null }, fileBytes: number) {
-    super(storageFullMessage(room, fileBytes, {
-      price: localPlusPrices(),
-      removalOn: room.removalAt ? longDate(new Date(room.removalAt)) : undefined,
-      forSale: plusForSale(),
-    }));
+  constructor(room: StorageRoom & { removalAt?: string | null }, fileBytes: number, person?: PersonRoom) {
+    super(person
+      ? personStorageFullMessage(person, fileBytes, { business: room.business, forSale: plusForSale() })
+      : storageFullMessage(room, fileBytes, {
+        price: localPlusPrices(),
+        removalOn: room.removalAt ? longDate(new Date(room.removalAt)) : undefined,
+        forSale: plusForSale(),
+      }));
     this.name = 'StorageFullError';
     this.room = room;
   }
