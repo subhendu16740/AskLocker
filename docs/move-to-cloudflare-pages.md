@@ -13,6 +13,23 @@ Free plan: 500 builds a month for the whole Cloudflare account, DEV and
 PROD together. AskLocker makes about 70 (60 merges into `dev`, 10
 releases to `main` in the last 30 days).
 
+**Moving both at once** (decided 21 October 2026): do DEV first, as a
+rehearsal nobody else sees, then PROD:
+
+1. A1, with both sets of variables: Production (A1 step 4) and Preview
+   (B2).
+2. Branch control as in B1 (`main`, and `dev` as the one preview branch),
+   instead of A2.
+3. B3 to B6 (DEV's Google origin, Supabase, passkeys, Gmail), then test
+   DEV as in B7.
+4. A3 to A6: PROD's DNS, the switch, the test.
+5. A week later: delete the Vercel project (end of B7). Skip A7.
+
+If asklocker.com was bought through Vercel, keep the Vercel account for
+the domain itself (deleting the project does not touch it), or transfer
+the domain to another registrar once it is 60 days old (from 5 December
+2026).
+
 ---
 
 ## Part A: PROD on Cloudflare (asklocker.com)
