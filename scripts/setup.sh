@@ -46,7 +46,7 @@ fi
 # so surface it here rather than letting it fail silently in a browser.
 missing=0
 for var in EXPO_PUBLIC_SUPABASE_URL EXPO_PUBLIC_SUPABASE_ANON_KEY; do
-  # Prefer a real environment value (how Vercel supplies them); fall
+  # Prefer a real environment value (how the web host supplies them); fall
   # back to a non-placeholder line in .env (how local dev supplies them).
   value="${!var-}"
   if [ -z "$value" ] && [ -f .env ]; then
@@ -64,7 +64,7 @@ done
 echo
 if [ "$missing" -gt 0 ]; then
   warn "Setup finished, but $missing Supabase variable(s) still need values."
-  warn "Local:  edit .env      Vercel:  Project Settings > Environment Variables"
+  warn "Local:  edit .env      Cloudflare Pages:  Settings > Environment variables"
 else
   info "Setup complete. Next:  npm run web   (dev)   |   npm run build   (static export to dist/)"
 fi

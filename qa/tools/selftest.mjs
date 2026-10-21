@@ -394,6 +394,12 @@ await test('gmail: Google\'s answer returns only to an allowed origin', () => {
   assert.equal(allowedReturnOrigin('https://family-vault-dbmzqbq0v-subhendu16740.vercel.app', pattern), 'https://family-vault-dbmzqbq0v-subhendu16740.vercel.app');
   assert.equal(allowedReturnOrigin('https://family-vault-a.evil.com-subhendu16740.vercel.app', pattern), null, '* never spans a dot');
   assert.equal(allowedReturnOrigin('https://evil.example/family-vault-x-subhendu16740.vercel.app', pattern), null);
+  // Cloudflare Pages: every branch and build is one label under the project's own address.
+  const pages = 'https://*.asklocker.pages.dev';
+  assert.equal(allowedReturnOrigin('https://dev.asklocker.pages.dev', pages), 'https://dev.asklocker.pages.dev');
+  assert.equal(allowedReturnOrigin('https://3f1c2a9b.asklocker.pages.dev', pages), 'https://3f1c2a9b.asklocker.pages.dev');
+  assert.equal(allowedReturnOrigin('https://evil.pages.dev', pages), null, 'another project is not ours');
+  assert.equal(allowedReturnOrigin('https://a.evil.asklocker.pages.dev', pages), null, '* never spans a dot');
   assert.equal(allowedReturnOrigin('http://localhost:8081', ''), 'http://localhost:8081', 'local development needs no configuration');
   assert.equal(allowedReturnOrigin('http://evil.example', 'http://evil.example'), null, 'plain http only for localhost');
   assert.equal(allowedReturnOrigin(`https://user:pw@${dev.slice(8)}`, dev), null, 'no credentials');

@@ -455,6 +455,23 @@ keys a project takes no payments and Family Plus says "Coming soon"
 Web build is hosted on **Vercel** as a static SPA. Config lives in
 `vercel.json`; the dashboard needs no build settings beyond env vars.
 
+**Moving to Cloudflare Pages** (decided 21 October 2026): Vercel's free
+plan is for non-commercial use only, and Cloudflare Pages is free for a
+business (its terms have no such rule; the free plan's one card rule is
+that a free site must not collect card details itself, and AskLocker's
+are taken in Razorpay's own window). The site is only `dist/`, so
+nothing else moves. Steps, in an order with no downtime, are in
+[`docs/move-to-cloudflare-pages.md`](docs/move-to-cloudflare-pages.md):
+PROD first (asklocker.com's DNS on Cloudflare, nothing else changes for
+PROD), DEV later (its address becomes `dev.asklocker.pages.dev`, so its
+passkey RP ID, Google origins, Supabase redirects and Gmail return
+origins change). The build is ready for both hosts: `app.config.ts`
+takes the commit from `CF_PAGES_COMMIT_SHA` or `VERCEL_GIT_COMMIT_SHA`,
+and `.node-version` pins Node 22. 500 builds a month for the whole
+account; AskLocker makes about 70 with previews limited to `dev`. Once
+Vercel is deleted, remove `vercel.json` and rewrite this section and the
+Vercel mentions below.
+
 | | |
 |---|---|
 | Install | `npm ci` |

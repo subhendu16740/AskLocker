@@ -15,7 +15,7 @@ export const releaseDate: Date | null = (() => {
   return d && !isNaN(d.getTime()) ? d : null;
 })();
 
-/** Short commit hash of the build, when the build knew it (Vercel does). */
+/** Short commit hash of the build, when the build knew it (the web host says). */
 export const buildCommit: string = extra.commit ?? '';
 
 // Help & FAQ › Contact us. Empty until there is a support address and number
