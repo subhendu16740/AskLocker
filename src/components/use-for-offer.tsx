@@ -57,8 +57,8 @@ export function UseForOffer({ style }: { style?: StyleProp<ViewStyle> }) {
           <Text style={styles.title}>{other === 'business' ? 'Have a business too?' : 'Share with your family too?'}</Text>
           <Text style={styles.sub}>
             {other === 'business'
-              ? 'Keep business records in a vault of their own, apart from your family.'
-              : 'Keep family papers in a vault of their own, apart from work.'}
+              ? "Keep its records apart from your family's."
+              : 'Keep family papers apart from work.'}
           </Text>
           <View style={styles.buttons}>
             <TouchableOpacity
@@ -85,7 +85,7 @@ export function UseForOffer({ style }: { style?: StyleProp<ViewStyle> }) {
       <View style={styles.card}>
         <Text style={styles.title}>{kind === 'business' ? 'Set up your business' : 'Set up your family'}</Text>
         <Text style={styles.sub}>
-          Create a {kind} vault and invite people to share documents. Your personal vault stays yours.
+          {kind === 'business' ? 'Share records with your team.' : 'Share documents with your family.'}
         </Text>
         <View style={styles.buttons}>
           <TouchableOpacity

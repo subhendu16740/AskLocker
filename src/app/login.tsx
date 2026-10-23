@@ -32,15 +32,11 @@ export default function LoginScreen() {
             <Image source={require('@/assets/images/logo-mark.png')} style={styles.logoMark} accessibilityIgnoresInvertColors />
           </LinearGradient>
           <Text style={styles.logoTitle} accessibilityRole="header">AskLocker</Text>
-          <Text style={styles.tagline}>Your family's documents, all in one place.</Text>
         </View>
 
         <FingerprintSignIn onSignedIn={() => router.replace('/home' as any)} />
-        <Text style={styles.lead}>Sign in with your Google account.</Text>
         <GoogleSignIn onSignedIn={() => router.replace('/home' as any)} />
-        <Text style={styles.note}>
-          New here? The same button creates your account.
-        </Text>
+        <Text style={styles.note}>New here? This creates your account.</Text>
 
         {!isProduction && <PasswordSignIn onSignedIn={() => router.replace('/home' as any)} />}
       </ScrollView>
@@ -77,7 +73,5 @@ const styles = StyleSheet.create({
   },
   logoMark: { width: 44, height: 44 },
   logoTitle: { fontSize: 20, lineHeight: 26, fontWeight: '600', color: color.primary },
-  tagline: { ...type.caption, marginTop: space.xs, textAlign: 'center' },
-  lead: { ...type.body, textAlign: 'center', marginBottom: space.lg },
-  note: { ...type.caption, textAlign: 'center' },
+  note: { ...type.caption, textAlign: 'center', marginTop: space.md },
 });

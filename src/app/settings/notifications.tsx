@@ -28,8 +28,8 @@ const DEVICE_TEXT: Record<Exclude<PushStatus, 'on' | 'off'>, string> = {
   unsupported: "This browser can't show notifications. Try Chrome, Edge, Firefox or Safari.",
   'needs-home-screen':
     'On iPhone or iPad, tap Share, then Add to Home Screen. Open AskLocker from there and turn this on.',
-  blocked: "This browser blocks AskLocker's notifications. Allow them in its site settings, then come back.",
-  'not-ready': "Device notifications aren't ready yet. You'll still see alerts under the bell.",
+  blocked: 'Your browser blocks these. Allow them in its site settings.',
+  'not-ready': 'Not ready yet. Alerts still show under the bell.',
 };
 
 export default function NotificationSettingsScreen() {
@@ -96,7 +96,7 @@ export default function NotificationSettingsScreen() {
           <Body>
             {notificationsEnabled
               ? 'New alerts show under the bell on Home.'
-              : 'The bell stays quiet and nothing goes to your devices. Turn this back on to see your alerts again.'}
+              : 'Nothing shows and nothing is sent.'}
           </Body>
         </Card>
 
@@ -107,8 +107,8 @@ export default function NotificationSettingsScreen() {
               <ActivityIndicator color={theme.primary} />
             ) : device === 'on' ? (
               <>
-                <Body>This device gets notifications, even when AskLocker is closed.</Body>
-                {!notificationsEnabled && <Muted>Notifications are off above, so nothing is sent for now.</Muted>}
+                <Body>This device gets alerts, even when AskLocker is closed.</Body>
+                {!notificationsEnabled && <Muted>Turned off above, so nothing is sent.</Muted>}
                 <View style={styles.buttons}>
                   <SecondaryButton label="Send a test" icon="send" onPress={test} disabled={busy !== null} />
                   <SecondaryButton label="Turn off" icon="bell-off" onPress={turnOff} disabled={busy !== null} />
@@ -116,7 +116,7 @@ export default function NotificationSettingsScreen() {
               </>
             ) : device === 'off' ? (
               <>
-                <Body>Get invitations, birthdays and, with ★ {plusName(theme.business)}, expiry reminders here, even when AskLocker is closed.</Body>
+                <Body>Get alerts here, even when AskLocker is closed.</Body>
                 <PrimaryButton label="Turn on" icon="bell" onPress={turnOn} busy={busy === 'on'} disabled={busy !== null} />
               </>
             ) : (
@@ -133,13 +133,10 @@ export default function NotificationSettingsScreen() {
               <OnOff value={birthdayReminders} onChange={setBirthdayReminders} label="Birthday reminders" />
               <Body>
                 {birthdayReminders
-                  ? 'You get a reminder on the morning of each birthday in your family tree.'
-                  : "You won't get birthday reminders."}
+                  ? 'A reminder on each birthday in your family tree.'
+                  : 'No birthday reminders.'}
               </Body>
-              <Muted>
-                Only for people with a birth date in the tree. If someone has passed away, an admin can remove their
-                birth date.
-              </Muted>
+              <Muted>If someone has passed away, an admin can remove their birth date.</Muted>
             </>
           ) : (
             <Muted>Birthday reminders aren't ready yet.</Muted>
@@ -147,14 +144,11 @@ export default function NotificationSettingsScreen() {
         </Card>
 
         <Card>
-          <CardTitle icon="info">What you are told about</CardTitle>
-          <Body>• Expiring {theme.business ? 'records' : 'documents'}, 90, 30 and 7 days ahead and on the day. Needs ★ {plusName(theme.business)}.</Body>
-          <Body>• Birthdays in your family tree, if Birthdays is on.</Body>
-          <Body>• Invitations to join a {theme.business ? 'business' : 'family'}.</Body>
-          <Muted>
-            Phones and computers get these between 8 am and 10 pm, India time. Anything at night waits until
-            morning.
-          </Muted>
+          <CardTitle icon="info">What you get</CardTitle>
+          <Body>• {theme.business ? 'Records' : 'Documents'} about to expire (★ {plusName(theme.business)})</Body>
+          <Body>• Birthdays</Body>
+          <Body>• Invitations</Body>
+          <Muted>Between 8 am and 10 pm, India time.</Muted>
         </Card>
       </ScrollView>
     </SafeAreaView>

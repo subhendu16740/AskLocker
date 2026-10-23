@@ -129,7 +129,7 @@ function UsesCard() {
         </View>
         <Text style={[styles.usesLabel, styles.usesLabelNext]}>{LABEL[other]} too</Text>
         <OnOff value={uses.both} onChange={(on) => change({ primary: uses.primary, both: on })} label={`${LABEL[other]} too`} />
-        <Muted>With it on, the menu has a Family | Business switch.</Muted>
+        <Muted>Adds a Family | Business switch to the menu.</Muted>
         {problem && <Status kind="error">Saved on this device. AskLocker saves it to your account next time it opens.</Status>}
       </View>
     </View>
@@ -205,7 +205,6 @@ export default function VaultsScreen() {
       <ScreenHeader title="Your vaults" fallback="/settings" />
       <ScrollView contentContainerStyle={styles.body}>
         <UsesCard />
-        <Text style={styles.intro}>Tap a vault to open it.</Text>
         {uses.primary === 'business' ? sections.reverse() : sections}
       </ScrollView>
     </SafeAreaView>
@@ -214,7 +213,6 @@ export default function VaultsScreen() {
 
 const styles = StyleSheet.create({
   body: { paddingVertical: space.lg, paddingBottom: 40 },
-  intro: { ...type.caption, paddingHorizontal: space.lg + space.xs, marginBottom: space.md },
   group: { paddingHorizontal: space.lg, marginBottom: space.lg },
   groupTitle: { ...type.overline, marginBottom: space.sm, marginLeft: space.xs },
   groupCard: { backgroundColor: color.surface, borderRadius: radius.card, ...shadow.card },

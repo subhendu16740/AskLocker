@@ -57,7 +57,6 @@ export function PasswordSignIn({ onSignedIn }: { onSignedIn: () => void }) {
         <Text style={styles.dividerText}>Test builds only</Text>
         <View style={styles.dividerLine} />
       </View>
-      <Text style={styles.intro}>For test accounts. The live app uses Google only.</Text>
 
       {creating && (
         <View style={styles.inputWrapper}>
@@ -141,7 +140,6 @@ const styles = StyleSheet.create({
   divider: { flexDirection: 'row', alignItems: 'center', gap: space.md },
   dividerLine: { flex: 1, height: 1, backgroundColor: color.border },
   dividerText: type.overline,
-  intro: { ...type.caption, textAlign: 'center' },
   inputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',

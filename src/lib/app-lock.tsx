@@ -42,9 +42,9 @@ export const lockAfterText = `${LOCK_AFTER_MS / 60_000} minutes`;
 export function lockUnavailableText(support: LockSupport): string {
   switch (support) {
     case 'no-webauthn':
-      return "This browser can't check a fingerprint or face. Open AskLocker in Chrome, Safari or Edge, not inside an app like WhatsApp or Gmail.";
+      return "This browser can't use a fingerprint. Open AskLocker in Chrome or Safari, not inside WhatsApp or Gmail.";
     case 'no-device-check':
-      return 'This device has no screen lock or fingerprint set up. Add one in your phone\'s settings, or set up Windows Hello or Touch ID on a computer. Then come back here.';
+      return 'Set up a screen lock, fingerprint, Windows Hello or Touch ID on this device first.';
     case 'insecure':
       return 'Fingerprint sign-in needs an https:// address.';
     case 'phone-app':

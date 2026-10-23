@@ -2276,7 +2276,8 @@ where it does not.
   theirs or not); everyone keeps the per-kind numbers, one free family and
   one free business. The new business starts on Business Free. The
   creation screen hides its "On Free" line from someone on Plus
-  (`useOnPlus()`). A member of a Plus family gets two free vaults, not
+  (`useOnPlus()`), and from someone making their first family or
+  business, whom it cannot stop (23 October 2026). A member of a Plus family gets two free vaults, not
   one: bounded, and what the owner asked for.
 - **One free family and one free business, for everyone on Free** (059,
   the owner's rule, 19 October 2026: Free's benefits for both, without
@@ -3142,6 +3143,15 @@ rule again once pinned chunks are mixed in.
   edge case, and none of "just for you", "simply", "please note". Numbers
   always come from the constants, never typed in. Explanations belong in
   this file, not on a screen.
+  **The first run is cut furthest** (23 October 2026, when the owner found
+  it wordy from the first screen): the three intro slides are a title and
+  one line each; the login is the name, Google's button and "New here?
+  This creates your account."; the welcome question has no subtitle;
+  creating a vault asks only its name (the description field, shown
+  nowhere, is gone); Home's offers (fingerprint, set up your family) are
+  a title, one line and two buttons. Settings › Privacy keeps every fact
+  it must (see the rule above) in one or two lines a card, the outside
+  services together in one card.
 - **★ Family Plus marks what only Plus families get** (`<PlusTag />`; in a
   business it reads ★ Plus, `plusName()`, 051):
   10 GB instead of 100 MB a family (50 MB for a personal vault, and 50 MB
