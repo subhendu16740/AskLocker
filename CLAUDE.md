@@ -2490,8 +2490,9 @@ where it does not.
 
 ### The agreement — what everyone agrees to, and when (062)
 
-- **One screen before anything else** (the owner's ask, 23 October 2026):
-  "Before you start", "Please read the following.", and two points of two
+- **A card at the bottom before anything else** (the owner's ask, 23
+  October 2026), like a site's cookie notice: the app stays in sight above
+  it, dimmed, and cannot be tapped. "Before you start", "Please read the following.", and two points of two
   lines each, said from the side of what AskLocker does (the owner's ask):
   **Encrypted** ("Sent and stored encrypted. In AskLocker, only people in
   your vault can open them.") and **Read to answer you** ("Our servers and
@@ -2509,10 +2510,14 @@ where it does not.
   way is "Don't agree? Sign out". The words live in one place,
   `supabase/functions/_shared/agreement.ts` (`agreementText()`).
 - **After sign-in, not on the intro slides**: a record has to know who
-  agreed, so the screen (`src/components/agreement-screen.tsx`) is a Modal
-  over everything, drawn for any signed-in account without the current
-  version recorded, in the lock screen's way (`useNothingElseReachable()`
-  makes the rest of the page inert). For a new person it is the screen right
+  agreed, so the card (`src/components/agreement-screen.tsx`, a
+  transparent Modal: a dim backdrop and the card at its foot, 480 wide at
+  most, scrolling on a short screen) is drawn for any signed-in account
+  without the current version recorded, in the lock screen's way
+  (`useNothingElseReachable()` makes the rest of the page inert). It was a
+  full screen until the owner asked for the card. While it asks the
+  database it draws nothing and only stops taps, so someone who has agreed
+  sees no flash at start-up. For a new person it is the screen right
   after Google, before the welcome question; everyone already signed up sees
   it once, at their next start. It waits while AskLocker is locked, and a
   shared document (`/s`) is never behind it.

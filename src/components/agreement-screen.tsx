@@ -1,9 +1,10 @@
 // The agreement (062): what AskLocker does with your documents, in plain
 // words (supabase/functions/_shared/agreement.ts), shown once to every
 // signed-in account and again whenever the words change (a new
-// AGREEMENT_VERSION). Drawn over everything, in a Modal nothing else can be
-// reached past (the lock screen's way): tick "I've read this and I agree"
-// and Continue, or sign out. There is no other way on.
+// AGREEMENT_VERSION). A card at the bottom of the screen, over the app
+// dimmed behind it, which nothing else can be reached past (the lock
+// screen's way): tick "I've read this and I agree" and Continue, or sign
+// out. There is no other way on.
 //
 // The database records who agreed to which version and when, by its own
 // clock (record_agreement()), as the proof. The device remembers it too, so
@@ -119,73 +120,92 @@ export function AgreementScreen() {
   };
 
   if (!visible || state === 'done') return null;
-  // A moment while it asks the database: nothing behind shows meanwhile.
+  // A moment while it asks the database: nothing can be tapped meanwhile,
+  // and nothing is drawn, so someone who agreed before sees no flash.
   if (state === 'checking') return <View style={[StyleSheet.absoluteFill, styles.cover]} />;
 
   return (
-    <Modal visible transparent={false} animationType="fade" onRequestClose={() => {}} statusBarTranslucent>
-      <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
-        <View style={styles.frame} nativeID={AGREEMENT_ID}>
-          <ScrollView contentContainerStyle={styles.body}>
-            <Text style={styles.title} accessibilityRole="header">{AGREEMENT_TITLE}</Text>
-            <Text style={styles.intro}>{AGREEMENT_INTRO}</Text>
-            {AGREEMENT_POINTS.map((p) => (
-              <View key={p.head} style={styles.point}>
-                <Text style={styles.head}>{p.head}</Text>
-                <Text style={styles.text}>{p.text}</Text>
-              </View>
-            ))}
-            <Text style={styles.footer}>{AGREEMENT_FOOTER}</Text>
-          </ScrollView>
+    <Modal visible transparent animationType="fade" onRequestClose={() => {}} statusBarTranslucent>
+      <View style={styles.dim}>
+        <View style={styles.sheet} nativeID={AGREEMENT_ID}>
+          <SafeAreaView edges={['bottom']}>
+            <ScrollView style={styles.scroll} contentContainerStyle={styles.body} bounces={false}>
+              <Text style={styles.title} accessibilityRole="header">{AGREEMENT_TITLE}</Text>
+              <Text style={styles.intro}>{AGREEMENT_INTRO}</Text>
+              {AGREEMENT_POINTS.map((p, i) => (
+                <View key={p.head} style={styles.point}>
+                  <View style={styles.icon}>
+                    <Feather name={POINT_ICONS[i] ?? 'info'} size={16} color={color.primary} />
+                  </View>
+                  <View style={styles.words}>
+                    <Text style={styles.head}>{p.head}</Text>
+                    <Text style={styles.text}>{p.text}</Text>
+                  </View>
+                </View>
+              ))}
+              <Text style={styles.footer}>{AGREEMENT_FOOTER}</Text>
+            </ScrollView>
 
-          <View style={styles.bottom}>
-            <Pressable
-              style={styles.tick}
-              onPress={() => setTicked(!ticked)}
-              accessibilityRole="checkbox"
-              accessibilityState={{ checked: ticked }}
-              aria-checked={ticked}
-            >
-              <View style={[styles.box, ticked && styles.boxOn]}>
-                {ticked && <Feather name="check" size={16} color="#FFFFFF" />}
-              </View>
-              <Text style={styles.tickText}>{AGREEMENT_TICK}</Text>
-            </Pressable>
-            {!!problem && <Text style={styles.problem} accessibilityRole="alert">{problem}</Text>}
-            <TouchableOpacity
-              style={[styles.continue, (!ticked || busy) && styles.off]}
-              onPress={agree}
-              disabled={!ticked || busy}
-              accessibilityRole="button"
-              accessibilityState={{ disabled: !ticked || busy }}
-            >
-              {busy ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.continueText}>Continue</Text>}
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.out} onPress={() => signOut()} disabled={busy} accessibilityRole="button">
-              <Text style={styles.outText}>Don't agree? Sign out</Text>
-            </TouchableOpacity>
-          </View>
+            <View style={styles.bottom}>
+              <Pressable
+                style={styles.tick}
+                onPress={() => setTicked(!ticked)}
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: ticked }}
+                aria-checked={ticked}
+              >
+                <View style={[styles.box, ticked && styles.boxOn]}>
+                  {ticked && <Feather name="check" size={16} color="#FFFFFF" />}
+                </View>
+                <Text style={styles.tickText}>{AGREEMENT_TICK}</Text>
+              </Pressable>
+              {!!problem && <Text style={styles.problem} accessibilityRole="alert">{problem}</Text>}
+              <TouchableOpacity
+                style={[styles.continue, (!ticked || busy) && styles.off]}
+                onPress={agree}
+                disabled={!ticked || busy}
+                accessibilityRole="button"
+                accessibilityState={{ disabled: !ticked || busy }}
+              >
+                {busy ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.continueText}>Continue</Text>}
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.out} onPress={() => signOut()} disabled={busy} accessibilityRole="button">
+                <Text style={styles.outText}>Don't agree? Sign out</Text>
+              </TouchableOpacity>
+            </View>
+          </SafeAreaView>
         </View>
-      </SafeAreaView>
+      </View>
     </Modal>
   );
 }
 
+/** One icon a point, in AGREEMENT_POINTS' order: encrypted, read to answer you. */
+const POINT_ICONS: (keyof typeof Feather.glyphMap)[] = ['lock', 'message-circle'];
+
 const styles = StyleSheet.create({
-  cover: { backgroundColor: color.background, zIndex: 1000 },
-  safe: { flex: 1, backgroundColor: color.background },
-  frame: { flex: 1, maxWidth: 420, width: '100%', alignSelf: 'center' },
-  body: { paddingHorizontal: space.lg, paddingTop: space.xl, paddingBottom: space.lg, gap: space.lg },
-  title: { ...type.title, fontSize: 20, lineHeight: 26 },
-  intro: { ...type.body, marginTop: -space.sm },
-  point: { gap: 2 },
-  head: { ...type.heading },
-  text: { ...type.body },
-  footer: { ...type.caption },
-  bottom: {
-    paddingHorizontal: space.lg, paddingTop: space.md, paddingBottom: space.md, gap: space.md,
-    borderTopWidth: 1, borderTopColor: color.border, backgroundColor: color.surface,
+  cover: { backgroundColor: 'transparent', zIndex: 1000 },
+  // The app stays in sight behind, dimmed, and cannot be reached.
+  dim: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(13, 17, 23, 0.45)' },
+  sheet: {
+    width: '100%', maxWidth: 480, maxHeight: '90%', alignSelf: 'center',
+    backgroundColor: color.surface, borderTopLeftRadius: radius.card, borderTopRightRadius: radius.card,
+    boxShadow: '0px -4px 16px rgba(0, 0, 0, 0.12)', elevation: 8,
   },
+  scroll: { flexGrow: 0 },
+  body: { paddingHorizontal: space.lg, paddingTop: space.lg, gap: space.md },
+  title: { ...type.title },
+  intro: { ...type.caption, marginTop: -space.sm },
+  point: { flexDirection: 'row', alignItems: 'flex-start', gap: space.md },
+  icon: {
+    width: size.iconBox, height: size.iconBox, borderRadius: radius.control,
+    backgroundColor: color.background, alignItems: 'center', justifyContent: 'center',
+  },
+  words: { flex: 1, gap: 2 },
+  head: { ...type.label },
+  text: { ...type.caption, color: color.textBody },
+  footer: { ...type.caption },
+  bottom: { paddingHorizontal: space.lg, paddingTop: space.md, paddingBottom: space.md, gap: space.sm },
   // The web Modal puts its first control in focus, and the browser drew its
   // ring round the whole row: the box itself shows the state.
   tick: { flexDirection: 'row', alignItems: 'center', gap: space.md, minHeight: size.control, outlineStyle: 'none' } as any,
