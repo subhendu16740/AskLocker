@@ -195,7 +195,7 @@ const styles = StyleSheet.create({
   scroll: { flexGrow: 0 },
   body: { paddingHorizontal: space.lg, paddingTop: space.lg, gap: space.md },
   title: { ...type.title },
-  intro: { ...type.caption, marginTop: -space.sm },
+  intro: { ...type.caption, color: color.textBody, marginTop: -space.sm },
   point: { flexDirection: 'row', alignItems: 'flex-start', gap: space.md },
   icon: {
     width: size.iconBox, height: size.iconBox, borderRadius: radius.control,

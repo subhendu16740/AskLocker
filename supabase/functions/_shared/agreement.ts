@@ -11,11 +11,16 @@
 // are a row of agreement_versions; the self-test checks the two match word
 // for word, so the record always says what the screen said.
 
-export const AGREEMENT_VERSION = '2026-10-23';
+// 2026-10-23 (062) opened with "Please read the following."; 2026-10-23.2
+// (063) says why the points are there.
+export const AGREEMENT_VERSION = '2026-10-23.2';
 
 export const AGREEMENT_TITLE = 'Before you start';
 
-export const AGREEMENT_INTRO = 'Please read the following.';
+// Respect, then plain words about what is done (the owner's ask, 23 October
+// 2026). An attitude, never a promise: "we keep them confidential" would be
+// untrue, since the people who run AskLocker can open them (Privacy).
+export const AGREEMENT_INTRO = "We respect your confidentiality. Here's exactly what we do with your documents.";
 
 // Only what a new person needs before they have used anything (the owner's
 // ask, 23 October 2026): two points of two lines each, said from the side

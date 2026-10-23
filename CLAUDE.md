@@ -182,7 +182,7 @@ errors**) and `npm run build` are the local gates.
 at 03:10 IST, and on pushes that change `qa/`. It uploads synthetic SPECIMEN
 documents to its own vault (QA Vault A, account A), asks questions about
 them, and checks the answers on facts and sources, never wording. It also
-runs the 023 sweep and the 024 DEV/PROD fingerprint, 177 access probes (a
+runs the 023 sweep and the 024 DEV/PROD fingerprint, 178 access probes (a
 logged-out visitor and a second account must be refused everywhere, Gmail
 import's endpoints, the family tree and its nicknames, emergency cards, linking,
 notification devices, share links, invitations, plans and personal vaults
@@ -808,7 +808,7 @@ tabs. `(tabs)` is a layout group, so routes are `/home`, `/search`, `/upload`.
 | `speech-text.ts` | `toSpeech()`: strips markdown and spells out ID numbers before they are read aloud — and a number named as one ("train number 16782", "PNR: 4512", "PIN 751001", "नंबर 16782") digit by digit, from its digits; the screen keeps the digits |
 | `voice-languages.ts` | The language picker list and the few phrases the app itself says, per language |
 | `storage.ts` | Key-value cache: localStorage on web, AsyncStorage on native |
-| `database.types.ts` | Generated Supabase types, current to 062 (030, 052, 055, 058, 059 and 061 changed nothing in them; 049's, 050's, 051's, 053's, 054's, 056's, 057's, 060's and 062's added by hand). Regenerate after every migration and re-append the hand-written block at the bottom (see the typecheck note) |
+| `database.types.ts` | Generated Supabase types, current to 063 (030, 052, 055, 058, 059, 061 and 063 changed nothing in them; 049's, 050's, 051's, 053's, 054's, 056's, 057's, 060's and 062's added by hand). Regenerate after every migration and re-append the hand-written block at the bottom (see the typecheck note) |
 
 ---
 
@@ -2492,7 +2492,11 @@ where it does not.
 
 - **A card at the bottom before anything else** (the owner's ask, 23
   October 2026), like a site's cookie notice: the app stays in sight above
-  it, dimmed, and cannot be tapped. "Before you start", "Please read the following.", and two points of two
+  it, dimmed, and cannot be tapped. "Before you start", then why: "We
+  respect your confidentiality. Here's exactly what we do with your
+  documents." (an attitude, never a promise: "we keep them confidential"
+  would be untrue while the people who run AskLocker can open them), and
+  two points of two
   lines each, said from the side of what AskLocker does (the owner's ask):
   **Encrypted** ("Sent and stored encrypted. In AskLocker, only people in
   your vault can open them.") and **Read to answer you** ("Our servers and
@@ -2532,7 +2536,8 @@ where it does not.
   words the migration inserted for `AGREEMENT_VERSION`, that they still
   say AI services read parts of documents and keep "In AskLocker" on who
   can open them, and that they say nothing about end-to-end, make none of
-  the forbidden claims and name no service.
+  the forbidden claims and name no service. A QA probe reads DEV's words
+  for that version and checks they are the app's, byte for byte.
 - **To show someone agreed**: in the SQL editor,
   `select u.email, a.version, a.agreed_at, a.platform, a.app_build, v.body
   from user_agreements a join auth.users u on u.id = a.user_id join
@@ -2541,6 +2546,15 @@ where it does not.
   `AGREEMENT_VERSION`, and write a migration inserting those words under it,
   in the same release (migration first). Everyone who has not agreed to the
   new version sees the screen again. Change it with Settings › Privacy.
+  An applied migration is never edited, even for one line: 062 inserted
+  2026-10-23, which opened "Please read the following." (the owner: it
+  said nothing), and 063 inserted 2026-10-23.2 with the opening above.
+- **A paste can change the line breaks.** 062 pasted into DEV's SQL
+  editor stored its words with CR LF, where the app writes LF: the same
+  words, not the same bytes. 063 takes the CRs out of every version, its
+  own included however it is pasted, and the QA probe above fails on a CR
+  ("apply 063"). A later version's migration should end with the same
+  `replace(body, E'\r', '')`.
 - **The device remembers too** (`accountKey.agreement`), so the screen does
   not ask the database at every start. Before 062, or before the migration
   that adds a new version, there is nowhere to record it: the agreement is

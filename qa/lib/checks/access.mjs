@@ -25,9 +25,9 @@
 // ────────────────────────────────────────────────────────────────
 
 import { createHmac, randomUUID } from 'node:crypto';
-import { readFileSync } from 'node:fs';
 import { invokeFunction } from '../supabase.mjs';
 import { permanentDocuments } from '../../fixtures/documents.mjs';
+import { AGREEMENT_VERSION, agreementText } from '../../../supabase/functions/_shared/agreement.ts';
 
 // The phrasings this app's refusals actually use: 42501 from the 023
 // asserts and from column privileges (025), "Access denied" (P0001) from the
@@ -302,16 +302,29 @@ const overviewJudge = (expect) => (outcome) => {
 };
 // The agreement (062): each person records only their own, by the
 // database's clock, reads only their own, and nobody changes or deletes a
-// record or the words. Skipped until 062 is on DEV (no such table or function).
+// record or the words. Skipped until 062 is on DEV (no such table or
+// function), and recording until the app's version is (its migration: 063
+// for 2026-10-23.2; record_agreement() answers unknown_version).
 const agreementJudge = (expect) => (outcome) => {
   if (outcome.missing || missingTable(outcome.error) || ['PGRST202'].includes(String(outcome.error?.code))) {
     return ['skipped', 'migration 062 is not applied to DEV yet'];
   }
+  if (outcome.error?.hint === 'unknown_version') {
+    return ['skipped', `agreement version ${AGREEMENT_VERSION} is not on DEV yet (apply its migration)`];
+  }
   return typeof expect === 'function' ? expect(outcome) : judge(expect, outcome);
 };
-// The version the app asks for, read from the app's own words (agreement.ts).
-const AGREEMENT_VERSION = readFileSync(new URL('../../../supabase/functions/_shared/agreement.ts', import.meta.url), 'utf8')
-  .match(/AGREEMENT_VERSION = '([^']+)'/)[1];
+// The words DEV keeps for the app's version must be the app's, byte for byte:
+// the record says what the screen said. A paste can turn line breaks into
+// CR LF (062 on DEV did; 063 takes them out), which reads the same and is not.
+const agreementWordsJudge = agreementJudge((o) => {
+  if (o.error) return ['fail', `could not read the words: ${short(o.error)}`];
+  const body = o.data?.[0]?.body;
+  if (body == null) return ['skipped', `agreement version ${AGREEMENT_VERSION} is not on DEV yet (apply its migration)`];
+  if (body === agreementText()) return ['pass', `version ${AGREEMENT_VERSION}, ${body.length} characters, as the app shows them`];
+  const why = body.replace(/\r/g, '') === agreementText() ? 'only the line breaks differ (CR LF): apply 063' : 'the words differ from agreement.ts';
+  return ['fail', `DEV's words for ${AGREEMENT_VERSION} are not the app's: ${why}`];
+});
 // Deleting a family vault (057): its owner's alone, through delete-account,
 // and the database side is the server's. Skipped until 057 is on DEV (no such
 // function; delete-account answering needs_migration), or until DEV runs a
@@ -1192,6 +1205,7 @@ export async function runAccessChecks(cfg, { a, b, anon, vaultA, vaultB, docsA }
     ['B', 'delete its agreements', agreementJudge('refused'), () => b.client.from('user_agreements').delete().eq('user_id', b.user.id)],
     ['B', 'change the words of the agreement', agreementJudge('refused'), () => b.client.from('agreement_versions').update({ body: 'QA intrusion' }).eq('version', AGREEMENT_VERSION)],
     ['B', 'add a version of the agreement', agreementJudge('refused'), () => b.client.from('agreement_versions').insert({ version: 'qa-intrusion', body: 'QA intrusion' })],
+    ['anon', "read the words of the app's version, exactly as the app shows them", agreementWordsJudge, () => anon.client.from('agreement_versions').select('body').eq('version', AGREEMENT_VERSION)],
     // Deleting a family vault (057): only its owner, through delete-account.
     ['anon', 'see what deleting QA Vault A would take', familyDeletionJudge('http-401-403'), fn(anon, 'delete-account', { action: 'family_preview', family_id: A.family })],
     ['B', 'see what deleting QA Vault A would take', familyDeletionJudge('http-401-403'), fn(b, 'delete-account', { action: 'family_preview', family_id: A.family })],
