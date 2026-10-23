@@ -120,7 +120,7 @@ export default function StorageScreen() {
 
             <View style={styles.key}>
               <Text style={styles.keyText}>
-                <Text style={{ color: business ? biz.accent : color.accent }}>★</Text> Paid plan. Documents and saved chats share a vault's space.
+                <Text style={{ color: business ? biz.accent : color.accent }}>★</Text> Paid plan
               </Text>
             </View>
 

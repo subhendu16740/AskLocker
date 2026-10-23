@@ -71,7 +71,6 @@ export default function WelcomeScreen() {
             <Image source={require('@/assets/images/logo-mark.png')} style={styles.logo} accessibilityIgnoresInvertColors />
           </LinearGradient>
           <Text style={styles.title} accessibilityRole="header">What will you use AskLocker for?</Text>
-          <Text style={styles.sub}>Pick one, or Both to switch between them from the menu.</Text>
         </View>
 
         <View style={styles.choices}>
@@ -103,7 +102,7 @@ export default function WelcomeScreen() {
           })}
         </View>
 
-        <Text style={styles.note}>You can change this in Settings › Your vaults.</Text>
+        <Text style={styles.note}>You can change this later in Settings.</Text>
       </ScrollView>
     </SafeAreaView>
   );
@@ -118,8 +117,7 @@ const styles = StyleSheet.create({
   // The login screen's tile: the mark is drawn in white for it.
   logoBox: { width: 64, height: 64, borderRadius: radius.card, alignItems: 'center', justifyContent: 'center', marginBottom: space.lg },
   logo: { width: 44, height: 44 },
-  title: { fontSize: 20, lineHeight: 26, fontWeight: '600', color: color.primary, textAlign: 'center', marginBottom: space.sm },
-  sub: { ...type.body, color: color.textMuted, textAlign: 'center', maxWidth: 320 },
+  title: { fontSize: 20, lineHeight: 26, fontWeight: '600', color: color.primary, textAlign: 'center' },
   choices: { gap: space.md },
   // One height for all three: a label and one line each.
   choice: {

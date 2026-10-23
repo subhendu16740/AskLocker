@@ -127,7 +127,12 @@ Four things will mislead you if you assume otherwise:
    060's free space per person is added up by the server alone
    (`person_free_files_bytes`, service role only), and a person reads only
    their own (`person_storage_status()`, from `auth.uid()`): see
-   [Free space per person](#free-space-per-person--50-mb-each-a-family-100-mb-a-business-200-mb-060)).
+   [Free space per person](#free-space-per-person--50-mb-each-a-family-100-mb-a-business-200-mb-060);
+   062's agreements are their owner's — recorded only through
+   `record_agreement()` (from `auth.uid()`), read only by their owner, and
+   changed or deleted by no client; the words themselves
+   (`agreement_versions`) are written only by a migration: see
+   [The agreement](#the-agreement--what-everyone-agrees-to-and-when-062)).
    **A new writable
    column needs its own `GRANT` in a migration.** Nobody joins a family
    without saying yes: only an admin asks a person in, through the
@@ -177,7 +182,7 @@ errors**) and `npm run build` are the local gates.
 at 03:10 IST, and on pushes that change `qa/`. It uploads synthetic SPECIMEN
 documents to its own vault (QA Vault A, account A), asks questions about
 them, and checks the answers on facts and sources, never wording. It also
-runs the 023 sweep and the 024 DEV/PROD fingerprint, 168 access probes (a
+runs the 023 sweep and the 024 DEV/PROD fingerprint, 178 access probes (a
 logged-out visitor and a second account must be refused everywhere, Gmail
 import's endpoints, the family tree and its nicknames, emergency cards, linking,
 notification devices, share links, invitations, plans and personal vaults
@@ -455,6 +460,23 @@ keys a project takes no payments and Family Plus says "Coming soon"
 Web build is hosted on **Vercel** as a static SPA. Config lives in
 `vercel.json`; the dashboard needs no build settings beyond env vars.
 
+**Moving to Cloudflare Pages** (decided 21 October 2026): Vercel's free
+plan is for non-commercial use only, and Cloudflare Pages is free for a
+business (its terms have no such rule; the free plan's one card rule is
+that a free site must not collect card details itself, and AskLocker's
+are taken in Razorpay's own window). The site is only `dist/`, so
+nothing else moves. Steps, in an order with no downtime, are in
+[`docs/move-to-cloudflare-pages.md`](docs/move-to-cloudflare-pages.md):
+PROD first (asklocker.com's DNS on Cloudflare, nothing else changes for
+PROD), DEV later (its address becomes `dev.asklocker.pages.dev`, so its
+passkey RP ID, Google origins, Supabase redirects and Gmail return
+origins change). The build is ready for both hosts: `app.config.ts`
+takes the commit from `CF_PAGES_COMMIT_SHA` or `VERCEL_GIT_COMMIT_SHA`,
+and `.node-version` pins Node 22. 500 builds a month for the whole
+account; AskLocker makes about 70 with previews limited to `dev`. Once
+Vercel is deleted, remove `vercel.json` and rewrite this section and the
+Vercel mentions below.
+
 | | |
 |---|---|
 | Install | `npm ci` |
@@ -726,7 +748,7 @@ src/
     (tabs)/
       _layout.tsx            # custom tab bar (CustomTabBar): full width; the round Ask button (size.ask) sits on its bottom edge and rises above it
       home.tsx  search.tsx  upload.tsx
-  components/                # shared UI, incl. ProfileDrawer, ShareSheet (036), InvitationCards (037), the vault dropdown and sheet (vault-sheet.tsx, 046), GoogleSignIn, FingerprintSignIn, PasswordSignIn (test builds), AppLockScreen, LockOffer and UseForOffer (051)
+  components/                # shared UI, incl. ProfileDrawer, ShareSheet (036), InvitationCards (037), the vault dropdown and sheet (vault-sheet.tsx, 046), GoogleSignIn, FingerprintSignIn, PasswordSignIn (test builds), AppLockScreen, AgreementScreen (062), LockOffer and UseForOffer (051)
   constants/design.ts        # the one type/size/spacing scale every screen uses
   constants/theme.ts         # create-expo-app scaffold, largely unused
   hooks/                     # use-color-scheme, use-theme
@@ -764,7 +786,7 @@ tabs. `(tabs)` is a layout group, so routes are `/home`, `/search`, `/upload`.
 | `vaults.ts` | Personal vault, family or business (046, 051): `vaultName()` ("Personal vault" everywhere), `isBusinessVault()`, `vaultWord()`, `vaultIcon()`, `splitVaults()`, `vaultSubtitle()`, `canDeleteDocument()` (whoever added it, or any admin in a business) |
 | `family-only.ts` | `useFamilyOnly()`: the family tree, a person's page and emergency cards send a business to Manage team (051) |
 | `drawer-context.tsx` | Profile drawer open/close state |
-| `api.ts` | **All** Supabase queries — documents, search, upload, RAG, notifications, adding and leaving families, invitations, Gmail import, saved chats, share links, deleting your account, plans and storage limits (`fetchStorageStatus`, `fetchPlanLimits`; `uploadDocument` throws `StorageFullError` before a file that does not fit is sent, and `saveChat` `ChatStorageFullError` for a chat, 042), voice chats (`claimVoiceAnswer`, 041; `fetchVoiceStatus`, how many are left, 042), paying for Family Plus (`fetchPaymentsStatus`, whether this project takes payments, asked once a session; `createPlusOrder`, `verifyPlusPayment`, 044), questions this month (`fetchQuestionStatus`; `ragSearch`'s `questions` and `question_limit`, 049), the expiry date found in a new upload (`fetchDocumentExpiry`, for Upload's Plus offer), personal vaults and Ask across vaults (`ensurePersonalVault`; `ragSearch`'s `vaults` option, 046), businesses (`createNewFamily(…, kind)`, `previewBusinessDeletion`, `deleteBusiness`, `fetchUseFor` / `saveUseFor`, 051; `previewBusinessVault`, `makeBusinessVault`, 054; `fetchBusinessOverview`, `setBillPaid`, `fetchNotes`, `addNote`, `updateNote`, `deleteNote`, 056), and the Settings screens (profile, storage use, expiry dates, feedback) |
+| `api.ts` | **All** Supabase queries — documents, search, upload, RAG, notifications, adding and leaving families, invitations, Gmail import, saved chats, share links, deleting your account, plans and storage limits (`fetchStorageStatus`, `fetchPlanLimits`; `uploadDocument` throws `StorageFullError` before a file that does not fit is sent, and `saveChat` `ChatStorageFullError` for a chat, 042), voice chats (`claimVoiceAnswer`, 041; `fetchVoiceStatus`, how many are left, 042), paying for Family Plus (`fetchPaymentsStatus`, whether this project takes payments, asked once a session; `createPlusOrder`, `verifyPlusPayment`, 044), questions this month (`fetchQuestionStatus`; `ragSearch`'s `questions` and `question_limit`, 049), the expiry date found in a new upload (`fetchDocumentExpiry`, for Upload's Plus offer), personal vaults and Ask across vaults (`ensurePersonalVault`; `ragSearch`'s `vaults` option, 046), businesses (`createNewFamily(…, kind)`, `previewBusinessDeletion`, `deleteBusiness`, `fetchUseFor` / `saveUseFor`, 051; `previewBusinessVault`, `makeBusinessVault`, 054; `fetchBusinessOverview`, `setBillPaid`, `fetchNotes`, `addNote`, `updateNote`, `deleteNote`, 056), the agreement (`fetchAgreement`, `recordAgreement`, 062), and the Settings screens (profile, storage use, expiry dates, feedback) |
 | `overview.ts` | The overview's arithmetic (056), pure: `parseAmount()` ("1,18,000.00"), `formatRupees()` (lakhs and crores), `compactRupees()` for the axis, `monthlyTotals()`, `financialYearTotals()` (since 1 April), `daysFromToday()`, `whenText()` |
 | `document-groups.ts` | What Home's three counts and All documents' three tabs count, in one place: `peopleVault()` (whose people), `categoryGroups()`, `categoryCount()`, `categoryKey()`, the tab names (`DocumentsTab`) |
 | `dates.ts` | `parseDocumentDate()`: expiry dates exactly as ingest stores them (DD/MM/YYYY and kin, YYYY-MM-DD, "19 October 2026") |
@@ -786,7 +808,7 @@ tabs. `(tabs)` is a layout group, so routes are `/home`, `/search`, `/upload`.
 | `speech-text.ts` | `toSpeech()`: strips markdown and spells out ID numbers before they are read aloud — and a number named as one ("train number 16782", "PNR: 4512", "PIN 751001", "नंबर 16782") digit by digit, from its digits; the screen keeps the digits |
 | `voice-languages.ts` | The language picker list and the few phrases the app itself says, per language |
 | `storage.ts` | Key-value cache: localStorage on web, AsyncStorage on native |
-| `database.types.ts` | Generated Supabase types, current to 060 (030, 052, 055, 058 and 059 changed nothing in them; 049's, 050's, 051's, 053's, 054's, 056's, 057's and 060's added by hand). Regenerate after every migration and re-append the hand-written block at the bottom (see the typecheck note) |
+| `database.types.ts` | Generated Supabase types, current to 063 (030, 052, 055, 058, 059, 061 and 063 changed nothing in them; 049's, 050's, 051's, 053's, 054's, 056's, 057's, 060's and 062's added by hand). Regenerate after every migration and re-append the hand-written block at the bottom (see the typecheck note) |
 
 ---
 
@@ -855,7 +877,8 @@ Supabase, cloud-hosted. Three layers:
   saved_chats, family_people, family_links, family_emergency_cards,
   push_subscriptions, reminders_sent, push_config, document_shares,
   family_invites, plan_limits, family_plans, member_usage, plan_payments,
-  question_usage, daily_usage, scratch_notes.
+  question_usage, daily_usage, scratch_notes, agreement_versions,
+  user_agreements.
   RLS enabled.
 - **Layer 2 (private)** — one isolated schema per family (`family_<short_uuid>`)
   holding documents, document_metadata, document_chunks, expiry_alerts,
@@ -2259,7 +2282,8 @@ where it does not.
   theirs or not); everyone keeps the per-kind numbers, one free family and
   one free business. The new business starts on Business Free. The
   creation screen hides its "On Free" line from someone on Plus
-  (`useOnPlus()`). A member of a Plus family gets two free vaults, not
+  (`useOnPlus()`), and from someone making their first family or
+  business, whom it cannot stop (23 October 2026). A member of a Plus family gets two free vaults, not
   one: bounded, and what the owner asked for.
 - **One free family and one free business, for everyone on Free** (059,
   the owner's rule, 19 October 2026: Free's benefits for both, without
@@ -2463,6 +2487,84 @@ where it does not.
 - **Usage counts**: `family_deleted` and `business_deleted`, no properties.
 - Before 057, Delete on a family says deleting a family vault is not
   switched on yet, and a business's Delete goes 051's way (any admin).
+
+### The agreement — what everyone agrees to, and when (062)
+
+- **A card at the bottom before anything else** (the owner's ask, 23
+  October 2026), like a site's cookie notice: the app stays in sight above
+  it, dimmed, and cannot be tapped. "Before you start", then why: "We
+  respect your confidentiality. Here's exactly what we do with your
+  documents." (an attitude, never a promise: "we keep them confidential"
+  would be untrue while the people who run AskLocker can open them), and
+  two points of two
+  lines each, said from the side of what AskLocker does (the owner's ask):
+  **Encrypted** ("Sent and stored encrypted. In AskLocker, only people in
+  your vault can open them.") and **Read to answer you** ("Our servers and
+  AI services read parts of them to answer your questions."). **No service
+  is named there, and nothing about end-to-end**: "In AskLocker" is the
+  approved limit (see the privacy rule under Conventions), and Settings ›
+  Privacy says the rest plainly — not end-to-end, the people who run
+  AskLocker can open documents, the services by name, who can see what, AI
+  can be wrong, not a backup, what goes when Family Plus ends, deleting,
+  usage counts — and the screen says "More in Settings › Privacy". It was
+  eight points, then three, before the owner settled on what a new person
+  needs before using anything. Being what people tick, it no longer records
+  their agreement to staff access: that is in Privacy, read, not ticked. A tick box, "I've read this and I
+  agree", and Continue, which stays off until it is ticked. The only other
+  way is "Don't agree? Sign out". The words live in one place,
+  `supabase/functions/_shared/agreement.ts` (`agreementText()`).
+- **After sign-in, not on the intro slides**: a record has to know who
+  agreed, so the card (`src/components/agreement-screen.tsx`, a
+  transparent Modal: a dim backdrop and the card at its foot, 480 wide at
+  most, scrolling on a short screen) is drawn for any signed-in account
+  without the current version recorded, in the lock screen's way
+  (`useNothingElseReachable()` makes the rest of the page inert). It was a
+  full screen until the owner asked for the card. While it asks the
+  database it draws nothing and only stops taps, so someone who has agreed
+  sees no flash at start-up. For a new person it is the screen right
+  after Google, before the welcome question; everyone already signed up sees
+  it once, at their next start. It waits while AskLocker is locked, and a
+  shared document (`/s`) is never behind it.
+- **The proof is the database's.** `record_agreement(p_version, p_platform,
+  p_app_build)` (the caller from `auth.uid()`) writes `user_agreements`:
+  who, which version, when by the database's clock (never the device's),
+  and the platform and build that showed it. Agreeing again keeps the first
+  time. No client can change or delete a row; a person reads only their
+  own. `agreement_versions` keeps each version's exact words, inserted by
+  its migration, readable by anyone and written by nobody else. The QA
+  self-test checks that the app's words are, character for character, the
+  words the migration inserted for `AGREEMENT_VERSION`, that they still
+  say AI services read parts of documents and keep "In AskLocker" on who
+  can open them, and that they say nothing about end-to-end, make none of
+  the forbidden claims and name no service. A QA probe reads DEV's words
+  for that version and checks they are the app's, byte for byte.
+- **To show someone agreed**: in the SQL editor,
+  `select u.email, a.version, a.agreed_at, a.platform, a.app_build, v.body
+  from user_agreements a join auth.users u on u.id = a.user_id join
+  agreement_versions v using (version) where u.email = '<their email>';`
+- **New words mean a new version**: change `agreement.ts`, give it a new
+  `AGREEMENT_VERSION`, and write a migration inserting those words under it,
+  in the same release (migration first). Everyone who has not agreed to the
+  new version sees the screen again. Change it with Settings › Privacy.
+  An applied migration is never edited, even for one line: 062 inserted
+  2026-10-23, which opened "Please read the following." (the owner: it
+  said nothing), and 063 inserted 2026-10-23.2 with the opening above.
+- **A paste can change the line breaks.** 062 pasted into DEV's SQL
+  editor stored its words with CR LF, where the app writes LF: the same
+  words, not the same bytes. 063 takes the CRs out of every version, its
+  own included however it is pasted, and the QA probe above fails on a CR
+  ("apply 063"). A later version's migration should end with the same
+  `replace(body, E'\r', '')`.
+- **The device remembers too** (`accountKey.agreement`), so the screen does
+  not ask the database at every start. Before 062, or before the migration
+  that adds a new version, there is nowhere to record it: the agreement is
+  kept on the device and sent at the next start that can. So apply each
+  version's migration to PROD before the release that carries it, or early
+  agreements carry the time they were sent, not the time they were given.
+- **A record goes with the account** (ON DELETE CASCADE), like everything
+  else deleting an account removes (029). Keeping it after an account is
+  deleted, as proof, would contradict Privacy and Help ("deleting is
+  immediate"), so that is a decision for a lawyer, and a change to both.
 
 ## Edge Functions
 
@@ -3087,7 +3189,10 @@ rule again once pinned chunks are mixed in.
   services. It must stay true of the code and of the people who run
   AskLocker, so change it with any change to sharing, search, OCR,
   embeddings, voice, Gmail import, payments or usage counts. The app made such claims until
-  7 October 2026.
+  7 October 2026. The agreement everyone accepts at the start
+  (`_shared/agreement.ts`, 062) says the same things and is held to the
+  same rule: a change to any of them changes its words too, under a new
+  version, so everyone is asked again.
 - **Usage counts — PostHog, named events only.** Which screens are opened
   and which actions are taken (a document added, a question asked, a link
   made, Plus paid for), so the team can see what is used. **What kinds of
@@ -3125,6 +3230,16 @@ rule again once pinned chunks are mixed in.
   edge case, and none of "just for you", "simply", "please note". Numbers
   always come from the constants, never typed in. Explanations belong in
   this file, not on a screen.
+  **The first run is cut furthest** (23 October 2026, when the owner found
+  it wordy from the first screen): the three intro slides are a title and
+  one line each; the login is the name, Google's button and "New here?
+  This creates your account."; the welcome question has no subtitle;
+  creating a vault asks only its name (the description field, shown
+  nowhere, is gone); Home's offers (fingerprint, set up your family) are
+  a title, one line and two buttons. Settings › Privacy keeps every fact
+  it must (see the rule above) in one or two lines a card, the outside
+  services together in one card, and what the agreement leaves out (AI
+  can be wrong, not a backup, Family Plus ending) under Good to know.
 - **★ Family Plus marks what only Plus families get** (`<PlusTag />`; in a
   business it reads ★ Plus, `plusName()`, 051):
   10 GB instead of 100 MB a family (50 MB for a personal vault, and 50 MB

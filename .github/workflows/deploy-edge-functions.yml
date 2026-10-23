@@ -1,6 +1,6 @@
 # Deploy Supabase Edge Functions.
 #
-# Vercel already deploys the web bundle on merge, but Edge Functions ship
+# The web host already deploys the web bundle on merge, but Edge Functions ship
 # separately — so a merged PR touching supabase/functions/ used to change
 # nothing until someone ran the CLI by hand. This closes that gap.
 #

@@ -12,7 +12,7 @@
 // as a "failing app".
 
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { getDocument } from 'pdfjs-serverless';
 import { reconstructLayout } from '../../supabase/functions/_shared/pdf-text.ts';
 import { extractMetadata, parseFlexibleDate, gstinCheckChar, isValidGstin } from '../../supabase/functions/_shared/metadata.ts';
@@ -37,6 +37,7 @@ import { buildGraph, relationTo, relationLabel, relativesForPrompt, relativesNam
 import { encryptPayload, vapidAuthorization, generateVapidKeys, isPushServiceEndpoint, MAX_PLAINTEXT } from '../../supabase/functions/_shared/webpush.ts';
 import { phoneLooksRight, cardProblem, cardIsEmpty, emptyCard, bloodGroupLabel, bloodGroupSpoken, telHref } from '../../src/lib/emergency.ts';
 import { allowanceJson, givenBack, parseAllowance, questionLimitMessage, questionsLeftText, resetDay } from '../../supabase/functions/_shared/questions.ts';
+import { AGREEMENT_POINTS, AGREEMENT_VERSION, agreementText } from '../../supabase/functions/_shared/agreement.ts';
 import { isSpreadsheetText, isSpreadsheetType, MAX_ROW_TOKENS, parseCsv, periodLabel, spreadsheetText } from '../../supabase/functions/_shared/spreadsheet-text.ts';
 import { estimateTokens } from '../../supabase/functions/_shared/tokens.ts';
 import { chunkText } from '../../supabase/functions/_shared/chunking.ts';
@@ -394,6 +395,12 @@ await test('gmail: Google\'s answer returns only to an allowed origin', () => {
   assert.equal(allowedReturnOrigin('https://family-vault-dbmzqbq0v-subhendu16740.vercel.app', pattern), 'https://family-vault-dbmzqbq0v-subhendu16740.vercel.app');
   assert.equal(allowedReturnOrigin('https://family-vault-a.evil.com-subhendu16740.vercel.app', pattern), null, '* never spans a dot');
   assert.equal(allowedReturnOrigin('https://evil.example/family-vault-x-subhendu16740.vercel.app', pattern), null);
+  // Cloudflare Pages: every branch and build is one label under the project's own address.
+  const pages = 'https://*.asklocker.pages.dev';
+  assert.equal(allowedReturnOrigin('https://dev.asklocker.pages.dev', pages), 'https://dev.asklocker.pages.dev');
+  assert.equal(allowedReturnOrigin('https://3f1c2a9b.asklocker.pages.dev', pages), 'https://3f1c2a9b.asklocker.pages.dev');
+  assert.equal(allowedReturnOrigin('https://evil.pages.dev', pages), null, 'another project is not ours');
+  assert.equal(allowedReturnOrigin('https://a.evil.asklocker.pages.dev', pages), null, '* never spans a dot');
   assert.equal(allowedReturnOrigin('http://localhost:8081', ''), 'http://localhost:8081', 'local development needs no configuration');
   assert.equal(allowedReturnOrigin('http://evil.example', 'http://evil.example'), null, 'plain http only for localhost');
   assert.equal(allowedReturnOrigin(`https://user:pw@${dev.slice(8)}`, dev), null, 'no credentials');
@@ -1340,9 +1347,36 @@ await test('spreadsheets: a month column is named as people say it, and no passa
   assert.ok(proseParts.length > 1 && proseParts[0].content.endsWith(proseParts[1].content.split('\n')[0].slice(-20)), 'prose overlaps');
 });
 
+await test('the agreement the app shows is word for word what the database keeps (062)', () => {
+  // The record must say what the screen said: each version's words are
+  // inserted by a migration, and the app's agreementText() must match them.
+  const dir = new URL('../../supabase/migrations/', import.meta.url);
+  const migrations = readdirSync(dir).filter((f) => f.endsWith('.sql')).map((f) => readFileSync(new URL(f, dir), 'utf8'));
+  const quoted = (sql) => [...sql.matchAll(/values \('([^']+)', \$agreement\$([\s\S]*?)\$agreement\$\)/g)];
+  const kept = migrations.flatMap(quoted).find((m) => m[1] === AGREEMENT_VERSION);
+  assert.ok(kept, `no migration inserts agreement version ${AGREEMENT_VERSION}: write one with the new words`);
+  assert.equal(kept[2], agreementText(), `version ${AGREEMENT_VERSION}'s words differ from the app's: a new version needs a new migration`);
+  // Plain words, never a privacy claim the app does not keep (CLAUDE.md):
+  // no end-to-end at all (documents are not), and "only people in your
+  // vault" only with its limit, "in AskLocker".
+  const words = agreementText().toLowerCase();
+  assert.ok(!words.includes('end-to-end'), 'claims nothing about end-to-end');
+  assert.ok(!words.includes('only people in your vault') || words.includes('in asklocker, only people in your vault'), 'keeps "In AskLocker" on who can open them');
+  for (const claim of ['100% private', 'only you can see', 'nothing is kept', 'secure', 'bank-level', 'military-grade']) {
+    assert.ok(!words.includes(claim), `promises "${claim}"`);
+  }
+  // It says outside services read parts of documents, but names none (the
+  // owner's ask): the names are in Settings › Privacy.
+  assert.ok(words.includes('ai services'), 'says AI services read parts of them');
+  for (const name of ['huggingface', 'groq', 'ocr.space', 'supabase', 'posthog', 'razorpay']) {
+    assert.ok(!words.includes(name), `names "${name}"`);
+  }
+  assert.ok(AGREEMENT_POINTS.every((p) => p.text.length <= 200), 'each point stays short');
+});
+
 if (failures.length) {
   console.error(failures.map((f) => `✗ ${f}`).join('\n'));
   console.error(`\n${failures.length} self-test(s) failed, ${passed} passed.`);
   process.exit(1);
 }
-console.log(`✓ ${passed} self-tests passed — matchers, judge, run-time PDF, metadata, ticket codes, text cleaning, Gmail rules and token sealing, kinship and the family tree, emergency card checks, web push, plan limits, questions each month, limits against abuse, business papers, categories and plan words, Razorpay signatures, numbers in digits, sources the answer used, questions and budget.`);
+console.log(`✓ ${passed} self-tests passed — matchers, judge, run-time PDF, metadata, ticket codes, text cleaning, Gmail rules and token sealing, kinship and the family tree, emergency card checks, web push, plan limits, questions each month, limits against abuse, business papers, categories and plan words, Razorpay signatures, numbers in digits, sources the answer used, the agreement's words, questions and budget.`);

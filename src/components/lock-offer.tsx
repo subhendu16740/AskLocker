@@ -57,7 +57,7 @@ export function LockOffer({ style }: { style?: StyleProp<ViewStyle> }) {
         <View style={styles.news}>
           <Feather name="check-circle" size={16} color="#15803D" />
           <Text style={styles.newsText}>
-            Fingerprint sign-in is on. Next time, sign in with your fingerprint or face.
+            It's on. AskLocker now locks after {lockAfterText} away.
           </Text>
         </View>
         <TouchableOpacity style={styles.secondary} onPress={() => setClosed(true)} accessibilityRole="button">
@@ -77,10 +77,7 @@ export function LockOffer({ style }: { style?: StyleProp<ViewStyle> }) {
         </View>
         <View style={styles.text}>
           <Text style={styles.title}>Sign in with your fingerprint</Text>
-          <Text style={styles.sub}>
-            Turn it on, and next time your fingerprint or face signs you in. AskLocker also locks after{' '}
-            {lockAfterText} away. Your fingerprint never leaves this device.
-          </Text>
+          <Text style={styles.sub}>Quicker next time. Your fingerprint stays on your device.</Text>
         </View>
       </View>
       {!!problem && <Text style={styles.problem} accessibilityRole="alert">{problem}</Text>}
@@ -92,7 +89,6 @@ export function LockOffer({ style }: { style?: StyleProp<ViewStyle> }) {
           <Text style={styles.secondaryText}>Not now</Text>
         </TouchableOpacity>
       </View>
-      <Text style={styles.later}>You can change this in Settings › Security.</Text>
     </View>
     </View>
   );
@@ -117,7 +113,6 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center', backgroundColor: color.surface,
   },
   secondaryText: { ...type.button, color: color.textBody },
-  later: type.caption,
   news: {
     flexDirection: 'row', alignItems: 'center', gap: space.sm, padding: space.md,
     borderRadius: radius.control, backgroundColor: '#F0FDF4',

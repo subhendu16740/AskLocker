@@ -88,8 +88,7 @@ export default function SecurityScreen() {
           )}
           {noGoogle && (
             <Body>
-              AskLocker now uses Google to sign in. Next time, tap Continue with Google and choose {user?.email}.
-              You'll get this same account, with everything in it.
+              Next time, tap Continue with Google and pick {user?.email}. Everything in your account stays.
             </Body>
           )}
         </Card>
@@ -101,14 +100,8 @@ export default function SecurityScreen() {
             <CardTitle icon="aperture">Fingerprint sign-in</CardTitle>
             {lock.supported ? (
               <>
-                <Body>
-                  Sign in with your fingerprint, face or device PIN. AskLocker also locks when it opens and after
-                  {lockAfterText} away. Turn it on for each device you use.
-                </Body>
-                <Muted>
-                  Your fingerprint and face stay on your device, which may call this a passkey. Google sign-in still
-                  works.
-                </Muted>
+                <Body>Sign in with your fingerprint or face. AskLocker locks after {lockAfterText} away.</Body>
+                <Muted>Your fingerprint stays on your device. Google still works.</Muted>
                 <OnOff value={lock.enabled} onChange={setLock} label="Fingerprint sign-in" />
                 {lockStatus && <Status kind={lockStatus.kind}>{lockStatus.text}</Status>}
               </>
@@ -120,9 +113,7 @@ export default function SecurityScreen() {
 
         <Card>
           <CardTitle icon="smartphone">Sign out on every device</CardTitle>
-          <Body>
-            Use this if you lose a phone or sign in on someone else's computer. You'll be signed out here too.
-          </Body>
+          <Body>Lost a phone? This signs you out everywhere, here too.</Body>
           {signOutError && <Status kind="error">{signOutError}</Status>}
           {confirmAll ? (
             <>
@@ -137,10 +128,7 @@ export default function SecurityScreen() {
 
         <Card>
           <CardTitle icon="user-x">Delete your account</CardTitle>
-          <Body>
-            Deletes your account, saved chats, personal vault and any family only you manage. You'll see exactly what
-            goes before anything happens.
-          </Body>
+          <Body>You'll see what goes before anything is deleted.</Body>
           <DangerButton
             label="Delete account"
             icon="trash-2"

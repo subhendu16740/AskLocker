@@ -26,11 +26,11 @@ function faq(payments: PaymentsStatus | null): { q: string; a: string }[] {
   return [
     {
       q: 'How do I add a document?',
-      a: 'Tap Upload, then Scan, Browse Files or Gallery. Browse Files takes PDFs, photos, Excel files (.xlsx) and CSVs. If you\'re in a family, you choose which vault it goes to. With ★ Family Plus, you can also bring documents in From Gmail on a computer.',
+      a: 'Tap Upload, then Scan, Browse Files or Gallery. Browse Files takes PDFs, photos, Excel files (.xlsx) and CSVs. With ★ Family Plus, you can also add them From Gmail on a computer.',
     },
     {
       q: 'What is my personal vault?',
-      a: 'Everyone gets a personal vault, and nobody else can join it. If you\'re not in a family, your uploads go there. To share documents, create a family in Settings › Your vaults, or accept an invitation.',
+      a: 'Your own vault. Nobody else can join it. To share documents, create a family in Settings › Your vaults, or accept an invitation.',
     },
     {
       q: 'How do I see or delete documents?',
@@ -62,7 +62,7 @@ function faq(payments: PaymentsStatus | null): { q: string; a: string }[] {
     },
     {
       q: 'Who can see my documents?',
-      a: 'Only the members of a document\'s vault can open it in AskLocker, plus anyone with a share link to it. Documents aren\'t end-to-end encrypted, so the people who run AskLocker can technically open them. Settings › Privacy has the details.',
+      a: 'Your family, and anyone you send a share link to. Documents aren\'t end-to-end encrypted, so the people who run AskLocker can open them too. See Settings › Privacy.',
     },
     {
       q: 'How do I share with someone outside the family?',
@@ -74,7 +74,7 @@ function faq(payments: PaymentsStatus | null): { q: string; a: string }[] {
     },
     {
       q: 'Can I use AskLocker for my business?',
-      a: `Yes. In Settings › Your vaults, turn Business too on and tap Create a business, then invite your team in Manage team. The menu then switches between Family and Business. Admins can delete any record, and records stay even if a paid plan ends. A business has its own plans: Plus for ${DEFAULT_PLAN_LIMITS.business.business_plus.members} people, ${businessPrice('business_plus')}. Pro for ${DEFAULT_PLAN_LIMITS.business.business_pro.members}, ${businessPrice('business_pro')}. Enterprise for ${DEFAULT_PLAN_LIMITS.business.business_enterprise.members}, ${businessPrice('business_enterprise')}. Ask for one in Settings › Feedback. Started your shop in a family vault? An admin can tap Make it a business in Settings › Your vaults. Everything stays.`,
+      a: `Yes. In Settings › Your vaults, turn on Business too and tap Create a business. A business has its own plans: Plus for ${DEFAULT_PLAN_LIMITS.business.business_plus.members} people, ${businessPrice('business_plus')}. Pro for ${DEFAULT_PLAN_LIMITS.business.business_pro.members}, ${businessPrice('business_pro')}. Enterprise for ${DEFAULT_PLAN_LIMITS.business.business_enterprise.members}, ${businessPrice('business_enterprise')}. Ask for one in Settings › Feedback. Started in a family vault? An admin can tap Make it a business there.`,
     },
     {
       q: 'How do I delete a vault?',
@@ -114,7 +114,7 @@ function faq(payments: PaymentsStatus | null): { q: string; a: string }[] {
     }] : []),
     {
       q: 'How do I delete my account?',
-      a: 'In Settings › Security, tap Delete account. It deletes your account, saved chats, personal vault and any family only you manage, right away. Documents you added to other families stay with them, and nobody can delete them, so remove any you want gone first.',
+      a: 'In Settings › Security, tap Delete account. It goes right away, with your personal vault and any family only you manage. Documents you added to other families stay there, so delete any you want gone first.',
     },
     {
       q: 'Why can\'t AskLocker find something in my document?',
@@ -177,7 +177,7 @@ function businessFaq(): { q: string; a: string }[] {
     },
     {
       q: 'Who can see our records?',
-      a: 'Only the people in a business can open its records in AskLocker, plus anyone with a share link to one. Records aren\'t end-to-end encrypted, so the people who run AskLocker can technically open them. Settings › Privacy has the details.',
+      a: 'Your team, and anyone you send a share link to. Records aren\'t end-to-end encrypted, so the people who run AskLocker can open them too. See Settings › Privacy.',
     },
     {
       q: 'How do I delete a business?',
@@ -229,10 +229,12 @@ export default function HelpScreen() {
 
         <Card>
           <CardTitle icon="send">Send us feedback</CardTitle>
-          <Body>Something not working, or have an idea? Tell us here.</Body>
+          <Body>Something wrong, or an idea? Tell us.</Body>
           <PrimaryButton label="Send feedback" icon="edit-3" onPress={() => router.push('/settings/feedback' as any)} />
         </Card>
 
+        {/* Only when there is somewhere else to reach us: otherwise it is Send feedback again. */}
+        {(!!SUPPORT_EMAIL || !!SUPPORT_PHONE) && (
         <Card>
           <CardTitle icon="phone">Contact us</CardTitle>
           {!!SUPPORT_EMAIL && (
@@ -255,10 +257,8 @@ export default function HelpScreen() {
               <Text style={[styles.contactText, { color: theme.primary }]}>{SUPPORT_PHONE}</Text>
             </TouchableOpacity>
           )}
-          {!SUPPORT_EMAIL && !SUPPORT_PHONE && (
-            <Body>Use Send feedback above to reach us.</Body>
-          )}
         </Card>
+        )}
       </ScrollView>
     </SafeAreaView>
   );

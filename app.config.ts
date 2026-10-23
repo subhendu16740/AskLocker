@@ -53,9 +53,10 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     extra: {
       router: routerExtra,
       // Settings › About. Stamped when the bundle is built, so for a web
-      // deploy this is the day it was released; Vercel also says which commit.
+      // deploy this is the day it was released; the host also says which
+      // commit (Cloudflare Pages, or Vercel before the move).
       releaseDate: new Date().toISOString(),
-      commit: (process.env.VERCEL_GIT_COMMIT_SHA ?? "").slice(0, 7),
+      commit: (process.env.CF_PAGES_COMMIT_SHA || process.env.VERCEL_GIT_COMMIT_SHA || "").slice(0, 7),
     },
     experiments: {
       typedRoutes: true,

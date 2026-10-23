@@ -83,7 +83,7 @@ export default function ProfileScreen() {
             label="Email"
             value={user?.email ?? ''}
             editable={false}
-            hint="You sign in with this address. It can't be changed here."
+            hint="You sign in with this."
           />
           {status && <Status kind={status.kind}>{status.text}</Status>}
           <PrimaryButton label="Save" onPress={save} busy={saving} icon="check" />
