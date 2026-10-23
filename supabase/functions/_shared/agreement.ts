@@ -17,20 +17,18 @@ export const AGREEMENT_TITLE = 'Before you start';
 
 export const AGREEMENT_INTRO = 'Here is what happens to your documents.';
 
-// Only what happens to people's documents (the owner's ask, 23 October 2026).
-// Everything else worth knowing is one line each in Settings › Privacy.
+// Only what a new person needs before they have used anything (the owner's
+// ask, 23 October 2026): two points, and no service named. Who can see what,
+// and the services by name, are in Settings › Privacy, which the footer
+// points to.
 export const AGREEMENT_POINTS: { head: string; text: string }[] = [
   {
-    head: 'Who can see them',
-    text: 'People in the same vault, and anyone you send a share link to. Your personal vault is only for you.',
-  },
-  {
     head: 'Not end-to-end encrypted',
-    text: 'They are encrypted when sent and stored, but the people who run AskLocker can open them.',
+    text: 'Your documents are encrypted when sent and stored, but the people who run AskLocker can open them.',
   },
   {
-    head: 'Other services',
-    text: 'To search and answer, parts of them go to HuggingFace and Groq. Scanned PDFs and Gmail photos go to OCR.space.',
+    head: 'Read to answer you',
+    text: 'To find your documents and answer your questions, our servers and the AI services we use read parts of them.',
   },
 ];
 

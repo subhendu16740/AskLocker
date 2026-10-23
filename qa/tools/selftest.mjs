@@ -1362,6 +1362,12 @@ await test('the agreement the app shows is word for word what the database keeps
   for (const claim of ['100% private', 'only you can see', 'nothing is kept', 'secure', 'bank-level', 'military-grade']) {
     assert.ok(!words.includes(claim), `promises "${claim}"`);
   }
+  // It says outside services read parts of documents, but names none (the
+  // owner's ask): the names are in Settings › Privacy.
+  assert.ok(words.includes('ai services'), 'says AI services read parts of them');
+  for (const name of ['huggingface', 'groq', 'ocr.space', 'supabase', 'posthog', 'razorpay']) {
+    assert.ok(!words.includes(name), `names "${name}"`);
+  }
   assert.ok(AGREEMENT_POINTS.every((p) => p.text.length <= 200), 'each point stays short');
 });
 

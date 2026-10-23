@@ -2,10 +2,10 @@
 -- 062: What everyone agrees to before using AskLocker, and when they agreed
 --
 -- Before anything else, every signed-in person sees one screen that says in
--- plain words what happens to their documents (who can see them, that they
--- are not end-to-end encrypted, which outside services read parts of them),
--- ticks "I've read this and I agree" and taps Continue. Everything else
--- worth knowing is one line each in Settings › Privacy. There is no way past it but agreeing
+-- plain words what happens to their documents (that they are not end-to-end
+-- encrypted, and that our servers and the AI services we use read parts of
+-- them to answer), ticks "I've read this and I agree" and taps Continue.
+-- Everything else, the services by name included, is in Settings › Privacy. There is no way past it but agreeing
 -- or signing out (src/components/agreement-screen.tsx). This keeps the proof:
 --
 --   agreement_versions   the exact words of each version, as the screen showed
@@ -113,14 +113,11 @@ values ('2026-10-23', $agreement$Before you start
 
 Here is what happens to your documents.
 
-Who can see them
-People in the same vault, and anyone you send a share link to. Your personal vault is only for you.
-
 Not end-to-end encrypted
-They are encrypted when sent and stored, but the people who run AskLocker can open them.
+Your documents are encrypted when sent and stored, but the people who run AskLocker can open them.
 
-Other services
-To search and answer, parts of them go to HuggingFace and Groq. Scanned PDFs and Gmail photos go to OCR.space.
+Read to answer you
+To find your documents and answer your questions, our servers and the AI services we use read parts of them.
 
 More in Settings › Privacy. If this changes, we'll ask you again.
 
