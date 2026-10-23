@@ -62,6 +62,7 @@ export const accountKey = {
   useFor: (userId: string) => `fv:use-for:${userId}`, // what they said they use AskLocker for, or "skipped" (051, use-for-offer.tsx)
   uses: (userId: string) => `fv:uses:${userId}`, // Family or Business first, and the other too: the account's copy, until it is saved there (family-context.tsx)
   setupLater: (userId: string) => `fv:setup-later:${userId}`, // "Later" to Home's "Set up your family/business" (use-for-offer.tsx)
+  agreement: (userId: string) => `fv:agreement:${userId}`, // the version they agreed to, and whether the database has it yet (062, agreement-screen.tsx)
 };
 
 // What this device keeps for every account on it at once.

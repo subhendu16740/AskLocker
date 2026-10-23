@@ -2589,3 +2589,43 @@ export async function fetchPersonDocuments(familyId: string, personId: string): 
   const docs = await fetchAllDocuments(familyId);
   return docs.filter((d) => d.belongs_to_member === personId);
 }
+
+// ─── The agreement (062) ─────────────────────────────────────────
+//
+// What everyone agrees to before using AskLocker, in plain words
+// (_shared/agreement.ts; the screen is components/agreement-screen.tsx). The
+// database records who agreed to which version and when, by its own clock,
+// only through record_agreement() (the caller from auth.uid()). Before 062,
+// or before the migration that adds a new version, there is nowhere to
+// record it, and the screen keeps it on the device until there is.
+
+export type AgreementCheck = 'agreed' | 'not_agreed' | 'unavailable';
+
+/** Has this person agreed to this version, as the database knows? */
+export async function fetchAgreement(userId: string, version: string): Promise<AgreementCheck> {
+  const { data, error } = await supabase
+    .from('user_agreements')
+    .select('agreed_at')
+    .eq('user_id', userId)
+    .eq('version', version)
+    .maybeSingle();
+  if (error) {
+    if (isMissingMigration(error)) return 'unavailable';
+    throw error;
+  }
+  return data ? 'agreed' : 'not_agreed';
+}
+
+/** Records the signed-in person's agreement. When they first agreed, or null where it cannot be recorded yet. */
+export async function recordAgreement(version: string, platform: string, appBuild: string): Promise<string | null> {
+  const { data, error } = await supabase.rpc('record_agreement', {
+    p_version: version,
+    p_platform: platform,
+    p_app_build: appBuild,
+  });
+  if (error) {
+    if (missingFunction(error) || error.hint === 'unknown_version') return null;
+    throw error;
+  }
+  return data;
+}

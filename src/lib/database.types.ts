@@ -14,6 +14,12 @@ export type Database = {
   }
   public: {
     Tables: {
+      agreement_versions: {
+        Row: { body: string; created_at: string; version: string }
+        Insert: { body: string; created_at?: string; version: string }
+        Update: { body?: string; created_at?: string; version?: string }
+        Relationships: []
+      }
       audit_logs: {
         Row: {
           action: string
@@ -1269,6 +1275,41 @@ export type Database = {
           },
         ]
       }
+      user_agreements: {
+        Row: {
+          agreed_at: string
+          app_build: string | null
+          id: number
+          platform: string | null
+          user_id: string
+          version: string
+        }
+        Insert: {
+          agreed_at?: string
+          app_build?: string | null
+          id?: never
+          platform?: string | null
+          user_id: string
+          version: string
+        }
+        Update: {
+          agreed_at?: string
+          app_build?: string | null
+          id?: never
+          platform?: string | null
+          user_id?: string
+          version?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_agreements_version_fkey"
+            columns: ["version"]
+            isOneToOne: false
+            referencedRelation: "agreement_versions"
+            referencedColumns: ["version"]
+          },
+        ]
+      }
       users: {
         Row: {
           auth_provider: string
@@ -1392,6 +1433,10 @@ export type Database = {
       claim_question: { Args: { p_user_id: string }; Returns: Json }
       make_business_vault: { Args: { p_family_id: string }; Returns: Json }
       queue_note_reminders: { Args: { p_now?: string }; Returns: number }
+      record_agreement: {
+        Args: { p_app_build?: string; p_platform?: string; p_version: string }
+        Returns: string
+      }
       set_bill_paid: {
         Args: { p_document_id: string; p_family_id: string; p_paid?: boolean }
         Returns: undefined

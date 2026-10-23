@@ -25,6 +25,7 @@
 // ────────────────────────────────────────────────────────────────
 
 import { createHmac, randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { invokeFunction } from '../supabase.mjs';
 import { permanentDocuments } from '../../fixtures/documents.mjs';
 
@@ -299,6 +300,18 @@ const overviewJudge = (expect) => (outcome) => {
   }
   return typeof expect === 'function' ? expect(outcome) : judge(expect, outcome);
 };
+// The agreement (062): each person records only their own, by the
+// database's clock, reads only their own, and nobody changes or deletes a
+// record or the words. Skipped until 062 is on DEV (no such table or function).
+const agreementJudge = (expect) => (outcome) => {
+  if (outcome.missing || missingTable(outcome.error) || ['PGRST202'].includes(String(outcome.error?.code))) {
+    return ['skipped', 'migration 062 is not applied to DEV yet'];
+  }
+  return typeof expect === 'function' ? expect(outcome) : judge(expect, outcome);
+};
+// The version the app asks for, read from the app's own words (agreement.ts).
+const AGREEMENT_VERSION = readFileSync(new URL('../../../supabase/functions/_shared/agreement.ts', import.meta.url), 'utf8')
+  .match(/AGREEMENT_VERSION = '([^']+)'/)[1];
 // Deleting a family vault (057): its owner's alone, through delete-account,
 // and the database side is the server's. Skipped until 057 is on DEV (no such
 // function; delete-account answering needs_migration), or until DEV runs a
@@ -1166,6 +1179,19 @@ export async function runAccessChecks(cfg, { a, b, anon, vaultA, vaultB, docsA }
     // anyone before RLS is reached; a stranger's note into a business, which
     // RLS refuses, is checked in business.mjs.
     ['B', 'write a note into QA Vault A', overviewJudge((o) => (o.error?.hint === 'not_business' ? ['pass', short(o.error)] : judge('refused', o))), () => b.client.from('scratch_notes').insert({ family_id: A.family, body: 'QA intrusion' })],
+    // The agreement (062): a person's own record, the database's time, the words fixed.
+    ['anon', 'record an agreement', agreementJudge('refused'), rpc(anon, 'record_agreement', { p_version: AGREEMENT_VERSION })],
+    ['anon', "read anyone's agreements", agreementJudge('refused-or-empty'), () => anon.client.from('user_agreements').select('user_id, agreed_at').limit(5)],
+    ['B', 'record its own agreement, and get the time back', agreementJudge((o) => (!o.error && typeof o.data === 'string' && !Number.isNaN(Date.parse(o.data))
+      ? ['pass', `agreed ${o.data}`]
+      : ['fail', o.error ? `refused its own agreement: ${short(o.error)}` : `no time came back: ${JSON.stringify(o.data)}`])),
+    rpc(b, 'record_agreement', { p_version: AGREEMENT_VERSION, p_platform: 'web', p_app_build: 'qa' })],
+    ['B', 'read when anyone else agreed', agreementJudge('refused-or-empty'), () => b.client.from('user_agreements').select('user_id, agreed_at').neq('user_id', b.user.id).limit(5)],
+    ['B', 'write an agreement for account A', agreementJudge('refused'), () => b.client.from('user_agreements').insert({ user_id: A.user, version: AGREEMENT_VERSION })],
+    ['B', 'change when it agreed', agreementJudge('refused'), () => b.client.from('user_agreements').update({ agreed_at: '2020-01-01T00:00:00Z' }).eq('user_id', b.user.id)],
+    ['B', 'delete its agreements', agreementJudge('refused'), () => b.client.from('user_agreements').delete().eq('user_id', b.user.id)],
+    ['B', 'change the words of the agreement', agreementJudge('refused'), () => b.client.from('agreement_versions').update({ body: 'QA intrusion' }).eq('version', AGREEMENT_VERSION)],
+    ['B', 'add a version of the agreement', agreementJudge('refused'), () => b.client.from('agreement_versions').insert({ version: 'qa-intrusion', body: 'QA intrusion' })],
     // Deleting a family vault (057): only its owner, through delete-account.
     ['anon', 'see what deleting QA Vault A would take', familyDeletionJudge('http-401-403'), fn(anon, 'delete-account', { action: 'family_preview', family_id: A.family })],
     ['B', 'see what deleting QA Vault A would take', familyDeletionJudge('http-401-403'), fn(b, 'delete-account', { action: 'family_preview', family_id: A.family })],

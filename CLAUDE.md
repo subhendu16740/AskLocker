@@ -127,7 +127,12 @@ Four things will mislead you if you assume otherwise:
    060's free space per person is added up by the server alone
    (`person_free_files_bytes`, service role only), and a person reads only
    their own (`person_storage_status()`, from `auth.uid()`): see
-   [Free space per person](#free-space-per-person--50-mb-each-a-family-100-mb-a-business-200-mb-060)).
+   [Free space per person](#free-space-per-person--50-mb-each-a-family-100-mb-a-business-200-mb-060);
+   062's agreements are their owner's — recorded only through
+   `record_agreement()` (from `auth.uid()`), read only by their owner, and
+   changed or deleted by no client; the words themselves
+   (`agreement_versions`) are written only by a migration: see
+   [The agreement](#the-agreement--what-everyone-agrees-to-and-when-062)).
    **A new writable
    column needs its own `GRANT` in a migration.** Nobody joins a family
    without saying yes: only an admin asks a person in, through the
@@ -177,7 +182,7 @@ errors**) and `npm run build` are the local gates.
 at 03:10 IST, and on pushes that change `qa/`. It uploads synthetic SPECIMEN
 documents to its own vault (QA Vault A, account A), asks questions about
 them, and checks the answers on facts and sources, never wording. It also
-runs the 023 sweep and the 024 DEV/PROD fingerprint, 168 access probes (a
+runs the 023 sweep and the 024 DEV/PROD fingerprint, 177 access probes (a
 logged-out visitor and a second account must be refused everywhere, Gmail
 import's endpoints, the family tree and its nicknames, emergency cards, linking,
 notification devices, share links, invitations, plans and personal vaults
@@ -743,7 +748,7 @@ src/
     (tabs)/
       _layout.tsx            # custom tab bar (CustomTabBar): full width; the round Ask button (size.ask) sits on its bottom edge and rises above it
       home.tsx  search.tsx  upload.tsx
-  components/                # shared UI, incl. ProfileDrawer, ShareSheet (036), InvitationCards (037), the vault dropdown and sheet (vault-sheet.tsx, 046), GoogleSignIn, FingerprintSignIn, PasswordSignIn (test builds), AppLockScreen, LockOffer and UseForOffer (051)
+  components/                # shared UI, incl. ProfileDrawer, ShareSheet (036), InvitationCards (037), the vault dropdown and sheet (vault-sheet.tsx, 046), GoogleSignIn, FingerprintSignIn, PasswordSignIn (test builds), AppLockScreen, AgreementScreen (062), LockOffer and UseForOffer (051)
   constants/design.ts        # the one type/size/spacing scale every screen uses
   constants/theme.ts         # create-expo-app scaffold, largely unused
   hooks/                     # use-color-scheme, use-theme
@@ -781,7 +786,7 @@ tabs. `(tabs)` is a layout group, so routes are `/home`, `/search`, `/upload`.
 | `vaults.ts` | Personal vault, family or business (046, 051): `vaultName()` ("Personal vault" everywhere), `isBusinessVault()`, `vaultWord()`, `vaultIcon()`, `splitVaults()`, `vaultSubtitle()`, `canDeleteDocument()` (whoever added it, or any admin in a business) |
 | `family-only.ts` | `useFamilyOnly()`: the family tree, a person's page and emergency cards send a business to Manage team (051) |
 | `drawer-context.tsx` | Profile drawer open/close state |
-| `api.ts` | **All** Supabase queries — documents, search, upload, RAG, notifications, adding and leaving families, invitations, Gmail import, saved chats, share links, deleting your account, plans and storage limits (`fetchStorageStatus`, `fetchPlanLimits`; `uploadDocument` throws `StorageFullError` before a file that does not fit is sent, and `saveChat` `ChatStorageFullError` for a chat, 042), voice chats (`claimVoiceAnswer`, 041; `fetchVoiceStatus`, how many are left, 042), paying for Family Plus (`fetchPaymentsStatus`, whether this project takes payments, asked once a session; `createPlusOrder`, `verifyPlusPayment`, 044), questions this month (`fetchQuestionStatus`; `ragSearch`'s `questions` and `question_limit`, 049), the expiry date found in a new upload (`fetchDocumentExpiry`, for Upload's Plus offer), personal vaults and Ask across vaults (`ensurePersonalVault`; `ragSearch`'s `vaults` option, 046), businesses (`createNewFamily(…, kind)`, `previewBusinessDeletion`, `deleteBusiness`, `fetchUseFor` / `saveUseFor`, 051; `previewBusinessVault`, `makeBusinessVault`, 054; `fetchBusinessOverview`, `setBillPaid`, `fetchNotes`, `addNote`, `updateNote`, `deleteNote`, 056), and the Settings screens (profile, storage use, expiry dates, feedback) |
+| `api.ts` | **All** Supabase queries — documents, search, upload, RAG, notifications, adding and leaving families, invitations, Gmail import, saved chats, share links, deleting your account, plans and storage limits (`fetchStorageStatus`, `fetchPlanLimits`; `uploadDocument` throws `StorageFullError` before a file that does not fit is sent, and `saveChat` `ChatStorageFullError` for a chat, 042), voice chats (`claimVoiceAnswer`, 041; `fetchVoiceStatus`, how many are left, 042), paying for Family Plus (`fetchPaymentsStatus`, whether this project takes payments, asked once a session; `createPlusOrder`, `verifyPlusPayment`, 044), questions this month (`fetchQuestionStatus`; `ragSearch`'s `questions` and `question_limit`, 049), the expiry date found in a new upload (`fetchDocumentExpiry`, for Upload's Plus offer), personal vaults and Ask across vaults (`ensurePersonalVault`; `ragSearch`'s `vaults` option, 046), businesses (`createNewFamily(…, kind)`, `previewBusinessDeletion`, `deleteBusiness`, `fetchUseFor` / `saveUseFor`, 051; `previewBusinessVault`, `makeBusinessVault`, 054; `fetchBusinessOverview`, `setBillPaid`, `fetchNotes`, `addNote`, `updateNote`, `deleteNote`, 056), the agreement (`fetchAgreement`, `recordAgreement`, 062), and the Settings screens (profile, storage use, expiry dates, feedback) |
 | `overview.ts` | The overview's arithmetic (056), pure: `parseAmount()` ("1,18,000.00"), `formatRupees()` (lakhs and crores), `compactRupees()` for the axis, `monthlyTotals()`, `financialYearTotals()` (since 1 April), `daysFromToday()`, `whenText()` |
 | `document-groups.ts` | What Home's three counts and All documents' three tabs count, in one place: `peopleVault()` (whose people), `categoryGroups()`, `categoryCount()`, `categoryKey()`, the tab names (`DocumentsTab`) |
 | `dates.ts` | `parseDocumentDate()`: expiry dates exactly as ingest stores them (DD/MM/YYYY and kin, YYYY-MM-DD, "19 October 2026") |
@@ -803,7 +808,7 @@ tabs. `(tabs)` is a layout group, so routes are `/home`, `/search`, `/upload`.
 | `speech-text.ts` | `toSpeech()`: strips markdown and spells out ID numbers before they are read aloud — and a number named as one ("train number 16782", "PNR: 4512", "PIN 751001", "नंबर 16782") digit by digit, from its digits; the screen keeps the digits |
 | `voice-languages.ts` | The language picker list and the few phrases the app itself says, per language |
 | `storage.ts` | Key-value cache: localStorage on web, AsyncStorage on native |
-| `database.types.ts` | Generated Supabase types, current to 060 (030, 052, 055, 058 and 059 changed nothing in them; 049's, 050's, 051's, 053's, 054's, 056's, 057's and 060's added by hand). Regenerate after every migration and re-append the hand-written block at the bottom (see the typecheck note) |
+| `database.types.ts` | Generated Supabase types, current to 062 (030, 052, 055, 058, 059 and 061 changed nothing in them; 049's, 050's, 051's, 053's, 054's, 056's, 057's, 060's and 062's added by hand). Regenerate after every migration and re-append the hand-written block at the bottom (see the typecheck note) |
 
 ---
 
@@ -872,7 +877,8 @@ Supabase, cloud-hosted. Three layers:
   saved_chats, family_people, family_links, family_emergency_cards,
   push_subscriptions, reminders_sent, push_config, document_shares,
   family_invites, plan_limits, family_plans, member_usage, plan_payments,
-  question_usage, daily_usage, scratch_notes.
+  question_usage, daily_usage, scratch_notes, agreement_versions,
+  user_agreements.
   RLS enabled.
 - **Layer 2 (private)** — one isolated schema per family (`family_<short_uuid>`)
   holding documents, document_metadata, document_chunks, expiry_alerts,
@@ -2482,6 +2488,55 @@ where it does not.
 - Before 057, Delete on a family says deleting a family vault is not
   switched on yet, and a business's Delete goes 051's way (any admin).
 
+### The agreement — what everyone agrees to, and when (062)
+
+- **One screen before anything else** (the owner's ask, 23 October 2026):
+  what AskLocker does with your documents, in eight plain points, true of
+  the app as it is today — who can see them, that they are **not**
+  end-to-end encrypted and the people who run AskLocker can open them,
+  which outside services read parts of them, that AI answers can be wrong,
+  that AskLocker is not a backup, what goes when Family Plus ends, deleting
+  your account, usage counts. A tick box, "I've read this and I agree", and
+  Continue, which stays off until it is ticked. The only other way is
+  "Don't agree? Sign out". The words live in one place,
+  `supabase/functions/_shared/agreement.ts` (`agreementText()`).
+- **After sign-in, not on the intro slides**: a record has to know who
+  agreed, so the screen (`src/components/agreement-screen.tsx`) is a Modal
+  over everything, drawn for any signed-in account without the current
+  version recorded, in the lock screen's way (`useNothingElseReachable()`
+  makes the rest of the page inert). For a new person it is the screen right
+  after Google, before the welcome question; everyone already signed up sees
+  it once, at their next start. It waits while AskLocker is locked, and a
+  shared document (`/s`) is never behind it.
+- **The proof is the database's.** `record_agreement(p_version, p_platform,
+  p_app_build)` (the caller from `auth.uid()`) writes `user_agreements`:
+  who, which version, when by the database's clock (never the device's),
+  and the platform and build that showed it. Agreeing again keeps the first
+  time. No client can change or delete a row; a person reads only their
+  own. `agreement_versions` keeps each version's exact words, inserted by
+  its migration, readable by anyone and written by nobody else. The QA
+  self-test checks that the app's words are, character for character, the
+  words the migration inserted for `AGREEMENT_VERSION`, and that they still
+  say "not end-to-end" and none of the forbidden claims.
+- **To show someone agreed**: in the SQL editor,
+  `select u.email, a.version, a.agreed_at, a.platform, a.app_build, v.body
+  from user_agreements a join auth.users u on u.id = a.user_id join
+  agreement_versions v using (version) where u.email = '<their email>';`
+- **New words mean a new version**: change `agreement.ts`, give it a new
+  `AGREEMENT_VERSION`, and write a migration inserting those words under it,
+  in the same release (migration first). Everyone who has not agreed to the
+  new version sees the screen again. Change it with Settings › Privacy.
+- **The device remembers too** (`accountKey.agreement`), so the screen does
+  not ask the database at every start. Before 062, or before the migration
+  that adds a new version, there is nowhere to record it: the agreement is
+  kept on the device and sent at the next start that can. So apply each
+  version's migration to PROD before the release that carries it, or early
+  agreements carry the time they were sent, not the time they were given.
+- **A record goes with the account** (ON DELETE CASCADE), like everything
+  else deleting an account removes (029). Keeping it after an account is
+  deleted, as proof, would contradict Privacy and Help ("deleting is
+  immediate"), so that is a decision for a lawyer, and a change to both.
+
 ## Edge Functions
 
 `supabase/functions/` — Deno, excluded from `tsconfig.json` (they use remote
@@ -3105,7 +3160,10 @@ rule again once pinned chunks are mixed in.
   services. It must stay true of the code and of the people who run
   AskLocker, so change it with any change to sharing, search, OCR,
   embeddings, voice, Gmail import, payments or usage counts. The app made such claims until
-  7 October 2026.
+  7 October 2026. The agreement everyone accepts at the start
+  (`_shared/agreement.ts`, 062) says the same things and is held to the
+  same rule: a change to any of them changes its words too, under a new
+  version, so everyone is asked again.
 - **Usage counts — PostHog, named events only.** Which screens are opened
   and which actions are taken (a document added, a question asked, a link
   made, Plus paid for), so the team can see what is used. **What kinds of
