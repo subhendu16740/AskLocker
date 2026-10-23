@@ -19,6 +19,7 @@ import { useFamily } from '../../lib/family-context';
 import { isBusinessVault, isPersonalVault, vaultIcon, vaultName } from '../../lib/vaults';
 import { fetchPersonStorage, fetchPlanLimits, fetchStorageStatus, fetchStorageUsage, type FamilyPlanStatus } from '../../lib/api';
 import {
+  familyPlanName,
   DEFAULT_PLAN_LIMITS, businessPlanName, formatBytes, isBusinessPlan, storageLevel, type PersonRoom, type PlanLimits, type StorageLevel,
 } from '../../lib/plans';
 import { longDate } from '../../lib/dates';
@@ -41,7 +42,7 @@ interface Row {
 
 function planName(status: FamilyPlanStatus | null): string {
   if (isBusinessPlan(status?.plan)) return `${businessPlanName(status.plan)}${status.trial ? ', trial' : ''}`;
-  if (status?.plan === 'plus') return `Family Plus${status.trial ? ', trial' : ''}`;
+  if (status?.plan === 'plus' || status?.plan === 'family_pro') return `${familyPlanName(status.plan)}${status.trial ? ', trial' : ''}`;
   // A business whose paid plan ended (051): every record stays, nothing can be added.
   return status?.closed ? 'Plan ended' : 'Free';
 }

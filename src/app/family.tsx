@@ -89,7 +89,14 @@ export default function FamilyScreen() {
   );
 
   // Members and waiting invitations together, against the plan's number.
-  const maxMembers = isBusinessPlan(plan) ? limits.business[plan].members : plan === 'plus' ? limits.members.plus : limits.members.free;
+  const maxMembers = isBusinessPlan(plan) ? limits.business[plan].members
+    : plan === 'family_pro' ? limits.familyPro.members
+    : plan === 'plus' ? limits.members.plus
+    : business ? limits.freeBusinessMembers : limits.members.free;
+  // In a family, the plan that allows more members: Plus from Free, Pro from Plus (064).
+  const moreMembers = plan === 'family_pro' ? null
+    : plan !== 'plus' && limits.members.plus > maxMembers ? { name: 'Family Plus', members: limits.members.plus }
+    : limits.familyPro.members > maxMembers ? { name: 'Family Pro', members: limits.familyPro.members } : null;
   // In a business, the plan above this one, if it allows more people (051).
   const nextPlan = business && plan ? nextBusinessPlan(plan) : null;
   const morePeople = nextPlan && limits.business[nextPlan].members > maxMembers ? limits.business[nextPlan].members : null;
@@ -328,9 +335,9 @@ export default function FamilyScreen() {
               {business ? '' : ' You can still add anyone to the family tree.'}
               {business
                 ? (nextPlan && morePeople ? ` ${businessPlanName(nextPlan)} allows up to ${morePeople}.` : '')
-                : (plan !== 'plus' && limits.members.plus > maxMembers ? ` Family Plus allows up to ${limits.members.plus} members.` : '')}
+                : (moreMembers ? ` ${moreMembers.name} allows up to ${moreMembers.members} members.` : '')}
             </Text>
-            {(business ? !!morePeople : plan !== 'plus' && limits.members.plus > maxMembers) && (
+            {(business ? !!morePeople : !!moreMembers) && (
               <TouchableOpacity onPress={() => router.push(plusPage('members') as any)} accessibilityRole="link" hitSlop={8}>
                 <Text style={styles.fullNoteLink}>{business ? 'Plans ›' : 'Family Plus ›'}</Text>
               </TouchableOpacity>

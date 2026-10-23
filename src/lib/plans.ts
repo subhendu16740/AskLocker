@@ -6,8 +6,10 @@
 //                 a family 100 MB and a business 200 MB, everyone
 //                 together; a personal vault 50 MB (060) — in total, not
 //                 a monthly allowance
-//   Family Plus   10 GB, either kind of vault — in India ₹100 a month or
+//   Family Plus   1 GB, either kind of vault — in India ₹100 a month or
 //                 ₹1,100 a year, elsewhere $10 a month or $110 a year
+//   Family Pro    10 GB (064) — in India ₹200 a month or ₹2,000 a year,
+//                 elsewhere $20 a month or $200 a year
 //
 // The yearly price is shown as a discount on twelve months at the monthly
 // price, crossed out (<YearlyPrice />, src/components/plus-price.tsx).
@@ -31,7 +33,7 @@
 
 import {
   DEFAULT_PLAN_LIMITS, formatBytes, plusAmount, plusPrice, plusPrices, plusYearlyOffer, plusYearlySaving,
-  type PriceCurrency, type PricePeriod,
+  type FamilyPlan, type PriceCurrency, type PricePeriod,
 } from '../../supabase/functions/_shared/plan-text';
 
 export {
@@ -43,11 +45,11 @@ export {
 } from '../../supabase/functions/_shared/limits';
 
 export {
-  BUSINESS_PLANS, BUSINESS_PRICE, CLOSED_MESSAGE, DEFAULT_PLAN_LIMITS, PLUS_FOR_SALE, PLUS_PRICE, businessAmount, businessPlanName, businessPrice,
-  businessYearPrice, chatStorageFullMessage, fits, formatBytes, freeVaultsText, isBusinessPlan, nextBusinessPlan, personFits,
+  BUSINESS_PLANS, BUSINESS_PRICE, CLOSED_MESSAGE, DEFAULT_PLAN_LIMITS, FAMILY_PLANS, PLUS_FOR_SALE, PLUS_PRICE, PRO_PRICE, businessAmount, businessPlanName, businessPrice,
+  businessYearPrice, chatStorageFullMessage, familyPlanName, familyPrice, fits, formatBytes, freeVaultsText, isBusinessPlan, isFamilyPlan, nextBusinessPlan, personFits,
   personStorageFullMessage, planLabel, plusAmount, plusName, plusPrice, plusPrices, plusTwelveMonths, plusYearlyOffer, plusYearlySaving,
   storageFullMessage,
-  type BusinessPlan, type BusinessPlanLimits, type PersonRoom, type PlanLimits, type PlanName, type PriceCurrency, type PricePeriod,
+  type BusinessPlan, type BusinessPlanLimits, type FamilyPlan, type PersonRoom, type PlanLimits, type PlanName, type PlanPrice, type PriceCurrency, type PricePeriod,
   type StorageRoom,
 } from '../../supabase/functions/_shared/plan-text';
 
@@ -99,29 +101,31 @@ export function localCurrency(): PriceCurrency {
   return zone && !/^Asia\/(Kolkata|Calcutta)$/.test(zone) ? 'usd' : 'inr';
 }
 
+// Each takes the family plan last, Family Plus when not said (064).
+
 /** "₹100 a month" (or "₹1,100 a year") where this device is. */
-export function localPlusPrice(period: PricePeriod = 'monthly'): string {
-  return plusPrice(localCurrency(), period);
+export function localPlusPrice(period: PricePeriod = 'monthly', plan: FamilyPlan = 'plus'): string {
+  return plusPrice(localCurrency(), period, plan);
 }
 
 /** "₹100 a month or ₹1,100 a year" where this device is. */
-export function localPlusPrices(): string {
-  return plusPrices(localCurrency());
+export function localPlusPrices(plan: FamilyPlan = 'plus'): string {
+  return plusPrices(localCurrency(), plan);
 }
 
 /** "₹100", "₹1,100" where this device is. */
-export function localPlusAmount(period: PricePeriod): string {
-  return plusAmount(localCurrency(), period);
+export function localPlusAmount(period: PricePeriod, plan: FamilyPlan = 'plus'): string {
+  return plusAmount(localCurrency(), period, plan);
 }
 
 /** "1 month free" where this device is. */
-export function localPlusYearlySaving(): string {
-  return plusYearlySaving(localCurrency());
+export function localPlusYearlySaving(plan: FamilyPlan = 'plus'): string {
+  return plusYearlySaving(localCurrency(), plan);
 }
 
 /** "₹1,100 a year instead of ₹1,200" where this device is: what a screen reader hears for <YearlyPrice />. */
-export function localPlusYearlyOffer(): string {
-  return plusYearlyOffer(localCurrency());
+export function localPlusYearlyOffer(plan: FamilyPlan = 'plus'): string {
+  return plusYearlyOffer(localCurrency(), plan);
 }
 
 /** From this share of a family's limit on, it is told it is nearly full. */

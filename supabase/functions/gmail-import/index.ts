@@ -26,7 +26,7 @@ import { requireFamilyMember } from '../_shared/auth.ts';
 import { ingestDocument } from '../_shared/ingest.ts';
 import { sha256Hex } from '../_shared/gmail-crypto.ts';
 import { MAX_IMPORT_BYTES, attachmentParts, sniffType, storageFileName } from '../_shared/gmail-rules.ts';
-import { fits, isBusinessPlan, storageFullMessage, type StorageRoom } from '../_shared/plan-text.ts';
+import { fits, isBusinessPlan, isFamilyPlan, storageFullMessage, type StorageRoom } from '../_shared/plan-text.ts';
 import { MAX_FILE_BYTES, fileTooLargeMessage } from '../_shared/limits.ts';
 import { GmailError, accessTokenFor, getAttachment, getMessage } from '../_shared/gmail.ts';
 
@@ -150,7 +150,7 @@ Deno.serve(async (req) => {
           : 'Import from Gmail comes with Family Plus. Open Family Plus from the menu.');
       }
       const room: StorageRoom = {
-        plan: isBusinessPlan(r.plan) ? r.plan : 'plus',
+        plan: isBusinessPlan(r.plan) || isFamilyPlan(r.plan) ? r.plan : 'plus',
         limitBytes: Number(r.limit_bytes),
         usedBytes: Number(r.used_bytes),
         personal: r.personal === true,    // 048; absent before it

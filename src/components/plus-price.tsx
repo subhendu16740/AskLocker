@@ -1,4 +1,4 @@
-// The yearly Family Plus price, shown as a discount: twelve months at the
+// The yearly Family Plus (or Pro, 064) price, shown as a discount: twelve months at the
 // monthly price crossed out, then what a year costs — "₹1,200 ₹1,100 a year".
 // The crossed-out price is worked out (plusTwelveMonths()), never typed in, so
 // it is always one a family could really pay.
@@ -8,31 +8,33 @@
 // says "instead of" (plusYearlyOffer(), localPlusYearlyOffer()).
 
 import { Text, StyleSheet, type StyleProp, type TextStyle } from 'react-native';
-import { localCurrency, plusPrice, plusTwelveMonths, type PriceCurrency } from '../lib/plans';
+import { localCurrency, plusPrice, plusTwelveMonths, type FamilyPlan, type PriceCurrency } from '../lib/plans';
 
 interface PriceProps {
   /** Rupees or dollars; where this device is when left out. */
   currency?: PriceCurrency;
   /** On the dark Family Plus banner. */
   onDark?: boolean;
+  /** Family Plus when left out. */
+  plan?: FamilyPlan;
 }
 
 /** "₹1,200", crossed out: what a year costs by the month. */
-export function TwelveMonthsPrice({ currency, onDark, style }: PriceProps & { style?: StyleProp<TextStyle> }) {
+export function TwelveMonthsPrice({ currency, onDark, plan, style }: PriceProps & { style?: StyleProp<TextStyle> }) {
   return (
     <Text style={[styles.was, onDark && styles.wasOnDark, style]} aria-hidden>
-      {plusTwelveMonths(currency ?? localCurrency())}
+      {plusTwelveMonths(currency ?? localCurrency(), plan)}
     </Text>
   );
 }
 
 /** "₹1,200 ₹1,100 a year", the first crossed out, inside a sentence. */
-export function YearlyPrice({ currency, onDark }: PriceProps) {
+export function YearlyPrice({ currency, onDark, plan }: PriceProps) {
   const c = currency ?? localCurrency();
   return (
     <Text>
-      <TwelveMonthsPrice currency={c} onDark={onDark} />
-      {` ${plusPrice(c, 'yearly')}`}
+      <TwelveMonthsPrice currency={c} onDark={onDark} plan={plan} />
+      {` ${plusPrice(c, 'yearly', plan)}`}
     </Text>
   );
 }

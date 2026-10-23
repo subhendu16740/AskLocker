@@ -92,7 +92,7 @@ export async function runUploadChecks(cfg, { a, vaultA }, results, today) {
     const { data: rooms } = await a.client.rpc('family_storage_status', { p_family_id: vaultA.id });
     const room = rooms?.[0] ?? null;
     const remindersArePlus = !!room && 'personal' in room;
-    const expectReminder = !remindersArePlus || room.plan === 'plus';
+    const expectReminder = !remindersArePlus || room.plan === 'plus' || room.plan === 'family_pro';
     const { data: created, error: checkErr } = await a.client.rpc('check_expiry_notifications', { p_family_id: vaultA.id });
     const { data: inbox, error: inboxErr } = await a.client.rpc('get_user_notifications', { p_user_id: a.user.id, p_limit: 50, p_offset: 0 });
     const mine = (inbox ?? []).find((n) => n.document_ref === up.docId && n.type === 'expiry');

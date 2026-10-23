@@ -7,9 +7,9 @@ import type { Gender, KinLink, KinPerson } from '../../supabase/functions/_share
 import { parseAllowance, type QuestionAllowance } from '../../supabase/functions/_shared/questions';
 import { isBloodGroup, type EmergencyCard, type EmergencyCardInput, type EmergencyContact } from './emergency';
 import {
-  DEFAULT_PLAN_LIMITS, MAX_FILE_BYTES, PLUS_FOR_SALE, chatStorageFullMessage, deviceTimeZone, fileTooLargeMessage, fits,
-  limitHint, localPlusPrices, personFits, personStorageFullMessage, setPayerCurrency, storageFullMessage, type BusinessPlan,
-  type BusinessPlanLimits, type PersonRoom, type PlanLimits, type PlanName, type StorageRoom,
+  DEFAULT_PLAN_LIMITS, MAX_FILE_BYTES, PLUS_FOR_SALE, chatStorageFullMessage, deviceTimeZone, familyPlanName, familyPrice,
+  fileTooLargeMessage, fits, limitHint, localPlusPrices, personFits, personStorageFullMessage, setPayerCurrency, storageFullMessage,
+  type BusinessPlan, type BusinessPlanLimits, type FamilyPlan, type PersonRoom, type PlanLimits, type PlanName, type StorageRoom,
 } from './plans';
 import type {
   FamilyWithMembership,
@@ -1426,9 +1426,10 @@ export async function fetchStorageStatus(familyId: string): Promise<FamilyPlanSt
 // uploads_per_day and families_per_person; 051: invites_per_day and
 // businesses_per_person, and the business plans' rows; 053:
 // family_questions_per_month; 054: vaults_per_person; 056: notes_per_person; 060: business_storage_bytes and
-// person_storage_bytes). A column that is not there yet
+// person_storage_bytes; 064: business_max_members). A column that is not there yet
 // fails the whole select, so each one missing asks again with the set before it.
 const PLAN_LIMIT_COLUMNS = [
+  'plan, storage_bytes, grace_days, max_members, voice_answers, personal_storage_bytes, questions_per_month, questions_fair_use, question_tries_per_day, uploads_per_day, families_per_person, invites_per_day, businesses_per_person, family_questions_per_month, vaults_per_person, notes_per_person, business_storage_bytes, person_storage_bytes, business_max_members',
   'plan, storage_bytes, grace_days, max_members, voice_answers, personal_storage_bytes, questions_per_month, questions_fair_use, question_tries_per_day, uploads_per_day, families_per_person, invites_per_day, businesses_per_person, family_questions_per_month, vaults_per_person, notes_per_person, business_storage_bytes, person_storage_bytes',
   'plan, storage_bytes, grace_days, max_members, voice_answers, personal_storage_bytes, questions_per_month, questions_fair_use, question_tries_per_day, uploads_per_day, families_per_person, invites_per_day, businesses_per_person, family_questions_per_month, vaults_per_person, notes_per_person',
   'plan, storage_bytes, grace_days, max_members, voice_answers, personal_storage_bytes, questions_per_month, questions_fair_use, question_tries_per_day, uploads_per_day, families_per_person, invites_per_day, businesses_per_person, family_questions_per_month, vaults_per_person',
@@ -1453,11 +1454,12 @@ export async function fetchPlanLimits(): Promise<PlanLimits> {
     invites_per_day?: number | null; businesses_per_person?: number | null;
     family_questions_per_month?: number | null; vaults_per_person?: number | null; notes_per_person?: number | null;
     business_storage_bytes?: number | null; person_storage_bytes?: number | null;
+    business_max_members?: number | null;
   };
   let answer: { data: unknown; error: { message?: string } | null } = { data: null, error: null };
   for (const columns of PLAN_LIMIT_COLUMNS) {
     answer = await supabase.from('plan_limits').select(columns);
-    if (!answer.error || !/grace_days|max_members|voice_answers|personal_storage_bytes|questions_per_month|questions_fair_use|question_tries_per_day|uploads_per_day|families_per_person|invites_per_day|businesses_per_person|family_questions_per_month|vaults_per_person|notes_per_person|business_storage_bytes|person_storage_bytes/.test(answer.error.message ?? '')) break;
+    if (!answer.error || !/business_max_members|grace_days|max_members|voice_answers|personal_storage_bytes|questions_per_month|questions_fair_use|question_tries_per_day|uploads_per_day|families_per_person|invites_per_day|businesses_per_person|family_questions_per_month|vaults_per_person|notes_per_person|business_storage_bytes|person_storage_bytes/.test(answer.error.message ?? '')) break;
   }
   const rows = (answer.data ?? []) as Row[];
   if (answer.error || !rows.length) return DEFAULT_PLAN_LIMITS;
@@ -1485,10 +1487,19 @@ export async function fetchPlanLimits(): Promise<PlanLimits> {
     if (!row || !('questions_per_month' in row)) return null;
     return row.questions_per_month == null ? null : Number(row.questions_per_month);
   };
-  const fairUse = rows.find((r) => r.plan === 'plus')?.questions_fair_use;
   // The family's shared month (053): NULL is a real answer (no family number);
   // a row without the column is a database before 053, which keeps none.
   const plusRow = rows.find((r) => r.plan === 'plus');
+  // One person's ceiling where there is no monthly limit (049): NULL is a
+  // real answer since 064 (none on Plus or Pro).
+  const fairUse = plusRow && 'questions_fair_use' in plusRow
+    ? (plusRow.questions_fair_use == null ? null : Number(plusRow.questions_fair_use))
+    : DEFAULT_PLAN_LIMITS.questionsFairUse;
+  // Family Pro (064): its row, or what 064 will set before it.
+  const proRow = rows.find((r) => r.plan === 'family_pro');
+  const familyPro = proRow
+    ? { storage: Number(proRow.storage_bytes), members: proRow.max_members ? Number(proRow.max_members) : DEFAULT_PLAN_LIMITS.familyPro.members }
+    : DEFAULT_PLAN_LIMITS.familyPro;
   const familyQuestions = plusRow && 'family_questions_per_month' in plusRow
     ? (plusRow.family_questions_per_month == null ? null : Number(plusRow.family_questions_per_month))
     : null;
@@ -1535,11 +1546,14 @@ export async function fetchPlanLimits(): Promise<PlanLimits> {
     freeBusiness,
     freePerson,
     plus: of('plus', DEFAULT_PLAN_LIMITS.plus),
+    familyPro,
     graceDays: grace ? Number(grace) : DEFAULT_PLAN_LIMITS.graceDays,
     members: { free: members('free'), plus: members('plus') },
+    // A business on Free (064): its own number, else the family's (one number before 064).
+    freeBusinessMembers: freeRow?.business_max_members != null ? Number(freeRow.business_max_members) : members('free'),
     voiceAnswers: { free: voice('free'), plus: voice('plus') },
     questions: { free: questions('free'), plus: questions('plus') },
-    questionsFairUse: fairUse ? Number(fairUse) : DEFAULT_PLAN_LIMITS.questionsFairUse,
+    questionsFairUse: fairUse,
     familyQuestions,
     questionTriesPerDay: { free: perDay('free', 'question_tries_per_day'), plus: perDay('plus', 'question_tries_per_day') },
     uploadsPerDay: { free: perDay('free', 'uploads_per_day'), plus: perDay('plus', 'uploads_per_day') },
@@ -1664,11 +1678,13 @@ async function paymentsInvoke<T>(body: Record<string, unknown>): Promise<T> {
 }
 
 /** Starts paying for a month or a year of Family Plus for the family. */
-export async function createPlusOrder(familyId: string, period: 'monthly' | 'yearly', currency: PaymentCurrency): Promise<PlusOrder> {
+export async function createPlusOrder(
+  familyId: string, period: 'monthly' | 'yearly', currency: PaymentCurrency, plan: FamilyPlan = 'plus',
+): Promise<PlusOrder> {
   const r = await paymentsInvoke<{
     order_id: string; amount: number; currency: PaymentCurrency; key_id: string; description: string;
     prefill?: { email?: string; name?: string };
-  }>({ action: 'order', family_id: familyId, period, currency, time_zone: deviceTimeZone() }).catch((err) => {
+  }>({ action: 'order', family_id: familyId, period, currency, time_zone: deviceTimeZone(), plan }).catch((err) => {
     // The server pays this person in the other currency: show its prices from now on.
     if (err instanceof PaymentError && err.status === 'wrong_currency' && err.currency) {
       setPayerCurrency(err.currency);
@@ -1676,6 +1692,11 @@ export async function createPlusOrder(familyId: string, period: 'monthly' | 'yea
     }
     throw err;
   });
+  // A payments function from before 064 reads no plan and makes a Family
+  // Plus order. Its amount says so: never open a checkout for the wrong plan.
+  if (r.amount !== familyPrice(plan)[period][r.currency === 'USD' ? 'usd' : 'inr'] * 100) {
+    throw new PaymentError('needs_migration', `Paying for ${familyPlanName(plan)} isn't switched on yet.`);
+  }
   return {
     orderId: r.order_id, amount: r.amount, currency: r.currency, keyId: r.key_id,
     description: r.description, prefill: r.prefill ?? {},

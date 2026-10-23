@@ -679,7 +679,7 @@ export async function runAccessChecks(cfg, { a, b, anon, vaultA, vaultB, docsA }
     } else {
       const row = data?.[0];
       planOfA = row?.plan ?? null;
-      const ok = !error && row && Number(row.limit_bytes) > 0 && Number(row.used_bytes) > 0 && ['free', 'plus'].includes(row.plan);
+      const ok = !error && row && Number(row.limit_bytes) > 0 && Number(row.used_bytes) > 0 && ['free', 'plus', 'family_pro'].includes(row.plan);
       results.add('access', 'control:storage', "Control — account A reads its family's plan and storage", ok ? 'pass' : 'fail',
         { why: error ? short(error) : row ? `${row.plan}: ${Math.round(Number(row.used_bytes) / 1048576)} MB of ${Math.round(Number(row.limit_bytes) / 1048576)} MB` : 'no row' });
       const { data: room, error: roomErr } = await a.client.rpc('family_storage_has_room', { p_folder: A.ns });
@@ -758,17 +758,18 @@ export async function runAccessChecks(cfg, { a, b, anon, vaultA, vaultB, docsA }
       const n = (v) => (v == null ? null : Number(v));
       const expected = first?.plus ? plans.plus : plans.free;
       const ceiling = expected ? n(expected.questions_per_month ?? expected.questions_fair_use) : null;
+      // No ceiling (Plus and Pro since 064): nothing is left to count down.
       const ok = !error && !limErr && first && n(first.ceiling) === ceiling
         && n(first.limit) === n(expected?.questions_per_month)
-        && n(first.left) === Math.max(ceiling - n(first.used), 0)
+        && (ceiling == null ? first.left == null : n(first.left) === Math.max(ceiling - n(first.used), 0))
         && n(again?.used) === n(first.used)
         && n(plans.plus?.max_members) >= n(plans.free?.max_members);
       results.add('access', 'control:questions', title, ok ? 'pass' : 'fail', {
         why: error ? short(error) : limErr ? short(limErr)
           : `${first.used} asked, ${first.left} left of ${first.ceiling}${first.plus ? ' (Plus)' : ''}; members ${plans.free?.max_members}/${plans.plus?.max_members}`,
       });
-      if (planOfA === 'plus') {
-        results.add('access', 'control:link-30', 'Control — a vault on Free cannot make a 30-day share link (049)', 'skipped', { why: 'QA Vault A is on Plus' });
+      if (planOfA === 'plus' || planOfA === 'family_pro') {
+        results.add('access', 'control:link-30', 'Control — a vault on Free cannot make a 30-day share link (049)', 'skipped', { why: `QA Vault A is on ${planOfA}` });
       } else if (!passport) {
         results.add('access', 'control:link-30', 'Control — a vault on Free cannot make a 30-day share link (049)', 'skipped', { why: 'no passport to share' });
       } else {

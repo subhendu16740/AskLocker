@@ -15,6 +15,7 @@ import { supabase } from './supabase';
 import { storageGet, storageSet, accountKey } from './storage';
 import { DEFAULT_VOICE_LANGUAGE } from './voice-languages';
 import { DEFAULT_OCR_LANGUAGES } from './ocr-languages';
+import { usePaidPlan } from './family-plan';
 
 interface Preferences {
   voiceMode: boolean;
@@ -39,6 +40,13 @@ interface PreferencesContextType extends Preferences {
   setBirthdayReminders: (on: boolean) => void;
   /** False until the account row is read with birthday_reminders in it — before 035, or offline. */
   birthdaysAvailable: boolean;
+  /**
+   * Indian languages, for reading documents and for voice, come with a paid
+   * plan (064). On Free, voiceLanguage and documentLanguages read English
+   * whatever was chosen, and the choice comes back with a paid plan. True
+   * while the plan is not known, which gates nothing.
+   */
+  languagesAllowed: boolean;
 }
 
 const DEFAULTS: Preferences = {
@@ -58,6 +66,7 @@ const PreferencesContext = createContext<PreferencesContextType>({
   setNotificationsEnabled: () => {},
   setBirthdayReminders: () => {},
   birthdaysAvailable: false,
+  languagesAllowed: true,
 });
 
 const cacheKey = accountKey.prefs;
@@ -189,9 +198,14 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
     [prefs, persist],
   );
 
+  // On Free, English for reading and for voice (064); unknown gates nothing.
+  const languagesAllowed = usePaidPlan() !== false;
+
   return (
     <PreferencesContext.Provider value={{
-      ...prefs, ready, birthdaysAvailable,
+      ...prefs, ready, birthdaysAvailable, languagesAllowed,
+      voiceLanguage: languagesAllowed ? prefs.voiceLanguage : DEFAULT_VOICE_LANGUAGE,
+      documentLanguages: languagesAllowed ? prefs.documentLanguages : DEFAULT_OCR_LANGUAGES,
       setVoiceMode, setVoiceLanguage, setDocumentLanguages, setNotificationsEnabled, setBirthdayReminders,
     }}>
       {children}
