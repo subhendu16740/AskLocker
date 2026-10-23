@@ -15,20 +15,22 @@ export const AGREEMENT_VERSION = '2026-10-23';
 
 export const AGREEMENT_TITLE = 'Before you start';
 
-export const AGREEMENT_INTRO = 'Here is what happens to your documents.';
+export const AGREEMENT_INTRO = 'Please read the following.';
 
 // Only what a new person needs before they have used anything (the owner's
-// ask, 23 October 2026): two points, and no service named. Who can see what,
-// and the services by name, are in Settings › Privacy, which the footer
-// points to.
+// ask, 23 October 2026): two points of two lines each, said from the side
+// of what AskLocker does, and no service named. "In AskLocker" is the
+// approved limit (CLAUDE.md): the people who run AskLocker can still open
+// documents, which Settings › Privacy says, with the services by name and
+// who can see what; the footer points there.
 export const AGREEMENT_POINTS: { head: string; text: string }[] = [
   {
-    head: 'Not end-to-end encrypted',
-    text: 'Your documents are encrypted when sent and stored, but the people who run AskLocker can open them.',
+    head: 'Encrypted',
+    text: 'Sent and stored encrypted. In AskLocker, only people in your vault can open them.',
   },
   {
     head: 'Read to answer you',
-    text: 'To find your documents and answer your questions, our servers and the AI services we use read parts of them.',
+    text: 'Our servers and AI services read parts of them to answer your questions.',
   },
 ];
 

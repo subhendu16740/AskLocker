@@ -2491,16 +2491,20 @@ where it does not.
 ### The agreement — what everyone agrees to, and when (062)
 
 - **One screen before anything else** (the owner's ask, 23 October 2026):
-  what happens to your documents, in two points of one or two lines, true
-  of the app as it is today — that they are **not** end-to-end encrypted
-  and the people who run AskLocker can open them, and that "our servers and
-  the AI services we use read parts of them" to find documents and answer
-  questions. **No service is named there** (the owner's ask): the names,
-  who can see what, and the rest — AI can be wrong, not a backup, what goes
-  when Family Plus ends, deleting, usage counts — are one or two lines
-  each in Settings › Privacy, and the screen says "More in Settings ›
-  Privacy". It was eight points, then three, before the owner settled on
-  what a new person needs before using anything. A tick box, "I've read this and I
+  "Before you start", "Please read the following.", and two points of two
+  lines each, said from the side of what AskLocker does (the owner's ask):
+  **Encrypted** ("Sent and stored encrypted. In AskLocker, only people in
+  your vault can open them.") and **Read to answer you** ("Our servers and
+  AI services read parts of them to answer your questions."). **No service
+  is named there, and nothing about end-to-end**: "In AskLocker" is the
+  approved limit (see the privacy rule under Conventions), and Settings ›
+  Privacy says the rest plainly — not end-to-end, the people who run
+  AskLocker can open documents, the services by name, who can see what, AI
+  can be wrong, not a backup, what goes when Family Plus ends, deleting,
+  usage counts — and the screen says "More in Settings › Privacy". It was
+  eight points, then three, before the owner settled on what a new person
+  needs before using anything. Being what people tick, it no longer records
+  their agreement to staff access: that is in Privacy, read, not ticked. A tick box, "I've read this and I
   agree", and Continue, which stays off until it is ticked. The only other
   way is "Don't agree? Sign out". The words live in one place,
   `supabase/functions/_shared/agreement.ts` (`agreementText()`).
@@ -2521,8 +2525,9 @@ where it does not.
   its migration, readable by anyone and written by nobody else. The QA
   self-test checks that the app's words are, character for character, the
   words the migration inserted for `AGREEMENT_VERSION`, that they still
-  say "not end-to-end" and that AI services read parts of documents, and
-  that they make none of the forbidden claims and name no service.
+  say AI services read parts of documents and keep "In AskLocker" on who
+  can open them, and that they say nothing about end-to-end, make none of
+  the forbidden claims and name no service.
 - **To show someone agreed**: in the SQL editor,
   `select u.email, a.version, a.agreed_at, a.platform, a.app_build, v.body
   from user_agreements a join auth.users u on u.id = a.user_id join

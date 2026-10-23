@@ -1356,9 +1356,12 @@ await test('the agreement the app shows is word for word what the database keeps
   const kept = migrations.flatMap(quoted).find((m) => m[1] === AGREEMENT_VERSION);
   assert.ok(kept, `no migration inserts agreement version ${AGREEMENT_VERSION}: write one with the new words`);
   assert.equal(kept[2], agreementText(), `version ${AGREEMENT_VERSION}'s words differ from the app's: a new version needs a new migration`);
-  // Plain words, never a privacy claim the app does not keep (CLAUDE.md).
+  // Plain words, never a privacy claim the app does not keep (CLAUDE.md):
+  // no end-to-end at all (documents are not), and "only people in your
+  // vault" only with its limit, "in AskLocker".
   const words = agreementText().toLowerCase();
-  assert.ok(words.includes('not end-to-end'), 'says plainly it is not end-to-end encrypted');
+  assert.ok(!words.includes('end-to-end'), 'claims nothing about end-to-end');
+  assert.ok(!words.includes('only people in your vault') || words.includes('in asklocker, only people in your vault'), 'keeps "In AskLocker" on who can open them');
   for (const claim of ['100% private', 'only you can see', 'nothing is kept', 'secure', 'bank-level', 'military-grade']) {
     assert.ok(!words.includes(claim), `promises "${claim}"`);
   }

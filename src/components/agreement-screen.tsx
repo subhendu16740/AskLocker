@@ -186,7 +186,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.lg, paddingTop: space.md, paddingBottom: space.md, gap: space.md,
     borderTopWidth: 1, borderTopColor: color.border, backgroundColor: color.surface,
   },
-  tick: { flexDirection: 'row', alignItems: 'center', gap: space.md, minHeight: size.control },
+  // The web Modal puts its first control in focus, and the browser drew its
+  // ring round the whole row: the box itself shows the state.
+  tick: { flexDirection: 'row', alignItems: 'center', gap: space.md, minHeight: size.control, outlineStyle: 'none' } as any,
   box: {
     width: 24, height: 24, borderRadius: 6, borderWidth: 2, borderColor: color.primary,
     alignItems: 'center', justifyContent: 'center', backgroundColor: color.surface,
