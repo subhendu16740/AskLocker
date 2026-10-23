@@ -2491,14 +2491,17 @@ where it does not.
 ### The agreement — what everyone agrees to, and when (062)
 
 - **One screen before anything else** (the owner's ask, 23 October 2026):
-  what AskLocker does with your documents, in eight plain points, true of
-  the app as it is today — who can see them, that they are **not**
-  end-to-end encrypted and the people who run AskLocker can open them,
-  which outside services read parts of them, that AI answers can be wrong,
-  that AskLocker is not a backup, what goes when Family Plus ends, deleting
-  your account, usage counts. A tick box, "I've read this and I agree", and
-  Continue, which stays off until it is ticked. The only other way is
-  "Don't agree? Sign out". The words live in one place,
+  what happens to your documents, in three points of one or two lines,
+  true of the app as it is today — who can see them, that they are **not**
+  end-to-end encrypted and the people who run AskLocker can open them, and
+  which outside services read parts of them. Only the data part: a first
+  version also carried that AI can be wrong, that AskLocker is not a
+  backup, what goes when Family Plus ends, deleting and usage counts, and
+  the owner found it too much, so those are one line each in Settings ›
+  Privacy ("Good to know", and the cards already there), and the screen
+  says "More in Settings › Privacy". A tick box, "I've read this and I
+  agree", and Continue, which stays off until it is ticked. The only other
+  way is "Don't agree? Sign out". The words live in one place,
   `supabase/functions/_shared/agreement.ts` (`agreementText()`).
 - **After sign-in, not on the intro slides**: a record has to know who
   agreed, so the screen (`src/components/agreement-screen.tsx`) is a Modal
@@ -3209,7 +3212,8 @@ rule again once pinned chunks are mixed in.
   nowhere, is gone); Home's offers (fingerprint, set up your family) are
   a title, one line and two buttons. Settings › Privacy keeps every fact
   it must (see the rule above) in one or two lines a card, the outside
-  services together in one card.
+  services together in one card, and what the agreement leaves out (AI
+  can be wrong, not a backup, Family Plus ending) under Good to know.
 - **★ Family Plus marks what only Plus families get** (`<PlusTag />`; in a
   business it reads ★ Plus, `plusName()`, 051):
   10 GB instead of 100 MB a family (50 MB for a personal vault, and 50 MB

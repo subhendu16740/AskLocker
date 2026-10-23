@@ -2,11 +2,10 @@
 -- 062: What everyone agrees to before using AskLocker, and when they agreed
 --
 -- Before anything else, every signed-in person sees one screen that says in
--- plain words what AskLocker does with their documents (who can see them,
--- that they are not end-to-end encrypted, which outside services read parts
--- of them, that AI answers can be wrong, that AskLocker is not a backup, what
--- happens when Family Plus ends, deleting, usage counts), ticks "I've read
--- this and I agree" and taps Continue. There is no way past it but agreeing
+-- plain words what happens to their documents (who can see them, that they
+-- are not end-to-end encrypted, which outside services read parts of them),
+-- ticks "I've read this and I agree" and taps Continue. Everything else
+-- worth knowing is one line each in Settings › Privacy. There is no way past it but agreeing
 -- or signing out (src/components/agreement-screen.tsx). This keeps the proof:
 --
 --   agreement_versions   the exact words of each version, as the screen showed
@@ -112,33 +111,18 @@ grant execute on function public.record_agreement(text, text, text) to authentic
 insert into public.agreement_versions (version, body)
 values ('2026-10-23', $agreement$Before you start
 
-Here is what AskLocker does with your documents.
+Here is what happens to your documents.
 
 Who can see them
-Everyone in a vault can see its documents. Anyone you send a share link to can see that document. Your personal vault is only for you.
+People in the same vault, and anyone you send a share link to. Your personal vault is only for you.
 
 Not end-to-end encrypted
-Your documents are encrypted when sent and when stored, but not end-to-end. The people who run AskLocker can open them.
+They are encrypted when sent and stored, but the people who run AskLocker can open them.
 
-Other services read parts of them
-To search and answer questions, our servers read the text of your documents. Parts of it go to HuggingFace and Groq. Scanned PDFs and photos from Gmail go to OCR.space.
+Other services
+To search and answer, parts of them go to HuggingFace and Groq. Scanned PDFs and Gmail photos go to OCR.space.
 
-AI can be wrong
-Answers are written by AI. Check the document before you rely on an answer.
-
-Not a backup
-Keep the originals of important papers. AskLocker is not a backup.
-
-When Family Plus ends
-If a vault holds more than its free space, its newest documents above that are removed after 30 days. We warn you first.
-
-Deleting your account
-It happens at once and can't be undone. Documents you added to a family may stay there after you go.
-
-Usage counts
-We count which screens are used and the kinds of documents added, like "Passport", never what they say. You can turn this off in Settings › Privacy.
-
-If any of this changes, we'll ask you again.
+More in Settings › Privacy. If this changes, we'll ask you again.
 
 I've read this and I agree.$agreement$)
 on conflict (version) do nothing;

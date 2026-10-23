@@ -12,6 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ScreenHeader } from '../../components/screen-header';
 import { Card, CardTitle, Body, OnOff, SecondaryButton, screenStyles } from '../../components/settings-ui';
 import { analyticsBuilt, analyticsOn, setAnalyticsOn } from '../../lib/analytics';
+import { DEFAULT_PLAN_LIMITS } from '../../lib/plans';
 
 const bold = { fontWeight: '600' as const };
 
@@ -70,12 +71,23 @@ export default function PrivacyScreen() {
           <Body>Until you pick a file, we keep only each attachment's sender, subject and name. Never the email.</Body>
         </Card>
 
+        {/* What the agreement (062) leaves out: it says only what happens to documents. */}
+        <Card>
+          <CardTitle icon="info">Good to know</CardTitle>
+          <Body>Answers are written by AI and can be wrong. Check the document before you rely on one.</Body>
+          <Body>AskLocker is not a backup. Keep the originals of important papers.</Body>
+          <Body>
+            If Family Plus ends, a vault's newest documents over its free space are removed after{' '}
+            {DEFAULT_PLAN_LIMITS.graceDays} days. We warn you first.
+          </Body>
+        </Card>
+
         {analyticsBuilt && (
           <Card>
             <CardTitle icon="bar-chart-2">How the app is used</CardTitle>
             <Body>
-              PostHog counts which screens are used, with a random id for this device. Never your documents,
-              questions or name.
+              PostHog counts which screens are used and the kinds of documents added, like "Passport". Never
+              what they say, your questions or your name.
             </Body>
             {counts !== null && (
               <OnOff
