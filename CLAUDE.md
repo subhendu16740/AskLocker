@@ -715,7 +715,7 @@ src/
   app/                       # expo-router: file path = route
     _layout.tsx              # root Stack + AuthGate
     index.tsx                # redirect -> /onboarding or /home
-    onboarding.tsx           # 3-slide intro, then the agreement (062): tick it and Finish to reach sign-in
+    onboarding.tsx           # 3-slide intro, then the agreement (062) in a sheet over the last slide: tick it and Finish to reach sign-in
     welcome.tsx              # after the first sign-in: Family, Business or Both (Both gives the drawer its switch)
     login.tsx                # sends anyone whose device has not agreed (062) to the intro's agreement first; Google; the first sign-in makes the account (google-sign-in.tsx: Google's own button on the web where set up); "Sign in with fingerprint" first where turned on (fingerprint-sign-in.tsx); test builds add email and password (password-sign-in.tsx)
     setup-family.tsx         # creating a vault: Family or Business at the top (051), and the first one
@@ -2492,9 +2492,12 @@ where it does not.
 ### The agreement — what everyone agrees to, and when (062)
 
 - **Before signing in, as the intro's last step** (the owner's ask, 23
-  October 2026): after the three slides, a white card in the middle of the
-  screen with the words and the tick, and Finish below it, off until it is
-  ticked (`onboarding.tsx`). Nobody reaches sign-in without it: the login
+  October 2026): "Get started" on the last slide brings up a sheet at the
+  foot of the screen over that slide, dimmed, with the words, the tick and
+  Finish, off until it is ticked (`onboarding.tsx`; the same
+  `AgreementSheet` as the card after sign-in). A white card in the middle
+  of the screen was tried first and the owner found it looked bad. Nobody
+  reaches sign-in without it: the login
   screen sends anyone whose device has not agreed to the current version
   straight there (`/onboarding?step=agree`). "Before you start", then why: "We
   respect your confidentiality. Here's exactly what we do with your
@@ -2516,8 +2519,8 @@ where it does not.
   their agreement to staff access: that is in Privacy, read, not ticked. A tick box, "I've read this and I
   agree". The words live in one place,
   `supabase/functions/_shared/agreement.ts` (`agreementText()`), and the
-  intro and the card below draw them with the same pieces
-  (`AgreementWords`, `AgreementTick` in `agreement-screen.tsx`).
+  intro and the card below draw them with the same sheet
+  (`AgreementSheet` in `agreement-screen.tsx`).
 - **A tick before signing in belongs to nobody yet**, and a record has to
   know who agreed. So it waits on the device (`deviceKey.agreement`,
   `src/lib/agreement-device.ts`: the version, when, `pending`), and the

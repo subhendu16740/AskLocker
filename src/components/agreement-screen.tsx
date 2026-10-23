@@ -21,7 +21,7 @@
 // After the lock: while AskLocker is locked, or deciding whether to be, this
 // waits. A shared document (/s) is for anyone with the link, never behind it.
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import {
   Modal, View, Text, ScrollView, Pressable, TouchableOpacity, ActivityIndicator, StyleSheet, Platform,
 } from 'react-native';
@@ -100,6 +100,48 @@ export function AgreementTick({ ticked, onChange }: { ticked: boolean; onChange:
       </View>
       <Text style={styles.tickText}>{AGREEMENT_TICK}</Text>
     </Pressable>
+  );
+}
+
+/**
+ * The sheet at the foot of the screen: the words, the tick and one button,
+ * off until it is ticked. The intro's last step (Finish) and the card after
+ * sign-in (Continue, and Sign out under it) both draw it.
+ */
+export function AgreementSheet({ ticked, onTick, label, onPress, busy = false, problem, nativeID, children }: {
+  ticked: boolean;
+  onTick: (ticked: boolean) => void;
+  label: string;
+  onPress: () => void;
+  busy?: boolean;
+  problem?: string | null;
+  nativeID?: string;
+  children?: ReactNode;
+}) {
+  const off = !ticked || busy;
+  return (
+    <View style={styles.sheet} nativeID={nativeID}>
+      <SafeAreaView edges={['bottom']}>
+        <ScrollView style={styles.scroll} contentContainerStyle={styles.body} bounces={false}>
+          <AgreementWords />
+        </ScrollView>
+
+        <View style={styles.bottom}>
+          <AgreementTick ticked={ticked} onChange={onTick} />
+          {!!problem && <Text style={styles.problem} accessibilityRole="alert">{problem}</Text>}
+          <TouchableOpacity
+            style={[styles.continue, off && styles.off]}
+            onPress={onPress}
+            disabled={off}
+            accessibilityRole="button"
+            accessibilityState={{ disabled: off }}
+          >
+            {busy ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.continueText}>{label}</Text>}
+          </TouchableOpacity>
+          {children}
+        </View>
+      </SafeAreaView>
+    </View>
   );
 }
 
@@ -190,30 +232,19 @@ export function AgreementScreen() {
   return (
     <Modal visible transparent animationType="fade" onRequestClose={() => {}} statusBarTranslucent>
       <View style={styles.dim}>
-        <View style={styles.sheet} nativeID={AGREEMENT_ID}>
-          <SafeAreaView edges={['bottom']}>
-            <ScrollView style={styles.scroll} contentContainerStyle={styles.body} bounces={false}>
-              <AgreementWords />
-            </ScrollView>
-
-            <View style={styles.bottom}>
-              <AgreementTick ticked={ticked} onChange={setTicked} />
-              {!!problem && <Text style={styles.problem} accessibilityRole="alert">{problem}</Text>}
-              <TouchableOpacity
-                style={[styles.continue, (!ticked || busy) && styles.off]}
-                onPress={agree}
-                disabled={!ticked || busy}
-                accessibilityRole="button"
-                accessibilityState={{ disabled: !ticked || busy }}
-              >
-                {busy ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.continueText}>Continue</Text>}
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.out} onPress={() => signOut()} disabled={busy} accessibilityRole="button">
-                <Text style={styles.outText}>Don't agree? Sign out</Text>
-              </TouchableOpacity>
-            </View>
-          </SafeAreaView>
-        </View>
+        <AgreementSheet
+          ticked={ticked}
+          onTick={setTicked}
+          label="Continue"
+          onPress={agree}
+          busy={busy}
+          problem={problem}
+          nativeID={AGREEMENT_ID}
+        >
+          <TouchableOpacity style={styles.out} onPress={() => signOut()} disabled={busy} accessibilityRole="button">
+            <Text style={styles.outText}>Don't agree? Sign out</Text>
+          </TouchableOpacity>
+        </AgreementSheet>
       </View>
     </Modal>
   );
@@ -221,7 +252,7 @@ export function AgreementScreen() {
 
 const styles = StyleSheet.create({
   cover: { backgroundColor: 'transparent', zIndex: 1000 },
-  // The app stays in sight behind, dimmed, and cannot be reached.
+  // What is behind stays in sight, dimmed, and cannot be reached.
   dim: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(13, 17, 23, 0.45)' },
   sheet: {
     width: '100%', maxWidth: 480, maxHeight: '90%', alignSelf: 'center',
