@@ -1,8 +1,18 @@
-import { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Dimensions } from 'react-native';
+// The intro: three slides, then the agreement (062), which nobody passes
+// without ticking it. Finish goes on to sign in; the tick waits on this
+// device for the account that signs in (agreement-device.ts). The login
+// screen sends anyone here, straight to the agreement (?step=agree), until
+// this device has agreed to the current version; once it has, the slides
+// lead straight to sign-in.
+
+import { useEffect, useState } from 'react';
+import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Dimensions } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { AgreementTick, AgreementWords } from '../components/agreement-screen';
+import { agreeOnThisDevice, deviceAgreedToCurrent } from '../lib/agreement-device';
+import { color, radius, space } from '../constants/design';
 
 const { width } = Dimensions.get('window');
 
@@ -26,17 +36,34 @@ const slides = [
 ];
 
 export default function OnboardingScreen() {
-  const [currentSlide, setCurrentSlide] = useState(0);
+  const { step } = useLocalSearchParams<{ step?: string }>();
+  // Whether this device still has to agree: the last step only then.
+  const [mustAgree, setMustAgree] = useState(true);
+  const [currentSlide, setCurrentSlide] = useState(step === 'agree' ? slides.length : 0);
+  const [ticked, setTicked] = useState(false);
 
-  const handleNext = () => {
-    if (currentSlide < slides.length - 1) {
+  useEffect(() => {
+    deviceAgreedToCurrent().then((agreed) => setMustAgree(!agreed)).catch(() => {});
+  }, []);
+
+  const steps = slides.length + (mustAgree ? 1 : 0);
+  const agreeing = mustAgree && currentSlide >= slides.length;
+
+  const handleNext = async () => {
+    if (agreeing) {
+      if (!ticked) return;
+      await agreeOnThisDevice(true);
+      router.replace('/login');
+    } else if (currentSlide < steps - 1) {
       setCurrentSlide(currentSlide + 1);
     } else {
       router.replace('/login');
     }
   };
 
-  const slide = slides[currentSlide];
+  const slide = slides[Math.min(currentSlide, slides.length - 1)];
+  const label = agreeing ? 'Finish' : currentSlide < steps - 1 ? 'Next' : 'Get started';
+  const off = agreeing && !ticked;
 
   return (
     <LinearGradient
@@ -45,34 +72,48 @@ export default function OnboardingScreen() {
       end={{ x: 1, y: 1 }}
       style={styles.container}
     >
-      <SafeAreaView style={styles.safeArea}>
+      <SafeAreaView style={[styles.safeArea, agreeing && styles.safeAreaWide]}>
         {/* Content */}
-        <View style={styles.content}>
-          <Text style={styles.emoji}>{slide.emoji}</Text>
-          <Text style={styles.title}>{slide.title}</Text>
-          <Text style={styles.subtitle}>{slide.subtitle}</Text>
-        </View>
+        {agreeing ? (
+          <ScrollView style={styles.flex} contentContainerStyle={styles.agreeScroll}>
+            <View style={styles.card}>
+              <AgreementWords />
+              <AgreementTick ticked={ticked} onChange={setTicked} />
+            </View>
+          </ScrollView>
+        ) : (
+          <View style={styles.content}>
+            <Text style={styles.emoji}>{slide.emoji}</Text>
+            <Text style={styles.title}>{slide.title}</Text>
+            <Text style={styles.subtitle}>{slide.subtitle}</Text>
+          </View>
+        )}
 
         {/* Bottom */}
         <View style={styles.bottom}>
           {/* Dots */}
           <View style={styles.dots}>
-            {slides.map((_, index) => (
+            {Array.from({ length: steps }, (_, index) => (
               <View
                 key={index}
                 style={[
                   styles.dot,
-                  index === currentSlide ? styles.dotActive : styles.dotInactive,
+                  index === Math.min(currentSlide, steps - 1) ? styles.dotActive : styles.dotInactive,
                 ]}
               />
             ))}
           </View>
 
-          {/* Button */}
-          <TouchableOpacity onPress={handleNext} style={styles.button} activeOpacity={0.8}>
-            <Text style={styles.buttonText}>
-              {currentSlide < slides.length - 1 ? 'Next' : 'Get started'}
-            </Text>
+          {/* Button: Finish stays off until the agreement is ticked. */}
+          <TouchableOpacity
+            onPress={handleNext}
+            disabled={off}
+            style={[styles.button, agreeing && styles.finish, off && styles.off]}
+            activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityState={{ disabled: off }}
+          >
+            <Text style={[styles.buttonText, agreeing && styles.finishText]}>{label}</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -93,10 +134,19 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     width: '100%',
   },
+  // The agreement's card is wider than a slide's words, so its points keep
+  // to two lines.
+  safeAreaWide: { paddingHorizontal: space.lg, maxWidth: 420 },
+  flex: { flex: 1, width: '100%' },
   content: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  agreeScroll: { flexGrow: 1, justifyContent: 'center', paddingVertical: space.lg },
+  card: {
+    backgroundColor: color.surface, borderRadius: radius.card, padding: space.lg, gap: space.md,
+    boxShadow: '0px 8px 24px rgba(0, 0, 0, 0.18)', elevation: 6,
   },
   emoji: {
     fontSize: 64,
@@ -155,4 +205,7 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     fontWeight: '600',
   },
+  finish: { backgroundColor: color.surface, borderColor: color.surface },
+  finishText: { color: color.primary },
+  off: { opacity: 0.45 },
 });

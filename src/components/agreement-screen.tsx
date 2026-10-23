@@ -1,6 +1,12 @@
 // The agreement (062): what AskLocker does with your documents, in plain
-// words (supabase/functions/_shared/agreement.ts), shown once to every
-// signed-in account and again whenever the words change (a new
+// words (supabase/functions/_shared/agreement.ts). It is asked for before
+// signing in, as the intro's last step (onboarding.tsx; the login screen
+// sends anyone back there until this device has agreed), and that tick is
+// recorded for the first account to sign in (agreement-device.ts).
+//
+// This is the card for everyone else who is signed in without the current
+// version recorded: someone signed in before the agreement existed, a second
+// account on the same device, or anyone when the words change (a new
 // AGREEMENT_VERSION). A card at the bottom of the screen, over the app
 // dimmed behind it, which nothing else can be reached past (the lock
 // screen's way): tick "I've read this and I agree" and Continue, or sign
@@ -26,6 +32,7 @@ import { useAuth } from '../lib/auth';
 import { useAppLock } from '../lib/app-lock';
 import { fetchAgreement, recordAgreement } from '../lib/api';
 import { accountKey, storageGet, storageSet } from '../lib/storage';
+import { agreeOnThisDevice, pendingTick, readDeviceAgreement } from '../lib/agreement-device';
 import { appVersion, buildCommit } from '../lib/app-info';
 import { useNothingElseReachable } from './app-lock-screen';
 import {
@@ -52,6 +59,49 @@ const keep = (userId: string, kept: Kept) => storageSet(accountKey.agreement(use
 
 const platform = Platform.OS === 'web' ? 'web' : Platform.OS;
 const appBuild = buildCommit ? `${appVersion} ${buildCommit}` : appVersion;
+
+/** One icon a point, in AGREEMENT_POINTS' order: encrypted, read to answer you. */
+const POINT_ICONS: (keyof typeof Feather.glyphMap)[] = ['lock', 'message-circle'];
+
+/** The words, from the title to the footer: the intro's last step and the card both show them. */
+export function AgreementWords() {
+  return (
+    <>
+      <Text style={styles.title} accessibilityRole="header">{AGREEMENT_TITLE}</Text>
+      <Text style={styles.intro}>{AGREEMENT_INTRO}</Text>
+      {AGREEMENT_POINTS.map((p, i) => (
+        <View key={p.head} style={styles.point}>
+          <View style={styles.icon}>
+            <Feather name={POINT_ICONS[i] ?? 'info'} size={16} color={color.primary} />
+          </View>
+          <View style={styles.words}>
+            <Text style={styles.head}>{p.head}</Text>
+            <Text style={styles.text}>{p.text}</Text>
+          </View>
+        </View>
+      ))}
+      <Text style={styles.footer}>{AGREEMENT_FOOTER}</Text>
+    </>
+  );
+}
+
+/** "I've read this and I agree", as a checkbox. */
+export function AgreementTick({ ticked, onChange }: { ticked: boolean; onChange: (ticked: boolean) => void }) {
+  return (
+    <Pressable
+      style={styles.tick}
+      onPress={() => onChange(!ticked)}
+      accessibilityRole="checkbox"
+      accessibilityState={{ checked: ticked }}
+      aria-checked={ticked}
+    >
+      <View style={[styles.box, ticked && styles.boxOn]}>
+        {ticked && <Feather name="check" size={16} color="#FFFFFF" />}
+      </View>
+      <Text style={styles.tickText}>{AGREEMENT_TICK}</Text>
+    </Pressable>
+  );
+}
 
 export function AgreementScreen() {
   const { user, signOut } = useAuth();
@@ -83,6 +133,17 @@ export function AgreementScreen() {
         }
         return;
       }
+      // Ticked on the intro's last step just before signing in: theirs.
+      const tick = pendingTick(await readDeviceAgreement());
+      if (tick) {
+        if (!cancelled) setState('done');
+        await agreeOnThisDevice(false, tick.at);
+        await keep(user.id, { version: AGREEMENT_VERSION, recorded: false, at: tick.at });
+        recordAgreement(AGREEMENT_VERSION, platform, appBuild)
+          .then((at) => { if (at) keep(user.id, { version: AGREEMENT_VERSION, recorded: true, at }); })
+          .catch(() => {});
+        return;
+      }
       if (!cancelled) setState('checking');
       try {
         // Agreed on another device: the database knows.
@@ -90,6 +151,7 @@ export function AgreementScreen() {
         if (cancelled) return;
         if (check === 'agreed') {
           await keep(user.id, { version: AGREEMENT_VERSION, recorded: true, at: '' });
+          await agreeOnThisDevice(false);
           setState('done');
         } else {
           setState('needed');
@@ -111,6 +173,7 @@ export function AgreementScreen() {
     try {
       const at = await recordAgreement(AGREEMENT_VERSION, platform, appBuild);
       await keep(user.id, { version: AGREEMENT_VERSION, recorded: at !== null, at: at ?? new Date().toISOString() });
+      await agreeOnThisDevice(false);
       setState('done');
     } catch {
       setProblem("Couldn't save that. Check your connection and try again.");
@@ -130,35 +193,11 @@ export function AgreementScreen() {
         <View style={styles.sheet} nativeID={AGREEMENT_ID}>
           <SafeAreaView edges={['bottom']}>
             <ScrollView style={styles.scroll} contentContainerStyle={styles.body} bounces={false}>
-              <Text style={styles.title} accessibilityRole="header">{AGREEMENT_TITLE}</Text>
-              <Text style={styles.intro}>{AGREEMENT_INTRO}</Text>
-              {AGREEMENT_POINTS.map((p, i) => (
-                <View key={p.head} style={styles.point}>
-                  <View style={styles.icon}>
-                    <Feather name={POINT_ICONS[i] ?? 'info'} size={16} color={color.primary} />
-                  </View>
-                  <View style={styles.words}>
-                    <Text style={styles.head}>{p.head}</Text>
-                    <Text style={styles.text}>{p.text}</Text>
-                  </View>
-                </View>
-              ))}
-              <Text style={styles.footer}>{AGREEMENT_FOOTER}</Text>
+              <AgreementWords />
             </ScrollView>
 
             <View style={styles.bottom}>
-              <Pressable
-                style={styles.tick}
-                onPress={() => setTicked(!ticked)}
-                accessibilityRole="checkbox"
-                accessibilityState={{ checked: ticked }}
-                aria-checked={ticked}
-              >
-                <View style={[styles.box, ticked && styles.boxOn]}>
-                  {ticked && <Feather name="check" size={16} color="#FFFFFF" />}
-                </View>
-                <Text style={styles.tickText}>{AGREEMENT_TICK}</Text>
-              </Pressable>
+              <AgreementTick ticked={ticked} onChange={setTicked} />
               {!!problem && <Text style={styles.problem} accessibilityRole="alert">{problem}</Text>}
               <TouchableOpacity
                 style={[styles.continue, (!ticked || busy) && styles.off]}
@@ -179,9 +218,6 @@ export function AgreementScreen() {
     </Modal>
   );
 }
-
-/** One icon a point, in AGREEMENT_POINTS' order: encrypted, read to answer you. */
-const POINT_ICONS: (keyof typeof Feather.glyphMap)[] = ['lock', 'message-circle'];
 
 const styles = StyleSheet.create({
   cover: { backgroundColor: 'transparent', zIndex: 1000 },

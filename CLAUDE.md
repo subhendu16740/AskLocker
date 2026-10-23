@@ -715,9 +715,9 @@ src/
   app/                       # expo-router: file path = route
     _layout.tsx              # root Stack + AuthGate
     index.tsx                # redirect -> /onboarding or /home
-    onboarding.tsx           # 3-slide intro
+    onboarding.tsx           # 3-slide intro, then the agreement (062): tick it and Finish to reach sign-in
     welcome.tsx              # after the first sign-in: Family, Business or Both (Both gives the drawer its switch)
-    login.tsx                # Google; the first sign-in makes the account (google-sign-in.tsx: Google's own button on the web where set up); "Sign in with fingerprint" first where turned on (fingerprint-sign-in.tsx); test builds add email and password (password-sign-in.tsx)
+    login.tsx                # sends anyone whose device has not agreed (062) to the intro's agreement first; Google; the first sign-in makes the account (google-sign-in.tsx: Google's own button on the web where set up); "Sign in with fingerprint" first where turned on (fingerprint-sign-in.tsx); test builds add email and password (password-sign-in.tsx)
     setup-family.tsx         # creating a vault: Family or Business at the top (051), and the first one
     notifications.tsx        # expiry alerts, uploads, invites, Family Plus
     family.tsx               # Manage Family: the open vault's members, invitations (Pending approval), leaving; the personal vault's own page (046); Manage team for a business (051). No vaults: they are in Settings › Your vaults    (NOT a tab)
@@ -781,6 +781,7 @@ tabs. `(tabs)` is a layout group, so routes are `/home`, `/search`, `/upload`.
 | `supabase.ts` | Client init. AsyncStorage for session persistence on native only. |
 | `auth.tsx` | `AuthProvider`: session, signInWithGoogle (the redirect), signInWithGoogleToken (Google's own button's ID token), signOut. Google is the only way in; `signInWithPassword` / `signUpWithPassword` serve only the test builds' form |
 | `app-lock.tsx` | Fingerprint sign-in (`AppLockProvider`, `useAppLock()`): a Supabase passkey — turning it on and off (`registerPasskey`, `passkey.delete`), signing in with it (`signIn`, the login screen's button), the lock (opened signed in; back after `LOCK_AFTER_MS`) and unlocking with it, checking the passkey is still there (`entryStillWorks()`), and errors in words (`passkeyErrorText()`). What the device can do is `app-lock-device.ts` / `app-lock-device.web.ts`; the screen, `components/app-lock-screen.tsx`. See [Fingerprint sign-in](#fingerprint-sign-in--a-passkey-after-google-once) |
+| `agreement-device.ts` | The agreement (062) ticked before signing in, on this device (`deviceKey.agreement`): `agreeOnThisDevice()`, `deviceAgreedToCurrent()` (the login screen asks), `pendingTick()` (the first account to sign in within the hour records it). See [The agreement](#the-agreement--what-everyone-agrees-to-and-when-062) |
 | `family-context.tsx` | `FamilyProvider`: currentFamily, members, membership, needsFamily; `families` is every vault, the personal one included, which it makes the first time it sees an account without one (`ensurePersonalVault()`, 046); `mode` (Family or Business, the open vault's kind), `modeVaults` and `setMode()` for the drawer's switch; `uses` (Family or Business first, and the other too), `needsWelcome`, `showModeSwitch` and `setUses()` (welcome.tsx, Settings › Your vaults) |
 | `vault-theme.ts` | A vault's colours: `useVaultTheme()` (the open vault's, so the mode's), `vaultTheme(family)`, `FAMILY_THEME` and `BUSINESS_THEME` (design.ts's `biz`) |
 | `vaults.ts` | Personal vault, family or business (046, 051): `vaultName()` ("Personal vault" everywhere), `isBusinessVault()`, `vaultWord()`, `vaultIcon()`, `splitVaults()`, `vaultSubtitle()`, `canDeleteDocument()` (whoever added it, or any admin in a business) |
@@ -2490,9 +2491,12 @@ where it does not.
 
 ### The agreement — what everyone agrees to, and when (062)
 
-- **A card at the bottom before anything else** (the owner's ask, 23
-  October 2026), like a site's cookie notice: the app stays in sight above
-  it, dimmed, and cannot be tapped. "Before you start", then why: "We
+- **Before signing in, as the intro's last step** (the owner's ask, 23
+  October 2026): after the three slides, a white card in the middle of the
+  screen with the words and the tick, and Finish below it, off until it is
+  ticked (`onboarding.tsx`). Nobody reaches sign-in without it: the login
+  screen sends anyone whose device has not agreed to the current version
+  straight there (`/onboarding?step=agree`). "Before you start", then why: "We
   respect your confidentiality. Here's exactly what we do with your
   documents." (an attitude, never a promise: "we keep them confidential"
   would be untrue while the people who run AskLocker can open them), and
@@ -2510,20 +2514,31 @@ where it does not.
   eight points, then three, before the owner settled on what a new person
   needs before using anything. Being what people tick, it no longer records
   their agreement to staff access: that is in Privacy, read, not ticked. A tick box, "I've read this and I
-  agree", and Continue, which stays off until it is ticked. The only other
-  way is "Don't agree? Sign out". The words live in one place,
-  `supabase/functions/_shared/agreement.ts` (`agreementText()`).
-- **After sign-in, not on the intro slides**: a record has to know who
-  agreed, so the card (`src/components/agreement-screen.tsx`, a
-  transparent Modal: a dim backdrop and the card at its foot, 480 wide at
-  most, scrolling on a short screen) is drawn for any signed-in account
-  without the current version recorded, in the lock screen's way
+  agree". The words live in one place,
+  `supabase/functions/_shared/agreement.ts` (`agreementText()`), and the
+  intro and the card below draw them with the same pieces
+  (`AgreementWords`, `AgreementTick` in `agreement-screen.tsx`).
+- **A tick before signing in belongs to nobody yet**, and a record has to
+  know who agreed. So it waits on the device (`deviceKey.agreement`,
+  `src/lib/agreement-device.ts`: the version, when, `pending`), and the
+  first account to sign in within the hour takes it as theirs:
+  `record_agreement()` at that sign-in, so the database's time is when they
+  signed in, a minute or two after the tick. After that it is no longer
+  pending, so nobody else's agreement is recorded from it; it still lets
+  this device's login screen open, and the slides then lead straight to
+  sign-in.
+- **The card after sign-in is for everyone else** without the current
+  version recorded: someone signed in before the agreement existed (each
+  sees it once, at their next start), a second account on the same device,
+  a tick more than an hour old, and everyone signed in when the words
+  change (signed out, the intro asks again before sign-in). A
+  transparent Modal (`agreement-screen.tsx`): a dim backdrop and the card at
+  its foot, 480 wide at most, scrolling on a short screen, with Continue
+  (off until ticked) and "Don't agree? Sign out", in the lock screen's way
   (`useNothingElseReachable()` makes the rest of the page inert). It was a
-  full screen until the owner asked for the card. While it asks the
+  full screen before the owner asked for a card. While it asks the
   database it draws nothing and only stops taps, so someone who has agreed
-  sees no flash at start-up. For a new person it is the screen right
-  after Google, before the welcome question; everyone already signed up sees
-  it once, at their next start. It waits while AskLocker is locked, and a
+  sees no flash at start-up. It waits while AskLocker is locked, and a
   shared document (`/s`) is never behind it.
 - **The proof is the database's.** `record_agreement(p_version, p_platform,
   p_app_build)` (the caller from `auth.uid()`) writes `user_agreements`:

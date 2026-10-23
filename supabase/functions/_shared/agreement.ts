@@ -1,7 +1,9 @@
 // What everyone agrees to before using AskLocker (062), in plain words: what
-// AskLocker does with their documents. The app shows it as a screen nobody
-// can skip (src/components/agreement-screen.tsx) and records who agreed, to
-// which version, and when, by the database's clock (record_agreement()).
+// AskLocker does with their documents. The app asks for it as the intro's
+// last step, before signing in (src/app/onboarding.tsx), or as a card after
+// signing in that nobody can skip (src/components/agreement-screen.tsx), and
+// records who agreed, to which version, and when, by the database's clock
+// (record_agreement()).
 //
 // Every sentence must stay true of the app and of the people who run it, as
 // Settings › Privacy must (CLAUDE.md, "Never promise more privacy than

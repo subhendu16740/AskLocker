@@ -74,6 +74,10 @@ export const deviceKey = {
   // and the Settings › Privacy switch, '1' when turned off.
   analyticsId: 'fv:analytics-id',
   analyticsOff: 'fv:analytics-off',
+  // The agreement (062) ticked on this device before signing in: its version,
+  // when, and whether the next account to sign in still has it to record
+  // (agreement-device.ts). The login screen asks for it first.
+  agreement: 'fv:agreement',
 };
 
 /** The accounts with fingerprint sign-in on this device. */
