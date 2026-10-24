@@ -61,7 +61,7 @@ export function googleButtonAvailable(): boolean {
 export function googleButtonReason(): string {
   if (typeof window === 'undefined') return 'the redirect sign-in: no browser window';
   const here = window.location.origin.toLowerCase();
-  if (!CLIENT_ID) return 'the redirect sign-in: this build has no EXPO_PUBLIC_GOOGLE_CLIENT_ID (set it in Vercel for this environment, then redeploy)';
+  if (!CLIENT_ID) return 'the redirect sign-in: this build has no EXPO_PUBLIC_GOOGLE_CLIENT_ID (set it on the web host for this environment, then redeploy)';
   if (!ORIGINS.includes(here)) {
     return `the redirect sign-in: ${here} is not in EXPO_PUBLIC_GOOGLE_WEB_ORIGINS (this build has: ${ORIGINS.join(', ') || 'nothing'})`;
   }

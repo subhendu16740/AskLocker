@@ -24,15 +24,17 @@ const LOCK_ID = 'app-lock';
  * On the web, while locked: every other part of the page — the app and any
  * other open Modal — inert and hidden from screen readers. The lock's Modal
  * is its own child of <body> (react-native-web's portal), so it stays usable.
+ * The agreement (agreement-screen.tsx) covers the page the same way, by its
+ * own element's id.
  */
-function useNothingElseReachable(active: boolean) {
+export function useNothingElseReachable(active: boolean, id: string = LOCK_ID) {
   useEffect(() => {
     if (Platform.OS !== 'web' || typeof document === 'undefined' || !active) return;
     const covered: Element[] = [];
     let frame = 0;
     let tries = 0;
     const coverTheRest = () => {
-      const lock = document.getElementById(LOCK_ID);
+      const lock = document.getElementById(id);
       if (!lock) {
         if (tries++ < 60) frame = requestAnimationFrame(coverTheRest);
         return;
@@ -52,7 +54,7 @@ function useNothingElseReachable(active: boolean) {
         el.removeAttribute('aria-hidden');
       }
     };
-  }, [active]);
+  }, [active, id]);
 }
 
 export function AppLockScreen() {
@@ -131,7 +133,7 @@ export function AppLockScreen() {
           >
             <Text style={styles.googleText}>Use Google instead</Text>
           </TouchableOpacity>
-          <Text style={styles.small}>This signs you out. Fingerprint sign-in stays on for next time.</Text>
+          <Text style={styles.small}>This signs you out.</Text>
         </View>
       </SafeAreaView>
     </Modal>

@@ -3,25 +3,32 @@
 // Shared by the app (src/lib/plans.ts) and Gmail import, so both say the same
 // thing when a family's storage is full. Pure TypeScript: no Deno, no React.
 //
-// Two plans, each with a limit (039, 048):
+// Three family plans, each with a limit (039, 048, 064):
 //
-//   Free          a family 200 MB, a personal vault 100 MB, in total
-//   Family Plus   10 GB, either kind of vault — in India ₹100 a month or
-//                 ₹1,100 a year, elsewhere $10 a month or $110 a year
+//   Free          50 MB for each person to add, across their free vaults;
+//                 a family 100 MB and a business 200 MB, everyone together;
+//                 a personal vault 50 MB (060); 2 members (4 before 064)
+//   Family Plus   1 GB (10 GB before 064), either kind of vault; 4 members
+//                 (8 before) — in India ₹100 a month or ₹1,100 a year,
+//                 elsewhere $10 a month or $110 a year
+//   Family Pro    10 GB; 8 members — in India ₹200 a month or ₹2,000 a
+//                 year, elsewhere $20 a month or $200 a year
 //
-// A family has at most 4 members on Free and 8 on Family Plus (041, 049) —
-// the people who sign in; anyone can be in the family tree. Each person on
-// Free has 10 voice chats (041–043) and 20 questions a month (049); on Family
-// Plus, voice without a limit and 200 questions a month the whole family
-// shares (053). A share link lasts 1 or 7 days on Free, and up to 30 days on
-// Family Plus (049). On Free a person creates one vault besides their
-// personal vault, a family or a business (054).
+// Members are the people who sign in; anyone can be in the family tree. Each
+// person on Free has 10 voice chats (041–043) and 20 questions a month (049);
+// on Plus and Pro, voice and questions without a monthly limit (064; 200 a
+// month for the family before it, 053), and 50 tries a day each (050). A
+// share link lasts 1 or 7 days on Free, and up to 30 days on a paid plan
+// (049). Expiry and birthday reminders (048, 064), Gmail import and reading
+// and speaking Indian languages are for Plus and Pro. On Free a person
+// creates one family and one business besides their personal vault (059).
 //
-// A year costs eleven months: one month free. The yearly price is shown
-// against twelve months at the monthly price, crossed out (₹1,200 → ₹1,100,
-// $120 → $110), and so are the months it saves — both worked out here, never
-// typed in: a crossed-out price must be one a family could really pay. How a
-// family pays never changes what it may keep.
+// A year of Plus costs eleven months (one month free) and a year of Pro ten
+// (two months free). The yearly price is shown against twelve months at the
+// monthly price, crossed out (₹1,200 → ₹1,100, ₹2,400 → ₹2,000), and so are
+// the months it saves — both worked out here, never typed in: a crossed-out
+// price must be one a family could really pay. How a family pays never
+// changes what it may keep.
 //
 // When Family Plus ends (040), a vault above its free limit has 30 days to
 // renew or delete documents; then the newest documents above it are removed.
@@ -50,7 +57,15 @@
 // ────────────────────────────────────────────────────────────────
 
 export type BusinessPlan = 'business_plus' | 'business_pro' | 'business_enterprise';
-export type PlanName = 'free' | 'plus' | BusinessPlan;
+/** A family's paid plans: Family Plus, and Family Pro (064). */
+export type FamilyPlan = 'plus' | 'family_pro';
+export type PlanName = 'free' | FamilyPlan | BusinessPlan;
+
+export const FAMILY_PLANS: readonly FamilyPlan[] = ['plus', 'family_pro'];
+
+export function isFamilyPlan(plan: string | null | undefined): plan is FamilyPlan {
+  return (FAMILY_PLANS as readonly string[]).includes(plan ?? '');
+}
 
 export const BUSINESS_PLANS: readonly BusinessPlan[] = ['business_plus', 'business_pro', 'business_enterprise'];
 
@@ -82,22 +97,30 @@ export interface BusinessPlanLimits {
 }
 
 export interface PlanLimits {
-  /** What a family may keep on Free. */
+  /** What a family may keep on Free, everyone together. */
   free: number;
   /** What a personal vault may keep on Free (048). */
   freePersonal: number;
+  /** What a business may keep on Free, everyone together (060; the family number before it). */
+  freeBusiness: number;
+  /** What one person may add across the vaults they are in on Free (060); null: no number per person. */
+  freePerson: number | null;
   /** What a vault may keep on Family Plus, either kind. */
   plus: number;
+  /** Family Pro (064): what a vault may keep, and its members. Every other number is Plus's. */
+  familyPro: { storage: number; members: number };
   /** Days a family keeps what is above the free limit after Plus ends (040). */
   graceDays: number;
   /** Members — people who sign in — a family may have, per plan (041). The family tree has no limit. */
   members: { free: number; plus: number };
+  /** People a business may have on Free (064 keeps it at 4 when a family's Free goes to 2). */
+  freeBusinessMembers: number;
   /** Voice chats each person gets, per plan; null: no limit (041; per person since 043). */
   voiceAnswers: { free: number | null; plus: number | null };
   /** Questions each person may ask a month, per plan; null: no monthly limit (049). */
   questions: { free: number | null; plus: number | null };
-  /** The most one person may ask in a month where there is no monthly limit (049). */
-  questionsFairUse: number;
+  /** The most one person may ask in a month where there is no monthly limit (049); null: no ceiling (064). */
+  questionsFairUse: number | null;
   /** The questions everyone in a vault on Family Plus shares in a month (053); null: no family number. */
   familyQuestions: number | null;
   /** Questions each person may try in a day, answered or not, per plan; null: no limit (050). */
@@ -122,22 +145,26 @@ const GB = 1024 ** 3;
 
 const MB = 1024 ** 2;
 
-/** What 039–056 set; plan_limits is the truth. */
+/** What 039–060 set; plan_limits is the truth. */
 export const DEFAULT_PLAN_LIMITS: PlanLimits = {
-  free: 200 * MB,
-  freePersonal: 100 * MB,
-  plus: 10 * GB,
+  free: 100 * MB,
+  freePersonal: 50 * MB,
+  freeBusiness: 200 * MB,
+  freePerson: 50 * MB,
+  plus: 1 * GB,
+  familyPro: { storage: 10 * GB, members: 8 },
   graceDays: 30,
-  members: { free: 4, plus: 8 },
+  members: { free: 2, plus: 4 },
+  freeBusinessMembers: 4,
   voiceAnswers: { free: 10, plus: null },
   questions: { free: 20, plus: null },
-  questionsFairUse: 200,
-  familyQuestions: 200,
+  questionsFairUse: null,
+  familyQuestions: null,
   questionTriesPerDay: { free: 10, plus: 50 },
   uploadsPerDay: { free: 50, plus: 100 },
   familiesPerPerson: 1,
   businessesPerPerson: 1,
-  vaultsPerPerson: 1,
+  vaultsPerPerson: null,
   notesPerPerson: { free: 20, paid: 500 },
   invitesPerDay: { free: 20, plus: 20 },
   business: {
@@ -147,14 +174,31 @@ export const DEFAULT_PLAN_LIMITS: PlanLimits = {
   },
 };
 
+export type PricePeriod = 'monthly' | 'yearly';
+export type PriceCurrency = 'inr' | 'usd';
+export type PlanPrice = Record<PricePeriod, Record<PriceCurrency, number>>;
+
 /** What Family Plus costs, by the month or by the year (one month free). */
-export const PLUS_PRICE = {
+export const PLUS_PRICE: PlanPrice = {
   monthly: { inr: 100, usd: 10 },
   yearly: { inr: 1100, usd: 110 },
-} as const;
+};
 
-export type PricePeriod = keyof typeof PLUS_PRICE;
-export type PriceCurrency = keyof (typeof PLUS_PRICE)['monthly'];
+/** What Family Pro costs (064), by the month or by the year (two months free). */
+export const PRO_PRICE: PlanPrice = {
+  monthly: { inr: 200, usd: 20 },
+  yearly: { inr: 2000, usd: 200 },
+};
+
+/** A family plan's price: what every screen shows and the payments function charges. */
+export function familyPrice(plan: FamilyPlan = 'plus'): PlanPrice {
+  return plan === 'family_pro' ? PRO_PRICE : PLUS_PRICE;
+}
+
+/** "Family Plus" or "Family Pro" (064). */
+export function familyPlanName(plan: FamilyPlan = 'plus'): string {
+  return plan === 'family_pro' ? 'Family Pro' : 'Family Plus';
+}
 
 /** 1000 → "1,000"; in rupees, lakhs group in twos: 100000 → "1,00,000". */
 function grouped(amount: number, indian: boolean): string {
@@ -175,8 +219,8 @@ function formatMoney(currency: PriceCurrency, amount: number): string {
   return currency === 'inr' ? `₹${grouped(amount, true)}` : `$${grouped(amount, false)}`;
 }
 
-function money(currency: PriceCurrency, period: PricePeriod): string {
-  return formatMoney(currency, PLUS_PRICE[period][currency]);
+function money(currency: PriceCurrency, period: PricePeriod, plan: FamilyPlan = 'plus'): string {
+  return formatMoney(currency, familyPrice(plan)[period][currency]);
 }
 
 /**
@@ -187,37 +231,40 @@ function money(currency: PriceCurrency, period: PricePeriod): string {
  */
 export const PLUS_FOR_SALE = false;
 
+// Each takes the plan last, Family Plus when not said.
+
 /** "₹100 a month", "₹1,100 a year", "$10 a month", "$110 a year". */
-export function plusPrice(currency: PriceCurrency, period: PricePeriod = 'monthly'): string {
-  return `${money(currency, period)} a ${period === 'monthly' ? 'month' : 'year'}`;
+export function plusPrice(currency: PriceCurrency, period: PricePeriod = 'monthly', plan: FamilyPlan = 'plus'): string {
+  return `${money(currency, period, plan)} a ${period === 'monthly' ? 'month' : 'year'}`;
 }
 
 /** "₹100 a month or ₹1,100 a year". */
-export function plusPrices(currency: PriceCurrency): string {
-  return `${plusPrice(currency, 'monthly')} or ${plusPrice(currency, 'yearly')}`;
+export function plusPrices(currency: PriceCurrency, plan: FamilyPlan = 'plus'): string {
+  return `${plusPrice(currency, 'monthly', plan)} or ${plusPrice(currency, 'yearly', plan)}`;
 }
 
 /** The amount alone, "₹100" or "₹1,100", for a narrow column. */
-export function plusAmount(currency: PriceCurrency, period: PricePeriod): string {
-  return money(currency, period);
+export function plusAmount(currency: PriceCurrency, period: PricePeriod, plan: FamilyPlan = 'plus'): string {
+  return money(currency, period, plan);
 }
 
 /**
  * Twelve months at the monthly price: "₹1,200", "$120". The yearly price is
  * shown against it, crossed out.
  */
-export function plusTwelveMonths(currency: PriceCurrency): string {
-  return formatMoney(currency, 12 * PLUS_PRICE.monthly[currency]);
+export function plusTwelveMonths(currency: PriceCurrency, plan: FamilyPlan = 'plus'): string {
+  return formatMoney(currency, 12 * familyPrice(plan).monthly[currency]);
 }
 
 /** "₹1,100 a year instead of ₹1,200", where a crossed-out price cannot be drawn or seen. */
-export function plusYearlyOffer(currency: PriceCurrency): string {
-  return `${plusPrice(currency, 'yearly')} instead of ${plusTwelveMonths(currency)}`;
+export function plusYearlyOffer(currency: PriceCurrency, plan: FamilyPlan = 'plus'): string {
+  return `${plusPrice(currency, 'yearly', plan)} instead of ${plusTwelveMonths(currency, plan)}`;
 }
 
-/** What paying by the year saves, in months: "1 month free". */
-export function plusYearlySaving(currency: PriceCurrency): string {
-  const months = 12 - PLUS_PRICE.yearly[currency] / PLUS_PRICE.monthly[currency];
+/** What paying by the year saves, in months: "1 month free", "2 months free". */
+export function plusYearlySaving(currency: PriceCurrency, plan: FamilyPlan = 'plus'): string {
+  const price = familyPrice(plan);
+  const months = 12 - price.yearly[currency] / price.monthly[currency];
   return `${months} ${months === 1 ? 'month' : 'months'} free`;
 }
 
@@ -243,7 +290,27 @@ export function businessPlanName(plan: BusinessPlan): string {
 
 export function planLabel(plan: PlanName, business?: boolean): string {
   if (plan === 'free') return 'the free plan';
+  if (plan === 'family_pro') return familyPlanName(plan);
   return isBusinessPlan(plan) ? businessPlanName(plan) : plusName(business);
+}
+
+/**
+ * What a person on Free may create besides their personal vault: "one family
+ * and one business" (050's and 051's numbers, 059), or "one family or one
+ * business" while 054's combined number is the tighter one. Null when
+ * nothing is said: no limit, or none at all, which the server says itself.
+ */
+export function freeVaultsText(limits: Pick<PlanLimits, 'familiesPerPerson' | 'businessesPerPerson' | 'vaultsPerPerson'>): string | null {
+  const { familiesPerPerson: f, businessesPerPerson: b, vaultsPerPerson: v } = limits;
+  if (v === 0) return null;
+  if (v != null && (f == null || b == null || v < f + b)) {
+    return v === 1 ? 'one family or one business' : `${v} families or businesses in all`;
+  }
+  const parts = [
+    f != null && f > 0 ? (f === 1 ? 'one family' : `${f} families`) : null,
+    b != null && b > 0 ? (b === 1 ? 'one business' : `${b} businesses`) : null,
+  ].filter((part): part is string => part !== null);
+  return parts.length ? parts.join(' and ') : null;
 }
 
 /**
@@ -329,9 +396,45 @@ export function storageFullMessage(room: StorageRoom, fileBytes = 0, options: St
     more = forSale
       ? `${free}, or move to ${name} and get ${plus}.`
       : `${free}. ${name} is coming soon, with ${plus}.`;
+  } else if (room.plan === 'plus' && forSale && limits.familyPro.storage > room.limitBytes) {
+    more = `${free}, or move to Family Pro and get ${formatBytes(limits.familyPro.storage)}.`;
   } else {
     more = `${free} to make room.`;
   }
+  return `${head} ${more}`;
+}
+
+/** What one person on Free has added across their free vaults, and their number (060). */
+export interface PersonRoom {
+  usedBytes: number;
+  limitBytes: number;
+}
+
+/** Whether a file of this size fits in what the person has left on Free (060). */
+export function personFits(person: PersonRoom, fileBytes: number): boolean {
+  return person.usedBytes + fileBytes <= person.limitBytes;
+}
+
+/**
+ * Why a file does not fit in what one person may add on Free (060), and what
+ * they can do: delete what they added, or move the vault to a paid plan,
+ * where their files no longer count.
+ */
+export function personStorageFullMessage(
+  person: PersonRoom, fileBytes = 0, options: { business?: boolean; forSale?: boolean } = {},
+): string {
+  const { business = false, forSale = PLUS_FOR_SALE } = options;
+  const left = Math.max(0, person.limitBytes - person.usedBytes);
+  const each = `the ${formatBytes(person.limitBytes)} each person can add on Free`;
+  const head = left === 0 || fileBytes === 0
+    ? `You've added ${formatBytes(person.usedBytes)} of ${each}.`
+    : `This file is ${formatBytes(fileBytes)}, but you have only ${formatBytes(left)} left of ${each}.`;
+  const name = plusName(business);
+  const more = business
+    ? "Delete records you added, or move this business to a paid plan."
+    : forSale
+      ? `Delete documents you added, or move this vault to ${name}.`
+      : `Delete documents you added to make room. ${name} is coming soon.`;
   return `${head} ${more}`;
 }
 
@@ -347,6 +450,9 @@ export function chatStorageFullMessage(room: StorageRoom, options: Omit<StorageM
     return next
       ? `${head} To save more, move to ${businessPlanName(next)} for ${formatBytes(limits.business[next].storage)}. Or delete records you don't need.`
       : `${head} Delete records or saved chats you don't need to make room.`;
+  }
+  if (room.plan === 'plus' && forSale && limits.familyPro.storage > room.limitBytes) {
+    return `${head} To save more, move to Family Pro and get ${formatBytes(limits.familyPro.storage)}. Or delete documents you don't need.`;
   }
   if (room.plan !== 'free') return `${head} Delete documents or saved chats you don't need to make room.`;
   const plus = `${formatBytes(limits.plus)}${price ? ` for ${price}` : ''}`;

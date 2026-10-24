@@ -7,9 +7,9 @@ import type { Gender, KinLink, KinPerson } from '../../supabase/functions/_share
 import { parseAllowance, type QuestionAllowance } from '../../supabase/functions/_shared/questions';
 import { isBloodGroup, type EmergencyCard, type EmergencyCardInput, type EmergencyContact } from './emergency';
 import {
-  DEFAULT_PLAN_LIMITS, MAX_FILE_BYTES, PLUS_FOR_SALE, chatStorageFullMessage, deviceTimeZone, fileTooLargeMessage, fits,
-  limitHint, localPlusPrices, setPayerCurrency, storageFullMessage, type BusinessPlan, type BusinessPlanLimits, type PlanLimits,
-  type PlanName, type StorageRoom,
+  DEFAULT_PLAN_LIMITS, MAX_FILE_BYTES, PLUS_FOR_SALE, chatStorageFullMessage, deviceTimeZone, familyPlanName, familyPrice,
+  fileTooLargeMessage, fits, limitHint, localPlusPrices, personFits, personStorageFullMessage, setPayerCurrency, storageFullMessage,
+  type BusinessPlan, type BusinessPlanLimits, type FamilyPlan, type PersonRoom, type PlanLimits, type PlanName, type StorageRoom,
 } from './plans';
 import type {
   FamilyWithMembership,
@@ -266,8 +266,10 @@ export interface RagSearchResult {
     kept_docs: string[];
     /** The documents the answer said it used, which the source chips show; null when it did not say. */
     used_docs?: string[] | null;
-    /** Groq models that actually ran each step. Missing = the step didn't run. */
+    /** The models (Claude's or Groq's) that actually ran each step. Missing = the step didn't run. */
     models?: { answer?: string; condense?: string; rerank?: string };
+    /** Claude is set up but left alone for now (no credit, a bad key), so Groq answered. */
+    claude_error?: string;
     /** false means the retriever was given the raw follow-up, not a rewrite. */
     condensed: boolean;
     condense_error?: string;
@@ -897,6 +899,12 @@ export async function uploadDocument(params: UploadDocumentParams): Promise<stri
     await fetchPaymentsStatus();   // so the words say whether Family Plus can be bought
     throw new StorageFullError(room, fileSizeBytes);
   }
+  // And on Free, what this person may add across their free vaults (060).
+  const person = room?.plan === 'free' ? await fetchPersonStorage().catch(() => null) : null;
+  if (room && person && !personFits(person, fileSizeBytes)) {
+    await fetchPaymentsStatus();
+    throw new StorageFullError(room, fileSizeBytes, person);
+  }
 
   // 1. Upload to Supabase Storage
   const storagePath = `${storageNamespace}/${Date.now()}_${fileName}`;
@@ -907,12 +915,18 @@ export async function uploadDocument(params: UploadDocumentParams): Promise<stri
     .upload(storagePath, fileBlob, { contentType: mimeType, upsert: false });
 
   if (storageErr) {
-    // The bucket's policy refuses a family at its limit (038): say so in words.
+    // The bucket's policy refuses a family at its limit (038), and on Free a
+    // person at theirs (060): say so in words.
     if (/row-level security|policy/i.test(storageErr.message)) {
       const now = await fetchStorageStatus(familyId).catch(() => null);
       if (now && (now.closed || now.usedBytes >= now.limitBytes)) {
         await fetchPaymentsStatus();
         throw new StorageFullError(now, fileSizeBytes);
+      }
+      const mine = now?.plan === 'free' ? await fetchPersonStorage().catch(() => null) : null;
+      if (now && mine && mine.usedBytes >= mine.limitBytes) {
+        await fetchPaymentsStatus();
+        throw new StorageFullError(now, fileSizeBytes, mine);
       }
     }
     throw new Error(`Couldn't upload the file. ${storageErr.message}`);
@@ -1366,6 +1380,22 @@ export async function fetchPlusPeriod(familyId: string): Promise<'monthly' | 'ye
   return until - Date.parse(data.updated_at) > 183 * 86_400_000 ? 'yearly' : 'monthly';
 }
 
+/**
+ * What the signed-in person has added to the vaults they are in on Free, and
+ * the most each person may (060). Null before 060, and where there is no
+ * number per person.
+ */
+export async function fetchPersonStorage(): Promise<PersonRoom | null> {
+  const { data, error } = await supabase.rpc('person_storage_status');
+  if (error) {
+    if (isMissingMigration(error)) return null;
+    throw error;
+  }
+  const row = (data ?? [])[0];
+  if (!row || row.limit_bytes == null) return null;
+  return { usedBytes: Number(row.used_bytes), limitBytes: Number(row.limit_bytes) };
+}
+
 /** A family's plan, its limit and what its files (and, since 042, saved chats) add up to; null before 038. */
 export async function fetchStorageStatus(familyId: string): Promise<FamilyPlanStatus | null> {
   const { data, error } = await supabase.rpc('family_storage_status', { p_family_id: familyId });
@@ -1397,9 +1427,12 @@ export async function fetchStorageStatus(familyId: string): Promise<FamilyPlanSt
 // questions_per_month and questions_fair_use; 050: question_tries_per_day,
 // uploads_per_day and families_per_person; 051: invites_per_day and
 // businesses_per_person, and the business plans' rows; 053:
-// family_questions_per_month; 054: vaults_per_person; 056: notes_per_person). A column that is not there yet
+// family_questions_per_month; 054: vaults_per_person; 056: notes_per_person; 060: business_storage_bytes and
+// person_storage_bytes; 064: business_max_members). A column that is not there yet
 // fails the whole select, so each one missing asks again with the set before it.
 const PLAN_LIMIT_COLUMNS = [
+  'plan, storage_bytes, grace_days, max_members, voice_answers, personal_storage_bytes, questions_per_month, questions_fair_use, question_tries_per_day, uploads_per_day, families_per_person, invites_per_day, businesses_per_person, family_questions_per_month, vaults_per_person, notes_per_person, business_storage_bytes, person_storage_bytes, business_max_members',
+  'plan, storage_bytes, grace_days, max_members, voice_answers, personal_storage_bytes, questions_per_month, questions_fair_use, question_tries_per_day, uploads_per_day, families_per_person, invites_per_day, businesses_per_person, family_questions_per_month, vaults_per_person, notes_per_person, business_storage_bytes, person_storage_bytes',
   'plan, storage_bytes, grace_days, max_members, voice_answers, personal_storage_bytes, questions_per_month, questions_fair_use, question_tries_per_day, uploads_per_day, families_per_person, invites_per_day, businesses_per_person, family_questions_per_month, vaults_per_person, notes_per_person',
   'plan, storage_bytes, grace_days, max_members, voice_answers, personal_storage_bytes, questions_per_month, questions_fair_use, question_tries_per_day, uploads_per_day, families_per_person, invites_per_day, businesses_per_person, family_questions_per_month, vaults_per_person',
   'plan, storage_bytes, grace_days, max_members, voice_answers, personal_storage_bytes, questions_per_month, questions_fair_use, question_tries_per_day, uploads_per_day, families_per_person, invites_per_day, businesses_per_person, family_questions_per_month',
@@ -1422,11 +1455,13 @@ export async function fetchPlanLimits(): Promise<PlanLimits> {
     question_tries_per_day?: number | null; uploads_per_day?: number | null; families_per_person?: number | null;
     invites_per_day?: number | null; businesses_per_person?: number | null;
     family_questions_per_month?: number | null; vaults_per_person?: number | null; notes_per_person?: number | null;
+    business_storage_bytes?: number | null; person_storage_bytes?: number | null;
+    business_max_members?: number | null;
   };
   let answer: { data: unknown; error: { message?: string } | null } = { data: null, error: null };
   for (const columns of PLAN_LIMIT_COLUMNS) {
     answer = await supabase.from('plan_limits').select(columns);
-    if (!answer.error || !/grace_days|max_members|voice_answers|personal_storage_bytes|questions_per_month|questions_fair_use|question_tries_per_day|uploads_per_day|families_per_person|invites_per_day|businesses_per_person|family_questions_per_month|vaults_per_person|notes_per_person/.test(answer.error.message ?? '')) break;
+    if (!answer.error || !/business_max_members|grace_days|max_members|voice_answers|personal_storage_bytes|questions_per_month|questions_fair_use|question_tries_per_day|uploads_per_day|families_per_person|invites_per_day|businesses_per_person|family_questions_per_month|vaults_per_person|notes_per_person|business_storage_bytes|person_storage_bytes/.test(answer.error.message ?? '')) break;
   }
   const rows = (answer.data ?? []) as Row[];
   if (answer.error || !rows.length) return DEFAULT_PLAN_LIMITS;
@@ -1454,10 +1489,19 @@ export async function fetchPlanLimits(): Promise<PlanLimits> {
     if (!row || !('questions_per_month' in row)) return null;
     return row.questions_per_month == null ? null : Number(row.questions_per_month);
   };
-  const fairUse = rows.find((r) => r.plan === 'plus')?.questions_fair_use;
   // The family's shared month (053): NULL is a real answer (no family number);
   // a row without the column is a database before 053, which keeps none.
   const plusRow = rows.find((r) => r.plan === 'plus');
+  // One person's ceiling where there is no monthly limit (049): NULL is a
+  // real answer since 064 (none on Plus or Pro).
+  const fairUse = plusRow && 'questions_fair_use' in plusRow
+    ? (plusRow.questions_fair_use == null ? null : Number(plusRow.questions_fair_use))
+    : DEFAULT_PLAN_LIMITS.questionsFairUse;
+  // Family Pro (064): its row, or what 064 will set before it.
+  const proRow = rows.find((r) => r.plan === 'family_pro');
+  const familyPro = proRow
+    ? { storage: Number(proRow.storage_bytes), members: proRow.max_members ? Number(proRow.max_members) : DEFAULT_PLAN_LIMITS.familyPro.members }
+    : DEFAULT_PLAN_LIMITS.familyPro;
   const familyQuestions = plusRow && 'family_questions_per_month' in plusRow
     ? (plusRow.family_questions_per_month == null ? null : Number(plusRow.family_questions_per_month))
     : null;
@@ -1494,15 +1538,24 @@ export async function fetchPlanLimits(): Promise<PlanLimits> {
   // the server keeps one limit for every vault, so that one.
   const freeRow = rows.find((r) => r.plan === 'free');
   const freePersonal = freeRow?.personal_storage_bytes != null ? Number(freeRow.personal_storage_bytes) : free;
+  // A business's own number and each person's (060); before 060 a business
+  // keeps the family number and nobody has a number of their own.
+  const freeBusiness = freeRow?.business_storage_bytes != null ? Number(freeRow.business_storage_bytes) : free;
+  const freePerson = freeRow?.person_storage_bytes != null ? Number(freeRow.person_storage_bytes) : null;
   return {
     free,
     freePersonal,
+    freeBusiness,
+    freePerson,
     plus: of('plus', DEFAULT_PLAN_LIMITS.plus),
+    familyPro,
     graceDays: grace ? Number(grace) : DEFAULT_PLAN_LIMITS.graceDays,
     members: { free: members('free'), plus: members('plus') },
+    // A business on Free (064): its own number, else the family's (one number before 064).
+    freeBusinessMembers: freeRow?.business_max_members != null ? Number(freeRow.business_max_members) : members('free'),
     voiceAnswers: { free: voice('free'), plus: voice('plus') },
     questions: { free: questions('free'), plus: questions('plus') },
-    questionsFairUse: fairUse ? Number(fairUse) : DEFAULT_PLAN_LIMITS.questionsFairUse,
+    questionsFairUse: fairUse,
     familyQuestions,
     questionTriesPerDay: { free: perDay('free', 'question_tries_per_day'), plus: perDay('plus', 'question_tries_per_day') },
     uploadsPerDay: { free: perDay('free', 'uploads_per_day'), plus: perDay('plus', 'uploads_per_day') },
@@ -1627,11 +1680,13 @@ async function paymentsInvoke<T>(body: Record<string, unknown>): Promise<T> {
 }
 
 /** Starts paying for a month or a year of Family Plus for the family. */
-export async function createPlusOrder(familyId: string, period: 'monthly' | 'yearly', currency: PaymentCurrency): Promise<PlusOrder> {
+export async function createPlusOrder(
+  familyId: string, period: 'monthly' | 'yearly', currency: PaymentCurrency, plan: FamilyPlan = 'plus',
+): Promise<PlusOrder> {
   const r = await paymentsInvoke<{
     order_id: string; amount: number; currency: PaymentCurrency; key_id: string; description: string;
     prefill?: { email?: string; name?: string };
-  }>({ action: 'order', family_id: familyId, period, currency, time_zone: deviceTimeZone() }).catch((err) => {
+  }>({ action: 'order', family_id: familyId, period, currency, time_zone: deviceTimeZone(), plan }).catch((err) => {
     // The server pays this person in the other currency: show its prices from now on.
     if (err instanceof PaymentError && err.status === 'wrong_currency' && err.currency) {
       setPayerCurrency(err.currency);
@@ -1639,6 +1694,11 @@ export async function createPlusOrder(familyId: string, period: 'monthly' | 'yea
     }
     throw err;
   });
+  // A payments function from before 064 reads no plan and makes a Family
+  // Plus order. Its amount says so: never open a checkout for the wrong plan.
+  if (r.amount !== familyPrice(plan)[period][r.currency === 'USD' ? 'usd' : 'inr'] * 100) {
+    throw new PaymentError('needs_migration', `Paying for ${familyPlanName(plan)} isn't switched on yet.`);
+  }
   return {
     orderId: r.order_id, amount: r.amount, currency: r.currency, keyId: r.key_id,
     description: r.description, prefill: r.prefill ?? {},
@@ -1716,16 +1776,22 @@ export async function fetchQuestionStatus(): Promise<QuestionAllowance | null> {
   return parseAllowance(data);
 }
 
-/** The family's storage is full, in words the person can act on. */
+/**
+ * The family's storage is full, in words the person can act on; or, with
+ * `person`, the vault has room but this person on Free has added all they
+ * may across their free vaults (060).
+ */
 export class StorageFullError extends Error {
   room: StorageRoom;
 
-  constructor(room: StorageRoom & { removalAt?: string | null }, fileBytes: number) {
-    super(storageFullMessage(room, fileBytes, {
-      price: localPlusPrices(),
-      removalOn: room.removalAt ? longDate(new Date(room.removalAt)) : undefined,
-      forSale: plusForSale(),
-    }));
+  constructor(room: StorageRoom & { removalAt?: string | null }, fileBytes: number, person?: PersonRoom) {
+    super(person
+      ? personStorageFullMessage(person, fileBytes, { business: room.business, forSale: plusForSale() })
+      : storageFullMessage(room, fileBytes, {
+        price: localPlusPrices(),
+        removalOn: room.removalAt ? longDate(new Date(room.removalAt)) : undefined,
+        forSale: plusForSale(),
+      }));
     this.name = 'StorageFullError';
     this.room = room;
   }
@@ -2545,4 +2611,44 @@ export async function saveEmergencyCard(personId: string, card: EmergencyCardInp
 export async function fetchPersonDocuments(familyId: string, personId: string): Promise<FamilyDocumentRow[]> {
   const docs = await fetchAllDocuments(familyId);
   return docs.filter((d) => d.belongs_to_member === personId);
+}
+
+// ─── The agreement (062) ─────────────────────────────────────────
+//
+// What everyone agrees to before using AskLocker, in plain words
+// (_shared/agreement.ts; the screen is components/agreement-screen.tsx). The
+// database records who agreed to which version and when, by its own clock,
+// only through record_agreement() (the caller from auth.uid()). Before 062,
+// or before the migration that adds a new version, there is nowhere to
+// record it, and the screen keeps it on the device until there is.
+
+export type AgreementCheck = 'agreed' | 'not_agreed' | 'unavailable';
+
+/** Has this person agreed to this version, as the database knows? */
+export async function fetchAgreement(userId: string, version: string): Promise<AgreementCheck> {
+  const { data, error } = await supabase
+    .from('user_agreements')
+    .select('agreed_at')
+    .eq('user_id', userId)
+    .eq('version', version)
+    .maybeSingle();
+  if (error) {
+    if (isMissingMigration(error)) return 'unavailable';
+    throw error;
+  }
+  return data ? 'agreed' : 'not_agreed';
+}
+
+/** Records the signed-in person's agreement. When they first agreed, or null where it cannot be recorded yet. */
+export async function recordAgreement(version: string, platform: string, appBuild: string): Promise<string | null> {
+  const { data, error } = await supabase.rpc('record_agreement', {
+    p_version: version,
+    p_platform: platform,
+    p_app_build: appBuild,
+  });
+  if (error) {
+    if (missingFunction(error) || error.hint === 'unknown_version') return null;
+    throw error;
+  }
+  return data;
 }

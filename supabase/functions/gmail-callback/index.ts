@@ -13,7 +13,7 @@
 //
 // Registered in Google Cloud as the OAuth client's redirect URI:
 //   https://<project-ref>.supabase.co/functions/v1/gmail-callback
-// Google allows no wildcards there, which is why Vercel previews come back
+// Google allows no wildcards there, which is why web previews come back
 // through this one fixed address.
 // ────────────────────────────────────────────────────────────────
 

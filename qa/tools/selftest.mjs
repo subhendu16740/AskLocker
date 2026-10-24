@@ -12,7 +12,7 @@
 // as a "failing app".
 
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { getDocument } from 'pdfjs-serverless';
 import { reconstructLayout } from '../../supabase/functions/_shared/pdf-text.ts';
 import { extractMetadata, parseFlexibleDate, gstinCheckChar, isValidGstin } from '../../supabase/functions/_shared/metadata.ts';
@@ -21,6 +21,7 @@ import { ticketCodeNotes, ticketSearchTerms } from '../../supabase/functions/_sh
 import { digitsFromWords, restoreCodes } from '../../supabase/functions/_shared/numbers.ts';
 import { takeInTurn, uniqueRelatives } from '../../supabase/functions/_shared/vaults.ts';
 import { passagesUsed, splitUsedPassages } from '../../supabase/functions/_shared/used-passages.ts';
+import { CLAUDE_MIN_MAX_TOKENS, claudeCanTake, claudeShouldRest, claudeText, claudeUsable, groqStyleReply, toClaudeRequest } from '../../supabase/functions/_shared/claude-shape.ts';
 import { toSpeech } from '../../src/lib/speech-text.ts';
 import {
   BUILT_IN_CATEGORIES, BUSINESS_CATEGORIES, FAMILY_CATEGORIES, SUGGESTED_CATEGORIES, categoryOrder, countedCategory, suggestCategory,
@@ -37,9 +38,13 @@ import { buildGraph, relationTo, relationLabel, relativesForPrompt, relativesNam
 import { encryptPayload, vapidAuthorization, generateVapidKeys, isPushServiceEndpoint, MAX_PLAINTEXT } from '../../supabase/functions/_shared/webpush.ts';
 import { phoneLooksRight, cardProblem, cardIsEmpty, emptyCard, bloodGroupLabel, bloodGroupSpoken, telHref } from '../../src/lib/emergency.ts';
 import { allowanceJson, givenBack, parseAllowance, questionLimitMessage, questionsLeftText, resetDay } from '../../supabase/functions/_shared/questions.ts';
+import { AGREEMENT_POINTS, AGREEMENT_VERSION, agreementText } from '../../supabase/functions/_shared/agreement.ts';
+import { isSpreadsheetText, isSpreadsheetType, MAX_ROW_TOKENS, parseCsv, periodLabel, spreadsheetText } from '../../supabase/functions/_shared/spreadsheet-text.ts';
+import { estimateTokens } from '../../supabase/functions/_shared/tokens.ts';
+import { chunkText } from '../../supabase/functions/_shared/chunking.ts';
 import { MAX_DOCUMENT_TEXT, MAX_FILE_BYTES, QUESTION_INPUT_MAX, MAX_QUESTION_CHARS, fileTooLargeMessage, inVaultFolder, limitHint, providedTextLimit } from '../../supabase/functions/_shared/limits.ts';
 import { MAX_IMPORT_BYTES } from '../../supabase/functions/_shared/gmail-rules.ts';
-import { BUSINESS_PLANS, BUSINESS_PRICE, CLOSED_MESSAGE, DEFAULT_PLAN_LIMITS, PLUS_FOR_SALE, PLUS_PRICE, businessAmount, businessPrice, businessYearPrice, chatStorageFullMessage, fits, formatBytes, isBusinessPlan, nextBusinessPlan, planLabel, plusName, plusAmount, plusPrice, plusPrices, plusTwelveMonths, plusYearlyOffer, plusYearlySaving, storageFullMessage } from '../../supabase/functions/_shared/plan-text.ts';
+import { BUSINESS_PLANS, BUSINESS_PRICE, CLOSED_MESSAGE, DEFAULT_PLAN_LIMITS, PLUS_FOR_SALE, PLUS_PRICE, PRO_PRICE, familyPlanName, isFamilyPlan, businessAmount, businessPrice, businessYearPrice, chatStorageFullMessage, fits, formatBytes, freeVaultsText, isBusinessPlan, nextBusinessPlan, personFits, personStorageFullMessage, planLabel, plusName, plusAmount, plusPrice, plusPrices, plusTwelveMonths, plusYearlyOffer, plusYearlySaving, storageFullMessage } from '../../supabase/functions/_shared/plan-text.ts';
 import { mentionsDate, mentionsAmount, mentionsPhone, mentionsText, refuses, devanagariShare, scriptShare, hasMarkdown } from '../lib/match.mjs';
 import { judgeAnswer } from '../lib/checks/ask.mjs';
 import { EMBED_ALLOWANCE } from '../lib/results.mjs';
@@ -391,6 +396,12 @@ await test('gmail: Google\'s answer returns only to an allowed origin', () => {
   assert.equal(allowedReturnOrigin('https://family-vault-dbmzqbq0v-subhendu16740.vercel.app', pattern), 'https://family-vault-dbmzqbq0v-subhendu16740.vercel.app');
   assert.equal(allowedReturnOrigin('https://family-vault-a.evil.com-subhendu16740.vercel.app', pattern), null, '* never spans a dot');
   assert.equal(allowedReturnOrigin('https://evil.example/family-vault-x-subhendu16740.vercel.app', pattern), null);
+  // Cloudflare Pages: every branch and build is one label under the project's own address.
+  const pages = 'https://*.asklocker.pages.dev';
+  assert.equal(allowedReturnOrigin('https://dev.asklocker.pages.dev', pages), 'https://dev.asklocker.pages.dev');
+  assert.equal(allowedReturnOrigin('https://3f1c2a9b.asklocker.pages.dev', pages), 'https://3f1c2a9b.asklocker.pages.dev');
+  assert.equal(allowedReturnOrigin('https://evil.pages.dev', pages), null, 'another project is not ours');
+  assert.equal(allowedReturnOrigin('https://a.evil.asklocker.pages.dev', pages), null, '* never spans a dot');
   assert.equal(allowedReturnOrigin('http://localhost:8081', ''), 'http://localhost:8081', 'local development needs no configuration');
   assert.equal(allowedReturnOrigin('http://evil.example', 'http://evil.example'), null, 'plain http only for localhost');
   assert.equal(allowedReturnOrigin(`https://user:pw@${dev.slice(8)}`, dev), null, 'no credentials');
@@ -677,27 +688,31 @@ await test('every suite stays inside its Groq budget', () => {
 
 await test('plans: every limit is finite, and a full vault says why and what to do (038–048)', () => {
   const GB = 1024 ** 3, MB = 1024 ** 2;
-  // What 039–048 leave in plan_limits: one row per plan; Free 200 MB for a
-  // family and 100 MB for a personal vault (048), Plus 10 GB for either;
+  // What 039–060 leave in plan_limits: one row per plan; on Free 50 MB for
+  // each person to add across their free vaults, 100 MB for a family and
+  // 200 MB for a business, everyone together, and 50 MB for a personal
+  // vault (060), Plus 1 GB and Pro 10 GB for either (064);
   // 30 days after Plus ends before anything above Free goes, 4 members on
   // Free and 8 on Plus (049), 10 voice chats for each person on Free (043),
   // and 20 questions a month for each person on Free, none on Plus up to
   // fair use (049), and on Plus 200 a month the whole family shares (053).
-  // A business (051) has its own plans. On Free a person creates one vault
-  // in all, a family or a business (054), and Family Plus adds 100
-  // documents and 50 question tries a day.
+  // A business (051) has its own plans. On Free a person creates one family
+  // and one business (059; one of either under 054), and Family Plus adds
+  // 100 documents and 50 question tries a day.
   assert.deepEqual(DEFAULT_PLAN_LIMITS, {
-    free: 200 * MB, freePersonal: 100 * MB, plus: 10 * GB, graceDays: 30,
-    members: { free: 4, plus: 8 },
+    free: 100 * MB, freePersonal: 50 * MB, freeBusiness: 200 * MB, freePerson: 50 * MB, plus: 1 * GB, graceDays: 30,
+    familyPro: { storage: 10 * GB, members: 8 },
+    members: { free: 2, plus: 4 },
+    freeBusinessMembers: 4,
     voiceAnswers: { free: 10, plus: null },
     questions: { free: 20, plus: null },
-    questionsFairUse: 200,
-    familyQuestions: 200,
+    questionsFairUse: null,
+    familyQuestions: null,
     questionTriesPerDay: { free: 10, plus: 50 },
     uploadsPerDay: { free: 50, plus: 100 },
     familiesPerPerson: 1,
     businessesPerPerson: 1,
-    vaultsPerPerson: 1,
+    vaultsPerPerson: null,
     notesPerPerson: { free: 20, paid: 500 },
     invitesPerDay: { free: 20, plus: 20 },
     business: {
@@ -707,12 +722,35 @@ await test('plans: every limit is finite, and a full vault says why and what to 
     },
   });
   assert.deepEqual(PLUS_PRICE, { monthly: { inr: 100, usd: 10 }, yearly: { inr: 1100, usd: 110 } });
-  // The Plus page says what a year saves in months ("1 month free"): a year
+  // Family Pro (064): the owner's prices, ₹200 / ₹2,000 and $20 / $200.
+  assert.deepEqual(PRO_PRICE, { monthly: { inr: 200, usd: 20 }, yearly: { inr: 2000, usd: 200 } });
+  // The Plans page says what a year saves in months ("1 month free"): a year
   // must cost a whole number of months, fewer than twelve.
-  for (const c of ['inr', 'usd']) {
-    const months = PLUS_PRICE.yearly[c] / PLUS_PRICE.monthly[c];
-    assert.ok(Number.isInteger(months) && months < 12, `${c}: a year costs ${months} months`);
+  for (const price of [PLUS_PRICE, PRO_PRICE]) {
+    for (const c of ['inr', 'usd']) {
+      const months = price.yearly[c] / price.monthly[c];
+      assert.ok(Number.isInteger(months) && months < 12, `${c}: a year costs ${months} months`);
+    }
   }
+  // apply_plan_payment() (064) keeps the time left when moving between Plus
+  // and Pro at Pro costing twice Plus a month; the prices must still say so.
+  for (const c of ['inr', 'usd']) assert.equal(PRO_PRICE.monthly[c], 2 * PLUS_PRICE.monthly[c], `${c}: Pro is twice Plus a month`);
+  assert.equal(familyPlanName('plus'), 'Family Plus');
+  assert.equal(familyPlanName('family_pro'), 'Family Pro');
+  assert.equal(plusYearlySaving('inr', 'family_pro'), '2 months free');
+  assert.equal(plusPrice('inr', 'monthly', 'family_pro'), '₹200 a month');
+  assert.equal(plusPrice('usd', 'yearly', 'family_pro'), '$200 a year');
+  assert.equal(plusTwelveMonths('inr', 'family_pro'), '₹2,400');
+  assert.equal(planLabel('family_pro'), 'Family Pro');
+  assert.ok(isFamilyPlan('family_pro') && isFamilyPlan('plus') && !isFamilyPlan('business_pro') && !isFamilyPlan('free'));
+  // What the creation screen and Help say a person on Free may create: one
+  // of each kind since 059, one of either while 054's combined 1 is there,
+  // one family before 051 had businesses.
+  assert.equal(freeVaultsText(DEFAULT_PLAN_LIMITS), 'one family and one business');
+  assert.equal(freeVaultsText({ familiesPerPerson: 1, businessesPerPerson: 1, vaultsPerPerson: 1 }), 'one family or one business');
+  assert.equal(freeVaultsText({ familiesPerPerson: 1, businessesPerPerson: 1, vaultsPerPerson: 2 }), 'one family and one business');
+  assert.equal(freeVaultsText({ familiesPerPerson: 1, businessesPerPerson: 0, vaultsPerPerson: null }), 'one family');
+  assert.equal(freeVaultsText({ familiesPerPerson: 1, businessesPerPerson: 1, vaultsPerPerson: 0 }), null);
   assert.equal(plusYearlySaving('inr'), '1 month free');
   assert.equal(plusYearlySaving('usd'), '1 month free');
   assert.equal(plusPrice('inr'), '₹100 a month');
@@ -732,8 +770,20 @@ await test('plans: every limit is finite, and a full vault says why and what to 
   assert.equal(formatBytes(2048), '2 KB');
   assert.equal(formatBytes(1.25 * MB), '1.3 MB');
   assert.equal(formatBytes(250 * MB), '250 MB');
-  assert.equal(formatBytes(DEFAULT_PLAN_LIMITS.free), '200 MB');
-  assert.equal(formatBytes(DEFAULT_PLAN_LIMITS.freePersonal), '100 MB');
+  assert.equal(formatBytes(DEFAULT_PLAN_LIMITS.free), '100 MB');
+  assert.equal(formatBytes(DEFAULT_PLAN_LIMITS.freePersonal), '50 MB');
+  assert.equal(formatBytes(DEFAULT_PLAN_LIMITS.freeBusiness), '200 MB');
+  assert.equal(formatBytes(DEFAULT_PLAN_LIMITS.freePerson), '50 MB');
+  // A person on Free who has added their 50 MB across their free vaults (060).
+  const me = { usedBytes: 48 * MB, limitBytes: 50 * MB };
+  assert.ok(personFits(me, 2 * MB), 'a file that exactly fills what is left fits');
+  assert.ok(!personFits(me, 3 * MB));
+  assert.equal(personStorageFullMessage(me, 3 * MB, { forSale: true }),
+    'This file is 3 MB, but you have only 2 MB left of the 50 MB each person can add on Free. Delete documents you added, or move this vault to Family Plus.');
+  assert.equal(personStorageFullMessage({ ...me, usedBytes: 50 * MB }, 0, { forSale: false }),
+    "You've added 50 MB of the 50 MB each person can add on Free. Delete documents you added to make room. Family Plus is coming soon.");
+  assert.equal(personStorageFullMessage({ ...me, usedBytes: 50 * MB }, 1 * MB, { business: true }),
+    "You've added 50 MB of the 50 MB each person can add on Free. Delete records you added, or move this business to a paid plan.");
   assert.equal(formatBytes(GB), '1 GB');
   assert.equal(formatBytes(1.5 * GB), '1.5 GB');
   const free = { plan: 'free', limitBytes: GB, usedBytes: GB - 2 * MB };
@@ -746,14 +796,19 @@ await test('plans: every limit is finite, and a full vault says why and what to 
   assert.match(full, /^Your family's storage is full, with 1\.01 GB of 1 GB used\./);
   // Until Plus can be bought, nothing offers to sell it.
   if (!PLUS_FOR_SALE) {
-    assert.match(full, /Family Plus is coming soon, with 10 GB for ₹100 a month\.$/);
+    assert.match(full, /Family Plus is coming soon, with 1 GB for ₹100 a month\.$/);
     assert.doesNotMatch(full, /move to/);
   }
-  assert.match(storageFullMessage({ ...free, usedBytes: GB }, 0, { price: plusPrices('inr') }), /with 10 GB for ₹100 a month or ₹1,100 a year\.$/);
+  assert.match(storageFullMessage({ ...free, usedBytes: GB }, 0, { price: plusPrices('inr') }), /with 1 GB for ₹100 a month or ₹1,100 a year\.$/);
   // The server cannot tell where the person is, so it names no price.
-  assert.match(storageFullMessage({ ...free, usedBytes: GB }), /with 10 GB\.$/);
-  const plus = storageFullMessage({ plan: 'plus', limitBytes: 10 * GB, usedBytes: 10 * GB }, 0, { price: plusPrice('usd') });
-  assert.equal(plus, "Your family's storage is full, with 10 GB of 10 GB used. Delete documents you don't need to make room.");
+  assert.match(storageFullMessage({ ...free, usedBytes: GB }), /with 1 GB\.$/);
+  const plus = storageFullMessage({ plan: 'plus', limitBytes: GB, usedBytes: GB }, 0, { price: plusPrice('usd') });
+  assert.equal(plus, "Your family's storage is full, with 1 GB of 1 GB used. Delete documents you don't need to make room.");
+  // Where Pro can be bought, a full Plus vault is offered its 10 GB (064); a full Pro vault makes room.
+  assert.equal(storageFullMessage({ plan: 'plus', limitBytes: GB, usedBytes: GB }, 0, { forSale: true }),
+    "Your family's storage is full, with 1 GB of 1 GB used. Delete documents you don't need, or move to Family Pro and get 10 GB.");
+  assert.equal(storageFullMessage({ plan: 'family_pro', limitBytes: 10 * GB, usedBytes: 10 * GB }, 0, { forSale: true }),
+    "Your family's storage is full, with 10 GB of 10 GB used. Delete documents you don't need to make room.");
   // Plus has ended and the family holds more than Free: the day it loses the excess, and how to keep it.
   const ended = storageFullMessage({ plan: 'free', limitBytes: GB, usedBytes: 3 * GB }, 0, { price: plusPrice('inr'), removalOn: '3 Nov 2026' });
   assert.equal(ended, "Your family's storage is full, with 3 GB of 1 GB used. Family Plus has ended. On 3 Nov 2026, the newest documents over 1 GB will be removed. Renew, or delete documents to get under 1 GB.");
@@ -761,10 +816,12 @@ await test('plans: every limit is finite, and a full vault says why and what to 
   // with no room needs Family Plus; on Plus, room is made by deleting.
   const chatFree = chatStorageFullMessage({ plan: 'free', limitBytes: GB, usedBytes: GB }, { price: plusPrices('inr') });
   assert.match(chatFree, /^There's no room to save this chat\. Your family has used 1 GB of 1 GB\. .*Family Plus/);
-  assert.match(chatFree, /10 GB for ₹100 a month or ₹1,100 a year\./);
+  assert.match(chatFree, /1 GB for ₹100 a month or ₹1,100 a year\./);
   if (!PLUS_FOR_SALE) assert.match(chatFree, /Family Plus is coming soon, with .*Until then, delete documents you don't need\.$/);
-  assert.equal(chatStorageFullMessage({ plan: 'plus', limitBytes: 10 * GB, usedBytes: 10 * GB }, { price: plusPrice('usd') }),
-    "There's no room to save this chat. Your family has used 10 GB of 10 GB. Delete documents or saved chats you don't need to make room.");
+  assert.equal(chatStorageFullMessage({ plan: 'plus', limitBytes: GB, usedBytes: GB }, { price: plusPrice('usd') }),
+    "There's no room to save this chat. Your family has used 1 GB of 1 GB. Delete documents or saved chats you don't need to make room.");
+  assert.equal(chatStorageFullMessage({ plan: 'plus', limitBytes: GB, usedBytes: GB }, { forSale: true }),
+    "There's no room to save this chat. Your family has used 1 GB of 1 GB. To save more, move to Family Pro and get 10 GB. Or delete documents you don't need.");
   // A personal vault (048) is "your personal vault", never "your family".
   const mine = { plan: 'free', limitBytes: 100 * MB, usedBytes: 99 * MB, personal: true };
   assert.match(storageFullMessage(mine, 3 * MB), /^This file is 3 MB, but your personal vault has only 1 MB left\./);
@@ -783,6 +840,16 @@ await test('razorpay: the server sets the price, and only Razorpay\'s signature 
   assert.equal(plusOrderAmount('yearly', 'USD'), 11000);
   assert.equal(plusOrderDescription('monthly'), 'Family Plus — 1 month');
   assert.equal(plusOrderDescription('yearly'), 'Family Plus — 1 year');
+  // Family Pro (064): PRO_PRICE's amounts, and its own name on the receipt.
+  assert.equal(plusOrderAmount('monthly', 'INR', 'family_pro'), 20000);
+  assert.equal(plusOrderAmount('yearly', 'INR', 'family_pro'), 200000);
+  assert.equal(plusOrderAmount('monthly', 'USD', 'family_pro'), 2000);
+  assert.equal(plusOrderAmount('yearly', 'USD', 'family_pro'), 20000);
+  assert.equal(plusOrderDescription('monthly', 'family_pro'), 'Family Pro — 1 month');
+  // No two plans and periods cost the same, so an unpaid order reused within
+  // the hour (050) is the plan it was made for even where 064 is missing.
+  const amounts = ['plus', 'family_pro'].flatMap((plan) => ['monthly', 'yearly'].flatMap((period) => ['INR', 'USD'].map((cur) => `${cur}${plusOrderAmount(period, cur, plan)}`)));
+  assert.equal(new Set(amounts).size, amounts.length);
   // Rupees unless dollars are switched on; nothing else, ever.
   assert.deepEqual(acceptedCurrencies(undefined), ['INR']);
   assert.deepEqual(acceptedCurrencies(''), ['INR']);
@@ -1164,9 +1231,238 @@ await test('business plans: Plus, Pro and Enterprise, their prices and words, an
   }
 });
 
+await test('spreadsheets: every row says what its numbers are, and a CSV read as Excel writes it', () => {
+  // A household sheet: a title row, a header, a date, a blank cell, float noise.
+  const house = spreadsheetText('Household expenses 2026.xlsx', [{
+    name: 'Expenses',
+    rows: [
+      ['SPECIMEN Household expenses 2026', null, null, null],
+      [],
+      ['Month', 'Rent', 'Electricity', 'Paid on'],
+      ['Jan', 18000, 2210.5, new Date(Date.UTC(2026, 0, 5))],
+      ['Feb', 18000, null, new Date(Date.UTC(2026, 1, 4))],
+      ['Mar', 18000, 0.1 + 0.2, null],
+    ],
+  }]);
+  assert.equal(house.text, [
+    'Spreadsheet: Household expenses 2026.xlsx',
+    'Sheet: Expenses',
+    'SPECIMEN Household expenses 2026',
+    'Month: Jan | Rent: 18000 | Electricity: 2210.5 | Paid on: 05/01/2026',
+    'Month: Feb | Rent: 18000 | Paid on: 04/02/2026',
+    'Month: Mar | Rent: 18000 | Electricity: 0.3',
+  ].join('\n'));
+  assert.deepEqual([house.sheets, house.rows, house.truncated], [1, 3, false]);
+  // A bank statement: the blank Credit cell no longer hides which column 1,240.00 is in.
+  const bank = spreadsheetText('Statement.xlsx', [{ name: 'Sept', rows: [
+    ['Date', 'Description', 'Debit', 'Credit', 'Balance'],
+    ['02/09/2026', 'UPI/Sharma Kirana', '1,240.00', '', '47,010.00'],
+    ['05/09/2026', 'Salary Sept', '', '62,500.00', '1,09,510.00'],
+  ] }]);
+  assert.match(bank.text, /^Date: 02\/09\/2026 \| Description: UPI\/Sharma Kirana \| Debit: 1,240\.00 \| Balance: 47,010\.00$/m);
+  assert.match(bank.text, /^Date: 05\/09\/2026 \| Description: Salary Sept \| Credit: 62,500\.00 \| Balance: 1,09,510\.00$/m);
+  // Two sheets: each row names its sheet, so a passage cut from the middle still says where it came from.
+  const two = spreadsheetText('Sales.xlsx', [
+    { name: '2025', rows: [['Month', 'Sales'], ['Jan', 41000]] },
+    { name: '2026', rows: [['Month', 'Sales'], ['Jan', 52000]] },
+    { name: 'Empty', rows: [[], [null]] },
+  ]);
+  assert.match(two.text, /^\[2025\] Month: Jan \| Sales: 41000$/m);
+  assert.match(two.text, /^\[2026\] Month: Jan \| Sales: 52000$/m);
+  assert.equal(two.sheets, 2, 'an empty sheet is left out');
+  // A list of words only (no numbers under the header) still finds its header; a time alone keeps its time.
+  const list = spreadsheetText('Contacts.xlsx', [{ name: 'People', rows: [['Name', 'Relation', 'Call at'], ['Asha Verma', 'Self', new Date(Date.UTC(1899, 11, 30, 9, 30))]] }]);
+  assert.match(list.text, /^Name: Asha Verma \| Relation: Self \| Call at: 09:30$/m);
+  // Lines above the header stay as they are; a second table after a blank row has its own header.
+  const second = spreadsheetText('Invoice.xlsx', [{ name: 'Inv', rows: [
+    ['Company', 'Sharma Traders'], ['GSTIN', '21ABCDE1234F1Z5'], [],
+    ['Item', 'Qty', 'Amount'], ['Rice 25 kg', 4, 5200], [],
+    ['Tax', 'Rate'], ['CGST', '2.5%'],
+  ] }]);
+  assert.match(second.text, /^Company \| Sharma Traders$/m);
+  assert.match(second.text, /^Item: Rice 25 kg \| Qty: 4 \| Amount: 5200$/m);
+  assert.match(second.text, /^Tax: CGST \| Rate: 2\.5%$/m);
+  // A huge sheet is cut, and says how much was left.
+  const big = spreadsheetText('Big.xlsx', [{ name: 'Rows', rows: [['Item', 'Amount'], ...Array.from({ length: 5000 }, (_, i) => [`Item ${i}`, i])] }], 2000);
+  assert.ok(big.truncated && big.text.length <= 2100 && /more rows not read\)$/.test(big.text), big.text.slice(-80));
+  // CSV: quotes, a doubled quote, a line break inside a quoted cell, CRLF, a BOM, and Excel's semicolons in some regions.
+  assert.deepEqual(parseCsv('\uFEFFName,Note,Amount\r\n"Verma, Asha","said ""hi""",500\r\n"Two\nlines",,\r\n'),
+    [['Name', 'Note', 'Amount'], ['Verma, Asha', 'said "hi"', '500'], ['Two\nlines', '', '']]);
+  assert.deepEqual(parseCsv('Month;Rent\nJan;18000\n'), [['Month', 'Rent'], ['Jan', '18000']]);
+  assert.equal(spreadsheetText('Rent.csv', [{ name: '', rows: parseCsv('Month,Rent\nJan,18000') }]).text,
+    'Spreadsheet: Rent.csv\nMonth: Jan | Rent: 18000', 'a CSV has no sheet line');
+  assert.ok(isSpreadsheetType('xlsx') && isSpreadsheetType('csv') && !isSpreadsheetType('xls') && !isSpreadsheetType('pdf'));
+  // The app may send a spreadsheet twenty times its size in text, under the same ceiling.
+  assert.equal(providedTextLimit(10_000, true), 220_000);
+  assert.equal(providedTextLimit(10_000), 30_000);
+  assert.equal(providedTextLimit(5_000_000, true), MAX_DOCUMENT_TEXT);
+});
+
+await test('spreadsheets: a month column is named as people say it, and no passage holds a row without its name', () => {
+  // "the Jan 2025 figure" must meet a column named 2025M01 (found on 20 October 2026).
+  for (const [code, said] of [
+    ['2025M01', 'Jan 2025'], ['2025-03', 'Mar 2025'], ['03/2025', 'Mar 2025'], ['Jan-25', 'Jan 2025'],
+    ["Sept'24", 'Sep 2024'], ['2025Q1', 'Q1 2025'], ['Q2-25', 'Q2 2025'],
+    ['Jan25', 'Jan 2025'], ['Mar.2025', 'Mar 2025'], ['January 2025', 'January 2025'], ['Jan 2025', 'Jan 2025'],
+    ['2011-12', '2011-12'], ['2024-25', '2024-25'], ['Dec 31', 'Dec 31'],
+    ['2025M13', '2025M13'], ['Marks 25', 'Marks 25'], ['May', 'May'], ['Total', 'Total'],
+  ]) assert.equal(periodLabel(code), said, code);
+  const months = spreadsheetText('Loans.xlsx', [{ name: 'L', rows: [
+    ['RowId', 'Segment', 'Country', 'Metric', '2024M12', '2025M01'],
+    ['FIN-035', 'Treasury', 'India', 'Loans', 22581, 22872],
+  ] }]);
+  assert.match(months.text, /^RowId: FIN-035 \| Segment: Treasury \| Country: India \| Metric: Loans \| Dec 2024: 22581 \| Jan 2025: 22872$/m);
+  // Excel month columns are dates: a header of dates over numbers is a header, the 1st or the month's end is a month.
+  const excel = spreadsheetText('Excel months.xlsx', [{ name: 'E', rows: [
+    ['Segment', 'Country', new Date(Date.UTC(2025, 0, 1)), new Date(Date.UTC(2025, 1, 1))],
+    ['Treasury', 'India', 22872, 23068],
+  ] }, { name: 'F', rows: [
+    ['Item', new Date(Date.UTC(2025, 0, 31)), new Date(Date.UTC(2025, 1, 28))],
+    ['Rent', 18000, 18000],
+  ] }]);
+  assert.match(excel.text, /^\[E\] Segment: Treasury \| Country: India \| Jan 2025: 22872 \| Feb 2025: 23068$/m);
+  assert.match(excel.text, /^\[F\] Item: Rent \| Jan 2025: 18000 \| Feb 2025: 18000$/m);
+  const years = spreadsheetText('Years.xlsx', [{ name: '', rows: [['Item', 2023, 2024], ['Rent', 216000, 228000]] }]);
+  assert.match(years.text, /^Item: Rent \| 2023: 216000 \| 2024: 228000$/m);
+  // A pivot: no name over the first column, a month with nothing in it on the first row.
+  const pivot = spreadsheetText('Pivot.xlsx', [{ name: '', rows: [
+    [null, new Date(Date.UTC(2025, 0, 1)), new Date(Date.UTC(2025, 1, 1)), new Date(Date.UTC(2025, 2, 1))],
+    ['Rent', 18000, null, 18000],
+  ] }]);
+  assert.match(pivot.text, /^Column A: Rent \| Jan 2025: 18000 \| Mar 2025: 18000$/m);
+  // A statement with no header row is not given one: its dates sit over dates, its amounts are amounts.
+  const bare = spreadsheetText('Bare.csv', [{ name: '', rows: [['02/09/2026', 'UPI', '1240'], ['03/09/2026', 'ATM', '500']] }]);
+  assert.match(bare.text, /^02\/09\/2026 \| UPI \| 1240$/m);
+  assert.equal(bare.rows, 0);
+
+  // A row too wide for one passage: every line opens with what the row is, and every value is kept once.
+  const codes = Array.from({ length: 120 }, (_, i) => `${2015 + Math.floor(i / 12)}M${String((i % 12) + 1).padStart(2, '0')}`);
+  const wide = spreadsheetText('Wide.xlsx', [{ name: 'W', rows: [
+    ['RowId', 'Segment', 'Country', 'Metric', ...codes, 'Notes'],
+    ['FIN-035', 'Treasury', 'India', 'Loans', ...codes.map((_, i) => 20000 + i), `SPECIMEN ${'restated after audit '.repeat(150)}end of note`],
+  ] }]);
+  const wideRows = wide.text.split('\n').slice(2);
+  assert.ok(wideRows.length > 2, `${wideRows.length} lines`);
+  for (const line of wideRows) {
+    assert.ok(line.startsWith('RowId: FIN-035 | Segment: Treasury | Country: India | Metric: Loans | '), line.slice(0, 90));
+    assert.ok(estimateTokens(line) <= MAX_ROW_TOKENS, `${estimateTokens(line)} tokens`);
+  }
+  for (let i = 0; i < 120; i++) assert.equal(wide.text.split(`: ${20000 + i}`).length - 1, 1, `value ${20000 + i}`);
+  assert.match(wide.text, /end of note$/, 'a long note is written across lines, not cut');
+  assert.equal(wide.rows, 1);
+
+  // Numbers cost about twice the tokens of words (o200k, 20 October 2026: a spreadsheet's rows were
+  // 10,472 tokens, which characters alone put at 5,524), so a row of 60 months is two lines, both named.
+  const row = 'RowId: FIN-035 | Segment: Treasury | Country: India | Metric: Loans | ' + codes.slice(0, 30).map((c, i) => `${periodLabel(c)}: ${20085 + i * 97}`).join(' | ');
+  assert.ok(estimateTokens(row) > 1.6 * Math.ceil(row.length / 4), `${estimateTokens(row)} tokens for ${row.length} characters`);
+  assert.equal(estimateTokens('The rent is paid by the fifth.'), Math.ceil('The rent is paid by the fifth.'.length / 4), 'words alone count as before');
+  assert.equal(estimateTokens('आशा'), 2, 'Indic text at double weight, as before');
+  const sixty = spreadsheetText('Financials.xlsx', [{ name: '', rows: [
+    ['RowId', 'Segment', 'Country', 'Metric', ...codes.slice(0, 60)],
+    ['FIN-035', 'Treasury', 'India', 'Loans', ...codes.slice(0, 60).map((_, i) => 20085 + i * 97)],
+  ] }]).text.split('\n').slice(1);
+  assert.equal(sixty.length, 2, sixty.join('\n'));
+  assert.ok(sixty.every((l) => l.startsWith('RowId: FIN-035 | Segment: Treasury | Country: India | Metric: Loans | ')));
+
+  // Passages: a spreadsheet is cut only between its lines, with no overlap, so every line of every
+  // passage is a whole line of the text. (An overlap once carried 2025M01 of one row beside the next row.)
+  const sheet = spreadsheetText('Financials.xlsx', [{ name: 'Financials', rows: [
+    ['RowId', 'Segment', 'Country', 'Metric', ...codes.slice(96)],
+    ...Array.from({ length: 36 }, (_, r) => [`FIN-${String(r + 1).padStart(3, '0')}`, ['Retail', 'Treasury', 'Wealth'][r % 3], ['India', 'UK', 'USA'][r % 3], 'Loans', ...codes.slice(96).map((_, i) => 1000 * r + i)]),
+  ] }, { name: 'Metrics', rows: [['Metric', 'Shown as'], ['Loans', 'USD thousands']] }]);
+  assert.ok(isSpreadsheetText(sheet.text) && !isSpreadsheetText('Passport\nSpreadsheet: no'));
+  const whole = new Set(sheet.text.split('\n'));
+  const passages = chunkText(sheet.text);
+  assert.ok(passages.length > 5, `${passages.length} passages`);
+  for (const p of passages) for (const line of p.content.split('\n')) assert.ok(whole.has(line), `cut line: ${line.slice(0, 60)}`);
+  assert.equal(passages.map((p) => p.content).join('\n'), sheet.text, 'nothing repeated, nothing lost');
+  // Other text keeps its overlap.
+  const prose = Array.from({ length: 60 }, (_, i) => `Clause ${i} of the SPECIMEN agreement says the rent is paid by the fifth.`).join('\n');
+  const proseParts = chunkText(prose);
+  assert.ok(proseParts.length > 1 && proseParts[0].content.endsWith(proseParts[1].content.split('\n')[0].slice(-20)), 'prose overlaps');
+});
+
+await test('the agreement the app shows is word for word what the database keeps (062)', () => {
+  // The record must say what the screen said: each version's words are
+  // inserted by a migration, and the app's agreementText() must match them.
+  const dir = new URL('../../supabase/migrations/', import.meta.url);
+  const migrations = readdirSync(dir).filter((f) => f.endsWith('.sql')).map((f) => readFileSync(new URL(f, dir), 'utf8'));
+  const quoted = (sql) => [...sql.matchAll(/values \('([^']+)', \$agreement\$([\s\S]*?)\$agreement\$\)/g)];
+  const kept = migrations.flatMap(quoted).find((m) => m[1] === AGREEMENT_VERSION);
+  assert.ok(kept, `no migration inserts agreement version ${AGREEMENT_VERSION}: write one with the new words`);
+  assert.equal(kept[2], agreementText(), `version ${AGREEMENT_VERSION}'s words differ from the app's: a new version needs a new migration`);
+  // Plain words, never a privacy claim the app does not keep (CLAUDE.md):
+  // no end-to-end at all (documents are not), and "only people in your
+  // vault" only with its limit, "in AskLocker".
+  const words = agreementText().toLowerCase();
+  assert.ok(!words.includes('end-to-end'), 'claims nothing about end-to-end');
+  assert.ok(!words.includes('only people in your vault') || words.includes('in asklocker, only people in your vault'), 'keeps "In AskLocker" on who can open them');
+  for (const claim of ['100% private', 'only you can see', 'nothing is kept', 'secure', 'bank-level', 'military-grade']) {
+    assert.ok(!words.includes(claim), `promises "${claim}"`);
+  }
+  // It says outside services read parts of documents, but names none (the
+  // owner's ask): the names are in Settings › Privacy.
+  assert.ok(words.includes('ai services'), 'says AI services read parts of them');
+  for (const name of ['huggingface', 'groq', 'ocr.space', 'supabase', 'posthog', 'razorpay']) {
+    assert.ok(!words.includes(name), `names "${name}"`);
+  }
+  assert.ok(AGREEMENT_POINTS.every((p) => p.text.length <= 200), 'each point stays short');
+});
+
+await test('Claude takes rag-search\'s Groq requests, and its replies read as Groq\'s', () => {
+  // System text becomes one field; temperature, which the current API
+  // version refuses, is never sent; history opening with the assistant
+  // loses that turn, since the first message must be the user's.
+  const req = toClaudeRequest({
+    temperature: 0.1,
+    max_tokens: 1200,
+    messages: [
+      { role: 'system', content: 'Rule one.' },
+      { role: 'assistant', content: 'Earlier answer with no question.' },
+      { role: 'user', content: 'Whose passport?' },
+      { role: 'assistant', content: '' },
+      { role: 'assistant', content: 'Asha\'s.' },
+      { role: 'system', content: 'Rule two.' },
+      { role: 'user', content: 'When does it expire?' },
+    ],
+  }, 'claude-haiku-5-5');
+  assert.equal(req.system, 'Rule one.\n\nRule two.');
+  assert.deepEqual(req.messages.map((m) => m.role), ['user', 'assistant', 'user']);
+  assert.ok(!('temperature' in req), 'no sampling parameter');
+  assert.equal(req.max_tokens, CLAUDE_MIN_MAX_TOKENS, 'room for thinking as well as the answer');
+  assert.equal(req.output_config.effort, 'low');
+  assert.ok(!req.output_config.format, 'no schema, plain text');
+  assert.ok(claudeCanTake(req));
+  // JSON steps keep to their schema; one ending with the assistant (a
+  // prefill, refused) is never sent.
+  const schema = { type: 'object', properties: { query: { type: 'string' } }, required: ['query'], additionalProperties: false };
+  const json = toClaudeRequest({ response_format: { type: 'json_object' }, max_tokens: 9000, messages: [{ role: 'user', content: 'q' }] }, 'm', schema);
+  assert.deepEqual(json.output_config.format, { type: 'json_schema', schema });
+  assert.equal(json.max_tokens, 9000);
+  assert.ok(!claudeCanTake(toClaudeRequest({ messages: [{ role: 'user', content: 'q' }, { role: 'assistant', content: '{' }] }, 'm')));
+  assert.ok(!claudeCanTake(toClaudeRequest({ messages: [{ role: 'system', content: 'only rules' }] }, 'm')));
+  // The answer is the text blocks, not the thinking.
+  assert.equal(claudeText([{ type: 'thinking', thinking: 'hmm' }, { type: 'text', text: 'It expires ' }, { type: 'text', text: 'on 12/03/2031.' }]), 'It expires on 12/03/2031.');
+  // A refusal, nothing, or JSON cut short sends the step to Groq; a written
+  // answer that ran long still reads.
+  assert.ok(claudeUsable('end_turn', 'Fine.', false));
+  assert.ok(claudeUsable('max_tokens', 'A long answer', false));
+  assert.ok(!claudeUsable('max_tokens', '{"scores":[{"i":0', true));
+  assert.ok(!claudeUsable('refusal', 'No.', false));
+  assert.ok(!claudeUsable('end_turn', '', false));
+  const reply = groqStyleReply('{"query":"Asha passport expiry"}', 'end_turn', { input_tokens: 120, output_tokens: 9 });
+  assert.equal(reply.choices[0].message.content, '{"query":"Asha passport expiry"}');
+  assert.equal(reply.choices[0].finish_reason, 'stop');
+  assert.deepEqual(reply.usage, { prompt_tokens: 120, completion_tokens: 9 });
+  // No key, no credit or no such model: Groq answers for a while. A rate
+  // limit or a passing fault: Claude is asked again next time.
+  for (const s of [400, 401, 402, 403, 404]) assert.ok(claudeShouldRest(s), `${s} rests`);
+  for (const s of [undefined, 413, 429, 500, 529]) assert.ok(!claudeShouldRest(s), `${s} does not rest`);
+});
+
 if (failures.length) {
   console.error(failures.map((f) => `✗ ${f}`).join('\n'));
   console.error(`\n${failures.length} self-test(s) failed, ${passed} passed.`);
   process.exit(1);
 }
-console.log(`✓ ${passed} self-tests passed — matchers, judge, run-time PDF, metadata, ticket codes, text cleaning, Gmail rules and token sealing, kinship and the family tree, emergency card checks, web push, plan limits, questions each month, limits against abuse, business papers, categories and plan words, Razorpay signatures, numbers in digits, sources the answer used, questions and budget.`);
+console.log(`✓ ${passed} self-tests passed — matchers, judge, run-time PDF, metadata, ticket codes, text cleaning, Gmail rules and token sealing, kinship and the family tree, emergency card checks, web push, plan limits, questions each month, limits against abuse, business papers, categories and plan words, Razorpay signatures, numbers in digits, sources the answer used, Claude's requests in Groq's shape, the agreement's words, questions and budget.`);

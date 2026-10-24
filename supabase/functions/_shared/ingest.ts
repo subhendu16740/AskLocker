@@ -21,6 +21,7 @@ import { extractPdfLayoutText } from './pdf-text.ts';
 import { extractMetadata, parseFlexibleDate, type ExtractedMeta } from './metadata.ts';
 import { cleanText } from './text.ts';
 import { inVaultFolder, MAX_DOCUMENT_TEXT } from './limits.ts';
+import { parseCsv, spreadsheetText } from './spreadsheet-text.ts';
 
 /** Bumped when extraction changes enough that stored text should be redone. */
 export const EXTRACTOR_VERSION = 'pdfjs-layout-2';
@@ -153,6 +154,19 @@ export async function ingestDocument(
           ...(ocr.retryable ? { retryable: true } : {}),
         };
       }
+    } else if (fileType === 'xlsx') {
+      // The app reads a workbook when it is added and sends its rows
+      // (src/lib/spreadsheet.ts); the server has no reader for one. Without
+      // that text there is nothing to store.
+      return {
+        chunks: 0, metadata: 0, extractedChars: 0, empty: true,
+        reason: 'This spreadsheet was added without its rows. Add it again from the app.',
+      };
+    } else if (fileType === 'csv') {
+      // A CSV the app did not read (an older app, the rebuild): row by row,
+      // as the app writes it, under the name it was added with.
+      const name = (storagePath.split('/').pop() ?? 'spreadsheet.csv').replace(/^\d+_/, '');
+      extractedText = spreadsheetText(name, [{ name: '', rows: parseCsv(await fileData.text()) }]).text;
     } else {
       extractedText = await fileData.text();
     }

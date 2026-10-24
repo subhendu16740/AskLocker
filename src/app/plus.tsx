@@ -1,17 +1,18 @@
-// Family Plus — what the paid plan gives, side by side with Free. Every
-// starred feature (★) opens this page for a free family (/plus?feature=…,
-// which says which feature brought them here), and so do Settings, Storage
-// and a full vault. Where payments are switched on (044: this project's
-// Razorpay keys are set), any member pays here for a month or a year, and
-// each payment adds that time; until then the page says "Coming soon"
-// instead of offering a button that does nothing.
+// Family Plus and Family Pro (064) — what the paid plans give, side by side
+// with Free. Every starred feature (★) opens this page for a free family
+// (/plus?feature=…, which says which feature brought them here), and so do
+// Settings, Storage and a full vault. Choosing Plus or Pro shows its monthly
+// and yearly price; where payments are switched on (044: this project's
+// Razorpay keys are set), any member pays here, and each payment adds that
+// time. Until then the page says "Coming soon" instead of offering a button
+// that does nothing.
 //
 // A business (051) sees its own plans instead — Plus, Pro and Enterprise,
 // side by side with their prices before GST — and is never offered Family
 // Plus: its plans are set up with us (ask in Settings › Feedback), not
 // bought here. Nothing is ever removed from a business.
 
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -23,12 +24,13 @@ import { forgetOnPlus, useFamilyPlan, usePaymentsStatus, type BusinessFeature, t
 import { PaymentError, createPlusOrder, fetchPlanLimits, fetchPlusPeriod, verifyPlusPayment } from '../lib/api';
 import { checkoutSupported, openCheckout } from '../lib/razorpay';
 import {
-  CLOSED_MESSAGE, DEFAULT_PLAN_LIMITS, businessAmount, businessPlanName, formatBytes, isBusinessPlan, localCurrency, localPlusAmount,
-  localPlusPrice, localPlusYearlyOffer, localPlusYearlySaving, nextBusinessPlan, plusName, type BusinessPlan, type PlanLimits,
+  CLOSED_MESSAGE, DEFAULT_PLAN_LIMITS, businessAmount, businessPlanName, familyPlanName, formatBytes, isBusinessPlan,
+  localCurrency, localPlusAmount, localPlusPrice, localPlusYearlyOffer, localPlusYearlySaving, nextBusinessPlan,
+  type BusinessPlan, type FamilyPlan, type PlanLimits,
 } from '../lib/plans';
 import { longDate } from '../lib/dates';
 import { ScreenHeader } from '../components/screen-header';
-import { TwelveMonthsPrice, YearlyPrice } from '../components/plus-price';
+import { TwelveMonthsPrice } from '../components/plus-price';
 import { Card, Muted, screenStyles } from '../components/settings-ui';
 import { biz, color, radius, space, type } from '../constants/design';
 import { BUSINESS_THEME } from '../lib/vault-theme';
@@ -38,64 +40,60 @@ type Cell = boolean | string;
 
 interface Row {
   label: string;
+  /** One short line under the label, where the name alone is not clear. */
+  sub?: string;
   free: Cell;
   plus: Cell;
+  pro: Cell;
   /** The starred feature this row is, so the page can point at it. */
   feature?: PlusFeature;
 }
 
-// "10 each" (per person, 043), or ✓ for a plan with no limit on voice chats.
-const voiceCell = (n: number | null): Cell => (n == null ? true : `${n} each`);
-// "20 a month each" (049), or ✓ for a plan with no monthly limit.
-const questionsCell = (n: number | null): Cell => (n == null ? true : `${n} a month each`);
+// "10 each" (per person, 043), or "No limit".
+const voiceCell = (n: number | null): Cell => (n == null ? 'No limit' : `${n} each`);
+// "20 each" a month (049), or "No limit" (Plus and Pro since 064).
+const questionsCell = (n: number | null): Cell => (n == null ? 'No limit' : `${n} each`);
 
-function rows(limits: PlanLimits): Row[] {
+/**
+ * What the plans give, clearest first. A star after a feature: it is more on
+ * a paid plan. Family tree and emergency cards are on every plan, so they are
+ * not here (the owner's ask, 23 October 2026).
+ */
+function rows(limits: PlanLimits, freeSpace: number): Row[] {
   const all: Array<Row | null> = [
-    { label: 'Space for a family', free: formatBytes(limits.free), plus: formatBytes(limits.plus), feature: 'storage' },
-    { label: 'Space in your personal vault', free: formatBytes(limits.freePersonal), plus: formatBytes(limits.plus) },
-    {
-      label: limits.members.plus > limits.members.free ? '★ Members who sign in' : 'Members who sign in',
-      free: String(limits.members.free), plus: String(limits.members.plus), feature: 'members',
+    { label: 'Members', sub: 'People who sign in', free: String(limits.members.free), plus: String(limits.members.plus), pro: String(limits.familyPro.members), feature: 'members' },
+    { label: 'Space', sub: 'For your documents', free: formatBytes(freeSpace), plus: formatBytes(limits.plus), pro: formatBytes(limits.familyPro.storage), feature: 'storage' },
+    // Before 049 nobody's questions are counted, on any plan.
+    limits.questions.free == null ? null : {
+      label: 'Questions', sub: 'Each month', free: questionsCell(limits.questions.free),
+      // 053's family number, where a database still has it.
+      plus: limits.familyQuestions != null ? `${limits.familyQuestions} family` : questionsCell(limits.questions.plus),
+      pro: limits.familyQuestions != null ? `${limits.familyQuestions} family` : questionsCell(limits.questions.plus),
+      feature: 'questions',
     },
-    { label: 'Add and scan documents, Indian languages too', free: true, plus: true },
-    // Before 049 nobody's questions are counted, on either plan.
-    limits.questions.free == null
-      ? { label: 'Ask about your documents', free: true, plus: true }
-      : {
-        label: '★ Questions', free: questionsCell(limits.questions.free),
-        // 053: one number the whole family shares; before it, fair use for each person.
-        plus: limits.familyQuestions != null ? `${limits.familyQuestions} a month for the family` : questionsCell(limits.questions.plus),
-        feature: 'questions',
-      },
-    { label: 'Family tree and emergency cards', free: true, plus: true },
-    { label: 'Birthday reminders', free: true, plus: true },
-    // 049 also makes a 30-day link part of Plus; before it, every plan has them.
-    limits.questions.free == null
-      ? { label: 'Share a document by link', free: true, plus: true }
-      : { label: '★ Share links', free: 'Up to 7 days', plus: 'Up to 30 days', feature: 'links' },
-    {
-      label: '★ Voice chats', free: voiceCell(limits.voiceAnswers.free), plus: voiceCell(limits.voiceAnswers.plus),
-      feature: 'voice',
+    { label: 'Ask by voice', sub: 'Talk and hear answers', free: voiceCell(limits.voiceAnswers.free), plus: voiceCell(limits.voiceAnswers.plus), pro: voiceCell(limits.voiceAnswers.plus), feature: 'voice' },
+    limits.questions.free == null ? null : {
+      label: 'Share a document', sub: 'A link for your CA or agent', free: '7 days', plus: '30 days', pro: '30 days', feature: 'links',
     },
-    {
-      label: '★ Expiry reminders', free: false, plus: true,
-      feature: 'reminders',
-    },
-    { label: '★ Import from Gmail', free: false, plus: true, feature: 'gmail' },
+    { label: 'Expiry reminders', sub: 'Before a passport or policy runs out', free: false, plus: true, pro: true, feature: 'reminders' },
+    { label: 'Birthday reminders', sub: 'For everyone in your tree', free: false, plus: true, pro: true, feature: 'birthdays' },
+    { label: 'Indian languages', sub: 'Read and talk in Hindi and more', free: 'English', plus: true, pro: true, feature: 'languages' },
+    { label: 'Import from Gmail', sub: 'Attachments from your email', free: false, plus: true, pro: true, feature: 'gmail' },
   ];
   return all.filter((r): r is Row => r !== null);
 }
 
-// Which feature brought them here; "Family Plus", or "Plus" in a business (051),
-// where Pro has it too.
+// Which feature brought them here, and the plan that has it.
 const BROUGHT_BY: Record<PlusFeature, { icon: string; text: (name: string) => string }> = {
   reminders: { icon: 'clock', text: (n) => `Expiry reminders come with ${n}.` },
   gmail: { icon: 'mail', text: (n) => `Import from Gmail comes with ${n}.` },
   storage: { icon: 'hard-drive', text: (n) => `More space comes with ${n}.` },
-  voice: { icon: 'mic', text: (n) => `Voice chats with no limit come with ${n}.` },
+  voice: { icon: 'mic', text: (n) => `Asking by voice with no limit comes with ${n}.` },
   questions: { icon: 'message-circle', text: (n) => `More questions come with ${n}.` },
   members: { icon: 'users', text: (n) => `Room for more members comes with ${n}.` },
   links: { icon: 'link', text: (n) => `30-day share links come with ${n}.` },
+  birthdays: { icon: 'gift', text: (n) => `Birthday reminders come with ${n}.` },
+  languages: { icon: 'globe', text: (n) => `Indian languages come with ${n}.` },
 };
 
 const said = (cell: Cell) => (cell === true ? 'yes' : cell === false ? 'no' : cell);
@@ -111,18 +109,21 @@ export default function PlusScreen() {
   return isBusinessVault(currentFamily) ? <BusinessPlans /> : <FamilyPlus />;
 }
 
+const FAMILY_COLUMNS = ['free', 'plus', 'family_pro'] as const;
+const short = (p: FamilyPlan) => (p === 'family_pro' ? 'Pro' : 'Plus');
+
 function FamilyPlus() {
   const { feature } = useLocalSearchParams<{ feature?: string }>();
   const { currentFamily } = useFamily();
   const { plan, paidUntil, removalAt, closed, trial, refresh } = useFamilyPlan();
-  const name = plusName(false);
-  const paid = plan === 'plus';
+  const onPlan: FamilyPlan | null = plan === 'plus' || plan === 'family_pro' ? plan : null;
   const [limits, setLimits] = useState<PlanLimits>(DEFAULT_PLAN_LIMITS);
-  // How the family pays for Plus, a month or a year: only that column is Current.
-  const [plusPeriod, setPlusPeriod] = useState<'monthly' | 'yearly' | null>(null);
-  const monthly = localPlusPrice('monthly');
-  // "₹1,100 a year instead of ₹1,200": what a screen reader hears for <YearlyPrice />.
-  const yearlyOffer = localPlusYearlyOffer();
+  // The plan they chose, whose monthly and yearly prices show.
+  const [chosen, setChosen] = useState<FamilyPlan | null>(null);
+  const scroll = useRef<ScrollView>(null);
+  const choiceAt = useRef(0);
+  // Members and space come with Pro for a family already on Plus.
+  const broughtPlan: FamilyPlan = onPlan === 'plus' ? 'family_pro' : 'plus';
   const broughtBy = feature && feature in BROUGHT_BY ? BROUGHT_BY[feature as PlusFeature] : null;
 
   useFocusEffect(useCallback(() => {
@@ -130,33 +131,37 @@ function FamilyPlus() {
     track('plus_viewed', { feature: feature && feature in BROUGHT_BY ? feature : 'none' });
     refresh(true);
     fetchPlanLimits().then((l) => { if (!cancelled) setLimits(l); });
-    if (currentFamily) fetchPlusPeriod(currentFamily.id).then((p) => { if (!cancelled) setPlusPeriod(p); });
     return () => { cancelled = true; };
-  }, [refresh, feature, currentFamily?.id]));
+  }, [refresh, feature]));
 
-  // The Current column: Free, or Plus as the family pays for it, a month or a
-  // year (none until that is known, and none once a plan has ended).
-  const currentColumn = plan === 'plus'
-    ? (plusPeriod === 'yearly' ? 2 : plusPeriod === 'monthly' ? 1 : -1)
-    : plan === 'free' && !closed ? 0 : -1;
+  const choose = (p: FamilyPlan) => {
+    setChosen(p);
+    // The choice is right under the plans; bring it into view.
+    setTimeout(() => scroll.current?.scrollTo({ y: Math.max(0, choiceAt.current - space.lg), animated: true }), 50);
+  };
+
+  // The Current column: none while unknown, and none once a plan has ended.
+  const currentColumn = onPlan ? FAMILY_COLUMNS.indexOf(onPlan) : plan === 'free' && !closed ? 0 : -1;
   const familyName = currentFamily ? vaultName(currentFamily) : undefined;
   // What this vault may keep on Free (048): a personal vault less than a family.
   const freeHere = isPersonalVault(currentFamily) ? limits.freePersonal : limits.free;
+  const table = rows(limits, freeHere);
 
-  // ─── Paying (044) ───────────────────────────────────────
+  // ─── Paying (044, 064) ──────────────────────────────────
   const payments = usePaymentsStatus();
   const currency = localCurrency() === 'inr' ? 'INR' : 'USD';
   const canPayHere = !!payments?.currencies.includes(currency);
   const [paying, setPaying] = useState<'monthly' | 'yearly' | null>(null);
   const [payNote, setPayNote] = useState<{ tone: 'ok' | 'info' | 'error'; text: string } | null>(null);
 
-  const pay = async (period: 'monthly' | 'yearly') => {
+  const pay = async (want: FamilyPlan, period: 'monthly' | 'yearly') => {
     if (!currentFamily || paying) return;
+    const name = familyPlanName(want);
     setPaying(period);
     setPayNote(null);
     try {
       track('pay_started', { period, currency });
-      const order = await createPlusOrder(currentFamily.id, period, currency);
+      const order = await createPlusOrder(currentFamily.id, period, currency, want);
       const result = await openCheckout(order);
       if (result.status === 'closed' || result.status === 'unsupported') return;
       if (result.status === 'failed') {
@@ -167,7 +172,6 @@ function FamilyPlus() {
       try {
         const { paidUntil } = await verifyPlusPayment(result);
         track('payment_done', { period, currency });
-        setPlusPeriod(period);
         await refresh(true);
         forgetOnPlus();
         setPayNote({
@@ -180,7 +184,7 @@ function FamilyPlus() {
           return;
         }
         // Razorpay tells the server too (its webhook), so a payment that went
-        // through switches Plus on even when this check could not finish.
+        // through switches the plan on even when this check could not finish.
         setPayNote({
           tone: 'info',
           text: `We're still confirming your payment. If it went through, ${name} turns on in a few minutes. You don't need to pay again.`,
@@ -188,7 +192,7 @@ function FamilyPlus() {
         setTimeout(() => {
           refresh(true);
           forgetOnPlus();
-          fetchPlusPeriod(currentFamily.id).then(setPlusPeriod);
+          fetchPlusPeriod(currentFamily.id).catch(() => null);
         }, 30_000);
       }
     } catch (err) {
@@ -198,52 +202,53 @@ function FamilyPlus() {
     }
   };
 
+  const planLine = (p: FamilyPlan) =>
+    `${p === 'family_pro' ? limits.familyPro.members : limits.members.plus} members · ${formatBytes(p === 'family_pro' ? limits.familyPro.storage : limits.plus)}`;
+
   return (
     <SafeAreaView style={screenStyles.safe} edges={['top']}>
-      <ScreenHeader title={name} fallback="/home" />
-      <ScrollView contentContainerStyle={screenStyles.body}>
-        {broughtBy && !paid && (
+      <ScreenHeader title="Plans" fallback="/home" />
+      <ScrollView ref={scroll} contentContainerStyle={screenStyles.body}>
+        {broughtBy && onPlan !== 'family_pro' && (
           <View style={styles.brought} accessibilityLiveRegion="polite">
             <Feather name={broughtBy.icon as any} size={16} color={color.primary} />
-            <Text style={styles.broughtText}>{broughtBy.text(name)}</Text>
+            <Text style={styles.broughtText}>{broughtBy.text(familyPlanName(broughtPlan))}</Text>
           </View>
         )}
 
         <LinearGradient colors={['#2A3D66', '#4A6491']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.hero}>
-          <Text style={styles.heroTag}>★ {name}</Text>
+          <Text style={styles.heroTag}>★ Family Plus and Pro</Text>
           <Text style={styles.heroTitle}>More space and more help for your family</Text>
           <View style={styles.heroCells}>
-            <View style={styles.heroCell} accessible accessibilityLabel={`Monthly, ${monthly}`}>
-              <Text style={styles.heroCellLabel}>Monthly</Text>
-              {/* As tall as the crossed-out price, so ₹100 sits level with ₹1,100. */}
-              <View style={styles.heroWasSpace} />
-              <Text style={styles.heroAmount}>{localPlusAmount('monthly')}</Text>
-              <Text style={styles.heroPer}>a month</Text>
-            </View>
-            <View
-              style={styles.heroCell}
-              accessible
-              accessibilityLabel={`Yearly, ${yearlyOffer}, ${localPlusYearlySaving()}`}
-            >
-              <Text style={styles.heroCellLabel}>Yearly</Text>
-              <TwelveMonthsPrice onDark style={styles.heroWas} />
-              <Text style={styles.heroAmount}>{localPlusAmount('yearly')}</Text>
-              <Text style={styles.heroPer}>a year</Text>
-              <View style={styles.heroSave}>
-                <Text style={styles.heroSaveText}>{localPlusYearlySaving()}</Text>
-              </View>
-            </View>
+            {(['plus', 'family_pro'] as const).map((p) => (
+              <TouchableOpacity
+                key={p}
+                style={[styles.heroCell, chosen === p && styles.heroCellChosen]}
+                onPress={() => choose(p)}
+                accessibilityRole="button"
+                accessibilityState={{ selected: chosen === p }}
+                accessibilityLabel={`${familyPlanName(p)}, ${planLine(p)}, ${localPlusPrice('monthly', p)}${onPlan === p ? ', your plan' : ''}`}
+              >
+                <Text style={styles.heroCellLabel}>{familyPlanName(p)}</Text>
+                <Text style={styles.heroAmount}>{localPlusAmount('monthly', p)}</Text>
+                <Text style={styles.heroPer}>a month</Text>
+                <Text style={styles.heroLine}>{planLine(p)}</Text>
+                <View style={styles.heroPick}>
+                  <Text style={styles.heroPickText}>{onPlan === p ? 'Your plan' : chosen === p ? 'Chosen' : 'Choose'}</Text>
+                </View>
+              </TouchableOpacity>
+            ))}
           </View>
           <Text style={styles.heroNote}>
             {familyName ? `One plan for everyone in ${familyName}.` : 'One plan for everyone in the family.'}
           </Text>
         </LinearGradient>
 
-        {paid ? (
+        {onPlan ? (
           <View style={[styles.state, styles.statePlus]}>
             <Feather name="check-circle" size={18} color="#15803D" />
             <Text style={[styles.stateText, { color: '#15803D' }]}>
-              {familyName ?? 'Your family'} has {name}
+              {familyName ?? 'Your family'} has {familyPlanName(onPlan)}
               {trial ? ' on trial' : ''}{paidUntil ? `, until ${longDate(new Date(paidUntil))}` : ''}.
             </Text>
           </View>
@@ -256,7 +261,7 @@ function FamilyPlus() {
           <View style={[styles.state, styles.stateEnded]}>
             <Feather name="alert-triangle" size={18} color="#B91C1C" />
             <Text style={[styles.stateText, { color: '#B91C1C' }]}>
-              Family Plus has ended for {familyName ?? 'your family'}. On {longDate(new Date(removalAt))}, the newest
+              Your paid plan has ended for {familyName ?? 'your family'}. On {longDate(new Date(removalAt))}, the newest
               documents over {formatBytes(freeHere)} will be removed. Renew, or delete documents to get under{' '}
               {formatBytes(freeHere)}.
             </Text>
@@ -268,134 +273,163 @@ function FamilyPlus() {
           </View>
         ) : null}
 
+        {/* The plan chosen: its monthly and yearly price, and paying. */}
+        <View onLayout={(e) => { choiceAt.current = e.nativeEvent.layout.y; }}>
+          {chosen && (
+            <Card style={styles.payCard}>
+              <Text style={styles.payTitle}>
+                {onPlan === chosen ? `Add more time to ${familyPlanName(chosen)}` : familyPlanName(chosen)}
+              </Text>
+              <View style={styles.options}>
+                <View
+                  style={styles.option}
+                  accessible
+                  accessibilityLabel={`Yearly, ${localPlusYearlyOffer(chosen)}, ${localPlusYearlySaving(chosen)}`}
+                >
+                  <Text style={styles.optionLabel}>Yearly</Text>
+                  <TwelveMonthsPrice plan={chosen} style={styles.optionWas} />
+                  <Text style={styles.optionAmount}>{localPlusAmount('yearly', chosen)}</Text>
+                  <Text style={styles.optionPer}>a year</Text>
+                  <View style={styles.optionSave}>
+                    <Text style={styles.optionSaveText}>{localPlusYearlySaving(chosen)}</Text>
+                  </View>
+                </View>
+                <View style={styles.option} accessible accessibilityLabel={`Monthly, ${localPlusPrice('monthly', chosen)}`}>
+                  <Text style={styles.optionLabel}>Monthly</Text>
+                  {/* As tall as the crossed-out price, so the amounts sit level. */}
+                  <View style={styles.optionWasSpace} />
+                  <Text style={styles.optionAmount}>{localPlusAmount('monthly', chosen)}</Text>
+                  <Text style={styles.optionPer}>a month</Text>
+                </View>
+              </View>
+
+              {!payments ? null : !payments.available ? (
+                <View style={styles.soon}>
+                  <Text style={styles.soonTag}>Coming soon</Text>
+                  <Text style={styles.soonText}>You can't buy {familyPlanName(chosen)} yet.</Text>
+                </View>
+              ) : !checkoutSupported ? (
+                <Text style={styles.payFine}>For now, you can pay on the AskLocker web app.</Text>
+              ) : !canPayHere ? (
+                <Text style={styles.payFine}>Paying from outside India is coming soon.</Text>
+              ) : (
+                <>
+                  <TouchableOpacity
+                    style={[styles.payBtn, styles.payBtnMain, !!paying && styles.payBtnBusy]}
+                    onPress={() => pay(chosen, 'yearly')}
+                    disabled={!!paying}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Pay ${localPlusAmount('yearly', chosen)} for a year of ${familyPlanName(chosen)}`}
+                  >
+                    {paying === 'yearly' ? <ActivityIndicator color="#FFFFFF" /> : (
+                      <Text style={styles.payBtnText}>Pay {localPlusAmount('yearly', chosen)} for 1 year</Text>
+                    )}
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.payBtn, styles.payBtnOther, !!paying && styles.payBtnBusy]}
+                    onPress={() => pay(chosen, 'monthly')}
+                    disabled={!!paying}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Pay ${localPlusAmount('monthly', chosen)} for a month of ${familyPlanName(chosen)}`}
+                  >
+                    {paying === 'monthly' ? <ActivityIndicator color={color.primary} /> : (
+                      <Text style={styles.payBtnTextOther}>Pay {localPlusAmount('monthly', chosen)} for 1 month</Text>
+                    )}
+                  </TouchableOpacity>
+                  <Text style={styles.payFine}>
+                    UPI, card or net banking, through Razorpay. Nothing renews by itself.
+                    {onPlan === chosen ? ' New time is added to what you have left.'
+                      : onPlan ? ` The time left on ${familyPlanName(onPlan)} moves to ${familyPlanName(chosen)}.` : ''}
+                  </Text>
+                </>
+              )}
+              {payNote && (
+                <Text
+                  style={[styles.payMsg, payNote.tone === 'ok' ? styles.payMsgOk : payNote.tone === 'error' ? styles.payMsgError : null]}
+                  accessibilityLiveRegion="polite"
+                >
+                  {payNote.text}
+                </Text>
+              )}
+            </Card>
+          )}
+        </View>
+
         <Card style={styles.tableCard}>
           {currentColumn >= 0 && (
-            <CurrentColumn from={currentColumn} to={currentColumn} count={3} width={60} tone={color.primary} tint="#F3F6FB" />
+            <CurrentColumn from={currentColumn} to={currentColumn} count={3} width={FAMILY_VALUE} tone={color.primary} tint="#F3F6FB" />
           )}
           <View style={[styles.row, styles.headRow, currentColumn >= 0 && styles.headRowTagged]}>
             <Text style={[styles.label, styles.headText]}>What you get</Text>
-            <Text style={[styles.value, styles.headText]} accessibilityLabel={currentColumn === 0 ? 'Free, your plan' : 'Free'}>Free</Text>
-            <View style={styles.value} accessible accessibilityLabel={`${name}, monthly${currentColumn === 1 ? ', your plan' : ''}`}>
-              <Text style={[styles.headText, styles.headPlus]}>★ Plus</Text>
-              <Text style={[styles.headText, styles.headPlus]}>Monthly</Text>
-            </View>
-            <View style={styles.value} accessible accessibilityLabel={`${name}, yearly${currentColumn === 2 ? ', your plan' : ''}`}>
-              <Text style={[styles.headText, styles.headPlus]}>★ Plus</Text>
-              <Text style={[styles.headText, styles.headPlus]}>Yearly</Text>
-            </View>
+            <Text style={[styles.value, styles.valueFamily, styles.headText]} accessibilityLabel={currentColumn === 0 ? 'Free, your plan' : 'Free'}>Free</Text>
+            {(['plus', 'family_pro'] as const).map((p) => (
+              <TouchableOpacity
+                key={p}
+                style={[styles.value, styles.valueFamily]}
+                onPress={() => choose(p)}
+                accessibilityRole="button"
+                accessibilityLabel={`${familyPlanName(p)}${onPlan === p ? ', your plan' : ''}. Choose it to see the prices.`}
+              >
+                <Text style={[styles.headText, styles.headPlus, chosen === p && styles.headChosen]}>{short(p)}</Text>
+              </TouchableOpacity>
+            ))}
           </View>
-          {rows(limits).map((r) => {
-            const pointed = !!broughtBy && r.feature === feature && !paid;
+          {table.map((r) => {
+            const pointed = !!broughtBy && r.feature === feature && onPlan !== 'family_pro';
             return (
               <View
                 key={r.label}
                 style={[styles.row, pointed && styles.rowPointed]}
                 accessible
-                accessibilityLabel={`${r.label.replace('★ ', '')}: Free ${said(r.free)}, ${name} ${said(r.plus)}`}
+                accessibilityLabel={`${r.label}${r.sub ? `, ${r.sub}` : ''}: Free ${said(r.free)}, Family Plus ${said(r.plus)}, Family Pro ${said(r.pro)}`}
               >
-                <Text style={styles.label}>{r.label}</Text>
-                <View style={styles.value}><CellView value={r.free} /></View>
-                <View style={styles.value}><CellView value={r.plus} plus /></View>
-                <View style={styles.value}><CellView value={r.plus} plus /></View>
+                <View style={styles.labelBox}>
+                  <Text style={styles.label}>
+                    {r.label}
+                    {/* After the name, never on a line of its own. */}
+                    {r.free !== r.pro && <Text style={styles.star}>{'\u00A0★'}</Text>}
+                  </Text>
+                  {!!r.sub && <Text style={styles.labelSub}>{r.sub}</Text>}
+                </View>
+                <View style={[styles.value, styles.valueFamily]}><CellView value={r.free} /></View>
+                <View style={[styles.value, styles.valueFamily]}><CellView value={r.plus} plus /></View>
+                <View style={[styles.value, styles.valueFamily]}><CellView value={r.pro} plus /></View>
               </View>
             );
           })}
           <View
             style={[styles.row, styles.priceRow]}
             accessible
-            accessibilityLabel={`Price: Free costs nothing. ${name} monthly, ${monthly}. ${name} yearly, ${yearlyOffer}.`}
+            accessibilityLabel={`Price: Free costs nothing. Family Plus ${localPlusPrice('monthly', 'plus')} or ${localPlusPrice('yearly', 'plus')}. Family Pro ${localPlusPrice('monthly', 'family_pro')} or ${localPlusPrice('yearly', 'family_pro')}.`}
           >
             <Text style={[styles.label, styles.priceLabel]}>Price</Text>
-            <Text style={[styles.value, styles.cellText]}>Free</Text>
-            <View style={styles.value}>
-              {/* As tall as the crossed-out price, so ₹100 sits level with ₹1,100. */}
-              <View style={styles.cellWasSpace} />
-              <Text style={[styles.cellText, styles.cellTextPlus]}>{localPlusAmount('monthly')}</Text>
-              <Text style={styles.cellPer}>a month</Text>
+            <View style={[styles.value, styles.valueFamily]}>
+              <Text style={styles.cellText}>Free</Text>
             </View>
-            <View style={styles.value}>
-              <TwelveMonthsPrice style={styles.cellWas} />
-              <Text style={[styles.cellText, styles.cellTextPlus]}>{localPlusAmount('yearly')}</Text>
-              <Text style={styles.cellPer}>a year</Text>
-            </View>
+            {(['plus', 'family_pro'] as const).map((p) => (
+              <TouchableOpacity key={p} style={[styles.value, styles.valueFamily]} onPress={() => choose(p)} accessibilityElementsHidden>
+                <Text style={[styles.cellText, styles.cellTextPlus]}>{localPlusAmount('monthly', p)}</Text>
+                <Text style={styles.cellPer}>a month</Text>
+                <Text style={[styles.cellText, styles.cellTextPlus, styles.cellYear]}>{localPlusAmount('yearly', p)}</Text>
+                <Text style={styles.cellPer}>a year</Text>
+              </TouchableOpacity>
+            ))}
           </View>
         </Card>
 
-        {payments?.available && (
-          <Card style={styles.payCard}>
-            <Text style={styles.payTitle}>{plan === 'plus' ? 'Add more time' : `Get ${name}`}</Text>
-            {!checkoutSupported ? (
-              <Text style={styles.payFine}>For now, you can pay on the AskLocker web app.</Text>
-            ) : !canPayHere ? (
-              <Text style={styles.payFine}>Paying from outside India is coming soon.</Text>
-            ) : (
-              <>
-                <TouchableOpacity
-                  style={[styles.payBtn, styles.payBtnMain, !!paying && styles.payBtnBusy]}
-                  onPress={() => pay('yearly')}
-                  disabled={!!paying}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Pay ${localPlusAmount('yearly')} for a year of ${name}, ${localPlusYearlySaving()}`}
-                >
-                  {paying === 'yearly' ? <ActivityIndicator color="#FFFFFF" /> : (
-                    <>
-                      <Text style={styles.payBtnText}>Pay {localPlusAmount('yearly')} for 1 year</Text>
-                      <Text style={styles.payBtnSave}>{localPlusYearlySaving()}</Text>
-                    </>
-                  )}
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.payBtn, styles.payBtnOther, !!paying && styles.payBtnBusy]}
-                  onPress={() => pay('monthly')}
-                  disabled={!!paying}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Pay ${localPlusAmount('monthly')} for a month of ${name}`}
-                >
-                  {paying === 'monthly' ? <ActivityIndicator color={color.primary} /> : (
-                    <Text style={styles.payBtnTextOther}>Pay {localPlusAmount('monthly')} for 1 month</Text>
-                  )}
-                </TouchableOpacity>
-                <Text style={styles.payFine}>
-                  Pay by UPI, card or net banking through Razorpay. Nothing renews by itself.
-                  {plan === 'plus' ? ' New time is added to what you have left.' : ''}
-                </Text>
-              </>
-            )}
-            {payNote && (
-              <Text
-                style={[styles.payMsg, payNote.tone === 'ok' ? styles.payMsgOk : payNote.tone === 'error' ? styles.payMsgError : null]}
-                accessibilityLiveRegion="polite"
-              >
-                {payNote.text}
-              </Text>
-            )}
-          </Card>
-        )}
-
-        {!paid && (
-          !payments || payments.available ? null : (
-            <View style={styles.soon}>
-              <Text style={styles.soonTag}>Coming soon</Text>
-              <Text
-                style={styles.soonText}
-                accessibilityLabel={`You can't buy ${name} yet. It will be ${monthly} or ${yearlyOffer} for the whole family.`}
-              >
-                You can't buy {name} yet. It will be {monthly} or <YearlyPrice /> for the whole family.
-              </Text>
-            </View>
-          )
-        )}
-
         <Muted>
-          {limits.questions.free != null && limits.familyQuestions == null
-            ? `Fair use on Plus: up to ${limits.questionsFairUse} questions a person each month.\n`
+          {limits.questions.free != null && limits.questions.plus == null && limits.familyQuestions == null && limits.questionTriesPerDay.plus != null
+            ? `Questions on Plus and Pro have no monthly limit. Each person can ask up to ${limits.questionTriesPerDay.plus} a day.\n`
             : ''}
-          {`If Plus ends and a vault is over its free space, the newest documents over it are removed after ${limits.graceDays} days.`}
+          {`If a paid plan ends and a vault is over its free space, the newest documents over it are removed after ${limits.graceDays} days.`}
         </Muted>
       </ScrollView>
     </SafeAreaView>
   );
 }
+
+/** A family table's value columns: Free, Plus and Pro (064). */
+const FAMILY_VALUE = 64;
 
 // ─── A business's plans (051) ─────────────────────────────────────
 
@@ -450,8 +484,12 @@ function businessRows(limits: PlanLimits): BusinessRow[] {
     ({ free, ...Object.fromEntries(PAID.map((p) => [p, pick(p)])) }) as Record<BusinessColumn, Cell>;
   const freeVoice = limits.voiceAnswers.free;
   return [
-    { label: '★ People', cells: row(String(limits.members.free), (p) => String(limits.business[p].members)), feature: 'members' },
-    { label: 'Space', cells: row(formatBytes(limits.free), (p) => formatBytes(limits.business[p].storage)), feature: 'storage' },
+    { label: '★ People', cells: row(String(limits.freeBusinessMembers), (p) => String(limits.business[p].members)), feature: 'members' },
+    // 060: on Free, each person's own number across their free vaults, and the business's for everyone together.
+    ...(limits.freePerson != null
+      ? [{ label: 'Each person can add, in all', cells: row(formatBytes(limits.freePerson), () => true) }]
+      : []),
+    { label: 'Space for the business, together', cells: row(formatBytes(limits.freeBusiness), (p) => formatBytes(limits.business[p].storage)), feature: 'storage' },
     {
       label: '★ Each person\'s questions',
       cells: row(`${limits.questions.free ?? 20} a month`, (p) => `${limits.business[p].questionsFairUse} a month`),
@@ -638,6 +676,14 @@ const styles = StyleSheet.create({
     backgroundColor: '#FBD5D1',
   },
   heroSaveText: { fontSize: 12, lineHeight: 16, fontWeight: '700', color: '#8A3B35' },
+  // Family Plus and Pro, each a cell to choose (064).
+  heroCellChosen: { backgroundColor: 'rgba(255, 255, 255, 0.24)', borderColor: '#FFFFFF', borderWidth: 2 },
+  heroLine: { fontSize: 12, lineHeight: 16, color: '#DCE3F0', marginTop: space.xs },
+  heroPick: {
+    borderRadius: radius.pill, paddingHorizontal: space.sm, paddingVertical: 2, marginTop: space.sm,
+    backgroundColor: '#FFFFFF',
+  },
+  heroPickText: { fontSize: 12, lineHeight: 16, fontWeight: '700', color: color.primary },
   heroNote: { fontSize: 13, lineHeight: 18, color: '#DCE3F0' },
   state: {
     flexDirection: 'row', alignItems: 'center', gap: space.sm,
@@ -663,6 +709,27 @@ const styles = StyleSheet.create({
   headText: { fontSize: 12, lineHeight: 16, fontWeight: '600', color: color.textMuted },
   headPlus: { color: color.accent },
   label: { ...type.body, flex: 1, fontSize: 14, lineHeight: 20 },
+  labelBox: { flex: 1, gap: 2 },
+  labelSub: { fontSize: 12, lineHeight: 16, color: color.textMuted },
+  star: { color: color.accent, fontWeight: '700' },
+  headChosen: { textDecorationLine: 'underline' },
+  valueFamily: { width: FAMILY_VALUE },
+  cellYear: { marginTop: space.xs },
+  options: { flexDirection: 'row', gap: space.sm },
+  option: {
+    flex: 1, alignItems: 'flex-start', borderRadius: radius.control, padding: space.md,
+    backgroundColor: color.background, borderWidth: 1, borderColor: color.border,
+  },
+  optionLabel: { fontSize: 12, lineHeight: 16, fontWeight: '600', color: color.textMuted },
+  optionWas: { fontSize: 13, lineHeight: 18, marginTop: space.xs, color: color.textMuted },
+  optionWasSpace: { height: 18, marginTop: space.xs },
+  optionAmount: { fontSize: 22, lineHeight: 28, fontWeight: '700', color: color.primary },
+  optionPer: { fontSize: 13, lineHeight: 18, color: color.textMuted },
+  optionSave: {
+    borderRadius: radius.pill, paddingHorizontal: space.sm, paddingVertical: 2, marginTop: space.sm,
+    backgroundColor: '#FBEDEB',
+  },
+  optionSaveText: { fontSize: 12, lineHeight: 16, fontWeight: '700', color: '#8A3B35' },
   value: { width: 60, alignItems: 'center', textAlign: 'center' },
   // "Enterprise" is wider than 60 (051).
   valueWide: { width: 70 },

@@ -28,6 +28,7 @@ import { corsHeaders } from '../_shared/cors.ts';
 import { requireFamilyMember } from '../_shared/auth.ts';
 import { ingestDocument } from '../_shared/ingest.ts';
 import { inVaultFolder, providedTextLimit, MAX_DOCUMENT_TEXT } from '../_shared/limits.ts';
+import { isSpreadsheetType } from '../_shared/spreadsheet-text.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -86,8 +87,10 @@ Deno.serve(async (req) => {
       if (!inVaultFolder(path, namespace)) return refuse('bad_path');
     }
 
-    // Text the app read itself, no more than a file of this size could hold.
-    const limit = fileBytes == null ? MAX_DOCUMENT_TEXT : providedTextLimit(fileBytes);
+    // Text the app read itself, no more than a file of this size could hold
+    // (a spreadsheet's text runs to many times its size, limits.ts).
+    const spreadsheet = isSpreadsheetType(path.split('.').pop()?.toLowerCase());
+    const limit = fileBytes == null ? MAX_DOCUMENT_TEXT : providedTextLimit(fileBytes, spreadsheet);
     const providedText = typeof ocr_text === 'string' ? ocr_text.slice(0, limit) : undefined;
 
     const result = await ingestDocument(supabase, {

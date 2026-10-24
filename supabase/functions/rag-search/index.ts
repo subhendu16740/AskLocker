@@ -1,16 +1,20 @@
 // ─── AskLocker RAG Search Edge Function ───────────────────────
 // Pipeline: Query → Retrieve matching chunks → LLM generates answer
-// Uses: Groq free tier; models are resolved at runtime (see _shared/groq.ts)
+// Uses: Claude when ANTHROPIC_API_KEY is set, Groq when it isn't or Claude
+// can't answer (see _shared/ai.ts); Groq's models resolve at runtime (groq.ts)
 // ────────────────────────────────────────────────────────────────
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { embedQuery, EMBEDDING_MODEL } from '../_shared/embeddings.ts';
 import { requireFamilyMember, requireVaults, selectVaultRows, vaultKind, type Vault } from '../_shared/auth.ts';
 import { runReembed, afterResponse } from '../_shared/reembed.ts';
-import { groqChat, groqText, hasGroqKey } from '../_shared/groq.ts';
+import { groqText } from '../_shared/groq.ts';
+import { aiChat, claudeRestReason, hasAiKey } from '../_shared/ai.ts';
 import { buildGraph, relativesNamedIn, type KinGraph, type NamedRelative } from '../_shared/kinship.ts';
 import { ticketCodeNotes, ticketSearchTerms } from '../_shared/tickets.ts';
 import { digitsFromWords, restoreCodes } from '../_shared/numbers.ts';
+import { isSpreadsheetType } from '../_shared/spreadsheet-text.ts';
+import { estimateTokens } from '../_shared/tokens.ts';
 import { takeInTurn, uniqueRelatives } from '../_shared/vaults.ts';
 import { USED_PASSAGES_RULE, passagesUsed, splitUsedPassages } from '../_shared/used-passages.ts';
 import { allowanceJson, givenBack, parseAllowance, questionLimitMessage, type QuestionAllowance } from '../_shared/questions.ts';
@@ -66,6 +70,18 @@ const RERANK_MIN_SCORE = 4;        // 0–10; below this a chunk is dropped outr
 // question. The chunker already caps a chunk at 400 tokens (~1,600
 // characters) precisely so a passage is small enough to handle whole.
 const RERANK_SNIPPET_CHARS = 1600; // per candidate: a full chunk, not its opening
+// Groq refuses a request over the model's allowance for a minute outright
+// (413; 8,000 tokens on the free tier, the judge's 2,000 to reply included),
+// and numbers cost about twice the tokens of words: fifteen passages of
+// spreadsheet rows came to 8,660 (20 October 2026). Passages go to the judge
+// whole, in retrieval order, while they fit this; the rest are not judged.
+const RERANK_LISTING_TOKENS = 4_500;
+
+// Spreadsheet rows arrive as "Column: value | Column: value", one row a line
+// (_shared/spreadsheet-text.ts). Said to the judge and the answer only when a
+// spreadsheet is among the passages, so other questions cost nothing more.
+const SPREADSHEET_ROWS_RULE =
+  'Spreadsheet passages hold one row per line, as "Column: value | Column: value". A number belongs only to the row it is on: the row\'s own columns (its segment, country, item, month…) say what it is.';
 
 /** A document an earlier answer cited — enough to rebuild a ChunkResult. */
 interface CitedSource {
@@ -381,6 +397,9 @@ Deno.serve(async (req) => {
       ...(cond.error ? { condense_error: cond.error } : {}),
       ...(pinError ? { pin_error: pinError } : {}),
       ...(rank.error ? { rerank_error: rank.error } : {}),
+      // Claude is set up but left alone for now (no credit, a bad key):
+      // Groq answered instead, and this says why.
+      ...(claudeRestReason() ? { claude_error: claudeRestReason() } : {}),
     };
 
     if (candidates.length === 0) {
@@ -413,7 +432,7 @@ Deno.serve(async (req) => {
     const built = buildContext(chunks, multi);
     const context = built.text;
 
-    // 6. Generate answer with Groq
+    // 6. Generate the answer (Claude, or Groq)
     // The model answers the STANDALONE question. Handing it the raw
     // follow-up ("What about 2026?") next to whatever retrieval found lets it
     // answer a different question from the context instead of the one asked.
@@ -904,6 +923,35 @@ async function ownerChunks(
   return { chunks: results, ...(errors.length ? { error: errors.join('; ') } : {}) };
 }
 
+// The JSON each step asks for, which Claude keeps to exactly (structured
+// outputs). Groq's JSON mode takes no schema, so it has the prompt's words.
+const SCORES_SCHEMA = {
+  type: 'object',
+  properties: {
+    scores: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: { i: { type: 'integer' }, s: { type: 'number' } },
+        required: ['i', 's'],
+        additionalProperties: false,
+      },
+    },
+  },
+  required: ['scores'],
+  additionalProperties: false,
+};
+
+/** {"<field>": "..."}: a translation, or a rewritten query. */
+function stringSchema(field: string) {
+  return {
+    type: 'object',
+    properties: { [field]: { type: 'string' } },
+    required: [field],
+    additionalProperties: false,
+  };
+}
+
 /**
  * Score every candidate against the question in ONE call to the small model,
  * then keep only those above the floor. Any failure returns the candidates
@@ -917,9 +965,11 @@ async function rerankChunks(
   let usedModel: string | undefined;
   const fallback = (error: string) => ({ kept: candidates.slice(0, RERANK_KEEP), error, model: usedModel });
   if (candidates.length === 0) return { kept: [] };
-  if (!hasGroqKey) return fallback('no api key');
+  if (!hasAiKey) return fallback('no api key');
 
-  const listing = candidates.map((c, i) => {
+  const entries: string[] = [];
+  let spent = 0;
+  for (const [i, c] of candidates.entries()) {
     const type = c.category_name ? ` · ${c.category_name}` : '';
     const whose = c.owner ? ` · marked as ${c.owner}'s` : '';
     // Do NOT flatten whitespace. The line breaks and the two-space column
@@ -931,11 +981,20 @@ async function rerankChunks(
       .replace(/[ \t]+$/gm, '')
       .replace(/\n{3,}/g, '\n\n')
       .trim();
-    return `[${i}] ${c.file_name}${type}${whose}\n${snippet}`;
-  }).join('\n\n');
+    const entry = `[${i}] ${c.file_name}${type}${whose}\n${snippet}`;
+    const cost = estimateTokens(entry);
+    if (entries.length && spent + cost > RERANK_LISTING_TOKENS) break;
+    entries.push(entry);
+    spent += cost;
+  }
+  const judged = candidates.slice(0, entries.length);
+  const listing = entries.join('\n\n');
+  if (judged.length < candidates.length) {
+    console.log(`[rag] Judge shown ${judged.length}/${candidates.length} passages (~${spent} tokens)`);
+  }
 
   try {
-    const { response, model } = await groqChat('rerank', {
+    const { response, model } = await aiChat('rerank', {
       temperature: 0,
       // Generous, because these models reason before answering and Groq
       // rejects the whole response with a 400 when JSON mode output is cut
@@ -950,7 +1009,7 @@ Score how well each passage answers the question, 0 to 10.
 10 = directly contains the answer. 5 = related, partial. 0 = unrelated, even if it shares a word or a year with the question.
 Use the document type: an insurance question is not answered by a tax return, a placements question is not answered by a resume.
 A passage may be a TABLE, one row per line with columns separated by two spaces. Read every row before scoring it: the row that answers the question is often not the first one, and a table whose other rows are irrelevant still scores 10 if any single row answers it.
-Reply with JSON only: {"scores":[{"i":0,"s":7}, ...]} — one entry for EVERY passage index, including the ones you score 0.${codeNotes.length
+${judged.some((c) => isSpreadsheetType(c.file_type)) ? `${SPREADSHEET_ROWS_RULE} A passage holding the row that matches every part of the question scores 10.\n` : ''}Reply with JSON only: {"scores":[{"i":0,"s":7}, ...]} — one entry for EVERY passage index, including the ones you score 0.${codeNotes.length
   ? `\nTicket codes in these passages, explained: ${codeNotes.join(' ')} On a train ticket the seat is this berth, in Booking Status or Current Status.`
   : ''}`,
         },
@@ -959,7 +1018,7 @@ Reply with JSON only: {"scores":[{"i":0,"s":7}, ...]} — one entry for EVERY pa
           content: `Question: ${question}\n\nPassages:\n\n${listing}\n\nReturn the JSON scores.`,
         },
       ],
-    });
+    }, { schema: SCORES_SCHEMA });
     usedModel = model;
 
     if (!response.ok) {
@@ -981,14 +1040,14 @@ Reply with JSON only: {"scores":[{"i":0,"s":7}, ...]} — one entry for EVERY pa
     // models routinely score ten of fifteen and stop; defaulting the rest to
     // zero threw away passages nobody had looked at. Neutral keeps them in
     // their retrieval order, behind anything explicitly scored higher.
-    const kept = candidates
+    const kept = judged
       .map((c, i) => ({ c, s: score.get(i) ?? RERANK_MIN_SCORE }))
       .filter(x => x.s >= RERANK_MIN_SCORE)
       .sort((a, b) => b.s - a.s)
       .slice(0, RERANK_KEEP)
       .map(x => x.c);
 
-    console.log(`[rag] Rerank scores: ${candidates.map((c, i) => `${c.file_name.slice(0, 18)}=${score.get(i) ?? '?'}`).join(', ')}`);
+    console.log(`[rag] Rerank scores: ${judged.map((c, i) => `${c.file_name.slice(0, 18)}=${score.get(i) ?? '?'}`).join(', ')}`);
 
     // A judge that rejects EVERY passage has failed, not filtered. Retrieval
     // had already ranked these by meaning and by keyword; discarding the lot
@@ -1045,10 +1104,10 @@ function dedupeChunks(chunks: ChunkResult[]): ChunkResult[] {
 async function translateToEnglish(
   query: string,
 ): Promise<{ query: string; changed: boolean; error?: string; model?: string }> {
-  if (!hasGroqKey) return { query, changed: false, error: 'no api key' };
+  if (!hasAiKey) return { query, changed: false, error: 'no api key' };
   let usedModel: string | undefined;
   try {
-    const { response, model } = await groqChat('condense', {
+    const { response, model } = await aiChat('condense', {
       temperature: 0,
       // Room for the model to reason before the object. JSON mode validates
       // the whole response, so output cut off by max_tokens comes back as a
@@ -1069,7 +1128,7 @@ Reply with JSON only: {"english":"<the translation>"}`,
         },
         { role: 'user', content: query },
       ],
-    });
+    }, { schema: stringSchema('english') });
     usedModel = model;
 
     if (!response.ok) {
@@ -1115,7 +1174,7 @@ async function condenseQuery(
   history: HistoryTurn[],
   opts: { toEnglish?: boolean } = {},
 ): Promise<{ query: string; changed: boolean; error?: string; model?: string }> {
-  if (!hasGroqKey) return { query, changed: false, error: 'no api key' };
+  if (!hasAiKey) return { query, changed: false, error: 'no api key' };
   let usedModel: string | undefined;
 
   const transcript = history.length > 0
@@ -1126,7 +1185,7 @@ async function condenseQuery(
     : '';
 
   try {
-    const { response, model } = await groqChat('condense', {
+    const { response, model } = await aiChat('condense', {
       temperature: 0,
       max_tokens: 1500, // as above: JSON mode 400s on a truncated object
       // Same reason as translateToEnglish: a bare line invites reasoning.
@@ -1145,7 +1204,7 @@ Reply with JSON only: {"query":"<the rewritten query>"}`,
           content: `Conversation so far:\n${transcript}\n\nLatest message: ${query}`,
         },
       ],
-    });
+    }, { schema: stringSchema('query') });
     usedModel = model;
 
     if (!response.ok) {
@@ -1230,14 +1289,14 @@ async function fallbackRetrieve(schema: string, query: string, words: string[]):
   return results;
 }
 
-// ─── Generate Answer (Groq) ────────────────────────────────────
+// ─── Generate Answer (Claude, or Groq) ─────────────────────────
 
 interface AnswerResult {
   answer: string;
   /** true when the text did not come from the model. */
   degraded: boolean;
   retryAfterSeconds?: number;
-  /** Which Groq model produced (or failed to produce) the text. */
+  /** Which model produced (or failed to produce) the text: Claude's or Groq's. */
   model?: string;
   /**
    * The passages (1-based) the answer says it relied on, from its "USED:"
@@ -1266,14 +1325,14 @@ async function generateAnswer(
     ? `\nYour answer will be read aloud by a voice assistant to an elderly person. Write two or three short, plain spoken sentences. No markdown, no bullet points, no asterisks, no headings. Write a date with its month as a word (for example "14 March 2027"), but every other number in digits, exactly as written: the app reads numbers aloud itself. Describe the document naturally ("this is from Mom's passport") instead of reading out a file name.`
     : '\nIf you mention a document, reference it by its filename.';
 
-  if (!hasGroqKey) {
-    console.warn('[rag] GROQ_API_KEY is not set');
+  if (!hasAiKey) {
+    console.warn('[rag] Neither ANTHROPIC_API_KEY nor GROQ_API_KEY is set');
     return { answer: buildFallbackAnswer(chunks, 'unavailable'), degraded: true };
   }
   let usedModel: string | undefined;
 
   try {
-    const { response, model } = await groqChat('answer', {
+    const { response, model } = await aiChat('answer', {
       messages: [
         {
           role: 'system',
@@ -1283,7 +1342,7 @@ You ONLY answer based on the provided document context.
 The context is whatever search returned — it may not actually answer the question. If it doesn't, say so plainly and, if a related document exists, say what it does cover instead. NEVER answer a different question just because the context happens to contain information about it.
 This is an ongoing conversation: use earlier turns to understand what the user is referring to.
 Keep answers concise (1-3 sentences). Include specific details like dates, amounts, and document names.
-Copy every number exactly as the document writes it, in digits: train, PNR, seat, berth, policy, account, phone and ID numbers, and amounts. Never write a number in words, and never reorder, round or respell its digits.${opts.family ? `\n${opts.family} Answer about that person, and say whose document it is.` : ''}${opts.notes?.length ? `\nTicket codes in the context, explained: ${opts.notes.join(' ')} On a train ticket the seat is this berth (coach and berth number), shown in Booking Status or Current Status.` : ''}${languageRule}${voiceRule}
+Copy every number exactly as the document writes it, in digits: train, PNR, seat, berth, policy, account, phone and ID numbers, and amounts. Never write a number in words, and never reorder, round or respell its digits.${chunks.some((c) => isSpreadsheetType(c.file_type)) ? `\n${SPREADSHEET_ROWS_RULE} Answer from the row whose own columns match what was asked, and say which column you read.` : ''}${opts.family ? `\n${opts.family} Answer about that person, and say whose document it is.` : ''}${opts.notes?.length ? `\nTicket codes in the context, explained: ${opts.notes.join(' ')} On a train ticket the seat is this berth (coach and berth number), shown in Booking Status or Current Status.` : ''}${languageRule}${voiceRule}
 The passages in the context are numbered: [Passage 1 | …], [Passage 2 | …]. ${USED_PASSAGES_RULE}`,
         },
         // Prior turns, so "this one" and "that policy" resolve naturally.
@@ -1294,13 +1353,15 @@ The passages in the context are numbered: [Passage 1 | …], [Passage 2 | …]. 
         },
       ],
       temperature: 0.1,
-      max_tokens: 500,
+      // Room to think as well as answer: these models reason first, and
+      // 500 ran out mid-thought over a table of numbers, leaving no answer.
+      max_tokens: 1200,
     });
     usedModel = model;
 
     if (!response.ok) {
       const errText = await response.text();
-      console.warn(`[rag] Groq API error (${response.status}): ${errText}`);
+      console.warn(`[rag] Answer model error (${response.status}): ${errText}`);
 
       // 429 is the common one on the free tier and is worth saying out loud,
       // because "wait twelve seconds" is advice the user can act on.
@@ -1319,7 +1380,7 @@ The passages in the context are numbered: [Passage 1 | …], [Passage 2 | …]. 
     const result = await response.json();
     const text = result.choices?.[0]?.message?.content;
     if (!text) {
-      console.warn('[rag] Groq returned no content');
+      console.warn(`[rag] The answer model returned no content (finish: ${result.choices?.[0]?.finish_reason ?? '?'}, ${JSON.stringify(result.usage ?? {})})`);
       return { answer: buildFallbackAnswer(chunks, 'unavailable'), degraded: true, model };
     }
 
@@ -1327,7 +1388,7 @@ The passages in the context are numbered: [Passage 1 | …], [Passage 2 | …]. 
     // relied on, for the source chips, and is never shown or read aloud.
     const { answer, used } = splitUsedPassages(text);
     if (!answer) {
-      console.warn('[rag] Groq returned only the USED line');
+      console.warn('[rag] The answer model returned only the USED line');
       return { answer: buildFallbackAnswer(chunks, 'unavailable'), degraded: true, model };
     }
 
@@ -1336,7 +1397,7 @@ The passages in the context are numbered: [Passage 1 | …], [Passage 2 | …]. 
     return { answer: digitsFromWords(restoreCodes(answer, context)), degraded: false, model, used };
 
   } catch (err) {
-    console.warn('[rag] Groq generation failed:', err);
+    console.warn('[rag] Answer generation failed:', err);
     return { answer: buildFallbackAnswer(chunks, 'unavailable'), degraded: true, model: usedModel };
   }
 }

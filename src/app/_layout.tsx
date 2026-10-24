@@ -10,6 +10,7 @@ import { EnvBadge } from '../components/env-badge';
 import { AnalyticsTracker } from '../components/analytics-tracker';
 import { AppLockProvider } from '../lib/app-lock';
 import { AppLockScreen } from '../components/app-lock-screen';
+import { AgreementScreen } from '../components/agreement-screen';
 
 function AuthGate() {
   const { session, loading: authLoading } = useAuth();
@@ -109,6 +110,9 @@ export default function RootLayout() {
         <EnvBadge />
         {/* Which screens are opened, where usage counts are on (analytics.ts). */}
         <AnalyticsTracker />
+        {/* What AskLocker does with your documents, agreed to before anything
+            else (062); it waits while the lock is up. */}
+        <AgreementScreen />
         {/* The fingerprint or face lock, over everything when it is up. */}
         <AppLockScreen />
       </FamilyProvider>

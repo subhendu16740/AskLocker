@@ -27,6 +27,7 @@
 import { createHmac, randomUUID } from 'node:crypto';
 import { invokeFunction } from '../supabase.mjs';
 import { permanentDocuments } from '../../fixtures/documents.mjs';
+import { AGREEMENT_VERSION, agreementText } from '../../../supabase/functions/_shared/agreement.ts';
 
 // The phrasings this app's refusals actually use: 42501 from the 023
 // asserts and from column privileges (025), "Access denied" (P0001) from the
@@ -220,6 +221,13 @@ const chatsVoiceJudge = (expect) => (outcome) => {
   if (String(outcome.error?.code) === 'PGRST202') return ['skipped', 'migration 042 is not applied to DEV yet'];
   return judge(expect, outcome);
 };
+// Free space per person (060): what someone's files in their free vaults add
+// up to is the server's, and a logged-out visitor has no number to ask.
+// Skipped until 060 is on DEV (PGRST202: no such function).
+const freeSpaceJudge = (expect) => (outcome) => {
+  if (String(outcome.error?.code) === 'PGRST202') return ['skipped', 'migration 060 is not applied to DEV yet'];
+  return judge(expect, outcome);
+};
 // Voice chats per person (043): each person's count is in member_usage,
 // which no client reads. Skipped until 043 is on DEV (the table is missing).
 const perPersonJudge = (expect) => (outcome) => {
@@ -292,6 +300,31 @@ const overviewJudge = (expect) => (outcome) => {
   }
   return typeof expect === 'function' ? expect(outcome) : judge(expect, outcome);
 };
+// The agreement (062): each person records only their own, by the
+// database's clock, reads only their own, and nobody changes or deletes a
+// record or the words. Skipped until 062 is on DEV (no such table or
+// function), and recording until the app's version is (its migration: 063
+// for 2026-10-23.2; record_agreement() answers unknown_version).
+const agreementJudge = (expect) => (outcome) => {
+  if (outcome.missing || missingTable(outcome.error) || ['PGRST202'].includes(String(outcome.error?.code))) {
+    return ['skipped', 'migration 062 is not applied to DEV yet'];
+  }
+  if (outcome.error?.hint === 'unknown_version') {
+    return ['skipped', `agreement version ${AGREEMENT_VERSION} is not on DEV yet (apply its migration)`];
+  }
+  return typeof expect === 'function' ? expect(outcome) : judge(expect, outcome);
+};
+// The words DEV keeps for the app's version must be the app's, byte for byte:
+// the record says what the screen said. A paste can turn line breaks into
+// CR LF (062 on DEV did; 063 takes them out), which reads the same and is not.
+const agreementWordsJudge = agreementJudge((o) => {
+  if (o.error) return ['fail', `could not read the words: ${short(o.error)}`];
+  const body = o.data?.[0]?.body;
+  if (body == null) return ['skipped', `agreement version ${AGREEMENT_VERSION} is not on DEV yet (apply its migration)`];
+  if (body === agreementText()) return ['pass', `version ${AGREEMENT_VERSION}, ${body.length} characters, as the app shows them`];
+  const why = body.replace(/\r/g, '') === agreementText() ? 'only the line breaks differ (CR LF): apply 063' : 'the words differ from agreement.ts';
+  return ['fail', `DEV's words for ${AGREEMENT_VERSION} are not the app's: ${why}`];
+});
 // Deleting a family vault (057): its owner's alone, through delete-account,
 // and the database side is the server's. Skipped until 057 is on DEV (no such
 // function; delete-account answering needs_migration), or until DEV runs a
@@ -646,7 +679,7 @@ export async function runAccessChecks(cfg, { a, b, anon, vaultA, vaultB, docsA }
     } else {
       const row = data?.[0];
       planOfA = row?.plan ?? null;
-      const ok = !error && row && Number(row.limit_bytes) > 0 && Number(row.used_bytes) > 0 && ['free', 'plus'].includes(row.plan);
+      const ok = !error && row && Number(row.limit_bytes) > 0 && Number(row.used_bytes) > 0 && ['free', 'plus', 'family_pro'].includes(row.plan);
       results.add('access', 'control:storage', "Control — account A reads its family's plan and storage", ok ? 'pass' : 'fail',
         { why: error ? short(error) : row ? `${row.plan}: ${Math.round(Number(row.used_bytes) / 1048576)} MB of ${Math.round(Number(row.limit_bytes) / 1048576)} MB` : 'no row' });
       const { data: room, error: roomErr } = await a.client.rpc('family_storage_has_room', { p_folder: A.ns });
@@ -725,17 +758,18 @@ export async function runAccessChecks(cfg, { a, b, anon, vaultA, vaultB, docsA }
       const n = (v) => (v == null ? null : Number(v));
       const expected = first?.plus ? plans.plus : plans.free;
       const ceiling = expected ? n(expected.questions_per_month ?? expected.questions_fair_use) : null;
+      // No ceiling (Plus and Pro since 064): nothing is left to count down.
       const ok = !error && !limErr && first && n(first.ceiling) === ceiling
         && n(first.limit) === n(expected?.questions_per_month)
-        && n(first.left) === Math.max(ceiling - n(first.used), 0)
+        && (ceiling == null ? first.left == null : n(first.left) === Math.max(ceiling - n(first.used), 0))
         && n(again?.used) === n(first.used)
         && n(plans.plus?.max_members) >= n(plans.free?.max_members);
       results.add('access', 'control:questions', title, ok ? 'pass' : 'fail', {
         why: error ? short(error) : limErr ? short(limErr)
           : `${first.used} asked, ${first.left} left of ${first.ceiling}${first.plus ? ' (Plus)' : ''}; members ${plans.free?.max_members}/${plans.plus?.max_members}`,
       });
-      if (planOfA === 'plus') {
-        results.add('access', 'control:link-30', 'Control — a vault on Free cannot make a 30-day share link (049)', 'skipped', { why: 'QA Vault A is on Plus' });
+      if (planOfA === 'plus' || planOfA === 'family_pro') {
+        results.add('access', 'control:link-30', 'Control — a vault on Free cannot make a 30-day share link (049)', 'skipped', { why: `QA Vault A is on ${planOfA}` });
       } else if (!passport) {
         results.add('access', 'control:link-30', 'Control — a vault on Free cannot make a 30-day share link (049)', 'skipped', { why: 'no passport to share' });
       } else {
@@ -1132,6 +1166,8 @@ export async function runAccessChecks(cfg, { a, b, anon, vaultA, vaultB, docsA }
     ['anon', "read how many voice chats QA Vault A has left", chatsVoiceJudge('refused'), rpc(anon, 'family_voice_status', { p_family_id: A.family })],
     ['B', "read how many voice chats QA Vault A has left", chatsVoiceJudge('refused'), rpc(b, 'family_voice_status', { p_family_id: A.family })],
     ['B', "add up QA Vault A's saved chats (server-only)", chatsVoiceJudge('refused'), rpc(b, 'family_chats_bytes', { p_family_id: A.family })],
+    ['anon', 'ask what it has added on Free', freeSpaceJudge('refused'), rpc(anon, 'person_storage_status', {})],
+    ['B', "add up account A's files on Free (server-only)", freeSpaceJudge('refused'), rpc(b, 'person_free_files_bytes', { p_user: A.user })],
     // Questions each month (049): each person's count is the server's.
     ['anon', 'read how many questions anyone has left', questionsJudge('refused'), onQuestions(rpc(anon, 'question_status', {}))],
     ['B', 'count a question for account A (server-only)', questionsJudge('refused'), onQuestions(rpc(b, 'claim_question', { p_user_id: A.user }))],
@@ -1157,6 +1193,20 @@ export async function runAccessChecks(cfg, { a, b, anon, vaultA, vaultB, docsA }
     // anyone before RLS is reached; a stranger's note into a business, which
     // RLS refuses, is checked in business.mjs.
     ['B', 'write a note into QA Vault A', overviewJudge((o) => (o.error?.hint === 'not_business' ? ['pass', short(o.error)] : judge('refused', o))), () => b.client.from('scratch_notes').insert({ family_id: A.family, body: 'QA intrusion' })],
+    // The agreement (062): a person's own record, the database's time, the words fixed.
+    ['anon', 'record an agreement', agreementJudge('refused'), rpc(anon, 'record_agreement', { p_version: AGREEMENT_VERSION })],
+    ['anon', "read anyone's agreements", agreementJudge('refused-or-empty'), () => anon.client.from('user_agreements').select('user_id, agreed_at').limit(5)],
+    ['B', 'record its own agreement, and get the time back', agreementJudge((o) => (!o.error && typeof o.data === 'string' && !Number.isNaN(Date.parse(o.data))
+      ? ['pass', `agreed ${o.data}`]
+      : ['fail', o.error ? `refused its own agreement: ${short(o.error)}` : `no time came back: ${JSON.stringify(o.data)}`])),
+    rpc(b, 'record_agreement', { p_version: AGREEMENT_VERSION, p_platform: 'web', p_app_build: 'qa' })],
+    ['B', 'read when anyone else agreed', agreementJudge('refused-or-empty'), () => b.client.from('user_agreements').select('user_id, agreed_at').neq('user_id', b.user.id).limit(5)],
+    ['B', 'write an agreement for account A', agreementJudge('refused'), () => b.client.from('user_agreements').insert({ user_id: A.user, version: AGREEMENT_VERSION })],
+    ['B', 'change when it agreed', agreementJudge('refused'), () => b.client.from('user_agreements').update({ agreed_at: '2020-01-01T00:00:00Z' }).eq('user_id', b.user.id)],
+    ['B', 'delete its agreements', agreementJudge('refused'), () => b.client.from('user_agreements').delete().eq('user_id', b.user.id)],
+    ['B', 'change the words of the agreement', agreementJudge('refused'), () => b.client.from('agreement_versions').update({ body: 'QA intrusion' }).eq('version', AGREEMENT_VERSION)],
+    ['B', 'add a version of the agreement', agreementJudge('refused'), () => b.client.from('agreement_versions').insert({ version: 'qa-intrusion', body: 'QA intrusion' })],
+    ['anon', "read the words of the app's version, exactly as the app shows them", agreementWordsJudge, () => anon.client.from('agreement_versions').select('body').eq('version', AGREEMENT_VERSION)],
     // Deleting a family vault (057): only its owner, through delete-account.
     ['anon', 'see what deleting QA Vault A would take', familyDeletionJudge('http-401-403'), fn(anon, 'delete-account', { action: 'family_preview', family_id: A.family })],
     ['B', 'see what deleting QA Vault A would take', familyDeletionJudge('http-401-403'), fn(b, 'delete-account', { action: 'family_preview', family_id: A.family })],

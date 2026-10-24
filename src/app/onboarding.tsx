@@ -1,42 +1,72 @@
-import { useState } from 'react';
+// The intro: three slides, then the agreement (062), which nobody passes
+// without ticking it: a sheet at the foot of the screen over the last slide,
+// dimmed, the way the card after sign-in looks. Finish goes on to sign in; the tick waits on this
+// device for the account that signs in (agreement-device.ts). The login
+// screen sends anyone here, straight to the agreement (?step=agree), until
+// this device has agreed to the current version; once it has, the slides
+// lead straight to sign-in.
+
+import { useEffect, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Dimensions } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { AgreementSheet } from '../components/agreement-screen';
+import { agreeOnThisDevice, deviceAgreedToCurrent } from '../lib/agreement-device';
 
 const { width } = Dimensions.get('window');
 
+// One title and one line each (the owner's ask, 23 October 2026).
 const slides = [
   {
     emoji: '🔐',
     title: 'Welcome to AskLocker',
-    subtitle: 'Every document your family needs, in one place.',
+    subtitle: "Your family's documents, in one place.",
   },
   {
-    emoji: '📁',
-    title: 'One Vault. Every Document.',
-    subtitle: 'Passports, insurance, tax and medical papers.',
+    emoji: '📷',
+    title: 'Snap or upload',
+    subtitle: 'AskLocker reads every page for you.',
   },
   {
-    emoji: '🔍',
-    title: 'Just Ask. We\'ll Find It.',
-    subtitle: 'Ask in your own words. AskLocker finds it.',
-    showSearch: true,
+    emoji: '💬',
+    title: 'Just ask',
+    subtitle: '“When does Dad\'s passport expire?”',
   },
 ];
 
 export default function OnboardingScreen() {
-  const [currentSlide, setCurrentSlide] = useState(0);
+  const { step } = useLocalSearchParams<{ step?: string }>();
+  // Whether this device still has to agree: the last step only then.
+  const [mustAgree, setMustAgree] = useState(true);
+  const [currentSlide, setCurrentSlide] = useState(step === 'agree' ? slides.length : 0);
+  const [ticked, setTicked] = useState(false);
+
+  useEffect(() => {
+    deviceAgreedToCurrent().then((agreed) => setMustAgree(!agreed)).catch(() => {});
+  }, []);
+
+  const agreeing = mustAgree && currentSlide >= slides.length;
 
   const handleNext = () => {
     if (currentSlide < slides.length - 1) {
       setCurrentSlide(currentSlide + 1);
+    } else if (mustAgree) {
+      setCurrentSlide(slides.length);
     } else {
       router.replace('/login');
     }
   };
 
-  const slide = slides[currentSlide];
+  const finish = async () => {
+    if (!ticked) return;
+    await agreeOnThisDevice(true);
+    router.replace('/login');
+  };
+
+  // Behind the agreement: the slide it came from (the first, from sign-in).
+  const shown = Math.min(currentSlide, slides.length - 1);
+  const slide = slides[shown];
 
   return (
     <LinearGradient
@@ -45,18 +75,12 @@ export default function OnboardingScreen() {
       end={{ x: 1, y: 1 }}
       style={styles.container}
     >
-      <SafeAreaView style={styles.safeArea}>
+      <SafeAreaView style={styles.safeArea} aria-hidden={agreeing}>
         {/* Content */}
         <View style={styles.content}>
           <Text style={styles.emoji}>{slide.emoji}</Text>
           <Text style={styles.title}>{slide.title}</Text>
           <Text style={styles.subtitle}>{slide.subtitle}</Text>
-
-          {slide.showSearch && (
-            <View style={styles.searchPreview}>
-              <Text style={styles.searchText}>Show me Dad's passport</Text>
-            </View>
-          )}
         </View>
 
         {/* Bottom */}
@@ -68,20 +92,27 @@ export default function OnboardingScreen() {
                 key={index}
                 style={[
                   styles.dot,
-                  index === currentSlide ? styles.dotActive : styles.dotInactive,
+                  index === shown ? styles.dotActive : styles.dotInactive,
                 ]}
               />
             ))}
           </View>
 
           {/* Button */}
-          <TouchableOpacity onPress={handleNext} style={styles.button} activeOpacity={0.8}>
+          <TouchableOpacity onPress={handleNext} style={styles.button} activeOpacity={0.8} disabled={agreeing}>
             <Text style={styles.buttonText}>
-              {currentSlide < slides.length - 1 ? 'Next' : 'Get Started'}
+              {currentSlide < slides.length - 1 ? 'Next' : 'Get started'}
             </Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
+
+      {/* The agreement: over the slide, which stays in sight, dimmed. */}
+      {agreeing && (
+        <View style={styles.dim}>
+          <AgreementSheet ticked={ticked} onTick={setTicked} label="Finish" onPress={finish} />
+        </View>
+      )}
     </LinearGradient>
   );
 }
@@ -104,6 +135,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  dim: { ...StyleSheet.absoluteFillObject, justifyContent: 'flex-end', backgroundColor: 'rgba(13, 17, 23, 0.45)' },
   emoji: {
     fontSize: 64,
     marginBottom: 24,
@@ -122,21 +154,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 24,
     maxWidth: 300,
-  },
-  searchPreview: {
-    marginTop: 24,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.3)',
-    width: '100%',
-    maxWidth: 300,
-  },
-  searchText: {
-    color: '#FFFFFF',
-    fontSize: 14,
   },
   bottom: {
     alignItems: 'center',

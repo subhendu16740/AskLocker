@@ -16,21 +16,21 @@
 //     agrees, so someone abroad cannot pick rupees by changing a setting.
 // ────────────────────────────────────────────────────────────────
 
-import { PLUS_PRICE, plusPrices, type PricePeriod } from './plan-text.ts';
+import { familyPlanName, familyPrice, plusPrices, type FamilyPlan, type PricePeriod } from './plan-text.ts';
 
 export type RazorpayCurrency = 'INR' | 'USD';
 
 export const ORDER_ID = /^order_[A-Za-z0-9]{6,40}$/;
 export const PAYMENT_ID = /^pay_[A-Za-z0-9]{6,40}$/;
 
-/** What a period of Family Plus costs, in paise or cents. */
-export function plusOrderAmount(period: PricePeriod, currency: RazorpayCurrency): number {
-  return PLUS_PRICE[period][currency === 'INR' ? 'inr' : 'usd'] * 100;
+/** What a period of Family Plus, or Family Pro (064), costs, in paise or cents. */
+export function plusOrderAmount(period: PricePeriod, currency: RazorpayCurrency, plan: FamilyPlan = 'plus'): number {
+  return familyPrice(plan)[period][currency === 'INR' ? 'inr' : 'usd'] * 100;
 }
 
-/** "Family Plus — 1 month", as the checkout and the receipt say it. */
-export function plusOrderDescription(period: PricePeriod): string {
-  return `Family Plus — 1 ${period === 'yearly' ? 'year' : 'month'}`;
+/** "Family Plus — 1 month", "Family Pro — 1 year", as the checkout and the receipt say it. */
+export function plusOrderDescription(period: PricePeriod, plan: FamilyPlan = 'plus'): string {
+  return `${familyPlanName(plan)} — 1 ${period === 'yearly' ? 'year' : 'month'}`;
 }
 
 /** The currencies this project takes, from RAZORPAY_CURRENCIES; rupees when unset or unreadable. */

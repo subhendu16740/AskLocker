@@ -5,7 +5,9 @@
 // vault nearly full or full says so on its row. Each vault wears its own
 // colours, a business's teal and a family's navy, whichever mode is open;
 // the mode's own vaults come first. Before 038 a vault's space is the free
-// limit, from its documents' own sizes (see src/lib/plans.ts).
+// limit, from its documents' own sizes (see src/lib/plans.ts). On Free each
+// person also has their own number across their free vaults (060), the
+// table's first row.
 
 import { useCallback, useState } from 'react';
 import { ScrollView, View, Text, ActivityIndicator, TouchableOpacity, StyleSheet } from 'react-native';
@@ -15,9 +17,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../lib/auth';
 import { useFamily } from '../../lib/family-context';
 import { isBusinessVault, isPersonalVault, vaultIcon, vaultName } from '../../lib/vaults';
-import { fetchPlanLimits, fetchStorageStatus, fetchStorageUsage, type FamilyPlanStatus } from '../../lib/api';
+import { fetchPersonStorage, fetchPlanLimits, fetchStorageStatus, fetchStorageUsage, type FamilyPlanStatus } from '../../lib/api';
 import {
-  DEFAULT_PLAN_LIMITS, businessPlanName, formatBytes, isBusinessPlan, storageLevel, type PlanLimits, type StorageLevel,
+  familyPlanName,
+  DEFAULT_PLAN_LIMITS, businessPlanName, formatBytes, isBusinessPlan, storageLevel, type PersonRoom, type PlanLimits, type StorageLevel,
 } from '../../lib/plans';
 import { longDate } from '../../lib/dates';
 import { plusPage } from '../../lib/family-plan';
@@ -39,7 +42,7 @@ interface Row {
 
 function planName(status: FamilyPlanStatus | null): string {
   if (isBusinessPlan(status?.plan)) return `${businessPlanName(status.plan)}${status.trial ? ', trial' : ''}`;
-  if (status?.plan === 'plus') return `Family Plus${status.trial ? ', trial' : ''}`;
+  if (status?.plan === 'plus' || status?.plan === 'family_pro') return `${familyPlanName(status.plan)}${status.trial ? ', trial' : ''}`;
   // A business whose paid plan ended (051): every record stays, nothing can be added.
   return status?.closed ? 'Plan ended' : 'Free';
 }
@@ -53,6 +56,7 @@ export default function StorageScreen() {
   const theme = useVaultTheme();
   const business = mode === 'business';
   const [rows, setRows] = useState<Row[] | null>(null);
+  const [person, setPerson] = useState<PersonRoom | null>(null);
   const [error, setError] = useState<string | null>(null);
   const familyKey = families.map((f) => f.family_id).join(',');
 
@@ -67,18 +71,23 @@ export default function StorageScreen() {
     Promise.all([
       Promise.all(vaults.map((v) => fetchStorageStatus(v.family_id).catch(() => null))),
       fetchPlanLimits().catch((): PlanLimits => DEFAULT_PLAN_LIMITS),
+      fetchPersonStorage().catch(() => null),
     ])
-      .then(async ([statuses, limits]) => {
+      .then(async ([statuses, limits, mine]) => {
         // Before 038 there is no status: add up the documents' own sizes instead.
         const unknown = vaults.filter((_, i) => !statuses[i]);
         const sizes = unknown.length
           ? await fetchStorageUsage(unknown.map((v) => ({ id: v.family_id, name: vaultName(v.families) })), user.id)
           : [];
         if (cancelled) return;
+        // Only someone in a free vault has a number of their own to show.
+        setPerson(statuses.some((s) => s?.plan === 'free' && !s.closed) ? mine : null);
         setRows(vaults.map((vault, i) => {
           const status = statuses[i];
           const used = status ? status.usedBytes : sizes.find((s) => s.familyId === vault.family_id)?.bytes ?? 0;
-          const limit = status ? status.limitBytes : isPersonalVault(vault.families) ? limits.freePersonal : limits.free;
+          const limit = status ? status.limitBytes
+            : isPersonalVault(vault.families) ? limits.freePersonal
+              : isBusinessVault(vault.families) ? limits.freeBusiness : limits.free;
           return { vault, status, used, limit };
         }));
       })
@@ -105,13 +114,14 @@ export default function StorageScreen() {
                 <Text style={[styles.head, styles.usedCol]}>Used</Text>
                 <Text style={[styles.head, styles.spaceCol]}>Space</Text>
               </View>
+              {person && <PersonRow person={person} last={rows.length === 0} />}
               {rows.length === 0 && <View style={styles.empty}><Muted>No vaults yet.</Muted></View>}
               {rows.map((r, i) => <VaultRow key={r.vault.family_id} row={r} last={i === rows.length - 1} />)}
             </View>
 
             <View style={styles.key}>
               <Text style={styles.keyText}>
-                <Text style={{ color: business ? biz.accent : color.accent }}>★</Text> Paid plan. Documents and saved chats share a vault's space.
+                <Text style={{ color: business ? biz.accent : color.accent }}>★</Text> Paid plan
               </Text>
             </View>
 
@@ -125,6 +135,50 @@ export default function StorageScreen() {
         )}
       </ScrollView>
     </SafeAreaView>
+  );
+}
+
+// What this person has added across their free vaults, against their own
+// number on Free (060). Files in a vault on a paid plan do not count.
+function PersonRow({ person, last }: { person: PersonRoom; last: boolean }) {
+  const theme = useVaultTheme();
+  const { usedBytes: used, limitBytes: limit } = person;
+  const level = storageLevel(used, limit);
+  const percent = limit > 0 ? Math.min(100, Math.round((used / limit) * 100)) : 0;
+  const note = level === 'full' ? 'Full. Delete something you added to add more.' : level === 'nearly' ? 'Nearly full.' : null;
+  return (
+    <View
+      style={[styles.row, last && styles.lastRow]}
+      accessible
+      accessibilityLabel={`You, on Free: ${formatBytes(used)} of ${formatBytes(limit)} added across your free vaults${note ? `. ${note}` : ''}`}
+    >
+      <View style={styles.rowMain}>
+        <View style={[styles.vaultCol, styles.vaultCell]}>
+          <View style={[styles.icon, { backgroundColor: theme.tint }]}>
+            <Feather name="user" size={16} color={theme.primary} />
+          </View>
+          <View style={styles.vaultText}>
+            <Text style={styles.name} numberOfLines={1}>You</Text>
+            <Text style={styles.plan} numberOfLines={1}>On Free</Text>
+          </View>
+        </View>
+        <Text style={[styles.num, styles.usedCol, level !== 'ok' && { color: LEVEL[level] }]} numberOfLines={1}>{formatBytes(used)}</Text>
+        <Text style={[styles.num, styles.spaceCol, styles.space, { color: theme.primary }]} numberOfLines={1}>{formatBytes(limit)}</Text>
+      </View>
+      <View style={styles.bar}>
+        <View
+          style={[
+            styles.barFill,
+            { width: `${used > 0 ? Math.max(2, percent) : 0}%`, backgroundColor: level === 'ok' ? theme.secondary : LEVEL[level] },
+          ]}
+        />
+      </View>
+      {note && (
+        <View style={styles.noteRow}>
+          <Text style={[styles.note, { color: LEVEL[level as Exclude<StorageLevel, 'ok'>] }]}>{note}</Text>
+        </View>
+      )}
+    </View>
   );
 }
 

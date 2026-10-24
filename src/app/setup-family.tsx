@@ -10,42 +10,40 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../lib/auth';
 import { useFamily } from '../lib/family-context';
 import { createNewFamily, fetchPlanLimits } from '../lib/api';
+import { freeVaultsText } from '../lib/plans';
 import { BackButton } from '../components/back-button';
 import { color, radius, size, space, type } from '../constants/design';
 import { track } from '../lib/analytics';
 import { useOnPlus } from '../lib/family-plan';
 import { vaultTheme } from '../lib/vault-theme';
+import { isPersonalVault } from '../lib/vaults';
 
 type Kind = 'family' | 'business';
 
 // The words that change with what is being made (051).
 const WORDS: Record<Kind, {
   title: string; subtitle: string; label: string; placeholder: string; empty: string;
-  button: string; failed: string; infoTitle: string; infoSub: string; plusLink: string; icon: 'users' | 'briefcase';
+  button: string; failed: string; plusLink: string; icon: 'users' | 'briefcase';
 }> = {
   family: {
     title: 'Create Your Family Vault',
-    subtitle: 'Everyone you invite can see its documents. Your personal vault stays yours.',
+    subtitle: 'Everyone you invite can see it.',
     label: 'Family Name',
     placeholder: 'e.g. The Sharma Family',
     empty: 'Enter a family name.',
     button: 'Create Family Vault',
     failed: "Couldn't create the family. Try again.",
-    infoTitle: "Your family's own space",
-    infoSub: 'Only your family can open its documents in AskLocker.',
     plusLink: 'See Family Plus ›',
     icon: 'users',
   },
   business: {
     title: 'Create Your Business Vault',
-    subtitle: 'Everyone you invite can see its records. Your personal vault stays yours.',
+    subtitle: 'Everyone you invite can see it.',
     label: 'Business Name',
     placeholder: 'e.g. Sharma Traders',
     empty: 'Enter a business name.',
     button: 'Create Business Vault',
     failed: "Couldn't create the business. Try again.",
-    infoTitle: "Your business's own space",
-    infoSub: 'Only your team can open its records in AskLocker.',
     plusLink: 'See Plus ›',
     icon: 'briefcase',
   },
@@ -68,19 +66,24 @@ export default function SetupFamilyScreen() {
   useEffect(() => {
     if (!fixedKind && !picked) setKind(uses.primary);
   }, [uses.primary]);
-  // On Free, one vault in all besides the personal one, a family or a
-  // business (054). Said before the form, not only when it is refused.
-  // Someone in a vault on a paid plan is not on Free (055), so not to them.
+  // On Free, one family and one business besides the personal vault (059;
+  // 054 allowed one vault in all, which a project without 059 still keeps).
+  // Said before the form once it can matter: to someone who already has a
+  // family or business, not to someone making their first. Someone in a vault
+  // on a paid plan is not on Free (055), so not to them.
   const onPlus = useOnPlus();
-  const [freeVaults, setFreeVaults] = useState<number | null>(null);
+  const [freeNote, setFreeNote] = useState<string | null>(null);
   useEffect(() => {
-    fetchPlanLimits().then((l) => setFreeVaults(l.vaultsPerPerson)).catch(() => {});
+    fetchPlanLimits().then((l) => {
+      const text = freeVaultsText(l);
+      setFreeNote(text ? `On Free, you can create ${text}.` : null);
+    }).catch(() => {});
   }, []);
+  const hasShared = families.some((f) => !isPersonalVault(f.families));
   const w = WORDS[kind];
   // What is being made wears its own colours: a business's from the start.
   const theme = vaultTheme({ kind });
   const [familyName, setFamilyName] = useState('');
-  const [description, setDescription] = useState('');
   const [loading, setLoading] = useState(false);
   // Said on the screen, not in an alert: an alert shows nothing in a browser.
   // `plus`: refused because on Free a person creates one family (050).
@@ -96,7 +99,7 @@ export default function SetupFamilyScreen() {
 
     setLoading(true);
     try {
-      const familyId = await createNewFamily(user.id, familyName.trim(), description.trim() || undefined, undefined, kind);
+      const familyId = await createNewFamily(user.id, familyName.trim(), undefined, undefined, kind);
       track('family_created', { kind });
       // A vault of the other kind than the one they chose first: they use
       // both now, so the menu gets the Family | Business switch.
@@ -153,13 +156,7 @@ export default function SetupFamilyScreen() {
           ))}
         </View>
 
-        {!onPlus && freeVaults != null && freeVaults > 0 && (
-          <Text style={styles.kindNote}>
-            {freeVaults === 1
-              ? 'On Free, you can create one family or one business.'
-              : `On Free, you can create ${freeVaults} families or businesses.`}
-          </Text>
-        )}
+        {!onPlus && freeNote && hasShared && <Text style={styles.kindNote}>{freeNote}</Text>}
 
         {/* Form */}
         <View style={styles.form}>
@@ -174,22 +171,6 @@ export default function SetupFamilyScreen() {
                 onChangeText={setFamilyName}
                 style={styles.input}
                 autoFocus
-              />
-            </View>
-          </View>
-
-          <View style={styles.field}>
-            <Text style={styles.fieldLabel}>
-              Description <Text style={styles.fieldOptional}>(optional)</Text>
-            </Text>
-            <View style={styles.inputWrapper}>
-              <Feather name="file-text" size={18} color="#9CA3AF" style={styles.inputIcon} />
-              <TextInput
-                placeholder="A short description"
-                placeholderTextColor="#9CA3AF"
-                value={description}
-                onChangeText={setDescription}
-                style={styles.input}
               />
             </View>
           </View>
@@ -228,15 +209,6 @@ export default function SetupFamilyScreen() {
             )}
           </LinearGradient>
         </TouchableOpacity>
-
-        {/* Info Card */}
-        <View style={[styles.infoCard, { backgroundColor: theme.tint }]}>
-          <Feather name="lock" size={16} color={theme.primary} style={styles.infoIcon} />
-          <View style={styles.infoTextWrap}>
-            <Text style={[styles.infoTitle, { color: theme.primary }]}>{w.infoTitle}</Text>
-            <Text style={styles.infoSub}>{w.infoSub}</Text>
-          </View>
-        </View>
       </View>
     </SafeAreaView>
   );
@@ -305,7 +277,6 @@ const styles = StyleSheet.create({
     color: color.textBody,
     marginBottom: 6,
   },
-  fieldOptional: { fontWeight: '400', color: '#9CA3AF' },
   inputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -346,16 +317,4 @@ const styles = StyleSheet.create({
   problemText: { ...type.caption, color: '#991B1B' },
   problemLink: { ...type.caption, fontWeight: '600', color: color.primary },
   createBtnText: { ...type.button, color: '#FFFFFF' },
-  infoCard: {
-    flexDirection: 'row',
-    backgroundColor: color.tint,
-    borderRadius: radius.control,
-    padding: space.md,
-    gap: space.md,
-    alignItems: 'flex-start',
-  },
-  infoIcon: { marginTop: 2 },
-  infoTextWrap: { flex: 1 },
-  infoTitle: { fontSize: 14, lineHeight: 20, fontWeight: '600', color: color.primary, marginBottom: 2 },
-  infoSub: type.caption,
 });

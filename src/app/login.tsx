@@ -6,7 +6,12 @@
 // first (fingerprint-sign-in.tsx). Test builds — DEV and previews — also take
 // an email and password, for test accounts (password-sign-in.tsx); production
 // never shows that.
+//
+// Nobody signs in before agreeing (062): until this device has agreed to the
+// current version, the login screen sends them to the intro's last step,
+// the agreement (onboarding.tsx).
 
+import { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Image, KeyboardAvoidingView, Platform } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
@@ -15,9 +20,20 @@ import { GoogleSignIn } from '../components/google-sign-in';
 import { FingerprintSignIn } from '../components/fingerprint-sign-in';
 import { PasswordSignIn } from '../components/password-sign-in';
 import { isProduction } from '../lib/environment';
+import { deviceAgreedToCurrent } from '../lib/agreement-device';
 import { color, radius, space, type } from '../constants/design';
 
 export default function LoginScreen() {
+  const [agreed, setAgreed] = useState(false);
+
+  useEffect(() => {
+    deviceAgreedToCurrent()
+      .then((yes) => (yes ? setAgreed(true) : router.replace('/onboarding?step=agree' as any)))
+      .catch(() => router.replace('/onboarding?step=agree' as any));
+  }, []);
+
+  if (!agreed) return <View style={styles.safe} />;
+
   return (
     <SafeAreaView style={styles.safe}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.flex}>
@@ -32,15 +48,11 @@ export default function LoginScreen() {
             <Image source={require('@/assets/images/logo-mark.png')} style={styles.logoMark} accessibilityIgnoresInvertColors />
           </LinearGradient>
           <Text style={styles.logoTitle} accessibilityRole="header">AskLocker</Text>
-          <Text style={styles.tagline}>Your family's documents, all in one place.</Text>
         </View>
 
         <FingerprintSignIn onSignedIn={() => router.replace('/home' as any)} />
-        <Text style={styles.lead}>Sign in with your Google account.</Text>
         <GoogleSignIn onSignedIn={() => router.replace('/home' as any)} />
-        <Text style={styles.note}>
-          New here? The same button creates your account.
-        </Text>
+        <Text style={styles.note}>New here? This creates your account.</Text>
 
         {!isProduction && <PasswordSignIn onSignedIn={() => router.replace('/home' as any)} />}
       </ScrollView>
@@ -77,7 +89,5 @@ const styles = StyleSheet.create({
   },
   logoMark: { width: 44, height: 44 },
   logoTitle: { fontSize: 20, lineHeight: 26, fontWeight: '600', color: color.primary },
-  tagline: { ...type.caption, marginTop: space.xs, textAlign: 'center' },
-  lead: { ...type.body, textAlign: 'center', marginBottom: space.lg },
-  note: { ...type.caption, textAlign: 'center' },
+  note: { ...type.caption, textAlign: 'center', marginTop: space.md },
 });

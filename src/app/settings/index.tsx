@@ -13,7 +13,7 @@ import { useFamily } from '../../lib/family-context';
 import { isBusinessVault } from '../../lib/vaults';
 import { usePreferences } from '../../lib/preferences';
 import { fetchPlanLimits, fetchVoiceStatus, indexStatus, type IndexStatus, type VoiceStatus } from '../../lib/api';
-import { useFamilyPlan, useModeOnPlus } from '../../lib/family-plan';
+import { plusPage, useFamilyPlan, useModeOnPlus } from '../../lib/family-plan';
 import { DEFAULT_PLAN_LIMITS, type PlanLimits, plusName } from '../../lib/plans';
 import { VOICE_LANGUAGES, phrase, voiceLanguage } from '../../lib/voice-languages';
 import { OCR_LANGUAGES, describeOcrLanguages } from '../../lib/ocr-languages';
@@ -74,7 +74,7 @@ export default function SettingsScreen() {
   const theme = useVaultTheme();
   const {
     voiceMode, voiceLanguage: voiceLang, documentLanguages, notificationsEnabled,
-    setVoiceMode, setVoiceLanguage, setDocumentLanguages,
+    setVoiceMode, setVoiceLanguage, setDocumentLanguages, languagesAllowed,
   } = usePreferences();
   // On the free plan each person has their own voice chats (041–043); say
   // how many are left where voice is switched on.
@@ -122,28 +122,28 @@ export default function SettingsScreen() {
   const voiceLabel = deviceVoices.find((v) => v.id === voiceChoice)?.label ?? 'Automatic';
 
   const accountItems: LinkItem[] = [
-    { icon: 'user', label: 'Profile', sub: 'Your name and phone number', route: '/settings/profile' },
+    { icon: 'user', label: 'Profile', sub: 'Name and phone', route: '/settings/profile' },
     {
       icon: 'shield', label: 'Security', route: '/settings/security',
       sub: Platform.OS === 'web'
-        ? 'Sign-in, fingerprint, sign out, delete account'
-        : 'Sign-in, sign out, delete account',
+        ? 'Sign-in, fingerprint, sign out'
+        : 'Sign-in and sign out',
     },
     {
-      icon: 'bell', label: 'Notifications', sub: 'Expiry alerts and family news',
+      icon: 'bell', label: 'Notifications', sub: 'Alerts and reminders',
       route: '/settings/notifications', value: notificationsEnabled ? 'On' : 'Off',
     },
   ];
   const vaultItems: LinkItem[] = [
-    { icon: 'layers', label: 'Your vaults', sub: 'Family or Business first, and every vault', route: '/settings/vaults' },
+    { icon: 'layers', label: 'Your vaults', sub: 'Open, create or delete', route: '/settings/vaults' },
     isBusinessVault(currentFamily)
       ? { icon: 'briefcase', label: 'Manage team', sub: 'People in this business', route: '/family' }
       : { icon: 'users', label: 'Manage Family', sub: 'People in this family', route: '/family' },
-    { icon: 'hard-drive', label: 'Storage', sub: 'Space used in each vault', route: '/settings/storage' },
+    { icon: 'hard-drive', label: 'Storage', sub: 'Space used', route: '/settings/storage' },
     { icon: 'lock', label: 'Privacy', sub: 'Who can see your documents', route: '/settings/privacy' },
   ];
   const helpItems: LinkItem[] = [
-    { icon: 'help-circle', label: 'Help & FAQ', sub: 'Answers, feedback and contact', route: '/settings/help' },
+    { icon: 'help-circle', label: 'Help & FAQ', sub: 'Answers and feedback', route: '/settings/help' },
     // The badge says WHICH build this is at a glance; About says what that
     // means, in the one place someone goes to check.
     {
@@ -222,10 +222,10 @@ export default function SettingsScreen() {
     if (index.up_to_date) {
       const stuck = index.unindexed?.length ?? 0;
       return stuck > 0
-        ? `${stuck} document${stuck === 1 ? '' : 's'} couldn't be read. Try adding a clearer copy.`
+        ? `${stuck} document${stuck === 1 ? '' : 's'} couldn't be read. Add a clearer copy.`
         : 'Up to date.';
     }
-    return 'Update so documents in every language can be found.';
+    return 'Update to find documents in every language.';
   };
 
   // Search keeps itself up to date (rag-search starts a rebuild when it sees
@@ -311,22 +311,25 @@ export default function SettingsScreen() {
                   {voiceChats?.limit != null
                     ? voiceChats.left === 0
                       ? `You've used all ${voiceChats.limit} free voice chats. ${plusName(theme.business)} has no limit.`
-                      : `You have ${voiceChats.left} of ${voiceChats.limit} free voice chats left. Each question you ask or hear by voice uses one. ${plusName(theme.business)} has no limit.`
-                    : `On Free, you get ${freeVoiceChats} voice chats. Each question you ask or hear by voice uses one. ${plusName(theme.business)} has no limit.`}
+                      : `${voiceChats.left} of ${voiceChats.limit} free voice chats left. ${plusName(theme.business)} has no limit.`
+                    : `${freeVoiceChats} free voice chats. ${plusName(theme.business)} has no limit.`}
                 </Text>
               </View>
             )}
             <TouchableOpacity
               style={[styles.settingRow, styles.settingRowBorder]}
               activeOpacity={0.7}
-              onPress={() => setLangPickerOpen(true)}
+              // On Free, voice is in English; Indian languages come with a paid plan (064).
+              onPress={() => (languagesAllowed ? setLangPickerOpen(true) : router.push(plusPage('languages') as any))}
             >
               <View style={[styles.settingIconWrap, { backgroundColor: theme.tint }]}>
                 <Feather name="globe" size={16} color={theme.primary} />
               </View>
               <View style={styles.settingText}>
                 <Text style={styles.settingLabel}>Voice language</Text>
-                <Text style={styles.settingSub}>The language you speak and hear</Text>
+                <Text style={styles.settingSub}>
+                  {languagesAllowed ? 'The language you speak and hear' : `★ Hindi and more with ${plusName(theme.business)}`}
+                </Text>
               </View>
               <Text style={styles.settingValue}>{voiceLanguage(voiceLang).native}</Text>
               <Feather name="chevron-right" size={16} color="#9CA3AF" />
@@ -356,14 +359,16 @@ export default function SettingsScreen() {
             <TouchableOpacity
               style={styles.settingRow}
               activeOpacity={0.7}
-              onPress={() => setDocLangPickerOpen(true)}
+              onPress={() => (languagesAllowed ? setDocLangPickerOpen(true) : router.push(plusPage('languages') as any))}
             >
               <View style={[styles.settingIconWrap, { backgroundColor: theme.tint }]}>
                 <Feather name="file-text" size={16} color={theme.primary} />
               </View>
               <View style={styles.settingText}>
                 <Text style={styles.settingLabel}>Document languages</Text>
-                <Text style={styles.settingSub}>Languages your documents are in</Text>
+                <Text style={styles.settingSub}>
+                  {languagesAllowed ? 'Languages your documents are in' : `★ Indian languages with ${plusName(theme.business)}`}
+                </Text>
               </View>
               <Text style={styles.settingValue} numberOfLines={1}>
                 {describeOcrLanguages(documentLanguages)}
@@ -461,7 +466,7 @@ export default function SettingsScreen() {
             <Text style={styles.sheetNote}>
               {deviceVoices.length
                 ? 'Tap a voice to hear it. The last one you tap reads your answers.'
-                : `This device has no ${voiceLanguage(voiceLang).english} voice, so it uses its default one. Another browser or your phone's settings may have more.`}
+                : `No ${voiceLanguage(voiceLang).english} voice on this device, so it uses its default one.`}
             </Text>
             <ScrollView style={styles.sheetList}>
               {[{ id: null as string | null, label: 'Automatic', note: 'Best voice for the language' }, ...deviceVoices].map((v, i) => {
@@ -503,8 +508,7 @@ export default function SettingsScreen() {
           <Pressable style={styles.sheet} onPress={() => {}}>
             <Text style={styles.sheetTitle}>Document languages</Text>
             <Text style={styles.sheetNote}>
-              Pick the languages your documents use. English is always on. Each new
-              language downloads once, the first time you scan.
+              English is always on. A new language downloads the first time you scan.
             </Text>
             <ScrollView style={styles.sheetList}>
               {OCR_LANGUAGES.map((l, i) => {

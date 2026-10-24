@@ -163,15 +163,18 @@ begin
   v_out := v_out || 'family_given=' || exists (select 1 from public.notifications n where n.family_id = '${familyA}' and n.type = 'plan'
              and n.user_id = '${userA}' and n.title = v_fam || ' has Family Plus' and n.message like 'Room for % GB of documents, until %') || ';';
   -- 053: on Family Plus the family shares its month; at its number, a
-  -- question is refused for the family (the block rolls back, as always).
+  -- question is refused for the family. 064 takes the number away: a
+  -- question past 500 this month is still allowed (the block rolls back, as
+  -- always).
   if exists (select 1 from information_schema.columns where table_schema = 'public'
               and table_name = 'plan_limits' and column_name = 'family_questions_per_month') then
     insert into public.question_usage (user_id, month) values ('${userA}', public.question_month())
       on conflict (user_id, month) do nothing;
     update public.question_usage
-       set questions = (select family_questions_per_month from public.plan_limits where plan = 'plus')
+       set questions = coalesce((select family_questions_per_month from public.plan_limits where plan = 'plus'), 500)
      where user_id = '${userA}' and month = public.question_month();
-    v_out := v_out || 'family_pool=' || coalesce(public.claim_question('${userA}')->>'reason', 'allowed') || ';';
+    v_out := v_out || 'family_pool=' || coalesce(public.claim_question('${userA}')->>'reason', 'allowed') || ';'
+             || 'family_number=' || coalesce((select family_questions_per_month::text from public.plan_limits where plan = 'plus'), 'none') || ';';
   else
     v_out := v_out || 'family_pool=none;';
   end if;
@@ -179,6 +182,18 @@ begin
   perform public.queue_plan_notices();
   v_out := v_out || 'family_ended=' || exists (select 1 from public.notifications n where n.family_id = '${familyA}' and n.type = 'plan'
              and n.user_id = '${userA}' and n.title = 'Family Plus has ended for ' || v_fam) || ';';
+  -- 064: Family Pro is given and ends under its own name.
+  if exists (select 1 from public.plan_limits where plan = 'family_pro') then
+    perform public.set_family_plan('${familyA}', now() + interval '1 day', 'manual', null, 'family_pro');
+    v_out := v_out || 'pro_given=' || exists (select 1 from public.notifications n where n.family_id = '${familyA}' and n.type = 'plan'
+               and n.user_id = '${userA}' and n.title = v_fam || ' has Family Pro') || ';';
+    perform public.end_family_plan('${familyA}');
+    perform public.queue_plan_notices();
+    v_out := v_out || 'pro_ended=' || exists (select 1 from public.notifications n where n.family_id = '${familyA}' and n.type = 'plan'
+               and n.user_id = '${userA}' and n.title = 'Family Pro has ended for ' || v_fam) || ';';
+  else
+    v_out := v_out || 'pro_given=none;';
+  end if;
 
   begin
     perform public.set_family_plan('${familyA}', now() + interval '1 day', 'manual', null, 'business_plus');
@@ -199,22 +214,27 @@ begin
     v_out := v_out || 'personal_business=refused;';
   end;
 
-  -- 054: on Free a person creates one vault in all, so B (on Free, with QA
-  -- Vault B) is refused a business; 055: once B is in a family on Family
-  -- Plus (QA Vault A, here), it is not on Free and may. Then QA Vault A
-  -- becomes a business only once its Family Plus has ended, as its admin, A
-  -- (all rolled back, as always).
+  -- B is on Free, with QA Vault B. 059: B creates a free business beside it
+  -- (undone at once, so 055's case below starts from the same place); 054,
+  -- while plan_limits still has its combined 1: B is refused one. 055: once
+  -- B is in a family on Family Plus (QA Vault A, here), it is not on Free and
+  -- may. Then QA Vault A becomes a business only once its Family Plus has
+  -- ended, as its admin, A (all rolled back, as always).
   if exists (select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
               where n.nspname = 'public' and p.proname = 'make_business_vault') then
+    v_out := v_out || 'free_vaults=' || coalesce((select pl.vaults_per_person::text from public.plan_limits pl where pl.plan = 'free'), 'none') || ';';
     perform set_config('request.jwt.claims', v_as_b, true);
     perform set_config('request.jwt.claim.role', 'authenticated', true);
     perform set_config('request.jwt.claim.sub', '${userB}', true);
     begin
-      perform public.create_family('${userB}', 'QA one free vault, business', null, null, false, 'business');
+      perform public.create_family('${userB}', 'QA free business beside a free family', null, null, false, 'business');
       v_out := v_out || 'b_business=ALLOWED;';
+      raise exception 'qa: undo the free business' using hint = 'qa_undo';
     exception when others then
       get stacked diagnostics v_hint = pg_exception_hint;
-      v_out := v_out || 'b_business=' || coalesce(nullif(v_hint, ''), 'other') || ';';
+      if v_hint is distinct from 'qa_undo' then
+        v_out := v_out || 'b_business=' || coalesce(nullif(v_hint, ''), 'other') || ';';
+      end if;
     end;
     perform set_config('request.jwt.claims', v_service, true);
     perform set_config('request.jwt.claim.role', 'service_role', true);
@@ -532,9 +552,20 @@ export async function runBusinessChecks(cfg, { a, b, anon, vaultA, vaultB }, res
   if (result.family_pool === 'none' || result.family_pool == null) {
     results.add('business', 'db-family-questions', 'Family Plus: a family that has used its month\'s questions is refused (053)', 'skipped',
       { why: 'migration 053 is not applied to DEV yet' });
+  } else if (result.family_number === 'none') {
+    // 064: Plus and Pro have no monthly limit; only the day's tries hold.
+    check('db-family-questions', 'Family Plus: no monthly limit, a question past 500 this month is allowed (064)',
+      result.family_pool === 'allowed' || result.family_pool === 'tries', said('family_pool'));
   } else {
     check('db-family-questions', 'Family Plus: a family that has used its month\'s questions is refused (053)',
       result.family_pool === 'family', said('family_pool'));
+  }
+  if (result.pro_given === 'none' || result.pro_given == null) {
+    results.add('business', 'db-family-pro', 'Family Pro is given and ends under its own name (064)', 'skipped',
+      { why: 'migration 064 is not applied to DEV yet' });
+  } else {
+    check('db-family-pro', 'Family Pro is given and ends under its own name (064)',
+      result.pro_given === 'true' && result.pro_ended === 'true', `${said('pro_given')}, ${said('pro_ended')}`);
   }
   check('db-business-plan-family', 'Business Plus is refused for a family', result.family_business === 'refused', said('family_business'));
   check('db-family-plus-business', 'Family Plus, and a payment naming no plan, is refused for a business',
@@ -544,7 +575,7 @@ export async function runBusinessChecks(cfg, { a, b, anon, vaultA, vaultB }, res
     for (const [id, title] of [
       ['db-convert-on-plus', 'A family vault on Family Plus cannot become a business until Plus ends (054)'],
       ['db-convert', 'Its admin makes a family vault a business: everyone stays, on Free (054)'],
-      ['db-one-free-vault', 'On Free, a person creates one vault in all: B, with a free family, is refused a business (054)'],
+      ['db-free-business-beside-family', 'On Free, a person with a free family also creates a free business (059)'],
     ]) results.add('business', id, title, 'skipped', { why: 'migration 054 is not applied to DEV yet' });
   } else {
     check('db-convert-on-plus', 'A family vault on Family Plus cannot become a business until Plus ends (054)',
@@ -552,8 +583,15 @@ export async function runBusinessChecks(cfg, { a, b, anon, vaultA, vaultB }, res
     check('db-convert', 'Its admin makes a family vault a business: everyone stays, on Free (054)',
       result.converted === 'business' && result.converted_plan === 'free' && Number(result.converted_members) >= 1,
       `${said('converted')}, ${said('converted_plan')}, members ${result.converted_members ?? '—'}`);
-    check('db-one-free-vault', 'On Free, a person creates one vault in all: B, with a free family, is refused a business (054)',
-      result.b_business === 'family_limit', said('b_business'));
+    // 059 turns 054's combined number off; until it is applied to DEV, B is
+    // still refused, and the check says which rule it is checking.
+    if (result.free_vaults === 'none') {
+      check('db-free-business-beside-family', 'On Free, a person with a free family also creates a free business (059)',
+        result.b_business === 'ALLOWED', said('b_business'));
+    } else {
+      check('db-free-business-beside-family', 'On Free, one vault in all: B, with a free family, is refused a business (054; 059 not applied to DEV yet)',
+        result.b_business === 'family_limit', `${said('b_business')}, ${said('free_vaults')}`);
+    }
   }
   if (result.overview_pro === 'none' || result.overview_pro == null) {
     for (const [id, title] of [

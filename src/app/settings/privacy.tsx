@@ -6,12 +6,15 @@
 // payments or usage counts.
 
 import { useEffect, useState } from 'react';
-import { ScrollView } from 'react-native';
+import { ScrollView, Text } from 'react-native';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ScreenHeader } from '../../components/screen-header';
 import { Card, CardTitle, Body, OnOff, SecondaryButton, screenStyles } from '../../components/settings-ui';
 import { analyticsBuilt, analyticsOn, setAnalyticsOn } from '../../lib/analytics';
+import { DEFAULT_PLAN_LIMITS } from '../../lib/plans';
+
+const bold = { fontWeight: '600' as const };
 
 export default function PrivacyScreen() {
   // Usage counts (analytics.ts): only builds made with a PostHog key send any.
@@ -26,84 +29,56 @@ export default function PrivacyScreen() {
       <ScrollView contentContainerStyle={screenStyles.body}>
         <Card>
           <CardTitle icon="users">Who can see your documents</CardTitle>
-          <Body>
-            Only a family's members can open its documents in AskLocker, unless someone shares one by link. Your
-            personal vault is yours alone, and nobody else can join it.
-          </Body>
-          <Body>
-            Nobody joins a family unless an admin invites them and they say yes. Only the person who added a document
-            can delete it. Not even an admin can.
-          </Body>
+          <Body>Your family, and anyone you send a share link to. Your personal vault is yours alone.</Body>
         </Card>
 
         <Card>
           <CardTitle icon="eye">What AskLocker can see</CardTitle>
           <Body>
-            Your documents travel over encrypted connections and are stored on Supabase's encrypted disks. They are not
-            end-to-end encrypted. Our servers read the text so you can search it, and the people who run AskLocker can
-            technically open your documents.
+            Your documents are encrypted on the way and on disk, but not end-to-end. Our servers read the text to
+            search it, and the people who run AskLocker can open your documents.
+          </Body>
+        </Card>
+
+        <Card>
+          <CardTitle icon="share-2">What goes to other services</CardTitle>
+          <Body><Text style={bold}>Search:</Text> passages of your documents, and your questions, go to HuggingFace.</Body>
+          <Body><Text style={bold}>Answers:</Text> your question and the best passages go to Anthropic (Claude) or Groq. Never your whole vault.</Body>
+          <Body>
+            <Text style={bold}>Reading:</Text> photos and spreadsheets you upload are read on your device. Scanned
+            PDFs and photos from Gmail go to OCR.space.
+          </Body>
+          <Body><Text style={bold}>Voice:</Text> your browser's own speech service. In Chrome, that's Google's.</Body>
+          <Body><Text style={bold}>Notifications:</Text> your browser's push service, which can't read them.</Body>
+          <Body>
+            <Text style={bold}>Payments:</Text> Razorpay takes your card or UPI details, never us. We check your
+            country to pick ₹ or $, and don't keep it.
           </Body>
         </Card>
 
         <Card>
           <CardTitle icon="link">Share links</CardTitle>
-          <Body>
-            Anyone with a share link can open that one document, without an account, until it expires or is turned
-            off. Your family sees every working link, and you're told when someone shares a document that's yours.
-          </Body>
+          <Body>Anyone with the link can open that one document until it expires or is turned off.</Body>
         </Card>
 
         <Card>
           <CardTitle icon="plus-square">Emergency cards</CardTitle>
-          <Body>
-            Everyone in your family can see each card, and a card is deleted when its person leaves. Ask doesn't read
-            the cards, so they never go to the AI service.
-          </Body>
-        </Card>
-
-        <Card>
-          <CardTitle icon="file-text">Reading your documents</CardTitle>
-          <Body>
-            Photos you upload are read on your device. Scanned PDFs and photos from Gmail may be read by OCR.space.
-          </Body>
-          <Body>
-            To make search work, passages of your documents and your questions go to HuggingFace.
-          </Body>
-        </Card>
-
-        <Card>
-          <CardTitle icon="message-circle">When you ask a question</CardTitle>
-          <Body>
-            Your question, the chat so far and the best-matching passages go to Groq, which writes the answer. Your
-            whole vault is never sent.
-          </Body>
-          <Body>
-            When you ask by voice, your browser or phone turns your speech into text with its own speech service. In
-            Chrome, that's Google's.
-          </Body>
-        </Card>
-
-        <Card>
-          <CardTitle icon="bell">Notifications on your devices</CardTitle>
-          <Body>
-            Notifications reach you through your browser's own push service, like Google's or Apple's. They're locked
-            so that service can't read them.
-          </Body>
+          <Body>Your family can see them. They're never sent to the AI.</Body>
         </Card>
 
         <Card>
           <CardTitle icon="mail">Import from Gmail</CardTitle>
-          <Body>
-            Until you pick a file, AskLocker keeps only each attachment's sender, subject, date, name and size, never
-            the email itself. Your family doesn't see this, and disconnecting Gmail forgets it.
-          </Body>
+          <Body>Until you pick a file, we keep only each attachment's sender, subject and name. Never the email.</Body>
         </Card>
 
+        {/* What the agreement (062) leaves out: it says only what happens to documents. */}
         <Card>
-          <CardTitle icon="credit-card">Paying for Family Plus</CardTitle>
+          <CardTitle icon="info">Good to know</CardTitle>
+          <Body>Answers are written by AI and can be wrong. Check the document before you rely on one.</Body>
+          <Body>AskLocker is not a backup. Keep the originals of important papers.</Body>
           <Body>
-            Razorpay takes your card or UPI details, and AskLocker never sees them. To pick rupees or dollars, we check
-            which country you're connecting from. We don't keep it.
+            If Family Plus ends, a vault's newest documents over its free space are removed after{' '}
+            {DEFAULT_PLAN_LIMITS.graceDays} days. We warn you first.
           </Body>
         </Card>
 
@@ -111,8 +86,8 @@ export default function PrivacyScreen() {
           <Card>
             <CardTitle icon="bar-chart-2">How the app is used</CardTitle>
             <Body>
-              We count which screens and buttons are used, to see what to improve, with PostHog. It gets a random id
-              for this device, never your documents, questions, names or email.
+              PostHog counts which screens are used and the kinds of documents added, like "Passport". Never
+              what they say, your questions or your name.
             </Body>
             {counts !== null && (
               <OnOff
@@ -127,13 +102,10 @@ export default function PrivacyScreen() {
         <Card>
           <CardTitle icon="user-x">Leaving or deleting</CardTitle>
           <Body>
-            Deleting your account is immediate. Documents you added to a family stay with it after you go, and nobody
-            can delete them, so delete any you want gone first.
+            Deleting your account is immediate. Documents you added to a family stay there, so delete any you want
+            gone first.
           </Body>
-          <Body>
-            Copies in our providers' backups and logs expire on their own. What the services above already got is kept
-            under their own policies.
-          </Body>
+          <Body>Backup copies expire on their own. What other services already got, they keep under their own rules.</Body>
           <SecondaryButton label="Manage Family" icon="users" onPress={() => router.push('/family' as any)} />
           <SecondaryButton label="Delete account" icon="user-x" onPress={() => router.push('/settings/delete-account' as any)} />
         </Card>
