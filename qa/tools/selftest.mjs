@@ -22,6 +22,7 @@ import { digitsFromWords, restoreCodes } from '../../supabase/functions/_shared/
 import { takeInTurn, uniqueRelatives } from '../../supabase/functions/_shared/vaults.ts';
 import { passagesUsed, splitUsedPassages } from '../../supabase/functions/_shared/used-passages.ts';
 import { CLAUDE_MIN_MAX_TOKENS, claudeCanTake, claudeShouldRest, claudeText, claudeUsable, groqStyleReply, toClaudeRequest } from '../../supabase/functions/_shared/claude-shape.ts';
+import { chooseEmbeddingProvider, cloudflareBody, embeddingModelId, runWithinBudget, truncateAndNormalise, CLOUDFLARE_DEFAULT_MODEL, EMBEDDING_DIMS, GTE_SMALL_MODEL_ID, HUGGINGFACE_MODEL, QUERY_INSTRUCTION, UNRECORDED_MODEL } from '../../supabase/functions/_shared/embedding-choice.ts';
 import { toSpeech } from '../../src/lib/speech-text.ts';
 import {
   BUILT_IN_CATEGORIES, BUSINESS_CATEGORIES, FAMILY_CATEGORIES, SUGGESTED_CATEGORIES, categoryOrder, countedCategory, suggestCategory,
@@ -1460,9 +1461,62 @@ await test('Claude takes rag-search\'s Groq requests, and its replies read as Gr
   for (const s of [undefined, 413, 429, 500, 529]) assert.ok(!claudeShouldRest(s), `${s} does not rest`);
 });
 
+await test('search vectors: who makes them, at 384 numbers, inside the CPU budget', async () => {
+  // gte-small unless Cloudflare's two secrets are set; HuggingFace only by name;
+  // Cloudflare asked for without its secrets is gte-small, never nothing.
+  assert.equal(chooseEmbeddingProvider({}), 'gte-small');
+  assert.equal(chooseEmbeddingProvider({ CLOUDFLARE_ACCOUNT_ID: 'acc' }), 'gte-small');
+  assert.equal(chooseEmbeddingProvider({ CLOUDFLARE_ACCOUNT_ID: 'acc', CLOUDFLARE_AI_TOKEN: 'tok' }), 'cloudflare');
+  assert.equal(chooseEmbeddingProvider({ CLOUDFLARE_ACCOUNT_ID: ' ', CLOUDFLARE_AI_TOKEN: 'tok' }), 'gte-small');
+  assert.equal(chooseEmbeddingProvider({ EMBEDDING_PROVIDER: 'huggingface' }), 'huggingface');
+  assert.equal(chooseEmbeddingProvider({ EMBEDDING_PROVIDER: 'gte-small', CLOUDFLARE_ACCOUNT_ID: 'a', CLOUDFLARE_AI_TOKEN: 't' }), 'gte-small');
+  assert.equal(chooseEmbeddingProvider({ EMBEDDING_PROVIDER: 'cloudflare' }), 'gte-small');
+  // The id an index records names provider, model and size, so changing any
+  // of them makes every index stale; HuggingFace keeps the id it always had,
+  // which is also what a vault with no row was made on.
+  assert.equal(embeddingModelId('gte-small'), GTE_SMALL_MODEL_ID);
+  assert.equal(embeddingModelId('cloudflare'), `cloudflare/${CLOUDFLARE_DEFAULT_MODEL}@384`);
+  assert.equal(embeddingModelId('cloudflare', { CLOUDFLARE_EMBEDDING_MODEL: '@cf/google/embeddinggemma-300m' }), 'cloudflare/@cf/google/embeddinggemma-300m@384');
+  assert.equal(embeddingModelId('huggingface'), HUGGINGFACE_MODEL);
+  assert.equal(UNRECORDED_MODEL, HUGGINGFACE_MODEL);
+  assert.notEqual(embeddingModelId('gte-small'), UNRECORDED_MODEL, 'gte-small rebuilds every vault without a row');
+  // Qwen3 names questions and passages apart, with a task line on questions.
+  assert.deepEqual(cloudflareBody(CLOUDFLARE_DEFAULT_MODEL, 'query', ['q']), { queries: ['q'], instruction: QUERY_INSTRUCTION });
+  assert.deepEqual(cloudflareBody(CLOUDFLARE_DEFAULT_MODEL, 'passage', ['p']), { documents: ['p'] });
+  assert.deepEqual(cloudflareBody('@cf/google/embeddinggemma-300m', 'passage', ['p']), { text: ['title: none | text: p'] });
+  assert.deepEqual(cloudflareBody('@cf/google/embeddinggemma-300m', 'query', ['q']), { text: ['task: search result | query: q'] });
+  // Matryoshka: the first 384 of 1,024, scaled back to length 1.
+  const long = Array.from({ length: 1024 }, (_, i) => (i < EMBEDDING_DIMS ? 2 : 100));
+  const cut = truncateAndNormalise(long);
+  assert.equal(cut.length, EMBEDDING_DIMS);
+  assert.ok(Math.abs(Math.hypot(...cut) - 1) < 1e-9, 'unit length');
+  assert.ok(cut.every((v) => Math.abs(v - 1 / Math.sqrt(EMBEDDING_DIMS)) < 1e-12), 'only the head counts');
+  assert.equal(truncateAndNormalise(Array(100).fill(1)), null, 'too short');
+  assert.equal(truncateAndNormalise([...Array(383).fill(1), 'x']), null, 'not numbers');
+  assert.equal(truncateAndNormalise('nope'), null);
+  // The budget: always the first, then only while the average says the next
+  // fits; nothing at all with no budget. A fake clock, 150 ms a passage.
+  let clock = 0;
+  const work = async (x) => { clock += 150; return x * 2; };
+  const now = () => clock;
+  const r1 = await runWithinBudget([1, 2, 3, 4, 5, 6, 7, 8, 9, 10], work, 1000, now);
+  assert.equal(r1.attempted, 6, '150 ms each: six fit in 1,000 ms (the seventh would make 1,050)');
+  assert.deepEqual(r1.results, [2, 4, 6, 8, 10, 12, null, null, null, null]);
+  assert.equal(r1.spentMs, 900);
+  clock = 0;
+  const r2 = await runWithinBudget([1, 2], work, 50, now);
+  assert.equal(r2.attempted, 1, 'the first always, so every call makes progress');
+  const r3 = await runWithinBudget([1, 2], work, 0, now);
+  assert.equal(r3.attempted, 0, 'no budget, nothing tried');
+  clock = 0;
+  const r4 = await runWithinBudget([1, 2, 3], async (x) => { clock += 10; if (x === 2) throw new Error('bad'); return x; }, Number.POSITIVE_INFINITY, now);
+  assert.deepEqual(r4.results, [1, null, 3], 'one failure is null, the rest go on');
+  assert.equal(r4.attempted, 3);
+});
+
 if (failures.length) {
   console.error(failures.map((f) => `✗ ${f}`).join('\n'));
   console.error(`\n${failures.length} self-test(s) failed, ${passed} passed.`);
   process.exit(1);
 }
-console.log(`✓ ${passed} self-tests passed — matchers, judge, run-time PDF, metadata, ticket codes, text cleaning, Gmail rules and token sealing, kinship and the family tree, emergency card checks, web push, plan limits, questions each month, limits against abuse, business papers, categories and plan words, Razorpay signatures, numbers in digits, sources the answer used, Claude's requests in Groq's shape, the agreement's words, questions and budget.`);
+console.log(`✓ ${passed} self-tests passed — matchers, judge, run-time PDF, metadata, ticket codes, text cleaning, Gmail rules and token sealing, kinship and the family tree, emergency card checks, web push, plan limits, questions each month, limits against abuse, business papers, categories and plan words, Razorpay signatures, numbers in digits, sources the answer used, Claude's requests in Groq's shape, search-vector providers and budget, the agreement's words, questions and budget.`);

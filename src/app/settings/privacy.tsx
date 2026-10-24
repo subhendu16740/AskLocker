@@ -42,7 +42,10 @@ export default function PrivacyScreen() {
 
         <Card>
           <CardTitle icon="share-2">What goes to other services</CardTitle>
-          <Body><Text style={bold}>Search:</Text> passages of your documents, and your questions, go to HuggingFace.</Body>
+          <Body>
+            <Text style={bold}>Search:</Text> your passages and questions become search data on our own servers, or at
+            Cloudflare, which doesn't use them to train AI.
+          </Body>
           <Body><Text style={bold}>Answers:</Text> your question and the best passages go to Anthropic (Claude) or Groq. Never your whole vault.</Body>
           <Body>
             <Text style={bold}>Reading:</Text> photos and spreadsheets you upload are read on your device. Scanned

@@ -5,9 +5,9 @@
 // ────────────────────────────────────────────────────────────────
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { embedQuery, EMBEDDING_MODEL } from '../_shared/embeddings.ts';
+import { embedQuery, EMBEDDING_MODEL, EMBEDS_LOCALLY, UNRECORDED_MODEL } from '../_shared/embeddings.ts';
 import { requireFamilyMember, requireVaults, selectVaultRows, vaultKind, type Vault } from '../_shared/auth.ts';
-import { runReembed, afterResponse } from '../_shared/reembed.ts';
+import { runReembed, afterResponse, fillMissingVectors } from '../_shared/reembed.ts';
 import { groqText } from '../_shared/groq.ts';
 import { aiChat, claudeRestReason, hasAiKey } from '../_shared/ai.ts';
 import { buildGraph, relativesNamedIn, type KinGraph, type NamedRelative } from '../_shared/kinship.ts';
@@ -58,6 +58,12 @@ const MAX_HISTORY_CHARS = 600;      // per message, keeps the prompt bounded
 // below then applies the same rule once pinned chunks are mixed in.
 const RETRIEVE_CANDIDATES = 40;    // how many retrieval returns
 const MAX_CHUNKS_PER_DOC = 4;      // of those, per document, before judging
+// A spreadsheet is one passage a row, so a question across rows ("India's
+// loans in Jan 2025", four segments, four rows) needs more of them than four:
+// on 24 October 2026 the fourth row never reached the answer. Retrieval
+// allows this many from any one document, and diversify() keeps the larger
+// number for spreadsheets only, so a long tax return still gets four.
+const MAX_ROWS_PER_SPREADSHEET = 8;
 const RERANK_CANDIDATES = 15;      // how many reach the judge
 const RERANK_KEEP = 5;             // how many survive into the prompt
 const RERANK_MIN_SCORE = 4;        // 0–10; below this a chunk is dropped outright
@@ -76,6 +82,12 @@ const RERANK_SNIPPET_CHARS = 1600; // per candidate: a full chunk, not its openi
 // spreadsheet rows came to 8,660 (20 October 2026). Passages go to the judge
 // whole, in retrieval order, while they fit this; the rest are not judged.
 const RERANK_LISTING_TOKENS = 4_500;
+
+// Keeping the search index up after the answer (embeddings.ts). gte-small
+// spends this function's CPU, about 2 seconds a request in all, and the
+// question has used some; the remote providers spend none.
+const BACKGROUND_EMBED_BUDGET_MS = 500;
+const FILL_EMBED_BUDGET_MS = 400;
 
 // Spreadsheet rows arrive as "Column: value | Column: value", one row a line
 // (_shared/spreadsheet-text.ts). Said to the judge and the answer only when a
@@ -302,6 +314,7 @@ Deno.serve(async (req) => {
     const searched = await Promise.all(vaults.map(v => searchVault(v, {
       userId, query, translated: trans.query, standalone, history, citedIds, ticketTerms, embed,
     })));
+    keepIndexesUp(searched);
     const first = <T>(values: (T | undefined)[]) => values.find(x => x !== undefined);
 
     // Relations become names: "Nani's pension" is searched as "… Meena Rao".
@@ -335,7 +348,7 @@ Deno.serve(async (req) => {
     // the user changes subject.
     const candidates = diversify(
       dedupeChunks([...pinned, ...owned, ...retrievedChunks]),
-      MAX_CHUNKS_PER_DOC,
+      (c) => isSpreadsheetType(c.file_type) ? MAX_ROWS_PER_SPREADSHEET : MAX_CHUNKS_PER_DOC,
       RERANK_CANDIDATES,
     );
     console.log(`[rag] ${candidates.length} candidate chunks`);
@@ -391,9 +404,13 @@ Deno.serve(async (req) => {
       // Which models actually ran, so a retired one shows up in a screenshot
       // instead of only in the logs. `answer` is filled in below.
       models: {
+        ...(trans.model ? { translate: trans.model } : {}),
         ...(cond.model ? { condense: cond.model } : {}),
         ...(rank.model ? { rerank: rank.model } : {}),
-      } as { condense?: string; rerank?: string; answer?: string },
+        // The model that makes this project's search vectors, whether or not
+        // this question got one (`embedded` says that).
+        embed: EMBEDDING_MODEL,
+      } as { translate?: string; condense?: string; rerank?: string; answer?: string; embed: string },
       ...(cond.error ? { condense_error: cond.error } : {}),
       ...(pinError ? { pin_error: pinError } : {}),
       ...(rank.error ? { rerank_error: rank.error } : {}),
@@ -447,6 +464,9 @@ Deno.serve(async (req) => {
     console.log(
       `[rag] Answer ${result.degraded ? 'DEGRADED' : 'generated'} (${result.answer.length} chars)`,
     );
+    // Which model ran each step, so the logs alone say who answered.
+    const ran = { ...debug.models, ...(result.model ? { answer: result.model } : {}) } as Record<string, string | undefined>;
+    console.log(`[rag] Models: ${['translate', 'condense', 'rerank', 'answer'].map(k => `${k}=${ran[k] ?? '-'}`).join(' ')} embed=${EMBEDDING_MODEL}${debug.embedded ? '' : ' (keywords only)'}`);
 
     // 7. Return answer + source documents
     // Built from the passages the answer says it used (its "USED:" line), so
@@ -575,21 +595,8 @@ async function searchVault(v: Vault, ctx: {
   if (named.length) console.log(`[rag] Relatives named in ${v.schema}: ${named.map(n => `${n.term}=${n.name}`).join(', ')}`);
 
   const indexReady = await isIndexReady(v.schema);
-  if (!indexReady) {
-    console.log(`[rag] ${v.schema} is mid re-embed — keyword-only retrieval`);
-    // Start the rebuild here rather than waiting to be asked. A rebuild
-    // gated on someone opening the right Settings row does not happen, and
-    // until it does this family has no vectors at all — so a question in
-    // another script, or one phrased differently from the document, finds
-    // nothing. Runs after the response is sent, holds a lease so parallel
-    // searches do not trample each other, and resumes from its cursor on
-    // the next search. A few questions and the index builds itself.
-    afterResponse(
-      runReembed(supabase, v.schema, { budgetMs: 20_000, requireLease: true, familyId: v.familyId })
-        .then(p => console.log(`[rag] Background re-embed: ${p.done_count}/${p.total_count}${p.error ? ` (${p.error})` : ''}`))
-        .catch(err => console.warn('[rag] Background re-embed failed:', err)),
-    );
-  }
+  // The rebuild starts in keepIndexesUp(), once every vault is searched.
+  if (!indexReady) console.log(`[rag] ${v.schema} is mid re-embed — keyword-only retrieval`);
 
   const [pin, owned, retrieved] = await Promise.all([
     ctx.history.length > 0
@@ -619,6 +626,46 @@ async function searchVault(v: Vault, ctx: {
     embedded: retrieved.embedded,
     embedError: retrieved.embedError,
   };
+}
+
+/**
+ * After the answer, keep the searched vaults' indexes up. A stale one starts
+ * (or carries on) its rebuild here rather than waiting to be asked: a
+ * rebuild gated on someone opening the right Settings row does not happen,
+ * and until it does that vault has no vectors, so a question phrased
+ * differently from the document finds nothing. It holds a lease so parallel
+ * searches do not trample each other, and resumes from its cursor on the next
+ * search; a few questions and the index builds itself. Ready vaults get
+ * vectors for chunks still without one (fillMissingVectors).
+ *
+ * gte-small spends this function's own CPU, so then only one vault's rebuild
+ * a question, and filling only when no rebuild runs. The remote providers
+ * cost no CPU here, so every stale vault starts its rebuild, as it always did.
+ */
+function keepIndexesUp(searched: VaultSearch[]): void {
+  const stale = searched.filter(s => !s.indexReady);
+  const rebuilds = EMBEDS_LOCALLY ? stale.slice(0, 1) : stale;
+  for (const s of rebuilds) {
+    afterResponse(
+      runReembed(supabase, s.vault.schema, {
+        budgetMs: 20_000, requireLease: true, familyId: s.vault.familyId,
+        embedBudgetMs: BACKGROUND_EMBED_BUDGET_MS,
+      })
+        .then(p => console.log(`[rag] Background re-embed of ${s.vault.schema}: ${p.done_count}/${p.total_count}${p.error ? ` (${p.error})` : ''}`))
+        .catch(err => console.warn('[rag] Background re-embed failed:', err)),
+    );
+  }
+  const ready = searched.filter(s => s.indexReady).map(s => s.vault.schema);
+  if (ready.length && !(EMBEDS_LOCALLY && rebuilds.length)) {
+    afterResponse(
+      fillMissingVectors(supabase, ready, { budgetMs: FILL_EMBED_BUDGET_MS })
+        .then(r => {
+          if (r.filled) console.log(`[rag] Filled in ${r.filled} missing vector(s)`);
+          if (r.error) console.warn(`[rag] Filling in vectors: ${r.error}`);
+        })
+        .catch(err => console.warn('[rag] Filling in vectors failed:', err)),
+    );
+  }
 }
 
 // ─── Retrieve Chunks ───────────────────────────────────────────
@@ -692,8 +739,10 @@ async function retrieveChunks(
   // PostgREST rejects the WHOLE call rather than ignoring the extra argument —
   // which turns a working search into no results at all. So ask for the
   // capped version, and fall back to the signature that has always existed.
+  // The cap is the larger, a spreadsheet's: SQL cannot tell the kinds apart,
+  // and diversify() brings every other document back down to four.
   let { data, error } = await supabase.rpc('rag_retrieve_chunks', {
-    ...args, p_per_doc: MAX_CHUNKS_PER_DOC,
+    ...args, p_per_doc: MAX_ROWS_PER_SPREADSHEET,
   });
   if (error && /find the function|schema cache|does not exist/i.test(error.message)) {
     console.warn('[rag] Migration 015 not applied — retrieving without the per-document cap');
@@ -1068,14 +1117,14 @@ ${judged.some((c) => isSpreadsheetType(c.file_type)) ? `${SPREADSHEET_ROWS_RULE}
  * this only ever promotes a lower-ranked chunk from an unrepresented
  * document over the fifth chunk of one already well represented.
  */
-function diversify(chunks: ChunkResult[], perDoc: number, limit: number): ChunkResult[] {
+function diversify(chunks: ChunkResult[], perDoc: (c: ChunkResult) => number, limit: number): ChunkResult[] {
   const seen = new Map<string, number>();
   const kept: ChunkResult[] = [];
   const overflow: ChunkResult[] = [];
 
   for (const c of chunks) {
     const count = seen.get(c.document_id) ?? 0;
-    if (count < perDoc) {
+    if (count < perDoc(c)) {
       seen.set(c.document_id, count + 1);
       kept.push(c);
     } else {
@@ -1405,10 +1454,10 @@ The passages in the context are numbered: [Passage 1 | …], [Passage 2 | …]. 
 /**
  * Whether this family's chunk vectors match the model we embed queries with.
  *
- * No row means the family was created after migration 013, so every chunk it
- * has was embedded with the current model — ready. A row exists only for
- * families that predate the multilingual switch, and stays "not ready" until
- * the reembed-index function has walked all of their chunks.
+ * No row means the family was created after migration 013 on that time's
+ * model (UNRECORDED_MODEL), and a vault's first document records a row of its
+ * own (ingest.ts). A row is "not ready" until the rebuild (reembed.ts) has
+ * walked all of a vault's chunks on the current model.
  *
  * On any error we assume NOT ready: keyword-only retrieval is always correct,
  * where a mismatched vector search quietly ranks by noise.
@@ -1424,7 +1473,9 @@ async function isIndexReady(schema: string): Promise<boolean> {
     console.warn('[rag] Could not read index state, assuming mid-rebuild:', error.message);
     return false;
   }
-  if (!data) return true;
+  // No row: made after migration 013 on the model of that time, so ready
+  // only while that is still the model (reembed.ts's isUpToDate agrees).
+  if (!data) return EMBEDDING_MODEL === UNRECORDED_MODEL;
   return !!data.completed_at && data.model === EMBEDDING_MODEL;
 }
 
