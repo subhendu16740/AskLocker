@@ -21,12 +21,20 @@
 // ────────────────────────────────────────────────────────────────
 
 import type { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { embedPassages, EMBEDDING_MODEL } from './embeddings.ts';
+import { embedPassages, EMBEDDING_MODEL, EMBEDS_LOCALLY, UNRECORDED_MODEL } from './embeddings.ts';
 import { chunkText } from './chunking.ts';
 import { ingestDocument, reextractDocument, EXTRACTOR_VERSION } from './ingest.ts';
 
-/** One HF call per batch: small enough that a failure costs little. */
+/** One call per batch: small enough that a failure costs little. */
 export const BATCH_SIZE = 32;
+/** gte-small embeds a handful a call (its CPU budget), so it reads fewer at a time. */
+const LOCAL_BATCH_SIZE = 8;
+/**
+ * The CPU gte-small may spend in one rebuild call. An Edge Function may use
+ * about 2 seconds of CPU a request, and reading chunks and writing vectors
+ * use some too. The remote providers spend none, so it does not apply to them.
+ */
+export const REBUILD_EMBED_BUDGET_MS = 1_000;
 /** A row untouched for this long is assumed abandoned, not in progress. */
 const LEASE_STALE_MS = 90_000;
 
@@ -121,9 +129,10 @@ export async function saveState(
 
 /** True when this family's vectors match the model queries are embedded with. */
 export function isUpToDate(state: StateRow | null): boolean {
-  // No row means the family was created after migration 013, so every chunk
-  // it has was embedded with the current model, by the current splitter.
-  if (!state) return true;
+  // No row means the family was created after migration 013 and before the
+  // model ever changed again, so its chunks are on UNRECORDED_MODEL, made by
+  // the current splitter. Up to date only while that is still the model.
+  if (!state) return EMBEDDING_MODEL === UNRECORDED_MODEL;
   // extractor_version belongs here as much as the model does. Without it,
   // bumping EXTRACTOR_VERSION — the documented way to re-read stored PDFs —
   // was a silent no-op for any family that had already finished a rebuild:
@@ -317,6 +326,9 @@ async function retryStuckDocuments(
     try {
       const result = await ingestDocument(supabase, {
         familyId, namespace: schema, documentId: doc.id, storagePath: doc.storage_path,
+        // gte-small: no vectors here, so this call's CPU goes to the embed
+        // phase below; the vectors are filled in once the index is ready.
+        ...(EMBEDS_LOCALLY ? { embedBudgetMs: 0 } : {}),
       });
       if (result.empty && result.retryable) {
         // Not the document: OCR was needed and could not run — no key is set,
@@ -362,6 +374,33 @@ async function claimRebuild(supabase: SupabaseClient, schema: string): Promise<b
 }
 
 /**
+ * The first row for a vault that has none, so its rebuild has somewhere to
+ * keep its cursor. Its chunks are on UNRECORDED_MODEL and its text is as
+ * current as anything (it never needed a rebuild until now), so only the
+ * embedding phase runs. True when this call made the row: it then holds the
+ * lease, since nobody else can have started.
+ */
+async function startRow(supabase: SupabaseClient, schema: string): Promise<boolean> {
+  const now = new Date().toISOString();
+  const base = {
+    storage_namespace: schema, model: UNRECORDED_MODEL, cursor_id: null,
+    done_count: 0, total_count: 0, completed_at: null, updated_at: now,
+  };
+  const insert = (row: Record<string, unknown>) => supabase
+    .from('family_embedding_state')
+    .upsert(row, { onConflict: 'storage_namespace', ignoreDuplicates: true })
+    .select('storage_namespace');
+  let { data, error } = await insert({ ...base, rechunked_at: now, extractor_version: EXTRACTOR_VERSION });
+  // Without migrations 016 and 018 those two columns are not there.
+  if (error) ({ data, error } = await insert(base));
+  if (error) {
+    console.warn('[reembed] Could not start the index row:', error.message);
+    return false;
+  }
+  return (data?.length ?? 0) > 0;
+}
+
+/**
  * Embed as many of this family's chunks as fit in `budgetMs`, then return
  * progress. Safe to call repeatedly and from more than one place: the lease
  * makes a second concurrent caller a no-op rather than a corruption.
@@ -369,15 +408,23 @@ async function claimRebuild(supabase: SupabaseClient, schema: string): Promise<b
 export async function runReembed(
   supabase: SupabaseClient,
   schema: string,
-  opts: { budgetMs: number; requireLease?: boolean; familyId?: string } = { budgetMs: 20_000 },
+  opts: { budgetMs: number; requireLease?: boolean; familyId?: string; embedBudgetMs?: number } = { budgetMs: 20_000 },
 ): Promise<ReembedProgress> {
-  const state = await loadState(supabase, schema);
-  if (!state) return { done: true, processed: 0, done_count: 0, total_count: 0 };
+  let state = await loadState(supabase, schema);
+  let leaseHeld = false;
+  if (!state) {
+    if (isUpToDate(null)) return { done: true, processed: 0, done_count: 0, total_count: 0 };
+    leaseHeld = await startRow(supabase, schema);
+    state = await loadState(supabase, schema);
+    if (!state) {
+      return { done: false, processed: 0, done_count: 0, total_count: 0, error: 'Could not start the search index rebuild' };
+    }
+  }
   if (isUpToDate(state)) {
     return { done: true, processed: 0, done_count: state.done_count, total_count: state.total_count };
   }
 
-  if (opts.requireLease && !(await claimRebuild(supabase, schema))) {
+  if (opts.requireLease && !leaseHeld && !(await claimRebuild(supabase, schema))) {
     // Somebody else is already on it. Report their progress, not an error.
     return { done: false, processed: 0, done_count: state.done_count, total_count: state.total_count };
   }
@@ -461,11 +508,15 @@ export async function runReembed(
 
   let processed = 0;
   let finished = false;
+  // gte-small spends this call's CPU: stop at the budget and let the next
+  // call carry on from the cursor. Remote providers spend none.
+  const embedBudget = EMBEDS_LOCALLY ? (opts.embedBudgetMs ?? REBUILD_EMBED_BUDGET_MS) : Number.POSITIVE_INFINITY;
+  let embedSpent = 0;
 
   // ── Phase 2: embed.
-  while (Date.now() < deadline) {
+  while (Date.now() < deadline && embedSpent < embedBudget) {
     const { data: batch, error: batchErr } = await supabase.rpc('rag_chunks_to_embed', {
-      p_schema: schema, p_after: cursor, p_limit: BATCH_SIZE,
+      p_schema: schema, p_after: cursor, p_limit: EMBEDS_LOCALLY ? LOCAL_BATCH_SIZE : BATCH_SIZE,
     });
 
     if (batchErr) {
@@ -479,12 +530,20 @@ export async function runReembed(
     const chunks = (batch ?? []) as { id: string; content: string }[];
     if (chunks.length === 0) { finished = true; break; }
 
-    const { vectors, error: embedError } = await embedPassages(chunks.map(c => c.content));
+    const embedStarted = Date.now();
+    const { vectors, error: embedError, attempted } = await embedPassages(
+      chunks.map(c => c.content), { budgetMs: embedBudget - embedSpent },
+    );
+    embedSpent += Date.now() - embedStarted;
+    // Only what was tried moves the cursor. The rest of the batch was left
+    // for the budget, not refused, and is read again next call.
+    const tried = chunks.slice(0, attempted);
+    if (tried.length === 0) break;
 
     // Every vector null means the embedding service is down, not that these
     // chunks are unembeddable. Keep the cursor where it is so the next run
     // retries this batch rather than skipping past it.
-    if (vectors.every(v => v === null)) {
+    if (vectors.slice(0, attempted).every(v => v === null)) {
       await saveState(supabase, schema, {
         model: EMBEDDING_MODEL, cursor_id: cursor, done_count: doneCount,
         total_count: total, completed_at: null,
@@ -495,7 +554,7 @@ export async function runReembed(
       };
     }
 
-    for (let i = 0; i < chunks.length; i++) {
+    for (let i = 0; i < tried.length; i++) {
       const vector = vectors[i];
       // A chunk that would not embed has its vector CLEARED, never left as it
       // was: the old value came from a different model, and keeping it would
@@ -504,15 +563,15 @@ export async function runReembed(
       // keyword.
       const { error: setErr } = await supabase.rpc('rag_set_chunk_embedding', {
         p_schema: schema,
-        p_chunk_id: chunks[i].id,
+        p_chunk_id: tried[i].id,
         p_embedding: vector ? `[${vector.join(',')}]` : null,
       });
-      if (setErr) console.warn(`[reembed] Chunk ${chunks[i].id} not written: ${setErr.message}`);
+      if (setErr) console.warn(`[reembed] Chunk ${tried[i].id} not written: ${setErr.message}`);
     }
 
-    cursor = chunks[chunks.length - 1].id;
-    processed += chunks.length;
-    doneCount += chunks.length;
+    cursor = tried[tried.length - 1].id;
+    processed += tried.length;
+    doneCount += tried.length;
 
     // Also renews the lease.
     await saveState(supabase, schema, {
@@ -531,6 +590,63 @@ export async function runReembed(
   }
 
   return { done: finished, processed, done_count: doneCount, total_count: Math.max(total, doneCount) };
+}
+
+/** Set once a database without migration 065 has said so: nothing to fill with. */
+let missingListUnavailable = false;
+
+/**
+ * Give vectors to chunks of ready vaults that have none, a few a call.
+ *
+ * A vault's index is complete, yet some chunks may still lack a vector:
+ * gte-small embeds only what fits its CPU budget when a document is added,
+ * and a provider that was down, or out of its daily allowance, left a
+ * batch without. Rebuilds run only on stale indexes, so nothing else would
+ * ever reach them. Only for ready vaults: every vector there is on the
+ * current model, so filling the gaps with it is right. Needs migration 065
+ * (rag_chunks_missing_embedding); without it the chunks stay searchable by
+ * keyword, as they were.
+ */
+export async function fillMissingVectors(
+  supabase: SupabaseClient,
+  schemas: string[],
+  opts: { budgetMs: number },
+): Promise<{ filled: number; error?: string }> {
+  let filled = 0;
+  let spent = 0;
+  for (const schema of schemas) {
+    if (missingListUnavailable || (EMBEDS_LOCALLY && spent >= opts.budgetMs)) break;
+    const { data, error } = await supabase.rpc('rag_chunks_missing_embedding', {
+      p_schema: schema, p_limit: EMBEDS_LOCALLY ? LOCAL_BATCH_SIZE : BATCH_SIZE,
+    });
+    if (error) {
+      if (/find the function|schema cache|does not exist/i.test(error.message)) {
+        missingListUnavailable = true;
+        console.warn('[reembed] Migration 065 not applied: chunks without a vector wait for a rebuild');
+        break;
+      }
+      return { filled, error: error.message };
+    }
+    const chunks = (data ?? []) as { id: string; content: string }[];
+    if (chunks.length === 0) continue;
+
+    const started = Date.now();
+    const { vectors, attempted, error: embedError } = await embedPassages(
+      chunks.map(c => c.content), { budgetMs: opts.budgetMs - spent },
+    );
+    spent += Date.now() - started;
+    for (let i = 0; i < attempted; i++) {
+      // Never cleared here: the chunk has no vector already.
+      if (!vectors[i]) continue;
+      const { error: setErr } = await supabase.rpc('rag_set_chunk_embedding', {
+        p_schema: schema, p_chunk_id: chunks[i].id, p_embedding: `[${vectors[i]!.join(',')}]`,
+      });
+      if (setErr) console.warn(`[reembed] Chunk ${chunks[i].id} not written: ${setErr.message}`);
+      else filled++;
+    }
+    if (embedError) return { filled, error: embedError };
+  }
+  return { filled };
 }
 
 /** Run work after the response has been sent, where the runtime allows it. */

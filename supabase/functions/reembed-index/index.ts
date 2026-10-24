@@ -1,9 +1,10 @@
 // ─── AskLocker: rebuild a family's search index ───────────────
 //
 // Re-embeds every chunk with the current model (see _shared/embeddings.ts).
-// Needed once, after the move from the English-only model to the
-// multilingual one, so Hindi and other Indian-language documents become
-// searchable by meaning rather than only by exact words.
+// Needed whenever the model changes: the move to the multilingual model, then
+// to Supabase's own gte-small, and to Cloudflare's once its keys are set.
+// gte-small makes a handful of vectors a call (its CPU budget), so the
+// client calls again until `done`.
 //
 // The work itself lives in _shared/reembed.ts, because rag-search starts
 // the same rebuild in the background whenever it notices one is due. This
@@ -26,7 +27,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { corsHeaders } from '../_shared/cors.ts';
 import { requireFamilyMember } from '../_shared/auth.ts';
 import { EMBEDDING_MODEL } from '../_shared/embeddings.ts';
-import { loadState, isUpToDate, runReembed } from '../_shared/reembed.ts';
+import { loadState, isUpToDate, runReembed, fillMissingVectors, REBUILD_EMBED_BUDGET_MS } from '../_shared/reembed.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -70,6 +71,14 @@ Deno.serve(async (req) => {
     const schema = family.storage_namespace as string;
     const state = await loadState(supabase, schema);
     const upToDate = isUpToDate(state);
+
+    // An up-to-date index may still hold chunks without a vector (gte-small
+    // embeds only so many when a document is added): a call that may do work
+    // fills some in.
+    if (upToDate && !status_only) {
+      const fill = await fillMissingVectors(supabase, [schema], { budgetMs: REBUILD_EMBED_BUDGET_MS });
+      if (fill.filled) console.log(`[reembed] ${schema}: filled in ${fill.filled} missing vector(s)`);
+    }
 
     if (status_only || upToDate) {
       return json({

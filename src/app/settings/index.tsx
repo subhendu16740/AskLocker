@@ -169,8 +169,8 @@ export default function SettingsScreen() {
   const [voiceAvailable, setVoiceAvailable] = useState<Record<string, boolean>>({});
 
   // ─── Search index ───────────────────────────────────────
-  // One-time rebuild after the move to a multilingual embedding model.
-  // Until it runs, Indian-language documents are found by exact words only.
+  // A rebuild after the search-vector model changes (embeddings.ts). Until
+  // it runs, the vault's documents are found by exact words only.
   const [index, setIndex] = useState<IndexStatus | null>(null);
   const [rebuilding, setRebuilding] = useState(false);
   const [indexError, setIndexError] = useState<string | null>(null);

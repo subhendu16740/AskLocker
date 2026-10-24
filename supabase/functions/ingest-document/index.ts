@@ -126,6 +126,7 @@ Deno.serve(async (req) => {
       chunks: result.chunks,
       metadata: result.metadata,
       ...(result.embedError ? { embed_error: result.embedError } : {}),
+      ...(result.vectorsDeferred ? { vectors_deferred: result.vectorsDeferred } : {}),
     });
 
   } catch (err) {

@@ -244,9 +244,11 @@ photos OCR'd the way the web app does it, with Tesseract — which is about
   200K/day). Questions go one at a time, 90s apart; the run backs off on a
   rate limit and stops if Groq pushes back twice; at most two post-deploy
   runs a day may ask questions. A rate limit is *inconclusive*, never a
-  failure, and so is HuggingFace refusing the search vectors for want of
-  credit (402) or calls (429): search falls back to keywords, a right answer
-  still passes, and a wrong one waits for a later run. Worst day ≈ half of
+  failure, and so is the search-vector service refusing for want of credit
+  (402) or calls, or a used-up daily allowance (429): search falls back to
+  keywords, a right answer still passes, and a wrong one waits for a later
+  run. Before the questions, QA drives QA Vault A's index rebuild to the end
+  (`checkIndex()`), since gte-small re-makes only a few vectors a call. Worst day ≈ half of
   `gpt-oss-20b`'s free allowance. With `ANTHROPIC_API_KEY` set on DEV the
   questions go to Claude first (see [Claude first](#claude-first-groq-when-claude-cant-answer)),
   about $0.0025 each from the owner's credit, and the pacing stays for the
@@ -373,7 +375,8 @@ npx supabase@latest functions deploy razorpay-webhook --project-ref <ref> --no-v
 
 # Set or rotate a secret (server-side only; never in this repo)
 npx supabase@latest secrets set GROQ_API_KEY=...      --project-ref <ref>
-npx supabase@latest secrets set HF_API_TOKEN=...      --project-ref <ref>
+npx supabase@latest secrets set CLOUDFLARE_ACCOUNT_ID=... CLOUDFLARE_AI_TOKEN=... --project-ref <ref>   # search vectors in 100+ languages; without them gte-small, English
+npx supabase@latest secrets set HF_API_TOKEN=...      --project-ref <ref>   # only with EMBEDDING_PROVIDER=huggingface
 npx supabase@latest secrets set OCR_SPACE_API_KEY=... --project-ref <ref>
 npx supabase@latest secrets set ANTHROPIC_API_KEY=... --project-ref <ref>   # Claude answers first; a key per project
 npx supabase@latest secrets set GMAIL_CLIENT_ID=... GMAIL_CLIENT_SECRET=... GMAIL_TOKEN_KEY=... GMAIL_RETURN_ORIGINS=... --project-ref <ref>
@@ -448,7 +451,12 @@ changing one requires a rebuild — there is no runtime config.
 
 **Edge Function secrets** — server-side only, set per Supabase project with
 `supabase secrets set NAME=value`, never in this repo:
-`GROQ_API_KEY`, `HF_API_TOKEN`, `OCR_SPACE_API_KEY`, optionally
+`GROQ_API_KEY`, `OCR_SPACE_API_KEY`, for search vectors in 100+ languages
+`CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_AI_TOKEN` (a Workers AI token; without
+them Supabase's own gte-small makes the vectors, English only;
+`CLOUDFLARE_EMBEDDING_MODEL` names another Matryoshka model; `EMBEDDING_PROVIDER`
+forces `gte-small` or `huggingface`, the second with `HF_API_TOKEN`; see
+[Embeddings](#embeddings--three-providers-one-column-one-registry)), optionally
 `ANTHROPIC_API_KEY` (Claude answers first, Groq when it can't; with
 `CLAUDE_MODEL`, `CLAUDE_CONDENSE_MODEL` and `CLAUDE_RERANK_MODEL` to pick
 another model than Haiku for a step), and for Gmail import
@@ -823,7 +831,7 @@ tabs. `(tabs)` is a layout group, so routes are `/home`, `/search`, `/upload`.
 | `speech-text.ts` | `toSpeech()`: strips markdown and spells out ID numbers before they are read aloud — and a number named as one ("train number 16782", "PNR: 4512", "PIN 751001", "नंबर 16782") digit by digit, from its digits; the screen keeps the digits |
 | `voice-languages.ts` | The language picker list and the few phrases the app itself says, per language |
 | `storage.ts` | Key-value cache: localStorage on web, AsyncStorage on native |
-| `database.types.ts` | Generated Supabase types, current to 064 (030, 052, 055, 058, 059, 061 and 063 changed nothing in them; 049's, 050's, 051's, 053's, 054's, 056's, 057's, 060's, 062's and 064's added by hand). Regenerate after every migration and re-append the hand-written block at the bottom (see the typecheck note) |
+| `database.types.ts` | Generated Supabase types, current to 065 (030, 052, 055, 058, 059, 061 and 063 changed nothing in them, nor did 065, whose one function only the Edge Functions call; 049's, 050's, 051's, 053's, 054's, 056's, 057's, 060's, 062's and 064's added by hand). Regenerate after every migration and re-append the hand-written block at the bottom (see the typecheck note) |
 
 ---
 
@@ -966,7 +974,9 @@ opened a month and two questions a week:
 
 | What | Free allowance | Runs out at about |
 |---|---|---|
-| Search vectors (HuggingFace) | $0.10 of credit a month; no pay-as-you-go on a free account | already: DEV's is used up (402), and search falls back to keywords |
+| Search vectors (gte-small, since 24 October 2026) | free, inside the Edge Functions, English only; a vector takes about 100–200 ms of the function's 2 seconds of CPU | not about families: a few vectors a call, so a big upload is filled in over the next questions |
+| Search vectors (Cloudflare, once its keys are set) | 10,000 neurons a day for the account, about 9 million words of passages | not at 1,000 families |
+| Search vectors (HuggingFace, opt-in) | $0.10 of credit a month; no pay-as-you-go on a free account | already: DEV's was used up (402) in October 2026 |
 | Files (Supabase) | 1 GB, shared with DEV | 70 families |
 | Answers (Groq) | 200K tokens a day and 8K a minute per model, per Groq organisation; a question is ~9K, mostly the judge on `gpt-oss-20b` | 25 questions a day for everyone, one a minute: 80 families |
 | Answers (Claude, once its key is set) | the owner's $100 of Anthropic API credit a month (with their Claude plan), for DEV and PROD together; a question is about $0.0025 on Haiku | about 40,000 questions a month: 4,000 families at two a week, 900 at 45 a month |
@@ -993,10 +1003,9 @@ about size, but true already:
 
 What costs nothing, and moves a limit without removing it: DEV in an
 organisation of its own; a personal vault's schema made when something is
-first saved to it; Supabase's built-in `gte-small` embedding model, which
-runs inside Edge Functions with no outside service (384 dimensions like the
-column, but English only, and every stored vector re-made); fewer or shorter
-passages for the judge. Files for 1,000 families need Supabase Pro by
+first saved to it; fewer or shorter passages for the judge. (Supabase's
+built-in `gte-small`, once on this list, makes the search vectors since 24
+October 2026.) Files for 1,000 families need Supabase Pro by
 then; answers fit the Claude credit (above), with Groq's paid tier at about
 a fifth of a rupee a question the other way.
 
@@ -1163,7 +1172,7 @@ where it does not.
   account shows, family by family, what goes and what stays, and asks for
   DELETE to be typed. There is no waiting period and the app keeps no
   copy. Short-lived copies in Supabase's backups and logs expire on their
-  own, and what went to HuggingFace, Anthropic, Groq or OCR.space is under their
+  own, and what went to HuggingFace, Cloudflare, Anthropic, Groq or OCR.space is under their
   policies, so the screens never say "nothing is kept" (see
   [Conventions](#conventions)).
 - **A business never goes with an account** (051): its last admin is told to
@@ -2293,7 +2302,7 @@ where it does not.
   on Free has one free family and one free business besides their
   personal vault.
 - **No PROD business goes on a paid plan before PROD is on Supabase Pro**, and
-  Groq and HuggingFace are paid: one active business can use up Groq's
+  answers are paid for (Groq's paid tier, or the Claude credit): one active business can use up Groq's
   whole free day (about 25 questions, for everyone). A business on Free has
   Free's limits, so demos fit the free tiers. The app cannot give the plan;
   only the SQL editor can.
@@ -2693,8 +2702,9 @@ where it does not.
   because the rebuild re-runs it for documents that were never indexed.
   Accepts pre-extracted OCR text from the client, or
   falls back to server-side extraction (simple PDF text parser → OCR.space).
-  Chunks (500 tokens, 50 overlap, paragraph-aware) → embeds via HuggingFace
-  `all-MiniLM-L6-v2` → extracts metadata (expiry dates, passport/PAN/Aadhaar/
+  Chunks (see [Chunking](#chunking--sized-to-the-models-window-not-to-taste)) → embeds
+  (`_shared/embeddings.ts`: gte-small within its CPU budget, the rest filled
+  in later, or Cloudflare) → extracts metadata (expiry dates, passport/PAN/Aadhaar/
   policy numbers) → stores via `complete_document_ingestion` → creates expiry
   alerts. Extracted text passes through `cleanText()` (`_shared/text.ts`)
   before any of that — Postgres refuses a NUL, and PDF.js emits one per glyph
@@ -2906,8 +2916,8 @@ All of them handle CORS preflight explicitly.
   each project its own API key, so one can be revoked alone. A full Family
   Pro family using all 50 tries a day each (064) could spend about $30 of it
   a month.
-- **No search vectors**: Anthropic has no embedding service, so HuggingFace
-  stays for search.
+- **No search vectors**: Anthropic has no embedding service. Search vectors
+  are gte-small's or Cloudflare's (see [Embeddings](#embeddings--three-providers-one-column-one-registry)).
 - **Privacy names Anthropic** beside Groq (Settings › Privacy, and the rule
   under Conventions). The agreement says "AI services" and names none, so
   it needed no new version.
@@ -3160,41 +3170,85 @@ reads ✅ by itself, and the offline self-test guards the first two:
 - Changing the target means re-splitting stored documents: migration 016's
   `rechunked_at` drives that as the first phase of `reembed-index`.
 
-### Embeddings — one model, two prefixes, one registry
+### Embeddings — three providers, one column, one registry
 
 `_shared/embeddings.ts` owns the model for **both** ingest and search;
-neither calls HuggingFace directly. Three things matter:
+nothing else calls a provider. Which one is chosen from the secrets
+(`_shared/embedding-choice.ts`, pure, pinned by the self-test):
 
-- The model is `intfloat/multilingual-e5-small` (384 dims, MIT, 100 languages).
-  It replaced the English-only `all-MiniLM-L6-v2`, which gave Hindi and other
-  Indian-language passages meaningless vectors. Same dimension, so the
-  `vector(384)` column and HNSW index were never touched.
-- **E5 requires prefixes.** Passages are embedded as `passage: …` and questions
-  as `query: …`. Omitting them degrades retrieval sharply and silently. Use
-  `embedPassages` / `embedQuery`, never a raw call.
+- **gte-small, the default** (since 24 October 2026, when HuggingFace's free
+  credit ran out on DEV): Supabase's own model, run inside the Edge Function
+  through `Supabase.ai.Session('gte-small')`, `mean_pool` and `normalize` on.
+  Free, no key, no outside service: nothing leaves AskLocker's servers for
+  search. English only. Questions in other languages are translated into
+  English before search anyway; a document written in an Indian script is
+  found by its keywords alone.
+- **Cloudflare Workers AI, when `CLOUDFLARE_ACCOUNT_ID` and
+  `CLOUDFLARE_AI_TOKEN` are set**: `@cf/qwen/qwen3-embedding-0.6b`, 100+
+  languages, the Indian ones included, free up to 10,000 neurons a day for
+  the account (about 9 million words), and Cloudflare says it does not train
+  on what it is sent. Its 1,024 numbers are cut to the first 384 and scaled
+  back to length 1, which a Matryoshka-trained model allows, so the column
+  stays `vector(384)`. Questions carry Qwen3's task line
+  (`QUERY_INSTRUCTION`); 32 texts a call. `CLOUDFLARE_EMBEDDING_MODEL` may
+  name another model only if it is Matryoshka-trained (EmbeddingGemma is);
+  cutting bge-m3's vectors would rank by noise. Past the day's allowance
+  Cloudflare answers 429 and search falls back to keywords until 00:00 UTC.
+- **Measured on 24 October 2026**, offline, on QA's eleven Indian-language
+  documents (text as written, not as the PDF reader mangles it) among seven
+  English ones, an English question per document with the name kept in its
+  own script (as the translate step leaves it) / in English letters, right
+  document first: gte-small 2/11 and 0/11; multilingual-e5-small, the old
+  HuggingFace model, 11/11 and 10/11; Qwen3 cut to 384 11/11 and 9/11 at
+  fp16 but 5/11 and 1/11 quantised to 8 bits; EmbeddingGemma cut to 384
+  10/11 and 10/11, even quantised; bge-m3 (1,024 numbers, not Matryoshka)
+  11/11 and 10/11. How precise Cloudflare's Qwen3 is cannot be seen from
+  outside: check it on QA's `languages` suite once the keys are set, and if
+  it is weak, `CLOUDFLARE_EMBEDDING_MODEL=@cf/google/embeddinggemma-300m`
+  (in beta at Cloudflare). gte-small took about 70 ms a passage on this
+  machine.
+- **HuggingFace, only with `EMBEDDING_PROVIDER=huggingface`** and
+  `HF_API_TOKEN`: `intfloat/multilingual-e5-small`, which needs a `passage:`
+  / `query:` prefix. Turning it back on means naming HuggingFace in Settings
+  › Privacy again.
+- **gte-small spends the function's CPU**, and an Edge Function may use
+  about 2 seconds of it a request (Supabase's limits page; a troubleshooting
+  page says less, so the budgets are kept low): a vector takes about
+  100–200 ms. So embedding works to a budget (`runWithinBudget()`: the first
+  always, then only while the average says the next fits): ingest 900 ms
+  less what reading the file took (`INGEST_EMBED_BUDGET_MS`), a rebuild call
+  1,000 ms, the rebuild rag-search starts after an answer 500 ms, filling in
+  400 ms. What is not reached is stored without a vector and found by
+  keyword meanwhile. The remote providers spend no CPU, so no budget.
+- **Chunks left without a vector are filled in** (`fillMissingVectors()`,
+  `_shared/reembed.ts`): after a question, for the ready vaults searched,
+  and from reembed-index on a ready index, a few a call, through migration
+  065's `rag_chunks_missing_embedding` (service role only, like every
+  `rag_*` function). A rebuild never walks a complete index again, so
+  without 065 those chunks wait for the next change of model.
 - **The endpoint moved, and the silence cost us the whole feature.**
-  `api-inference.huggingface.co` now answers `410 Gone`; HuggingFace serves
-  inference from `router.huggingface.co`. Every chunk in the live vault sat
-  with a NULL embedding for the life of the project because of it, and the
-  only sign was a `console.warn`. `embedPassages` / `embedQuery` now return
-  the reason alongside the vectors, callers surface it (`debug.embed_error`
-  in search, an error on the Settings › Search row, `console.error` in
-  ingest), and the host is a list to try rather than one name to be wrong
-  about. A token is now required — `HF_API_TOKEN` must be set.
-- **The reason is the one HuggingFace gave.** An address that answered beats
-  one that could not be reached, so the retired host's DNS failure, tried
-  last, can no longer hide the router's answer: for days every report said
-  "dns error" while the router was saying 402, credit used up. An answer
-  about the account (401, 402, 403, 429) stops the search at once, since every
-  address would say the same, and reads in words: `HTTP 402 (HuggingFace
-  credit is used up): …`.
+  HuggingFace's `api-inference.huggingface.co` began answering `410 Gone`
+  and every chunk sat with a NULL embedding for months, the only sign a
+  `console.warn`. So `embedPassages` / `embedQuery` return the reason
+  alongside the vectors, and callers surface it (`debug.embed_error` in
+  search, an error on the Settings › Search row, `console.error` in
+  ingest). A provider's refusal reads in words, "HTTP 429 …" first, which QA
+  counts as an outside allowance, not a fault.
+- **Which model ran is logged**: rag-search's `[rag] Models: …` line after
+  each answer names translate, condense, rerank, answer and the
+  search-vector model; `debug.models.embed` carries the last, and test
+  builds show it under an answer's Details.
 - **Query and chunk vectors must come from the same model.** Mixing ranks by
   noise instead of failing. `public.family_embedding_state` (migration 013)
   records which model a family's chunks use and whether the rebuild finished;
   until it has, `rag-search` sends no query vector and retrieval falls back to
-  keyword-only. A family with no row was created after 013 and is ready by
-  definition. **Changing the model means bumping it here and re-running
-  `reembed-index` for every family.** The search screen starts that rebuild
+  keyword-only. A family with no row was created after 013 on that time's
+  model, multilingual-e5-small (`UNRECORDED_MODEL`), so with any other model
+  it is due a rebuild, which starts its row (a vault's first document
+  records one at once, `recordFreshIndex()` in ingest.ts, so a new vault is
+  not rebuilt for nothing). **`EMBEDDING_MODEL` names provider, model and
+  size, so changing any of them makes every vault's index stale and the
+  rebuild re-makes it.** The search screen starts that rebuild
   by itself when an answer reports `debug.index_rebuilding`, so nobody has to
   find the Settings row for search to work; Settings › Search remains the
   manual route and the place errors are shown in full — and it shows only
@@ -3348,8 +3402,9 @@ rule again once pinned chunks are mixed in.
   - Anyone with the Supabase dashboard or the service role key — the people
     who run AskLocker — can open every file and read every document's text.
   - The servers read that text to search it.
-  - Parts of it go to outside services: HuggingFace (every passage, and
-    every question, for search), Anthropic and Groq (the passages an answer
+  - Parts of it go to outside services: Cloudflare (every passage, and
+    every question, for search, once its keys are set; until then the
+    search vectors are made on AskLocker's own servers, gte-small), Anthropic and Groq (the passages an answer
     is written from, and the chat: Claude first where its key is set, Groq
     otherwise) and OCR.space (scanned PDFs, photos imported from Gmail).
     PostHog gets usage counts, and never any of it.

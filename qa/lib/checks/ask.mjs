@@ -43,6 +43,7 @@ export function judgeAnswer(q, d) {
 
   // The pipeline's own health, on every question. embedded:false is the
   // exact shape of the HuggingFace outage that left every vector NULL.
+  // checkIndex() drives a rebuild first, so a ready index is expected here.
   const debug = d.debug ?? {};
   if (debug.embedded === false) reasons.push(`the question was NOT embedded (${debug.embed_error ?? 'no reason given'}) — search fell back to keywords`);
   if (debug.index_rebuilding) reasons.push('the search index is still rebuilding');
@@ -199,7 +200,7 @@ export async function runQuestions(cfg, { a, vaultA, notIndexed = new Map() }, r
     }
 
     answered.set(q.id, record);
-    // HuggingFace out of credit (or rate-limited): search answered from
+    // The search-vector service out of its allowance (or rate-limited): search answered from
     // keywords alone. A right answer still passes; a wrong one may only be the
     // missing vectors, so it is retried on a later run rather than failed.
     const embedError = String(d.debug?.embed_error ?? '');
@@ -207,7 +208,7 @@ export async function runQuestions(cfg, { a, vaultA, notIndexed = new Map() }, r
     const reasons = judgeAnswer(q, d).filter((reason) => !(embedOut && reason.startsWith('the question was NOT embedded')));
     const rerankLimited = /429|rate/i.test(String(d.debug?.rerank_error ?? ''));
     const status = reasons.length === 0 ? 'pass' : rerankLimited || embedOut ? 'inconclusive' : 'fail';
-    const keywordsOnly = `keywords only: HuggingFace refused the search vectors (${embedError.slice(0, 60)})`;
+    const keywordsOnly = `keywords only: the search-vector service refused (${embedError.slice(0, 60)})`;
     results.add('questions', q.id, title, status, {
       why: reasons.length
         ? reasons.join('; ')
