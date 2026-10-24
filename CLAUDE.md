@@ -247,7 +247,10 @@ photos OCR'd the way the web app does it, with Tesseract — which is about
   failure, and so is HuggingFace refusing the search vectors for want of
   credit (402) or calls (429): search falls back to keywords, a right answer
   still passes, and a wrong one waits for a later run. Worst day ≈ half of
-  `gpt-oss-20b`'s free allowance.
+  `gpt-oss-20b`'s free allowance. With `ANTHROPIC_API_KEY` set on DEV the
+  questions go to Claude first (see [Claude first](#claude-first-groq-when-claude-cant-answer)),
+  about $0.0025 each from the owner's credit, and the pacing stays for the
+  days Groq answers.
 - **It never touches PROD data** — the runner refuses a PROD URL. Its only
   PROD access is the two read-only catalog queries above.
 - **Everything in `qa/fixtures/` is fictional and says so.** This repo is
@@ -372,6 +375,7 @@ npx supabase@latest functions deploy razorpay-webhook --project-ref <ref> --no-v
 npx supabase@latest secrets set GROQ_API_KEY=...      --project-ref <ref>
 npx supabase@latest secrets set HF_API_TOKEN=...      --project-ref <ref>
 npx supabase@latest secrets set OCR_SPACE_API_KEY=... --project-ref <ref>
+npx supabase@latest secrets set ANTHROPIC_API_KEY=... --project-ref <ref>   # Claude answers first; a key per project
 npx supabase@latest secrets set GMAIL_CLIENT_ID=... GMAIL_CLIENT_SECRET=... GMAIL_TOKEN_KEY=... GMAIL_RETURN_ORIGINS=... --project-ref <ref>
 npx supabase@latest secrets set RAZORPAY_KEY_ID=... RAZORPAY_KEY_SECRET=... RAZORPAY_WEBHOOK_SECRET=... --project-ref <ref>   # test keys on DEV
 
@@ -444,7 +448,10 @@ changing one requires a rebuild — there is no runtime config.
 
 **Edge Function secrets** — server-side only, set per Supabase project with
 `supabase secrets set NAME=value`, never in this repo:
-`GROQ_API_KEY`, `HF_API_TOKEN`, `OCR_SPACE_API_KEY`, and for Gmail import
+`GROQ_API_KEY`, `HF_API_TOKEN`, `OCR_SPACE_API_KEY`, optionally
+`ANTHROPIC_API_KEY` (Claude answers first, Groq when it can't; with
+`CLAUDE_MODEL`, `CLAUDE_CONDENSE_MODEL` and `CLAUDE_RERANK_MODEL` to pick
+another model than Haiku for a step), and for Gmail import
 `GMAIL_CLIENT_ID`, `GMAIL_CLIENT_SECRET` (the OAuth client of the separate
 Google Cloud project made for Gmail), `GMAIL_TOKEN_KEY` (32 random bytes,
 base64 — `openssl rand -base64 32`; it seals refresh tokens, so changing it
@@ -962,6 +969,7 @@ opened a month and two questions a week:
 | Search vectors (HuggingFace) | $0.10 of credit a month; no pay-as-you-go on a free account | already: DEV's is used up (402), and search falls back to keywords |
 | Files (Supabase) | 1 GB, shared with DEV | 70 families |
 | Answers (Groq) | 200K tokens a day and 8K a minute per model, per Groq organisation; a question is ~9K, mostly the judge on `gpt-oss-20b` | 25 questions a day for everyone, one a minute: 80 families |
+| Answers (Claude, once its key is set) | the owner's $100 of Anthropic API credit a month (with their Claude plan), for DEV and PROD together; a question is about $0.0025 on Haiku | about 40,000 questions a month: 4,000 families at two a week, 900 at 45 a month |
 | Database (Supabase) | 500 MB per project | 150 families; 1,800 vaults even empty |
 | Data sent out (Supabase) | 5 GB a month (another 5 GB from its cache), shared with DEV | 400 families |
 | Scanned PDFs (OCR.space) | 25,000 a month, 500 a day per IP address, 1 MB and 3 pages a file | the file limits, at any size |
@@ -988,9 +996,9 @@ organisation of its own; a personal vault's schema made when something is
 first saved to it; Supabase's built-in `gte-small` embedding model, which
 runs inside Edge Functions with no outside service (384 dimensions like the
 column, but English only, and every stored vector re-made); fewer or shorter
-passages for the judge. Files and answers for 1,000 families need paid
-plans by then: Supabase Pro, and Groq's paid tier at about a tenth of a
-rupee a question.
+passages for the judge. Files for 1,000 families need Supabase Pro by
+then; answers fit the Claude credit (above), with Groq's paid tier at about
+a fifth of a rupee a question the other way.
 
 ### The migration gap — closed, and checked properly this time
 
@@ -1155,7 +1163,7 @@ where it does not.
   account shows, family by family, what goes and what stays, and asks for
   DELETE to be typed. There is no waiting period and the app keeps no
   copy. Short-lived copies in Supabase's backups and logs expire on their
-  own, and what went to HuggingFace, Groq or OCR.space is under their
+  own, and what went to HuggingFace, Anthropic, Groq or OCR.space is under their
   policies, so the screens never say "nothing is kept" (see
   [Conventions](#conventions)).
 - **A business never goes with an account** (051): its last admin is told to
@@ -2708,7 +2716,8 @@ where it does not.
   from the asker's place in the family tree; see
   [Family tree](#family-tree--people-not-accounts-031)), then embeds the query (`_shared/embeddings.ts`, same model as
   ingest) → retrieves chunks via `rag_retrieve_chunks`, which blends semantic
-  distance and full-text rank 0.7/0.3 → sends chunks + query to Groq → returns
+  distance and full-text rank 0.7/0.3 → sends chunks + query to Claude, or Groq
+  (see [Claude first](#claude-first-groq-when-claude-cant-answer)) → returns
   answer plus source document references. If embedding fails the RPC falls back
   to keyword-only rather than erroring. **Across vaults (046)**: `scope: 'all'`
   or `family_ids` searches several of the asker's vaults, every one checked;
@@ -2759,6 +2768,9 @@ where it does not.
   2026, `llama-3.1-8b-instant` in August 2026) — when adding a fallback, confirm
   the name on Groq's models page first. The models that actually ran are
   returned in `debug.models` and shown under follow-up answers.
+  **Claude goes first when it is set up** (`_shared/ai.ts`), and Groq answers
+  whenever Claude cannot: see
+  [Claude first](#claude-first-groq-when-claude-cant-answer).
   **Numbers stay in digits.** Every answer copies numbers exactly as the
   document writes them, in digits — train, PNR, seat, policy, account and ID
   numbers, amounts. Told to write voice answers for the ear, the model once
@@ -2852,6 +2864,57 @@ where it does not.
   **`gmail-import`** — Gmail import; see [below](#gmail-import--your-own-mailbox-your-tick-026).
 
 All of them handle CORS preflight explicitly.
+
+### Claude first, Groq when Claude can't answer
+
+- **Every model step in rag-search asks Claude first once
+  `ANTHROPIC_API_KEY` is set** (24 October 2026, with the owner's $100 of
+  Anthropic API credit a month, which comes with their Claude plan): the
+  judge, the rewrite of a follow-up or a translation, and the answer. All
+  run on Claude Haiku 5.5 (`claude-haiku-5-5`) unless `CLAUDE_MODEL` (the
+  answer), `CLAUDE_CONDENSE_MODEL` or `CLAUDE_RERANK_MODEL` names another.
+  Without the key nothing changes: Groq, as before.
+- **Groq answers whenever Claude can't**: a refusal, an empty reply, JSON
+  cut short, an error, Claude unreachable. After no key, no credit, no such
+  model or a request it refuses (400–404), Claude is left alone for 10
+  minutes in that function instance (`claudeRestReason()`, shown as
+  `debug.claude_error`), so running out of credit adds no wasted call to
+  every question. A rate limit or an overload is tried again next time. The
+  SDK retries once, within 30 seconds.
+- **Claude's reply comes back in Groq's shape** (`_shared/claude-shape.ts`,
+  pure, pinned by the self-test), so the callers read one kind of response
+  and `debug.models` says which model ran. System messages become `system`;
+  history that opens with the assistant loses that turn; `temperature` is
+  never sent (API version 2026-10-21 refuses every sampling parameter); the
+  JSON steps send a schema (structured outputs: `SCORES_SCHEMA` and
+  `stringSchema()` in rag-search) instead of JSON mode; effort is `low`,
+  the one control every current model takes (Haiku and Sonnet can turn
+  thinking off, Opus cannot); and `max_tokens` is at least 4,096, since
+  thinking counts toward it.
+- **The SDK is pinned**, `npm:@anthropic-ai/sdk@1.1.0`: the first release on
+  API version 2026-10-21 that Deno's 24-hour rule for new packages allowed
+  when this was written. Moving to a newer one is a change of its own: read
+  its changelog first.
+- **What it costs**: about $0.0025 a question on Haiku ($0.10 a million
+  tokens in and $0.50 out; ~12K in and ~2K out, thinking included), so $100
+  is about 40,000 questions a month, against Groq's free 750. Per question
+  Haiku costs about what Groq's paid tier does; the gain is that the credit
+  is already paid for. Sonnet 5.5 for the answer alone would be about $0.02
+  a question, 5,000 a month. The credit is the organisation's, shared by its
+  workspaces and so by DEV and PROD: keep **auto-reload off** in the Claude
+  Console, so spending stops at the credit and Groq takes over, and give
+  each project its own API key, so one can be revoked alone. A full Family
+  Pro family using all 50 tries a day each (064) could spend about $30 of it
+  a month.
+- **No search vectors**: Anthropic has no embedding service, so HuggingFace
+  stays for search.
+- **Privacy names Anthropic** beside Groq (Settings › Privacy, and the rule
+  under Conventions). The agreement says "AI services" and names none, so
+  it needed no new version.
+- **Not yet**: Claude reading scanned PDFs and photos, which would read the
+  Indian scripts that OCR.space (English only) and the PDF reader lose (the
+  open known issues); showing the judge more passages than Groq's 8K tokens
+  a minute allow (`RERANK_LISTING_TOKENS`), which needs a limit per provider.
 
 ### Gmail import — your own mailbox, your tick (026)
 
@@ -3211,7 +3274,7 @@ INGEST  upload → client OCR (Tesseract web / ML Kit native), or a spreadsheet'
         → document_chunks (+vectors) + document_metadata → expiry alerts
 
 SEARCH  question → rag-search → embed query → retrieve chunks
-        (0.7 semantic + 0.3 keyword) → Groq → answer + source docs
+        (0.7 semantic + 0.3 keyword) → Claude (or Groq) → answer + source docs
 ```
 
 **Retrieval fetches 40 and judges 15, with no document allowed more than 4 of
@@ -3286,9 +3349,10 @@ rule again once pinned chunks are mixed in.
     who run AskLocker — can open every file and read every document's text.
   - The servers read that text to search it.
   - Parts of it go to outside services: HuggingFace (every passage, and
-    every question, for search), Groq (the passages an answer is written
-    from, and the chat) and OCR.space (scanned PDFs, photos imported from
-    Gmail). PostHog gets usage counts, and never any of it.
+    every question, for search), Anthropic and Groq (the passages an answer
+    is written from, and the chat: Claude first where its key is set, Groq
+    otherwise) and OCR.space (scanned PDFs, photos imported from Gmail).
+    PostHog gets usage counts, and never any of it.
 
   So no screen, notification, README or store listing says "secure",
   "safe", "private and isolated", "100% private", "only you can see it" or

@@ -21,6 +21,7 @@ import { ticketCodeNotes, ticketSearchTerms } from '../../supabase/functions/_sh
 import { digitsFromWords, restoreCodes } from '../../supabase/functions/_shared/numbers.ts';
 import { takeInTurn, uniqueRelatives } from '../../supabase/functions/_shared/vaults.ts';
 import { passagesUsed, splitUsedPassages } from '../../supabase/functions/_shared/used-passages.ts';
+import { CLAUDE_MIN_MAX_TOKENS, claudeCanTake, claudeShouldRest, claudeText, claudeUsable, groqStyleReply, toClaudeRequest } from '../../supabase/functions/_shared/claude-shape.ts';
 import { toSpeech } from '../../src/lib/speech-text.ts';
 import {
   BUILT_IN_CATEGORIES, BUSINESS_CATEGORIES, FAMILY_CATEGORIES, SUGGESTED_CATEGORIES, categoryOrder, countedCategory, suggestCategory,
@@ -1408,9 +1409,60 @@ await test('the agreement the app shows is word for word what the database keeps
   assert.ok(AGREEMENT_POINTS.every((p) => p.text.length <= 200), 'each point stays short');
 });
 
+await test('Claude takes rag-search\'s Groq requests, and its replies read as Groq\'s', () => {
+  // System text becomes one field; temperature, which the current API
+  // version refuses, is never sent; history opening with the assistant
+  // loses that turn, since the first message must be the user's.
+  const req = toClaudeRequest({
+    temperature: 0.1,
+    max_tokens: 1200,
+    messages: [
+      { role: 'system', content: 'Rule one.' },
+      { role: 'assistant', content: 'Earlier answer with no question.' },
+      { role: 'user', content: 'Whose passport?' },
+      { role: 'assistant', content: '' },
+      { role: 'assistant', content: 'Asha\'s.' },
+      { role: 'system', content: 'Rule two.' },
+      { role: 'user', content: 'When does it expire?' },
+    ],
+  }, 'claude-haiku-5-5');
+  assert.equal(req.system, 'Rule one.\n\nRule two.');
+  assert.deepEqual(req.messages.map((m) => m.role), ['user', 'assistant', 'user']);
+  assert.ok(!('temperature' in req), 'no sampling parameter');
+  assert.equal(req.max_tokens, CLAUDE_MIN_MAX_TOKENS, 'room for thinking as well as the answer');
+  assert.equal(req.output_config.effort, 'low');
+  assert.ok(!req.output_config.format, 'no schema, plain text');
+  assert.ok(claudeCanTake(req));
+  // JSON steps keep to their schema; one ending with the assistant (a
+  // prefill, refused) is never sent.
+  const schema = { type: 'object', properties: { query: { type: 'string' } }, required: ['query'], additionalProperties: false };
+  const json = toClaudeRequest({ response_format: { type: 'json_object' }, max_tokens: 9000, messages: [{ role: 'user', content: 'q' }] }, 'm', schema);
+  assert.deepEqual(json.output_config.format, { type: 'json_schema', schema });
+  assert.equal(json.max_tokens, 9000);
+  assert.ok(!claudeCanTake(toClaudeRequest({ messages: [{ role: 'user', content: 'q' }, { role: 'assistant', content: '{' }] }, 'm')));
+  assert.ok(!claudeCanTake(toClaudeRequest({ messages: [{ role: 'system', content: 'only rules' }] }, 'm')));
+  // The answer is the text blocks, not the thinking.
+  assert.equal(claudeText([{ type: 'thinking', thinking: 'hmm' }, { type: 'text', text: 'It expires ' }, { type: 'text', text: 'on 12/03/2031.' }]), 'It expires on 12/03/2031.');
+  // A refusal, nothing, or JSON cut short sends the step to Groq; a written
+  // answer that ran long still reads.
+  assert.ok(claudeUsable('end_turn', 'Fine.', false));
+  assert.ok(claudeUsable('max_tokens', 'A long answer', false));
+  assert.ok(!claudeUsable('max_tokens', '{"scores":[{"i":0', true));
+  assert.ok(!claudeUsable('refusal', 'No.', false));
+  assert.ok(!claudeUsable('end_turn', '', false));
+  const reply = groqStyleReply('{"query":"Asha passport expiry"}', 'end_turn', { input_tokens: 120, output_tokens: 9 });
+  assert.equal(reply.choices[0].message.content, '{"query":"Asha passport expiry"}');
+  assert.equal(reply.choices[0].finish_reason, 'stop');
+  assert.deepEqual(reply.usage, { prompt_tokens: 120, completion_tokens: 9 });
+  // No key, no credit or no such model: Groq answers for a while. A rate
+  // limit or a passing fault: Claude is asked again next time.
+  for (const s of [400, 401, 402, 403, 404]) assert.ok(claudeShouldRest(s), `${s} rests`);
+  for (const s of [undefined, 413, 429, 500, 529]) assert.ok(!claudeShouldRest(s), `${s} does not rest`);
+});
+
 if (failures.length) {
   console.error(failures.map((f) => `✗ ${f}`).join('\n'));
   console.error(`\n${failures.length} self-test(s) failed, ${passed} passed.`);
   process.exit(1);
 }
-console.log(`✓ ${passed} self-tests passed — matchers, judge, run-time PDF, metadata, ticket codes, text cleaning, Gmail rules and token sealing, kinship and the family tree, emergency card checks, web push, plan limits, questions each month, limits against abuse, business papers, categories and plan words, Razorpay signatures, numbers in digits, sources the answer used, the agreement's words, questions and budget.`);
+console.log(`✓ ${passed} self-tests passed — matchers, judge, run-time PDF, metadata, ticket codes, text cleaning, Gmail rules and token sealing, kinship and the family tree, emergency card checks, web push, plan limits, questions each month, limits against abuse, business papers, categories and plan words, Razorpay signatures, numbers in digits, sources the answer used, Claude's requests in Groq's shape, the agreement's words, questions and budget.`);
