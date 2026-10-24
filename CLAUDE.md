@@ -502,7 +502,7 @@ Vercel mentions below.
 | | |
 |---|---|
 | Install | `npm ci` |
-| Build | `npx expo export --platform web --clear` |
+| Build | `npm run build` (`expo export --platform web --clear`, then `scripts/move-node-modules-assets.mjs`) |
 | Output | `dist` |
 | Node | 22.x |
 
@@ -513,6 +513,18 @@ file, not on the value. A build after changing a value could therefore ship
 the old one: measured here, a build made with no Google settings still
 carried the client id of the build before it. `vercel.json` and
 `npm run build` both pass `--clear`; do the same for any build by hand.
+
+**No published folder may be called `node_modules`.** Expo writes the
+assets that come from packages, the icon fonts among them, under
+`dist/assets/node_modules/`, and Cloudflare Pages does not publish a folder
+of that name: on 24 October 2026, the day asklocker.com moved to Cloudflare,
+every icon on a phone became an empty box, since the font's address answered
+with the app's page (the single-page fallback). A computer that still had
+the font from Vercel showed the icons. `scripts/move-node-modules-assets.mjs`,
+run by `npm run build` after the export, moves the folder to
+`dist/assets/vendor` and rewrites the one script that points at it, and
+fails the build if anything still points at the old folder. Build with
+`npm run build`, never `expo export` alone, on any host.
 
 **The SPA rewrite in `vercel.json` is mandatory.** expo-router's web output
 defaults to `single`, so the export emits exactly one `index.html` and no
