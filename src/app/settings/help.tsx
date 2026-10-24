@@ -11,7 +11,7 @@ import { SUPPORT_EMAIL, SUPPORT_PHONE } from '../../lib/app-info';
 import {
   DEFAULT_PLAN_LIMITS, FREE_BUSINESS_STORAGE_LABEL, FREE_PERSONAL_STORAGE_LABEL, FREE_PERSON_STORAGE_LABEL, businessPrice, FREE_STORAGE_LABEL,
   MAX_FILE_BYTES, PLUS_FOR_SALE, formatBytes, freeVaultsText,
-  plusPrice, plusPrices, plusYearlyOffer, plusYearlySaving,
+  plusPrice,
 } from '../../lib/plans';
 import { usePaymentsStatus } from '../../lib/family-plan';
 import { lockAfterText } from '../../lib/app-lock';
@@ -42,7 +42,7 @@ function faq(payments: PaymentsStatus | null): { q: string; a: string }[] {
     },
     {
       q: 'How many questions can I ask?',
-      a: `On Free, you can ask ${DEFAULT_PLAN_LIMITS.questions.free} questions a month, and the count starts again on the 1st. Questions that get no answer don't count, but you can only try ${DEFAULT_PLAN_LIMITS.questionTriesPerDay.free} a day. ★ With Family Plus, your family shares ${DEFAULT_PLAN_LIMITS.familyQuestions} questions a month, and each person can try ${DEFAULT_PLAN_LIMITS.questionTriesPerDay.plus} a day.`,
+      a: `On Free, you can ask ${DEFAULT_PLAN_LIMITS.questions.free} questions a month, and the count starts again on the 1st. Questions that get no answer don't count, but you can only try ${DEFAULT_PLAN_LIMITS.questionTriesPerDay.free} a day. ★ Family Plus and Pro have no monthly limit, and each person can ask up to ${DEFAULT_PLAN_LIMITS.questionTriesPerDay.plus} a day.`,
     },
     {
       q: 'Are there other limits?',
@@ -50,7 +50,7 @@ function faq(payments: PaymentsStatus | null): { q: string; a: string }[] {
     },
     {
       q: 'Can I ask by speaking?',
-      a: `Yes. Turn on Voice assistant in Settings › Accessibility, then tap the mic on Ask and speak. On Free, you get ${DEFAULT_PLAN_LIMITS.voiceAnswers.free} voice chats, and ★ Family Plus has no limit.`,
+      a: `Yes. Turn on Voice assistant in Settings › Accessibility, then tap the mic on Ask and speak. On Free, you get ${DEFAULT_PLAN_LIMITS.voiceAnswers.free} voice chats in English. ★ Family Plus and Pro have no limit, in Hindi and other Indian languages too.`,
     },
     {
       q: 'How do I sign in?',
@@ -70,7 +70,7 @@ function faq(payments: PaymentsStatus | null): { q: string; a: string }[] {
     },
     {
       q: 'How do I add someone to my family?',
-      a: `If you're an admin, open Manage Family, tap Add and type the Google email they sign in with. They must have signed in to AskLocker once, and they join when they accept. A family can have ${DEFAULT_PLAN_LIMITS.members.free} members on Free and ${DEFAULT_PLAN_LIMITS.members.plus} with ★ Family Plus, counting pending invitations.`,
+      a: `If you're an admin, open Manage Family, tap Add and type the Google email they sign in with. They must have signed in to AskLocker once, and they join when they accept. A family can have ${DEFAULT_PLAN_LIMITS.members.free} members on Free, ${DEFAULT_PLAN_LIMITS.members.plus} with ★ Family Plus and ${DEFAULT_PLAN_LIMITS.familyPro.members} with Family Pro, counting pending invitations.`,
     },
     {
       q: 'Can I use AskLocker for my business?',
@@ -98,19 +98,19 @@ function faq(payments: PaymentsStatus | null): { q: string; a: string }[] {
     },
     {
       q: 'How much space do we get?',
-      a: `On Free, each person can add ${FREE_PERSON_STORAGE_LABEL} in all. A family vault holds ${FREE_STORAGE_LABEL} from everyone together, and your personal vault ${FREE_PERSONAL_STORAGE_LABEL}, saved chats included. ★ Family Plus gives a vault ${formatBytes(DEFAULT_PLAN_LIMITS.plus)}, for ${plusPrices('inr')} in India or ${plusPrices('usd')} elsewhere. If Plus ends while a vault is over its free space, you have ${DEFAULT_PLAN_LIMITS.graceDays} days to renew or delete documents, or the newest ones above it are removed.`,
+      a: `On Free, each person can add ${FREE_PERSON_STORAGE_LABEL} in all. A family vault holds ${FREE_STORAGE_LABEL} from everyone together, and your personal vault ${FREE_PERSONAL_STORAGE_LABEL}, saved chats included. ★ Family Plus gives a vault ${formatBytes(DEFAULT_PLAN_LIMITS.plus)} and Family Pro ${formatBytes(DEFAULT_PLAN_LIMITS.familyPro.storage)}. If a paid plan ends while a vault is over its free space, you have ${DEFAULT_PLAN_LIMITS.graceDays} days to renew or delete documents, or the newest ones above it are removed.`,
     },
     {
       q: 'How do reminders work?',
-      a: 'With ★ Family Plus, everyone in the family is reminded 90, 30 and 7 days before a document expires, and on the day. To get them on your phone or computer, turn them on in Settings › Notifications. Birthday reminders come on every plan.',
+      a: 'With ★ Family Plus or Pro, everyone in the family is reminded 90, 30 and 7 days before a document expires, and on the day, and on each birthday in the family tree. To get them on your phone or computer, turn them on in Settings › Notifications.',
     },
     {
       q: 'What does ★ Family Plus mean?',
-      a: `Family Plus is the paid plan for the whole family${forSale ? '' : ', coming soon'}. In India it's ${plusPrice('inr')}, or ${plusYearlyOffer('inr')} (${plusYearlySaving('inr')}). Elsewhere it's ${plusPrice('usd')}, or ${plusYearlyOffer('usd')}. It adds ${formatBytes(DEFAULT_PLAN_LIMITS.plus)} of space, no monthly question limit, unlimited voice chats, up to ${DEFAULT_PLAN_LIMITS.members.plus} members, 30-day share links, expiry reminders and Gmail import.`,
+      a: `It marks what the paid plans for the whole family add${forSale ? '' : ', coming soon'}. Family Plus is ${plusPrice('inr')} or ${plusPrice('inr', 'yearly')} in India (${plusPrice('usd')} or ${plusPrice('usd', 'yearly')} elsewhere), with ${DEFAULT_PLAN_LIMITS.members.plus} members and ${formatBytes(DEFAULT_PLAN_LIMITS.plus)}. Family Pro is ${plusPrice('inr', 'monthly', 'family_pro')} or ${plusPrice('inr', 'yearly', 'family_pro')} (${plusPrice('usd', 'monthly', 'family_pro')} or ${plusPrice('usd', 'yearly', 'family_pro')}), with ${DEFAULT_PLAN_LIMITS.familyPro.members} members and ${formatBytes(DEFAULT_PLAN_LIMITS.familyPro.storage)}. Both add questions and voice with no monthly limit, Indian languages, 30-day share links, expiry and birthday reminders and Gmail import.`,
     },
     ...(forSale ? [{
-      q: 'How do I pay for Family Plus?',
-      a: `Open Family Plus from the menu and pick a month or a year. You pay through Razorpay by UPI, card or net banking, and AskLocker never sees your card or UPI details. Nothing renews by itself. For now, you can pay only on the web app${payments?.currencies.includes('USD') ? '' : ', in Indian rupees'}.`,
+      q: 'How do I pay for Family Plus or Pro?',
+      a: `Open Family Plus from the menu, choose Plus or Pro, then a month or a year. You pay through Razorpay by UPI, card or net banking, and AskLocker never sees your card or UPI details. Nothing renews by itself. For now, you can pay only on the web app${payments?.currencies.includes('USD') ? '' : ', in Indian rupees'}.`,
     }] : []),
     {
       q: 'How do I delete my account?',
@@ -118,7 +118,7 @@ function faq(payments: PaymentsStatus | null): { q: string; a: string }[] {
     },
     {
       q: 'Why can\'t AskLocker find something in my document?',
-      a: 'Blurry or dark photos are hard to read. Retake the photo in good light. If your documents use another language, add it in Settings › Document languages.',
+      a: 'Blurry or dark photos are hard to read. Retake the photo in good light. If your documents use another language, add it in Settings › Document languages (★ Family Plus).',
     },
   ];
 }
@@ -157,7 +157,7 @@ function businessFaq(): { q: string; a: string }[] {
     },
     {
       q: 'How do I add someone to my team?',
-      a: `If you're an admin, open Manage team, tap Add and type the Google email they sign in with. They must have signed in to AskLocker once, and they join when they accept. Free has room for ${L.members.free} people, Plus ${plus.members}, Pro ${pro.members} and Enterprise ${ent.members}.`,
+      a: `If you're an admin, open Manage team, tap Add and type the Google email they sign in with. They must have signed in to AskLocker once, and they join when they accept. Free has room for ${L.freeBusinessMembers} people, Plus ${plus.members}, Pro ${pro.members} and Enterprise ${ent.members}.`,
     },
     {
       q: 'How much space do we get?',

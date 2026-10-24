@@ -13,7 +13,7 @@ import { useFamily } from '../../lib/family-context';
 import { isBusinessVault } from '../../lib/vaults';
 import { usePreferences } from '../../lib/preferences';
 import { fetchPlanLimits, fetchVoiceStatus, indexStatus, type IndexStatus, type VoiceStatus } from '../../lib/api';
-import { useFamilyPlan, useModeOnPlus } from '../../lib/family-plan';
+import { plusPage, useFamilyPlan, useModeOnPlus } from '../../lib/family-plan';
 import { DEFAULT_PLAN_LIMITS, type PlanLimits, plusName } from '../../lib/plans';
 import { VOICE_LANGUAGES, phrase, voiceLanguage } from '../../lib/voice-languages';
 import { OCR_LANGUAGES, describeOcrLanguages } from '../../lib/ocr-languages';
@@ -74,7 +74,7 @@ export default function SettingsScreen() {
   const theme = useVaultTheme();
   const {
     voiceMode, voiceLanguage: voiceLang, documentLanguages, notificationsEnabled,
-    setVoiceMode, setVoiceLanguage, setDocumentLanguages,
+    setVoiceMode, setVoiceLanguage, setDocumentLanguages, languagesAllowed,
   } = usePreferences();
   // On the free plan each person has their own voice chats (041–043); say
   // how many are left where voice is switched on.
@@ -319,14 +319,17 @@ export default function SettingsScreen() {
             <TouchableOpacity
               style={[styles.settingRow, styles.settingRowBorder]}
               activeOpacity={0.7}
-              onPress={() => setLangPickerOpen(true)}
+              // On Free, voice is in English; Indian languages come with a paid plan (064).
+              onPress={() => (languagesAllowed ? setLangPickerOpen(true) : router.push(plusPage('languages') as any))}
             >
               <View style={[styles.settingIconWrap, { backgroundColor: theme.tint }]}>
                 <Feather name="globe" size={16} color={theme.primary} />
               </View>
               <View style={styles.settingText}>
                 <Text style={styles.settingLabel}>Voice language</Text>
-                <Text style={styles.settingSub}>The language you speak and hear</Text>
+                <Text style={styles.settingSub}>
+                  {languagesAllowed ? 'The language you speak and hear' : `★ Hindi and more with ${plusName(theme.business)}`}
+                </Text>
               </View>
               <Text style={styles.settingValue}>{voiceLanguage(voiceLang).native}</Text>
               <Feather name="chevron-right" size={16} color="#9CA3AF" />
@@ -356,14 +359,16 @@ export default function SettingsScreen() {
             <TouchableOpacity
               style={styles.settingRow}
               activeOpacity={0.7}
-              onPress={() => setDocLangPickerOpen(true)}
+              onPress={() => (languagesAllowed ? setDocLangPickerOpen(true) : router.push(plusPage('languages') as any))}
             >
               <View style={[styles.settingIconWrap, { backgroundColor: theme.tint }]}>
                 <Feather name="file-text" size={16} color={theme.primary} />
               </View>
               <View style={styles.settingText}>
                 <Text style={styles.settingLabel}>Document languages</Text>
-                <Text style={styles.settingSub}>Languages your documents are in</Text>
+                <Text style={styles.settingSub}>
+                  {languagesAllowed ? 'Languages your documents are in' : `★ Indian languages with ${plusName(theme.business)}`}
+                </Text>
               </View>
               <Text style={styles.settingValue} numberOfLines={1}>
                 {describeOcrLanguages(documentLanguages)}

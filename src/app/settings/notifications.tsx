@@ -23,6 +23,8 @@ import {
 import { color, space } from '../../constants/design';
 import { useVaultTheme } from '../../lib/vault-theme';
 import { plusName } from '../../lib/plans';
+import { usePaidPlan } from '../../lib/family-plan';
+import { PlusTag } from '../../components/screen-header';
 
 const DEVICE_TEXT: Record<Exclude<PushStatus, 'on' | 'off'>, string> = {
   unsupported: "This browser can't show notifications. Try Chrome, Edge, Firefox or Safari.",
@@ -36,6 +38,8 @@ export default function NotificationSettingsScreen() {
   // Settings follows the mode, Family or Business (the drawer's switch).
   const theme = useVaultTheme();
   const { notificationsEnabled, setNotificationsEnabled, birthdayReminders, setBirthdayReminders, birthdaysAvailable } = usePreferences();
+  // On Free there are no birthday reminders (064); unknown shows the switch.
+  const paid = usePaidPlan();
   const onWeb = Platform.OS === 'web';
   const [device, setDevice] = useState<PushStatus | null>(null);
   const [busy, setBusy] = useState<'on' | 'off' | 'test' | null>(null);
@@ -128,7 +132,13 @@ export default function NotificationSettingsScreen() {
 
         <Card>
           <CardTitle icon="gift">Birthdays</CardTitle>
-          {birthdaysAvailable ? (
+          {paid === false ? (
+            // Birthday reminders are part of Family Plus and Pro (064).
+            <>
+              <PlusTag link />
+              <Body>A reminder on each birthday in your family tree comes with {plusName(theme.business)}.</Body>
+            </>
+          ) : birthdaysAvailable ? (
             <>
               <OnOff value={birthdayReminders} onChange={setBirthdayReminders} label="Birthday reminders" />
               <Body>
@@ -146,7 +156,7 @@ export default function NotificationSettingsScreen() {
         <Card>
           <CardTitle icon="info">What you get</CardTitle>
           <Body>• {theme.business ? 'Records' : 'Documents'} about to expire (★ {plusName(theme.business)})</Body>
-          <Body>• Birthdays</Body>
+          <Body>• Birthdays (★ {plusName(theme.business)})</Body>
           <Body>• Invitations</Body>
           <Muted>Between 8 am and 10 pm, India time.</Muted>
         </Card>

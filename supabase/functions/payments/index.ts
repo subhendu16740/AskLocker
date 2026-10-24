@@ -1,4 +1,4 @@
-// ─── payments: paying for Family Plus with Razorpay (migration 044) ───
+// ─── payments: paying for Family Plus or Pro with Razorpay (044, 064) ───
 //
 // JSON POSTs, one action each:
 //
@@ -8,12 +8,16 @@
 //            choice from the connection's country and the device's time
 //            zone ({ time_zone }), payerCurrency().
 //   order    a member, for their own family: { family_id, period, currency,
-//            time_zone }. Refuses a business (409 business_plan: a business
+//            time_zone, plan }. plan is 'plus' (Family Plus, and what an
+//            older app means by sending none) or 'family_pro' (064).
+//            Refuses a business (409 business_plan: a business
 //            has its own plans, set up with us, never Family Plus — 051), and
 //            a currency other than the server's choice (409 wrong_currency,
 //            with the right one). Makes a Razorpay order
-//            for PLUS_PRICE's amount (never the client's), keeps it in
-//            plan_payments, and answers what the checkout needs.
+//            for PLUS_PRICE's or PRO_PRICE's amount (never the client's),
+//            keeps it in plan_payments with its plan, and answers what the
+//            checkout needs. A Pro order where 064 is not applied: 503
+//            needs_migration.
 //   verify   a member, after the checkout: { order_id, payment_id, signature }.
 //            Checks Razorpay's signature with the key secret, asks Razorpay
 //            that the payment is for this order's amount and captured
@@ -35,6 +39,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { corsHeaders } from '../_shared/cors.ts';
 import { requireFamilyMember, selectVaultRows, vaultKind } from '../_shared/auth.ts';
+import { isFamilyPlan, type FamilyPlan } from '../_shared/plan-text.ts';
 import {
   ORDER_ID, PAYMENT_ID, acceptedCurrencies, connectionCountry, payerCurrency, payerCurrencyMessage,
   paymentSignatureOk, plusOrderAmount, plusOrderDescription, type RazorpayCurrency,
@@ -50,7 +55,7 @@ const json = (status: number, body: Record<string, unknown>) =>
   new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
 const NOT_CONFIGURED = { status: 'not_configured', error: 'Paying for Family Plus is not switched on yet.' };
-const NEEDS_MIGRATION = { status: 'needs_migration', error: 'Paying for Family Plus is not switched on yet.' };
+const NEEDS_MIGRATION = { status: 'needs_migration', error: 'Paying for this plan is not switched on yet.' };
 
 const missingTable = (e: { code?: string; message?: string } | null) =>
   !!e && (['42P01', 'PGRST205', 'PGRST202'].includes(String(e.code)) || /does not exist|could not find/i.test(e.message ?? ''));
@@ -93,8 +98,10 @@ Deno.serve(async (req) => {
 
     if (action === 'order') {
       const { family_id: familyId, period, currency } = body;
-      if (typeof familyId !== 'string' || !UUID.test(familyId) || (period !== 'monthly' && period !== 'yearly')) {
-        return json(400, { status: 'bad_request', error: 'Which family, and a month or a year?' });
+      const plan: FamilyPlan = body?.plan === undefined || body?.plan === null ? 'plus' : body.plan;
+      if (typeof familyId !== 'string' || !UUID.test(familyId) || (period !== 'monthly' && period !== 'yearly')
+        || !isFamilyPlan(plan)) {
+        return json(400, { status: 'bad_request', error: 'Which family, which plan, and a month or a year?' });
       }
       const auth = await requireFamilyMember(req, supabase, familyId);
       if (!auth.ok) return auth.response;
@@ -113,7 +120,7 @@ Deno.serve(async (req) => {
         return json(400, { status: 'currency', error: "You can't pay in this currency yet." });
       }
 
-      const amount = plusOrderAmount(period, cur);
+      const amount = plusOrderAmount(period, cur, plan);
 
       const userId = auth.member.userId;
       const newOrder = async (): Promise<string | null> => {
@@ -123,7 +130,7 @@ Deno.serve(async (req) => {
             amount,
             currency: cur,
             receipt: `fv_${familyId.slice(0, 8)}_${Date.now().toString(36)}`,
-            notes: { family_id: familyId, period, user_id: userId },
+            notes: { family_id: familyId, period, plan, user_id: userId },
           },
         });
         if (!created.ok || !ORDER_ID.test(String(created.data.id ?? ''))) {
@@ -131,27 +138,35 @@ Deno.serve(async (req) => {
           return null;
         }
 
+        // Family Plus orders name no plan, so a database before 064 (no
+        // column) still takes them; the column's default is plus.
         const { error: saveErr } = await supabase.from('plan_payments').insert({
           order_id: created.data.id, family_id: familyId, user_id: userId, period, currency: cur, amount,
+          ...(plan === 'plus' ? {} : { plan }),
         });
         if (saveErr) throw saveErr;
         return String(created.data.id);
       };
 
       // Tapping Pay again within the hour reuses the order not yet paid, for
-      // the same person, family and price, rather than making another order
-      // at Razorpay and another row here each time (050). Razorpay takes a
-      // new attempt on an order until one is paid.
-      const { data: open, error: openErr } = await supabase
+      // the same person, family, plan and price, rather than making another
+      // order at Razorpay and another row here each time (050). Razorpay
+      // takes a new attempt on an order until one is paid. A Pro order asks
+      // for its plan, so a database before 064 answers needs_migration.
+      let openOrder = supabase
         .from('plan_payments')
         .select('order_id')
         .eq('family_id', familyId).eq('user_id', userId)
-        .eq('period', period).eq('currency', cur).eq('amount', amount).eq('status', 'created')
+        .eq('period', period).eq('currency', cur).eq('amount', amount).eq('status', 'created');
+      if (plan !== 'plus') openOrder = openOrder.eq('plan', plan);
+      const { data: open, error: openErr } = await openOrder
         .gt('created_at', new Date(Date.now() - 60 * 60 * 1000).toISOString())
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle();
-      if (openErr && missingTable(openErr)) return json(503, NEEDS_MIGRATION);
+      if (openErr && (missingTable(openErr) || (plan !== 'plus' && /plan/.test(openErr.message ?? '')))) {
+        return json(503, NEEDS_MIGRATION);
+      }
       const orderId = open?.order_id ? String(open.order_id) : await newOrder();
       if (!orderId) {
         return json(502, { status: 'razorpay', error: 'Razorpay could not start the payment. Please try again.' });
@@ -164,7 +179,7 @@ Deno.serve(async (req) => {
         amount,
         currency: cur,
         key_id: KEY_ID,
-        description: plusOrderDescription(period),
+        description: plusOrderDescription(period, plan),
         prefill: {
           email: who?.user?.email ?? undefined,
           name: who?.user?.user_metadata?.display_name ?? who?.user?.user_metadata?.full_name ?? undefined,

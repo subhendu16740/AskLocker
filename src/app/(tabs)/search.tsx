@@ -124,7 +124,8 @@ export default function SearchScreen() {
   const saveFailed = (err: unknown) => {
     if (err instanceof ChatStorageFullError) {
       setSaveNotice(null);
-      setChatFull({ text: err.message, plusLink: err.room?.plan !== 'plus' });
+      // Free moves to Plus, Plus to Pro (064); Pro has nowhere further to go.
+      setChatFull({ text: err.message, plusLink: err.room?.plan === 'free' || err.room?.plan === 'plus' });
       return;
     }
     showSaveNotice('error', isMissingMigration(err)

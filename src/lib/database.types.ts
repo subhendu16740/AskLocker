@@ -958,6 +958,7 @@ export type Database = {
       plan_limits: {
         Row: {
           business_storage_bytes: number | null
+          business_max_members: number | null
           businesses_per_person: number | null
           families_per_person: number | null
           family_questions_per_month: number | null
@@ -968,7 +969,7 @@ export type Database = {
           person_storage_bytes: number | null
           plan: string
           question_tries_per_day: number | null
-          questions_fair_use: number
+          questions_fair_use: number | null
           questions_per_month: number | null
           storage_bytes: number
           uploads_per_day: number | null
@@ -978,6 +979,7 @@ export type Database = {
         }
         Insert: {
           business_storage_bytes?: number | null
+          business_max_members?: number | null
           businesses_per_person?: number | null
           families_per_person?: number | null
           family_questions_per_month?: number | null
@@ -988,7 +990,7 @@ export type Database = {
           person_storage_bytes?: number | null
           plan: string
           question_tries_per_day?: number | null
-          questions_fair_use?: number
+          questions_fair_use?: number | null
           questions_per_month?: number | null
           storage_bytes: number
           uploads_per_day?: number | null
@@ -998,6 +1000,7 @@ export type Database = {
         }
         Update: {
           business_storage_bytes?: number | null
+          business_max_members?: number | null
           businesses_per_person?: number | null
           families_per_person?: number | null
           family_questions_per_month?: number | null
@@ -1008,7 +1011,7 @@ export type Database = {
           person_storage_bytes?: number | null
           plan?: string
           question_tries_per_day?: number | null
-          questions_fair_use?: number
+          questions_fair_use?: number | null
           questions_per_month?: number | null
           storage_bytes?: number
           uploads_per_day?: number | null
@@ -1029,6 +1032,7 @@ export type Database = {
           paid_until: string | null
           payment_id: string | null
           period: string
+          plan: string
           status: string
           user_id: string | null
         }
@@ -1042,6 +1046,7 @@ export type Database = {
           paid_until?: string | null
           payment_id?: string | null
           period: string
+          plan?: string
           status?: string
           user_id?: string | null
         }
@@ -1055,6 +1060,7 @@ export type Database = {
           paid_until?: string | null
           payment_id?: string | null
           period?: string
+          plan?: string
           status?: string
           user_id?: string | null
         }

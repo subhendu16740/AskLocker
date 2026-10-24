@@ -28,7 +28,7 @@ import { fetchPaymentsStatus, fetchQuestionStatus, fetchStorageStatus, type Paym
 import type { PlanName } from './plans';
 
 /** What a starred feature is called in /plus?feature=… */
-export type PlusFeature = 'reminders' | 'gmail' | 'storage' | 'voice' | 'questions' | 'members' | 'links';
+export type PlusFeature = 'reminders' | 'gmail' | 'storage' | 'voice' | 'questions' | 'members' | 'links' | 'birthdays' | 'languages';
 /** What only a business's paid plans bring (056): the overview's lists, money in and out, reminders on notes. */
 export type BusinessFeature = 'overview' | 'money' | 'notes';
 
@@ -151,14 +151,15 @@ export function useFamilyPlan() {
 let mine: { userId: string; plus: boolean; at: number } | null = null;
 const listeners = new Set<() => void>();
 
-let asking: Promise<boolean> | null = null;
+let asking: Promise<boolean | null> | null = null;
 
-async function readOnPlus(userId: string, force: boolean): Promise<boolean> {
+/** On a paid plan in any vault; null while the server cannot say (before 049, offline). */
+async function readOnPlus(userId: string, force: boolean): Promise<boolean | null> {
   if (mine && mine.userId === userId && !force && Date.now() - mine.at < FRESH_MS) return mine.plus;
   // Every screen showing a name asks at once; one question answers them all.
   asking ??= (async () => {
     const status = await fetchQuestionStatus().catch(() => null);
-    if (!status) return mine?.userId === userId ? mine.plus : false;
+    if (!status) return mine?.userId === userId ? mine.plus : null;
     mine = { userId, plus: status.plus, at: Date.now() };
     return status.plus;
   })().finally(() => { asking = null; });
@@ -218,7 +219,7 @@ export function useOnPlus(): boolean {
     }
     let cancelled = false;
     const read = (force: boolean) => {
-      readOnPlus(userId, force).then((p) => { if (!cancelled) setPlus(p); });
+      readOnPlus(userId, force).then((p) => { if (!cancelled) setPlus(p === true); });
     };
     read(false);
     const onForget = () => read(true);
@@ -227,4 +228,34 @@ export function useOnPlus(): boolean {
   }, [userId]);
 
   return plus;
+}
+
+/**
+ * Is the signed-in person on a paid plan in any vault: Family Plus, Family
+ * Pro or a business plan? Null until known, and while the server cannot say
+ * (before 049, offline), which gates nothing. Reading and speaking Indian
+ * languages follow it (064): they happen on the device, so they are the
+ * app's rule.
+ */
+export function usePaidPlan(): boolean | null {
+  const { user } = useAuth();
+  const userId = user?.id ?? null;
+  const [paid, setPaid] = useState<boolean | null>(() => (userId && mine?.userId === userId ? mine.plus : null));
+
+  useEffect(() => {
+    if (!userId) {
+      setPaid(null);
+      return;
+    }
+    let cancelled = false;
+    const read = (force: boolean) => {
+      readOnPlus(userId, force).then((p) => { if (!cancelled) setPaid(p); });
+    };
+    read(false);
+    const onForget = () => read(true);
+    listeners.add(onForget);
+    return () => { cancelled = true; listeners.delete(onForget); };
+  }, [userId]);
+
+  return paid;
 }

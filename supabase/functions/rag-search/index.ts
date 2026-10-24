@@ -1,13 +1,15 @@
 // ─── AskLocker RAG Search Edge Function ───────────────────────
 // Pipeline: Query → Retrieve matching chunks → LLM generates answer
-// Uses: Groq free tier; models are resolved at runtime (see _shared/groq.ts)
+// Uses: Claude when ANTHROPIC_API_KEY is set, Groq when it isn't or Claude
+// can't answer (see _shared/ai.ts); Groq's models resolve at runtime (groq.ts)
 // ────────────────────────────────────────────────────────────────
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { embedQuery, EMBEDDING_MODEL } from '../_shared/embeddings.ts';
 import { requireFamilyMember, requireVaults, selectVaultRows, vaultKind, type Vault } from '../_shared/auth.ts';
 import { runReembed, afterResponse } from '../_shared/reembed.ts';
-import { groqChat, groqText, hasGroqKey } from '../_shared/groq.ts';
+import { groqText } from '../_shared/groq.ts';
+import { aiChat, claudeRestReason, hasAiKey } from '../_shared/ai.ts';
 import { buildGraph, relativesNamedIn, type KinGraph, type NamedRelative } from '../_shared/kinship.ts';
 import { ticketCodeNotes, ticketSearchTerms } from '../_shared/tickets.ts';
 import { digitsFromWords, restoreCodes } from '../_shared/numbers.ts';
@@ -395,6 +397,9 @@ Deno.serve(async (req) => {
       ...(cond.error ? { condense_error: cond.error } : {}),
       ...(pinError ? { pin_error: pinError } : {}),
       ...(rank.error ? { rerank_error: rank.error } : {}),
+      // Claude is set up but left alone for now (no credit, a bad key):
+      // Groq answered instead, and this says why.
+      ...(claudeRestReason() ? { claude_error: claudeRestReason() } : {}),
     };
 
     if (candidates.length === 0) {
@@ -427,7 +432,7 @@ Deno.serve(async (req) => {
     const built = buildContext(chunks, multi);
     const context = built.text;
 
-    // 6. Generate answer with Groq
+    // 6. Generate the answer (Claude, or Groq)
     // The model answers the STANDALONE question. Handing it the raw
     // follow-up ("What about 2026?") next to whatever retrieval found lets it
     // answer a different question from the context instead of the one asked.
@@ -918,6 +923,35 @@ async function ownerChunks(
   return { chunks: results, ...(errors.length ? { error: errors.join('; ') } : {}) };
 }
 
+// The JSON each step asks for, which Claude keeps to exactly (structured
+// outputs). Groq's JSON mode takes no schema, so it has the prompt's words.
+const SCORES_SCHEMA = {
+  type: 'object',
+  properties: {
+    scores: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: { i: { type: 'integer' }, s: { type: 'number' } },
+        required: ['i', 's'],
+        additionalProperties: false,
+      },
+    },
+  },
+  required: ['scores'],
+  additionalProperties: false,
+};
+
+/** {"<field>": "..."}: a translation, or a rewritten query. */
+function stringSchema(field: string) {
+  return {
+    type: 'object',
+    properties: { [field]: { type: 'string' } },
+    required: [field],
+    additionalProperties: false,
+  };
+}
+
 /**
  * Score every candidate against the question in ONE call to the small model,
  * then keep only those above the floor. Any failure returns the candidates
@@ -931,7 +965,7 @@ async function rerankChunks(
   let usedModel: string | undefined;
   const fallback = (error: string) => ({ kept: candidates.slice(0, RERANK_KEEP), error, model: usedModel });
   if (candidates.length === 0) return { kept: [] };
-  if (!hasGroqKey) return fallback('no api key');
+  if (!hasAiKey) return fallback('no api key');
 
   const entries: string[] = [];
   let spent = 0;
@@ -960,7 +994,7 @@ async function rerankChunks(
   }
 
   try {
-    const { response, model } = await groqChat('rerank', {
+    const { response, model } = await aiChat('rerank', {
       temperature: 0,
       // Generous, because these models reason before answering and Groq
       // rejects the whole response with a 400 when JSON mode output is cut
@@ -984,7 +1018,7 @@ ${judged.some((c) => isSpreadsheetType(c.file_type)) ? `${SPREADSHEET_ROWS_RULE}
           content: `Question: ${question}\n\nPassages:\n\n${listing}\n\nReturn the JSON scores.`,
         },
       ],
-    });
+    }, { schema: SCORES_SCHEMA });
     usedModel = model;
 
     if (!response.ok) {
@@ -1070,10 +1104,10 @@ function dedupeChunks(chunks: ChunkResult[]): ChunkResult[] {
 async function translateToEnglish(
   query: string,
 ): Promise<{ query: string; changed: boolean; error?: string; model?: string }> {
-  if (!hasGroqKey) return { query, changed: false, error: 'no api key' };
+  if (!hasAiKey) return { query, changed: false, error: 'no api key' };
   let usedModel: string | undefined;
   try {
-    const { response, model } = await groqChat('condense', {
+    const { response, model } = await aiChat('condense', {
       temperature: 0,
       // Room for the model to reason before the object. JSON mode validates
       // the whole response, so output cut off by max_tokens comes back as a
@@ -1094,7 +1128,7 @@ Reply with JSON only: {"english":"<the translation>"}`,
         },
         { role: 'user', content: query },
       ],
-    });
+    }, { schema: stringSchema('english') });
     usedModel = model;
 
     if (!response.ok) {
@@ -1140,7 +1174,7 @@ async function condenseQuery(
   history: HistoryTurn[],
   opts: { toEnglish?: boolean } = {},
 ): Promise<{ query: string; changed: boolean; error?: string; model?: string }> {
-  if (!hasGroqKey) return { query, changed: false, error: 'no api key' };
+  if (!hasAiKey) return { query, changed: false, error: 'no api key' };
   let usedModel: string | undefined;
 
   const transcript = history.length > 0
@@ -1151,7 +1185,7 @@ async function condenseQuery(
     : '';
 
   try {
-    const { response, model } = await groqChat('condense', {
+    const { response, model } = await aiChat('condense', {
       temperature: 0,
       max_tokens: 1500, // as above: JSON mode 400s on a truncated object
       // Same reason as translateToEnglish: a bare line invites reasoning.
@@ -1170,7 +1204,7 @@ Reply with JSON only: {"query":"<the rewritten query>"}`,
           content: `Conversation so far:\n${transcript}\n\nLatest message: ${query}`,
         },
       ],
-    });
+    }, { schema: stringSchema('query') });
     usedModel = model;
 
     if (!response.ok) {
@@ -1255,14 +1289,14 @@ async function fallbackRetrieve(schema: string, query: string, words: string[]):
   return results;
 }
 
-// ─── Generate Answer (Groq) ────────────────────────────────────
+// ─── Generate Answer (Claude, or Groq) ─────────────────────────
 
 interface AnswerResult {
   answer: string;
   /** true when the text did not come from the model. */
   degraded: boolean;
   retryAfterSeconds?: number;
-  /** Which Groq model produced (or failed to produce) the text. */
+  /** Which model produced (or failed to produce) the text: Claude's or Groq's. */
   model?: string;
   /**
    * The passages (1-based) the answer says it relied on, from its "USED:"
@@ -1291,14 +1325,14 @@ async function generateAnswer(
     ? `\nYour answer will be read aloud by a voice assistant to an elderly person. Write two or three short, plain spoken sentences. No markdown, no bullet points, no asterisks, no headings. Write a date with its month as a word (for example "14 March 2027"), but every other number in digits, exactly as written: the app reads numbers aloud itself. Describe the document naturally ("this is from Mom's passport") instead of reading out a file name.`
     : '\nIf you mention a document, reference it by its filename.';
 
-  if (!hasGroqKey) {
-    console.warn('[rag] GROQ_API_KEY is not set');
+  if (!hasAiKey) {
+    console.warn('[rag] Neither ANTHROPIC_API_KEY nor GROQ_API_KEY is set');
     return { answer: buildFallbackAnswer(chunks, 'unavailable'), degraded: true };
   }
   let usedModel: string | undefined;
 
   try {
-    const { response, model } = await groqChat('answer', {
+    const { response, model } = await aiChat('answer', {
       messages: [
         {
           role: 'system',
@@ -1327,7 +1361,7 @@ The passages in the context are numbered: [Passage 1 | …], [Passage 2 | …]. 
 
     if (!response.ok) {
       const errText = await response.text();
-      console.warn(`[rag] Groq API error (${response.status}): ${errText}`);
+      console.warn(`[rag] Answer model error (${response.status}): ${errText}`);
 
       // 429 is the common one on the free tier and is worth saying out loud,
       // because "wait twelve seconds" is advice the user can act on.
@@ -1346,7 +1380,7 @@ The passages in the context are numbered: [Passage 1 | …], [Passage 2 | …]. 
     const result = await response.json();
     const text = result.choices?.[0]?.message?.content;
     if (!text) {
-      console.warn(`[rag] Groq returned no content (finish: ${result.choices?.[0]?.finish_reason ?? '?'}, ${JSON.stringify(result.usage ?? {})})`);
+      console.warn(`[rag] The answer model returned no content (finish: ${result.choices?.[0]?.finish_reason ?? '?'}, ${JSON.stringify(result.usage ?? {})})`);
       return { answer: buildFallbackAnswer(chunks, 'unavailable'), degraded: true, model };
     }
 
@@ -1354,7 +1388,7 @@ The passages in the context are numbered: [Passage 1 | …], [Passage 2 | …]. 
     // relied on, for the source chips, and is never shown or read aloud.
     const { answer, used } = splitUsedPassages(text);
     if (!answer) {
-      console.warn('[rag] Groq returned only the USED line');
+      console.warn('[rag] The answer model returned only the USED line');
       return { answer: buildFallbackAnswer(chunks, 'unavailable'), degraded: true, model };
     }
 
@@ -1363,7 +1397,7 @@ The passages in the context are numbered: [Passage 1 | …], [Passage 2 | …]. 
     return { answer: digitsFromWords(restoreCodes(answer, context)), degraded: false, model, used };
 
   } catch (err) {
-    console.warn('[rag] Groq generation failed:', err);
+    console.warn('[rag] Answer generation failed:', err);
     return { answer: buildFallbackAnswer(chunks, 'unavailable'), degraded: true, model: usedModel };
   }
 }
