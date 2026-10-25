@@ -1431,7 +1431,7 @@ await test('the agreement the app shows is word for word what the database keeps
     assert.ok(!words.includes(claim), `promises "${claim}"`);
   }
   // It says outside services read parts of documents, but names none (the
-  // owner's ask): the names are in Settings › Privacy.
+  // owner's ask): the names are in the privacy policy (public/privacy.html).
   assert.ok(words.includes('ai services'), 'says AI services read parts of them');
   for (const name of ['huggingface', 'groq', 'ocr.space', 'supabase', 'posthog', 'razorpay']) {
     assert.ok(!words.includes(name), `names "${name}"`);
@@ -1543,9 +1543,31 @@ await test('search vectors: who makes them, at 384 numbers, inside the CPU budge
   assert.equal(r4.attempted, 3);
 });
 
+await test('the privacy policy names who gets document text and promises nothing AskLocker does not keep', () => {
+  // public/privacy.html is the policy Settings › Privacy links to, at
+  // asklocker.com/privacy. The screen names no service; the policy must name
+  // every one that gets document text or personal details (CLAUDE.md).
+  const html = readFileSync(new URL('../../public/privacy.html', import.meta.url), 'utf8');
+  const page = html.replace(/<!--[\s\S]*?-->/g, '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+  const words = page.toLowerCase();
+  for (const name of ['Supabase', 'Cloudflare', 'Anthropic', 'Groq', 'OCR.space', 'Google', 'Razorpay']) {
+    assert.ok(page.includes(name), `names ${name}`);
+  }
+  assert.ok(words.includes('not end-to-end'), 'says documents are not end-to-end encrypted');
+  assert.ok(words.includes('the people who run asklocker can open them'), 'says the people who run AskLocker can open documents');
+  for (const claim of ['100% private', 'only you can see', 'nothing is kept', 'secure', 'bank-level', 'military-grade']) {
+    assert.ok(!words.includes(claim), `promises "${claim}"`);
+  }
+  // The usage analytics service is described, not named (the owner's ask).
+  assert.ok(!words.includes('posthog'), 'names the analytics service');
+  assert.ok(words.includes('turn it off in settings › privacy'), 'says how to turn usage counts off');
+  assert.ok(page.includes(`removed after ${DEFAULT_PLAN_LIMITS.graceDays} days`), 'the days before documents go follow the plan limits');
+  assert.ok(/Last updated \d{1,2} [A-Z][a-z]+ \d{4}/.test(page), 'carries the date it last changed');
+});
+
 if (failures.length) {
   console.error(failures.map((f) => `✗ ${f}`).join('\n'));
   console.error(`\n${failures.length} self-test(s) failed, ${passed} passed.`);
   process.exit(1);
 }
-console.log(`✓ ${passed} self-tests passed — matchers, judge, run-time PDF, metadata, ticket codes, text cleaning, Gmail rules and token sealing, kinship and the family tree, emergency card checks, web push, plan limits, questions each month, limits against abuse, business papers, categories and plan words, Razorpay signatures, numbers in digits, sources the answer used, Claude's requests in Groq's shape, search-vector providers and budget, the agreement's words, questions and budget.`);
+console.log(`✓ ${passed} self-tests passed — matchers, judge, run-time PDF, metadata, ticket codes, text cleaning, Gmail rules and token sealing, kinship and the family tree, emergency card checks, web push, plan limits, questions each month, limits against abuse, business papers, categories and plan words, Razorpay signatures, numbers in digits, sources the answer used, Claude's requests in Groq's shape, search-vector providers and budget, the agreement's words, the privacy policy, questions and budget.`);

@@ -18,8 +18,8 @@ export const releaseDate: Date | null = (() => {
 /** Short commit hash of the build, when the build knew it (the web host says). */
 export const buildCommit: string = extra.commit ?? '';
 
-// Help & FAQ › Contact us. Empty until there is a support address and number
-// to publish; the section shows only what is filled in, and Send feedback is
-// always there.
-export const SUPPORT_EMAIL = '';
+// Help & FAQ › Contact us, and the privacy policy's contact. The section shows
+// only what is filled in, and Send feedback is always there. The address is
+// Cloudflare Email Routing on asklocker.com, forwarding to the owner's inbox.
+export const SUPPORT_EMAIL = 'support@asklocker.com';
 export const SUPPORT_PHONE = '';

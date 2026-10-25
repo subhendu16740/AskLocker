@@ -631,6 +631,7 @@ copies, so DEV needs its own secrets and its own `documents` storage bucket.
 - **To show "AskLocker" instead of an address**: Google's brand
   verification, free — a public home page and privacy policy on a domain
   verified in Search Console, both linked from the OAuth consent screen.
+  The policy is `https://asklocker.com/privacy` (`public/privacy.html`).
 
 ### Fingerprint sign-in — a passkey, after Google once
 
@@ -771,7 +772,7 @@ src/
     saved-chats.tsx          # behind the clock on Ask: chats kept with Save chat (028)
     settings/                # (NOT a tab) its own Stack, so Back returns to Settings
       index.tsx              # the list; every row opens a screen
-      profile.tsx  security.tsx  notifications.tsx  privacy.tsx   # notifications: the switch, and this device (034)
+      profile.tsx  security.tsx  notifications.tsx  privacy.tsx   # notifications: the switch, and this device (034); privacy: three lines, the privacy policy, Share app usage
       storage.tsx  help.tsx  feedback.tsx  about.tsx   # storage: one table, a row per vault: used, space, its plan, ★ for a paid one (038, 039), and first what you added on Free (060); help: a business's answers in Business mode
       vaults.tsx             # Your vaults: Family vaults and Business vaults, open, create, Make it a business, Delete (057)
       delete-account.tsx     # Security › Delete account: shows what goes, asks for DELETE (029)
@@ -796,7 +797,7 @@ supabase/
   migrations/                # SQL — incomplete, see Database
   queries/                   # read-only queries to paste into the SQL editor (document-categories.sql)
 
-public/                      # copied to the web build's root: sw.js (shows notifications), manifest, icons
+public/                      # copied to the web build's root: sw.js (shows notifications), manifest, icons, privacy.html (the privacy policy, asklocker.com/privacy)
 qa/                          # end-to-end QA against DEV (own package.json)
   run.mjs  questions.yaml    # the runner, and what it asks
   fixtures/documents.mjs     # the SPECIMEN documents and the facts they carry
@@ -833,7 +834,7 @@ tabs. `(tabs)` is a layout group, so routes are `/home`, `/search`, `/upload`.
 | `family-plan.ts` | Is the current family on Family Plus? `useFamilyPlan()` (from `family_storage_status()`, kept a minute per family): `isFree`, `closed` and `trial` (051), and `routeFor(feature, route)`, which sends a free family to `/plus?feature=…` instead of a starred feature. Unknown (before 038, offline) gates nothing. `usePaymentsStatus()`: can Family Plus be bought here (044). `useOnPlus()`: is the signed-in person on Plus in any vault (from `question_status()`, a minute, shared; `forgetOnPlus()` after paying), for the creation screen's "On Free" line. `useModeOnPlus()`: is any vault of the open mode on a paid plan, for the ★ after their name. `usePaidPlan()`: is the person on any paid plan, null while unknown, which gates nothing (birthday reminders' switch, 064). `useIndianLanguages()`: may the person read documents in Indian languages — Family Pro, Business Pro or Enterprise, from `question_status().plans` (066; any paid plan before it) |
 | `file-types.ts` | What a picked file is (`detectFileType()`: MIME type, then name, never a web `blob:` uri) and whether the vault can keep it (PDF, JPG, PNG, and since 061 .xlsx and .csv; an old .xls is asked to be saved as .xlsx) |
 | `spreadsheet.ts` | Reading a spreadsheet when it is added (`readSpreadsheet()`): .xlsx with read-excel-file's universal build, loaded only then, .csv with the shared parser, both into `_shared/spreadsheet-text.ts`'s rows; see [Spreadsheets](#spreadsheets--xlsx-and-csv-read-in-the-app-061) |
-| `app-info.ts` | Version, release date and commit (stamped into `extra` by `app.config.ts` at build time), and the support contact Help shows |
+| `app-info.ts` | Version, release date and commit (stamped into `extra` by `app.config.ts` at build time), and the support contact Help and the privacy policy show (`support@asklocker.com`, Cloudflare Email Routing) |
 | `ocr.ts` | Platform-split OCR with progress callback; reads the person's chosen languages |
 | `ocr-languages.ts` | The document-language picker list, and `resolveOcrLanguages()` which always appends English |
 | `analytics.ts` | Usage counts with PostHog (production builds only): `track(event, props)`, typed by `AnalyticsEvents` so only named events and properties can be sent; a random id per device (`deviceKey.analyticsId`), the Privacy switch (`analyticsOn`, `setAnalyticsOn`), `categoryForAnalytics()` (built-in names only), `screenName()` (the route, never an id). Screen views come from `components/analytics-tracker.tsx` in the root layout. Off in every build but production |
@@ -2046,7 +2047,7 @@ where it does not.
   message, Help. DEV takes Razorpay's test keys and test payments only (QA
   fails a live key there); PROD takes live keys, which Razorpay gives after
   KYC and a look at the website (terms, privacy, refund and contact pages,
-  and the prices).
+  and the prices; the privacy page is asklocker.com/privacy).
 - **Web only for now.** The phone app's `razorpay.ts` says paying is on the
   web app; Razorpay's native checkout (`react-native-razorpay`) needs an
   EAS build.
@@ -2718,10 +2719,11 @@ where it does not.
   AI services read parts of them to answer your questions."). **No service
   is named there, and nothing about end-to-end**: "In AskLocker" is the
   approved limit (see the privacy rule under Conventions), and Settings ›
-  Privacy says the rest plainly — not end-to-end, the people who run
-  AskLocker can open documents, the services by name, who can see what, AI
-  can be wrong, not a backup, what goes when Family Plus ends, deleting,
-  usage counts — and the screen says "More in Settings › Privacy". It was
+  Privacy and the privacy policy it links to say the rest plainly — not
+  end-to-end, the people who run AskLocker can open documents, the
+  services by name, who can see what, AI can be wrong, not a backup, what
+  goes when Family Plus ends, deleting, usage counts — and the screen says
+  "More in Settings › Privacy". It was
   eight points, then three, before the owner settled on what a new person
   needs before using anything. Being what people tick, it no longer records
   their agreement to staff access: that is in Privacy, read, not ticked. A tick box, "I've read this and I
@@ -3514,9 +3516,15 @@ rule again once pinned chunks are mixed in.
   "safe", "private and isolated", "100% private", "only you can see it" or
   "nothing is kept". Say what the app does instead: "in AskLocker, only your
   family can open…", "nobody else using AskLocker can open it", "just for
-  you". Settings › Privacy says all of this plainly and names the outside
-  services, all but PostHog: it says usage is counted, with its switch,
-  without naming the service (the owner's ask, 25 October 2026). It must stay true of the code and of the people who run
+  you". Settings › Privacy says the three that matter in a line each (who
+  can see documents; encrypted, not end-to-end, so our servers and team can
+  open them; parts go to AI services) and links to the privacy policy,
+  `public/privacy.html` at `asklocker.com/privacy`, which says all of it
+  plainly and names every outside service but the usage analytics one,
+  which it describes (the owner's ask, 25 October 2026). The QA self-test
+  checks the policy names each service that gets document text and makes
+  none of the forbidden claims. Change the policy, and its date, with any
+  change below. It must stay true of the code and of the people who run
   AskLocker, so change it with any change to sharing, search, OCR,
   embeddings, voice, Gmail import, payments or usage counts. The app made such claims until
   7 October 2026. The agreement everyone accepts at the start
@@ -3546,9 +3554,12 @@ rule again once pinned chunks are mixed in.
   it) and off on a device where Settings › Privacy's switch is off. The
   PostHog project (AskLocker, EU Cloud) discards IP addresses and has
   autocapture, recordings, heatmaps and surveys off; its time zone is
-  India's. Settings › Privacy, in builds that send, says screens, taps
-  and document types are counted, "never what is in them", beside the
-  switch, and does not name PostHog (the owner's ask, 25 October 2026). How many documents each category has is a
+  India's. Settings › Privacy, in builds that send, has one row, Share
+  app usage, with its switch; the privacy policy says what is counted and
+  calls the service "a usage analytics service in the EU", never PostHog
+  (the owner's ask, 25 October 2026: it is the team's tool, not the
+  person's concern, but the counts still leave their device, so the
+  policy says so and the store forms must list app interactions). How many documents each category has is a
   query, not an event: `supabase/queries/document-categories.sql` counts
   category ids across every vault and reads nothing else.
 - **Copy is short and plain** (since 10 October 2026, when the owner said
@@ -3567,12 +3578,12 @@ rule again once pinned chunks are mixed in.
   This creates your account."; the welcome question has no subtitle;
   creating a vault asks only its name (the description field, shown
   nowhere, is gone); Home's offers (fingerprint, set up your family) are
-  a title, one line and two buttons. Settings › Privacy keeps every fact
-  it must (see the rule above) as rows of a short title and one line, in
-  13px (25 October 2026, when the owner found its cards too wordy), in
-  four groups: Your documents, Other services (one row a service), Good to
-  know (what the agreement leaves out: AI can be wrong, not a backup, a
-  family plan ending) and Your account (usage counts, Delete account).
+  a title, one line and two buttons. Settings › Privacy is what WhatsApp's
+  or Spotify's is: three rows of a short title and one line, in 13px, a
+  link to the privacy policy, and the Share app usage switch (25 October
+  2026, when the owner found its cards too wordy, then its sections too
+  many). The policy holds the rest; "AI can be wrong" and "not a backup"
+  are in it and in Help ("Can I rely on the answers?").
 - **★ Family Plus marks what only Plus families get** (`<PlusTag />`; in a
   business it reads ★ Plus, `plusName()`, 051):
   500 MB on Plus and 2 GB on Pro instead of 50 MB a vault (and 50 MB for
