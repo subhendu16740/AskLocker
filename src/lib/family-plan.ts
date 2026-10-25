@@ -1,16 +1,16 @@
 // ─── Is the family on Family Plus? ──────────────────────────────
 //
 // Starred features (★, <PlusTag />) are for Family Plus families: today
-// expiry reminders and the Reminders page (048), Import from Gmail, voice
-// chats after each person's first 10 (041–043), questions after each
-// person's 20 a month, members five to eight, and share links that last 30
-// days (049). For a free family, tapping
+// expiry reminders and the Reminders page (048), Import from Gmail,
+// questions after each person's 20 a month (a family's 500 a month since
+// 066), more members, and share links that last 30 days (049); reading
+// documents in Indian languages for Family Pro (066). Voice is free on every
+// plan, in any language (066). For a free family, tapping
 // one opens /plus, which shows Free and Plus side by side, and the screens
 // themselves send a free family there too (after a refresh, or from a link).
-// Storage beyond the free 200 MB (100 MB for a personal vault) is kept by the
-// server (038, 048), the server makes expiry reminders only for a vault on
-// Plus, and Gmail import refuses a free family on the server as well.
-// Birthday reminders reach every family.
+// Storage beyond the free 50 MB is kept by the server (038, 048, 066), the
+// server makes expiry and birthday reminders only for a vault on Plus or Pro,
+// and Gmail import refuses a free family on the server as well.
 //
 // A business (051) has its own plans, Plus, Pro and Enterprise, never Family Plus. Its ★
 // features open the same /plus page, which shows a business its plans. Its
@@ -25,7 +25,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from './auth';
 import { useFamily } from './family-context';
 import { fetchPaymentsStatus, fetchQuestionStatus, fetchStorageStatus, type PaymentsStatus } from './api';
-import type { PlanName } from './plans';
+import { plansHaveIndianLanguages, type PlanName } from './plans';
 
 /** What a starred feature is called in /plus?feature=… */
 export type PlusFeature = 'reminders' | 'gmail' | 'storage' | 'voice' | 'questions' | 'members' | 'links' | 'birthdays' | 'languages';
@@ -148,7 +148,7 @@ export function useFamilyPlan() {
 // screen. Unknown (before 049, offline) shows no star. Only your own: whether
 // another member is on Plus through some other family is not theirs to see.
 
-let mine: { userId: string; plus: boolean; at: number } | null = null;
+let mine: { userId: string; plus: boolean; plans: string[] | null; at: number } | null = null;
 const listeners = new Set<() => void>();
 
 let asking: Promise<boolean | null> | null = null;
@@ -160,7 +160,7 @@ async function readOnPlus(userId: string, force: boolean): Promise<boolean | nul
   asking ??= (async () => {
     const status = await fetchQuestionStatus().catch(() => null);
     if (!status) return mine?.userId === userId ? mine.plus : null;
-    mine = { userId, plus: status.plus, at: Date.now() };
+    mine = { userId, plus: status.plus, plans: status.plans ?? null, at: Date.now() };
     return status.plus;
   })().finally(() => { asking = null; });
   return asking;
@@ -233,9 +233,8 @@ export function useOnPlus(): boolean {
 /**
  * Is the signed-in person on a paid plan in any vault: Family Plus, Family
  * Pro or a business plan? Null until known, and while the server cannot say
- * (before 049, offline), which gates nothing. Reading and speaking Indian
- * languages follow it (064): they happen on the device, so they are the
- * app's rule.
+ * (before 049, offline), which gates nothing. Birthday reminders on Settings
+ * follow it (064).
  */
 export function usePaidPlan(): boolean | null {
   const { user } = useAuth();
@@ -258,4 +257,43 @@ export function usePaidPlan(): boolean | null {
   }, [userId]);
 
   return paid;
+}
+
+/**
+ * May the signed-in person read documents in Indian languages (066)? Only on
+ * Family Pro, or a business's Pro or Enterprise: question_status() lists the
+ * person's plans. Before 066 it does not, and 064's rule holds (any paid
+ * plan). Null until known, and while the server cannot say, which gates
+ * nothing. Reading happens on the device, so this is the app's rule. Voice
+ * is in any language on every plan.
+ */
+export function useIndianLanguages(): boolean | null {
+  const { user } = useAuth();
+  const userId = user?.id ?? null;
+  const decide = () => {
+    if (!userId || mine?.userId !== userId) return null;
+    return mine.plans ? plansHaveIndianLanguages(mine.plans) : mine.plus;
+  };
+  const [allowed, setAllowed] = useState<boolean | null>(decide);
+
+  useEffect(() => {
+    if (!userId) {
+      setAllowed(null);
+      return;
+    }
+    let cancelled = false;
+    const read = (force: boolean) => {
+      readOnPlus(userId, force).then((p) => {
+        if (cancelled) return;
+        if (p == null) setAllowed(null);
+        else setAllowed(mine?.userId === userId && mine.plans ? plansHaveIndianLanguages(mine.plans) : p);
+      });
+    };
+    read(false);
+    const onForget = () => read(true);
+    listeners.add(onForget);
+    return () => { cancelled = true; listeners.delete(onForget); };
+  }, [userId]);
+
+  return allowed;
 }

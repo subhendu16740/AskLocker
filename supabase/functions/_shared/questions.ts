@@ -1,14 +1,15 @@
 // ─── Questions each month: the allowance, and the words for it (049) ─
 //
 // A question is the most expensive thing AskLocker does, so each person has
-// a monthly allowance: 20 on Free (plan_limits.questions_per_month), and on
-// Family Plus no monthly limit for one person, but 200 a month shared by the
-// whole family (053: family_questions_per_month; 500 each before). A month
-// is a calendar month in India time.
+// a monthly allowance: 20 on Free (plan_limits.questions_per_month). On a
+// paid plan the vault shares one month (053's family_questions_per_month,
+// for businesses too since 066): Family Plus 500, Family Pro 2,000, Business
+// Plus 1,000 and Pro 5,000; Enterprise has no monthly limit. A month is a
+// calendar month in India time.
 //
 // rag-search counts one through claim_question() before it answers, and
 // gives it back when no answer came; Ask shows what question_status() says.
-// Since 050 each try is counted for the day too (10 a day on Free, 100 on
+// Since 050 each try is counted for the day too (10 a day on Free, 50 on
 // Plus), answered or not, and a try is never given back.
 // Shared by both, so the app and the answer say the same thing. Pure
 // TypeScript: no Deno, no React, so the QA self-test pins it in Node.
@@ -37,6 +38,10 @@ export interface QuestionAllowance {
   familyLimit?: number | null;
   familyUsed?: number | null;
   familyLeft?: number | null;
+  /** Whether that shared month is a family's or a business's (066). */
+  familyKind?: 'family' | 'business' | null;
+  /** The person's plans, Free among them (066); missing before 066. */
+  plans?: string[];
 }
 
 const num = (v: unknown): number | null => (v == null || v === '' || Number.isNaN(Number(v)) ? null : Number(v));
@@ -65,8 +70,16 @@ export function parseAllowance(raw: unknown): QuestionAllowance | null {
       familyLimit: num(r.family_limit),
       familyUsed: num(r.family_used) ?? 0,
       familyLeft: num(r.family_left) ?? Math.max((num(r.family_limit) ?? 0) - (num(r.family_used) ?? 0), 0),
+      familyKind: r.family_kind === 'business' ? 'business' as const : 'family' as const,
     } : {}),
+    // 066's, only when the database said them.
+    ...(Array.isArray(r.plans) ? { plans: r.plans.filter((p): p is string => typeof p === 'string') } : {}),
   };
+}
+
+/** 2000 → "2,000": a count in words (no Intl, which not every engine has). */
+function count(n: number): string {
+  return String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 }
 
 const MONTHS = {
@@ -108,10 +121,13 @@ export function questionLimitMessage(a: QuestionAllowance, language?: string): s
   }
   const day = resetDay(a.resetsOn, hi ? 'hi' : 'en');
   if (a.reason === 'family') {
-    // The family's shared month (053): one number for everyone in it.
-    const f = a.familyLimit ?? a.familyUsed ?? 0;
-    if (hi) return `आपके परिवार के इस महीने के ${f} सवाल पूरे हो गए।${day ? ` ये ${day} को फिर से मिलेंगे।` : ' ये अगले महीने फिर से मिलेंगे।'}`;
-    return `Your family has used its ${f} questions for this month.${day ? ` They start again on ${day}.` : ' They start again next month.'}`;
+    // The vault's shared month (053, 066): one number for everyone in it.
+    const f = count(a.familyLimit ?? a.familyUsed ?? 0);
+    const business = a.familyKind === 'business';
+    if (hi) {
+      return `${business ? 'आपके बिज़नेस' : 'आपके परिवार'} के इस महीने के ${f} सवाल पूरे हो गए।${day ? ` ये ${day} को फिर से मिलेंगे।` : ' ये अगले महीने फिर से मिलेंगे।'}`;
+    }
+    return `${business ? 'Your business' : 'Your family'} has used its ${f} questions for this month.${day ? ` They start again on ${day}.` : ' They start again next month.'}`;
   }
   const n = a.ceiling ?? a.used;
   if (hi) {
@@ -122,27 +138,28 @@ export function questionLimitMessage(a: QuestionAllowance, language?: string): s
   }
   const again = day ? ` They start again on ${day}.` : ' They start again next month.';
   return a.plus
-    ? `You've reached the fair-use limit of ${n} questions this month.${again}`
+    ? `You've reached this month's limit of ${count(n)} questions.${again}`
     : `You've used your ${n} free questions for this month.${again} Family Plus gives your family more.`;
 }
 
 /**
  * The line Ask shows: "12 of 20 free questions left this month", or null when
- * there is nothing worth saying (Family Plus, below the fair-use ceiling).
+ * there is nothing worth saying (a paid plan, with plenty left).
  */
 export function questionsLeftText(a: QuestionAllowance): string | null {
   if (a.familyLimit != null && a.familyLeft != null && (a.left == null || a.familyLeft <= a.left)) {
-    // Family Plus (053): the family's shared month, once it is close.
-    if (a.familyLeft > 50) return null;
+    // A vault's shared month (053, 066), once it is close: a tenth left.
+    if (a.familyLeft > Math.max(50, Math.round(a.familyLimit / 10))) return null;
+    const whose = a.familyKind === 'business' ? 'business' : 'family';
     return a.familyLeft === 0
-      ? `Your family has used its ${a.familyLimit} questions this month`
-      : `${a.familyLeft} of ${a.familyLimit} family questions left this month`;
+      ? `Your ${whose} has used its ${count(a.familyLimit)} questions this month`
+      : `${count(a.familyLeft)} of ${count(a.familyLimit)} ${whose} questions left this month`;
   }
   if (a.limit == null) {
     // Plus: say nothing until fair use is close.
     if (a.ceiling == null || a.left == null || a.left > 50) return null;
     return a.left === 0
-      ? `You've reached this month's fair-use limit`
+      ? `You've reached this month's limit`
       : `${a.left} of ${a.ceiling} questions left this month`;
   }
   const left = a.left ?? Math.max(a.limit - a.used, 0);
@@ -172,5 +189,7 @@ export function allowanceJson(a: QuestionAllowance): Record<string, unknown> {
     ...(a.tries != null ? { tries: a.tries } : {}),
     ...(a.triesLimit != null ? { tries_limit: a.triesLimit } : {}),
     ...(a.familyLimit != null ? { family_limit: a.familyLimit, family_used: a.familyUsed ?? 0, family_left: a.familyLeft ?? 0 } : {}),
+    ...(a.familyKind ? { family_kind: a.familyKind } : {}),
+    ...(a.plans ? { plans: a.plans } : {}),
   };
 }

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
-  View, Text, TouchableOpacity, ScrollView, StyleSheet, Switch, Modal, Pressable,
+  View, Text, TouchableOpacity, ScrollView, StyleSheet, Modal, Pressable,
   ActivityIndicator, Platform,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
@@ -21,6 +21,7 @@ import {
   chooseVoice, chosenVoice, hasVoiceFor, speak, stopSpeaking, voicesFor, type DeviceVoice,
 } from '../../lib/speech';
 import { ScreenHeader, PlusStar, PlusTag } from '../../components/screen-header';
+import { Toggle } from '../../components/settings-ui';
 import { appVersion } from '../../lib/app-info';
 import { color, radius, shadow, size, space, type } from '../../constants/design';
 import { useVaultTheme } from '../../lib/vault-theme';
@@ -76,8 +77,8 @@ export default function SettingsScreen() {
     voiceMode, voiceLanguage: voiceLang, documentLanguages, notificationsEnabled,
     setVoiceMode, setVoiceLanguage, setDocumentLanguages, languagesAllowed,
   } = usePreferences();
-  // On the free plan each person has their own voice chats (041–043); say
-  // how many are left where voice is switched on.
+  // Voice has had no limit on any plan since 066; where a database still
+  // counts voice chats (041–043), say how many are left.
   const { isFree } = useFamilyPlan();
   const onPlus = useModeOnPlus();
   const [limits, setLimits] = useState<PlanLimits>(DEFAULT_PLAN_LIMITS);
@@ -296,13 +297,7 @@ export default function SettingsScreen() {
                 <Text style={styles.settingLabel}>Voice assistant</Text>
                 <Text style={styles.settingSub}>Ask out loud and hear the answers</Text>
               </View>
-              <Switch
-                value={voiceMode}
-                onValueChange={setVoiceMode}
-                trackColor={{ false: '#D1D5DB', true: theme.secondary }}
-                thumbColor="#FFFFFF"
-                accessibilityLabel="Voice assistant"
-              />
+              <Toggle value={voiceMode} onChange={setVoiceMode} label="Voice assistant" />
             </View>
             {(voiceChats ? voiceChats.limit != null : isFree && freeVoiceChats != null) && (
               <View style={[styles.settingRow, styles.settingRowBorder, styles.plusNote]}>
@@ -319,17 +314,15 @@ export default function SettingsScreen() {
             <TouchableOpacity
               style={[styles.settingRow, styles.settingRowBorder]}
               activeOpacity={0.7}
-              // On Free, voice is in English; Indian languages come with a paid plan (064).
-              onPress={() => (languagesAllowed ? setLangPickerOpen(true) : router.push(plusPage('languages') as any))}
+              // Voice is in any language on every plan (066).
+              onPress={() => setLangPickerOpen(true)}
             >
               <View style={[styles.settingIconWrap, { backgroundColor: theme.tint }]}>
                 <Feather name="globe" size={16} color={theme.primary} />
               </View>
               <View style={styles.settingText}>
                 <Text style={styles.settingLabel}>Voice language</Text>
-                <Text style={styles.settingSub}>
-                  {languagesAllowed ? 'The language you speak and hear' : `★ Hindi and more with ${plusName(theme.business)}`}
-                </Text>
+                <Text style={styles.settingSub}>The language you speak and hear</Text>
               </View>
               <Text style={styles.settingValue}>{voiceLanguage(voiceLang).native}</Text>
               <Feather name="chevron-right" size={16} color="#9CA3AF" />
@@ -367,7 +360,7 @@ export default function SettingsScreen() {
               <View style={styles.settingText}>
                 <Text style={styles.settingLabel}>Document languages</Text>
                 <Text style={styles.settingSub}>
-                  {languagesAllowed ? 'Languages your documents are in' : `★ Indian languages with ${plusName(theme.business)}`}
+                  {languagesAllowed ? 'Languages your documents are in' : `★ Indian languages with ${theme.business ? 'Pro' : 'Family Pro'}`}
                 </Text>
               </View>
               <Text style={styles.settingValue} numberOfLines={1}>

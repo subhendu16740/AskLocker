@@ -1340,8 +1340,8 @@ export async function fetchStorageUsage(
 
 // ─── Plans and storage limits (038) ──────────────────────────────
 //
-// Every plan has a storage limit: on Free a family 200 MB and a personal
-// vault 100 MB, on Family Plus 10 GB (039, 048; public.plan_limits). The
+// Every plan has a storage limit: on Free 50 MB a vault and a business
+// 100 MB, on Family Plus 500 MB and Pro 2 GB (039, 048, 066; public.plan_limits). The
 // server keeps it — the documents bucket refuses a new file once a vault is at
 // its limit — and these say where a vault stands, so the app can tell people
 // before it refuses them. They read 038's shape too (a period beside each
@@ -1497,14 +1497,23 @@ export async function fetchPlanLimits(): Promise<PlanLimits> {
   const fairUse = plusRow && 'questions_fair_use' in plusRow
     ? (plusRow.questions_fair_use == null ? null : Number(plusRow.questions_fair_use))
     : DEFAULT_PLAN_LIMITS.questionsFairUse;
-  // Family Pro (064): its row, or what 064 will set before it.
+  // A plan's shared month (053; every paid plan but Enterprise since 066):
+  // NULL is a real answer (none); a row without the column is a database
+  // before 053, which keeps none.
+  const sharedMonth = (row: Row | undefined) =>
+    row && 'family_questions_per_month' in row && row.family_questions_per_month != null
+      ? Number(row.family_questions_per_month)
+      : null;
+  // Family Pro (064): its row, or what 066 will set before it.
   const proRow = rows.find((r) => r.plan === 'family_pro');
   const familyPro = proRow
-    ? { storage: Number(proRow.storage_bytes), members: proRow.max_members ? Number(proRow.max_members) : DEFAULT_PLAN_LIMITS.familyPro.members }
+    ? {
+      storage: Number(proRow.storage_bytes),
+      members: proRow.max_members ? Number(proRow.max_members) : DEFAULT_PLAN_LIMITS.familyPro.members,
+      questions: sharedMonth(proRow),
+    }
     : DEFAULT_PLAN_LIMITS.familyPro;
-  const familyQuestions = plusRow && 'family_questions_per_month' in plusRow
-    ? (plusRow.family_questions_per_month == null ? null : Number(plusRow.family_questions_per_month))
-    : null;
+  const familyQuestions = sharedMonth(plusRow);
   // The day's numbers (050): NULL is a real answer (no limit); a row without
   // the column is a database before 050, which keeps none.
   const perDay = (plan: 'free' | 'plus', column: 'question_tries_per_day' | 'uploads_per_day') => {
@@ -1524,10 +1533,15 @@ export async function fetchPlanLimits(): Promise<PlanLimits> {
     if (!row) return d;
     const perDay = (v: number | null | undefined, fallback: number | null) =>
       v === undefined ? fallback : v == null ? null : Number(v);
+    // The business's month together (066), else each person's ceiling (051);
+    // NULL with the column there is no monthly limit (Enterprise since 066).
+    const shared = sharedMonth(row);
     return {
       storage: Number(row.storage_bytes),
       members: row.max_members ? Number(row.max_members) : d.members,
-      questionsFairUse: row.questions_fair_use ? Number(row.questions_fair_use) : d.questionsFairUse,
+      questions: shared ?? (row.questions_fair_use != null ? Number(row.questions_fair_use)
+        : 'questions_fair_use' in row ? null : d.questions),
+      questionsShared: shared != null,
       questionTriesPerDay: perDay(row.question_tries_per_day, d.questionTriesPerDay),
       uploadsPerDay: perDay(row.uploads_per_day, d.uploadsPerDay),
       invitesPerDay: row.invites_per_day ? Number(row.invites_per_day) : d.invitesPerDay,
@@ -1715,8 +1729,8 @@ export async function verifyPlusPayment(p: { orderId: string; paymentId: string;
 
 // ─── Voice chats (041–043) ───────────────────────────────────────
 //
-// On the free plan each person has 10 voice chats of their own
-// (plan_limits.voice_answers, per person since 043): a question asked by
+// No plan has a limit since 066. Before it, each person on Free had 10 voice
+// chats of their own (plan_limits.voice_answers, per person since 043): a question asked by
 // voice or an answer read aloud, one per question, counted on the server for
 // that person in that family, so another phone does not start them again.
 // After that they type and read, and Family Plus brings voice back. A chat is
