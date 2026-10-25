@@ -7,7 +7,7 @@
   },
   "scripts": {
     "start": "expo start",
-    "build": "expo export --platform web --clear",
+    "build": "expo export --platform web --clear && node scripts/move-node-modules-assets.mjs",
     "typecheck": "tsc --noEmit",
     "reset-project": "node ./scripts/reset-project.js",
     "android": "expo run:android",

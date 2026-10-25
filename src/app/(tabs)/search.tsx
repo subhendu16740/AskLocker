@@ -29,6 +29,7 @@ import { ScreenHeader, HeaderIconButton, HeaderActions } from '../../components/
 import { VaultPill, VaultSheet, type VaultChoice } from '../../components/vault-sheet';
 import { color, size, space, type } from '../../constants/design';
 import { categoryForAnalytics, track } from '../../lib/analytics';
+import { isProduction } from '../../lib/environment';
 
 type DocumentCategory = Database['public']['Tables']['document_categories']['Row'];
 
@@ -101,6 +102,13 @@ export default function SearchScreen() {
   // follows the conversation: each finished answer brings it up to date,
   // until New question starts another. The clock at the top right lists them.
   const [savedId, setSavedId] = useState<string | null>(null);
+  // What the server did for an answer: test builds only, closed until tapped.
+  const [detailsOpen, setDetailsOpen] = useState<Set<string>>(() => new Set());
+  const toggleDetails = (id: string) => setDetailsOpen((open) => {
+    const next = new Set(open);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
   const [saving, setSaving] = useState(false);
   const [saveNotice, setSaveNotice] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null);
   // Saved chats take the family's storage (042). When there is no room, why,
@@ -668,31 +676,45 @@ export default function SearchScreen() {
                             )}
                           </View>
                         )}
-                        {msg.debug && (voiceMode
-                          ? !!(msg.debug.translate_error || msg.debug.condense_error || msg.debug.rerank_error
-                               || msg.debug.pin_error || msg.debug.index_rebuilding || msg.debug.embedded === false)
-                          : msg.debug.history_turns > 0 || !!msg.debug.translated
-                               || msg.debug.index_rebuilding || msg.debug.embedded === false) && (
-                          <Text style={styles.searchedFor} numberOfLines={3}>
-                            Searched for: {msg.debug.searched_for}
-                            {msg.debug.condensed ? '' : ' (not rewritten)'}
-                            {'\n'}
-                            {msg.debug.kept_count ?? msg.debug.kept_docs.length} of {msg.debug.candidate_count} passages kept ({msg.debug.kept_docs.length} {msg.debug.kept_docs.length === 1 ? 'doc' : 'docs'}) · {msg.debug.pinned_docs.length} pinned
-                            {Array.isArray(msg.debug.used_docs) && msg.debug.used_docs.length < msg.debug.kept_docs.length
-                              ? ` · answer used ${msg.debug.used_docs.length} ${msg.debug.used_docs.length === 1 ? 'doc' : 'docs'}`
-                              : ''}
-                            {msg.debug.models?.answer ? ` · ${shortModel(msg.debug.models.answer)}` : ''}
-                            {msg.debug.history_turns > 0 && !msg.debug.client_sent_sources ? ' · old client' : ''}
-                            {msg.debug.index_rebuilding ? ' · index rebuilding, see Settings › Search' : ''}
-                            {msg.debug.embedded === false && !msg.debug.index_rebuilding
-                              ? ` · no query vector${msg.debug.embed_error ? `: ${msg.debug.embed_error}` : ', keywords only'}`
-                              : ''}
-                            {msg.debug.pin_error ? ` · pin: ${msg.debug.pin_error}` : ''}
-                            {msg.debug.rerank_error ? ` · rerank: ${msg.debug.rerank_error}` : ''}
-                            {msg.debug.condense_error ? ` · condense: ${msg.debug.condense_error}` : ''}
-                            {msg.debug.translate_error ? ` · translate: ${msg.debug.translate_error}` : ''}
-                          </Text>
-                        )}
+                        {/* What the server did: never in production, and on test builds
+                            closed behind Details until tapped. */}
+                        {msg.debug && !isProduction && (detailsOpen.has(msg.id) ? (
+                          <TouchableOpacity
+                            onPress={() => toggleDetails(msg.id)}
+                            accessibilityRole="button"
+                            accessibilityLabel="Hide details"
+                          >
+                            <Text style={styles.searchedFor}>
+                              Searched for: {msg.debug.searched_for}
+                              {msg.debug.condensed ? '' : ' (not rewritten)'}
+                              {'\n'}
+                              {msg.debug.kept_count ?? msg.debug.kept_docs.length} of {msg.debug.candidate_count} passages kept ({msg.debug.kept_docs.length} {msg.debug.kept_docs.length === 1 ? 'doc' : 'docs'}) · {msg.debug.pinned_docs.length} pinned
+                              {Array.isArray(msg.debug.used_docs) && msg.debug.used_docs.length < msg.debug.kept_docs.length
+                                ? ` · answer used ${msg.debug.used_docs.length} ${msg.debug.used_docs.length === 1 ? 'doc' : 'docs'}`
+                                : ''}
+                              {msg.debug.models?.answer ? ` · ${shortModel(msg.debug.models.answer)}` : ''}
+                              {msg.debug.models?.embed ? ` · search: ${shortModel(msg.debug.models.embed)}` : ''}
+                              {msg.debug.history_turns > 0 && !msg.debug.client_sent_sources ? ' · old client' : ''}
+                              {msg.debug.index_rebuilding ? ' · index rebuilding, see Settings › Search' : ''}
+                              {msg.debug.embedded === false && !msg.debug.index_rebuilding
+                                ? ` · no query vector${msg.debug.embed_error ? `: ${msg.debug.embed_error}` : ', keywords only'}`
+                                : ''}
+                              {msg.debug.pin_error ? ` · pin: ${msg.debug.pin_error}` : ''}
+                              {msg.debug.rerank_error ? ` · rerank: ${msg.debug.rerank_error}` : ''}
+                              {msg.debug.condense_error ? ` · condense: ${msg.debug.condense_error}` : ''}
+                              {msg.debug.translate_error ? ` · translate: ${msg.debug.translate_error}` : ''}
+                            </Text>
+                          </TouchableOpacity>
+                        ) : (
+                          <TouchableOpacity
+                            style={styles.detailsLink}
+                            onPress={() => toggleDetails(msg.id)}
+                            accessibilityRole="button"
+                            accessibilityLabel="Show details"
+                          >
+                            <Text style={styles.detailsText}>Details</Text>
+                          </TouchableOpacity>
+                        ))}
                         {msg.sources && msg.sources.length > 0 && (
                           <View style={styles.sourcesWrap}>
                             {msg.sources.map((s) => (
@@ -1039,6 +1061,8 @@ const styles = StyleSheet.create({
     borderBottomColor: color.border,
   },
   searchedFor: { fontSize: 12, lineHeight: 16, color: '#9CA3AF', marginTop: space.sm, fontStyle: 'italic' },
+  detailsLink: { alignSelf: 'flex-start', marginTop: space.xs, paddingVertical: space.xs },
+  detailsText: { fontSize: 12, lineHeight: 16, color: '#9CA3AF', textDecorationLine: 'underline' },
   indexStrip: {
     flexDirection: 'row',
     alignItems: 'center',

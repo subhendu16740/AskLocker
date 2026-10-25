@@ -15,7 +15,7 @@
 // ────────────────────────────────────────────────────────────────
 
 import type { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { embedPassages } from './embeddings.ts';
+import { embedPassages, EMBEDDING_MODEL, UNRECORDED_MODEL } from './embeddings.ts';
 import { chunkText } from './chunking.ts';
 import { extractPdfLayoutText } from './pdf-text.ts';
 import { extractMetadata, parseFlexibleDate, type ExtractedMeta } from './metadata.ts';
@@ -69,7 +69,20 @@ export interface IngestRequest {
   storagePath: string;
   /** Text the client already extracted (Tesseract on web, ML Kit on native). */
   providedText?: string;
+  /**
+   * CPU gte-small may spend on this document's vectors (embeddings.ts). The
+   * chunks past it are stored without one and filled in afterwards. 0 makes
+   * none here. The remote providers ignore it.
+   */
+  embedBudgetMs?: number;
 }
+
+/**
+ * gte-small's share of this call's CPU (an Edge Function may use about 2
+ * seconds a request), less what reading the file has taken, which for a PDF
+ * read on the server is most of it.
+ */
+export const INGEST_EMBED_BUDGET_MS = 900;
 
 export interface IngestResult {
   chunks: number;
@@ -78,6 +91,8 @@ export interface IngestResult {
   /** True when nothing readable came out of the file. */
   empty: boolean;
   embedError?: string;
+  /** Chunks stored without a vector for want of CPU, to be filled in afterwards. */
+  vectorsDeferred?: number;
   /** Why the file could not be read, in words a person can act on. */
   reason?: string;
   /**
@@ -96,8 +111,9 @@ export interface IngestResult {
  */
 export async function ingestDocument(
   supabase: SupabaseClient,
-  { familyId, namespace, documentId, storagePath, providedText }: IngestRequest,
+  { familyId, namespace, documentId, storagePath, providedText, embedBudgetMs }: IngestRequest,
 ): Promise<IngestResult> {
+  const startedAt = Date.now();
   console.log(`[ingest] Starting: doc=${documentId}, path=${storagePath}, pre-extracted=${!!providedText}`);
 
   // The service role reads any file, so only this vault's are read: an
@@ -198,15 +214,21 @@ export async function ingestDocument(
   const chunks = chunkText(extractedText);
   console.log(`[ingest] Created ${chunks.length} chunks`);
 
-  const { vectors: embeddings, error: embedError } = await embedPassages(chunks.map(c => c.content));
+  // Wall time stands in for CPU spent so far: it over-counts (downloads and
+  // queries wait without CPU), which only errs on the safe side.
+  const budgetMs = embedBudgetMs ?? Math.max(0, INGEST_EMBED_BUDGET_MS - (Date.now() - startedAt));
+  const { vectors: embeddings, error: embedError, attempted } = await embedPassages(
+    chunks.map(c => c.content), { budgetMs },
+  );
   const embedded = embeddings.filter(Boolean).length;
+  const vectorsDeferred = chunks.length - attempted;
   if (embedError) {
     // This used to be a warning nobody saw, and every chunk in the vault
     // ended up with a NULL vector because of it. Not fatal — the document is
     // still stored and still found by keyword — but it must be visible.
     console.error(`[ingest] NO EMBEDDINGS STORED: ${embedError}`);
   }
-  console.log(`[ingest] Embedded ${embedded}/${chunks.length} chunks`);
+  console.log(`[ingest] Embedded ${embedded}/${chunks.length} chunks${vectorsDeferred ? ` (${vectorsDeferred} left for later: CPU budget)` : ''}`);
 
   const chunksWithEmbeddings = chunks.map((chunk, i) => ({
     ...chunk,
@@ -226,6 +248,7 @@ export async function ingestDocument(
   if (rpcError) throw new Error(`Ingestion RPC failed: ${rpcError.message}`);
 
   await createExpiryAlert(supabase, familyId, documentId, metadata);
+  await recordFreshIndex(supabase, namespace, chunks.length);
 
   console.log(`[ingest] Complete: doc=${documentId}`);
   return {
@@ -234,7 +257,44 @@ export async function ingestDocument(
     extractedChars: extractedText.length,
     empty: false,
     ...(embedError ? { embedError } : {}),
+    ...(vectorsDeferred ? { vectorsDeferred } : {}),
   };
+}
+
+/**
+ * A vault's first document: record its index as made on the current model,
+ * and complete. A vault with no row reads as made on UNRECORDED_MODEL, so
+ * the rebuild would re-make every vector this call just made. Only when all
+ * of the vault's chunks are this document's, so no older vector is vouched
+ * for; any chunk left without one is filled in later (fillMissingVectors).
+ */
+async function recordFreshIndex(supabase: SupabaseClient, namespace: string, chunkCount: number): Promise<void> {
+  if (EMBEDDING_MODEL === UNRECORDED_MODEL || chunkCount === 0) return;
+  try {
+    const { data: row, error } = await supabase
+      .from('family_embedding_state')
+      .select('storage_namespace')
+      .eq('storage_namespace', namespace)
+      .maybeSingle();
+    if (error || row) return;
+    const { data: total } = await supabase.rpc('rag_chunk_total', { p_schema: namespace });
+    if (total !== chunkCount) return;
+    const now = new Date().toISOString();
+    const base = {
+      storage_namespace: namespace, model: EMBEDDING_MODEL, cursor_id: null,
+      done_count: chunkCount, total_count: chunkCount, completed_at: now, updated_at: now,
+    };
+    const insert = (values: Record<string, unknown>) => supabase
+      .from('family_embedding_state')
+      .upsert(values, { onConflict: 'storage_namespace', ignoreDuplicates: true });
+    let { error: insertErr } = await insert({ ...base, rechunked_at: now, extractor_version: EXTRACTOR_VERSION });
+    // Without migrations 016 and 018 those two columns are not there.
+    if (insertErr) ({ error: insertErr } = await insert(base));
+    if (insertErr) console.warn(`[ingest] Could not record the new index: ${insertErr.message}`);
+  } catch (err) {
+    // Not recording it costs one rebuild of a small vault, nothing more.
+    console.warn('[ingest] Could not record the new index:', err);
+  }
 }
 
 /**

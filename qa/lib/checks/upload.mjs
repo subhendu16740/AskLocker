@@ -46,10 +46,12 @@ export async function runUploadChecks(cfg, { a, vaultA }, results, today) {
     why: ingested ? `${body.chunks} chunk(s), ${body.metadata} metadata field(s) in ${(up.ingest.ms / 1000).toFixed(1)}s` : `HTTP ${up.ingest.status}: ${body.error ?? JSON.stringify(body).slice(0, 200)}`,
   });
   const embedOut = EMBED_ALLOWANCE.test(String(body.embed_error ?? ''));
-  results.add('upload', 'vehicle:vectors', 'Its chunks got search vectors (HuggingFace embeddings)', ingested && !body.embed_error ? 'pass' : ingested ? (embedOut ? 'inconclusive' : 'fail') : 'skipped', {
+  results.add('upload', 'vehicle:vectors', 'Its chunks got search vectors', ingested && !body.embed_error ? 'pass' : ingested ? (embedOut ? 'inconclusive' : 'fail') : 'skipped', {
     why: body.embed_error
-      ? `NO VECTORS: ${body.embed_error}${embedOut ? ' — an outside allowance, not the app; the rebuild adds them once HuggingFace answers' : ''}`
-      : ingested ? 'no embed_error' : 'ingest failed',
+      ? `NO VECTORS: ${body.embed_error}${embedOut ? ' — an outside allowance, not the app; the vectors are filled in once the service answers' : ''}`
+      : ingested
+        ? `no embed_error${body.vectors_deferred ? `; ${body.vectors_deferred} chunk(s) left for later by gte-small's CPU budget` : ''}`
+        : 'ingest failed',
   });
 
   const doc = { id: up.docId, storage_path: up.storagePath };
@@ -155,6 +157,21 @@ export async function runUploadChecks(cfg, { a, vaultA }, results, today) {
  * Documents setup already reported are excluded — one failure, one report.
  */
 export async function checkIndex(cfg, a, vaultA, results, notIndexed = new Map()) {
+  // After a change of search-vector model (embeddings.ts) every vault's index
+  // is stale, and gte-small re-makes only a handful of vectors a call. Drive
+  // QA Vault A's rebuild here, as Ask does in the app, so the questions after
+  // this run on a ready index rather than on keywords.
+  const started = Date.now();
+  let walked = 0;
+  for (let pass = 0; pass < 150 && Date.now() - started < 240_000; pass++) {
+    const step = await invokeFunction(cfg, a, 'reembed-index', { family_id: vaultA.id });
+    const d = step.data ?? {};
+    walked += Number(d.processed) || 0;
+    if (step.status !== 200 || d.up_to_date === true || d.done === true) break;
+    if (!d.processed && !d.rechunking && !d.reextracting) break;
+  }
+  if (walked) results.note('index', `rebuilt ${walked} chunk vector(s) in QA Vault A first (${Math.round((Date.now() - started) / 1000)}s)`);
+
   const r = await invokeFunction(cfg, a, 'reembed-index', { family_id: vaultA.id, status_only: true });
   const d = r.data ?? {};
   const unindexed = Array.isArray(d.unindexed) ? d.unindexed : [];

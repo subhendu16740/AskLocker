@@ -266,8 +266,8 @@ export interface RagSearchResult {
     kept_docs: string[];
     /** The documents the answer said it used, which the source chips show; null when it did not say. */
     used_docs?: string[] | null;
-    /** The models (Claude's or Groq's) that actually ran each step. Missing = the step didn't run. */
-    models?: { answer?: string; condense?: string; rerank?: string };
+    /** The models (Claude's or Groq's) that actually ran each step. Missing = the step didn't run. `embed` is the project's search-vector model. */
+    models?: { answer?: string; condense?: string; rerank?: string; translate?: string; embed?: string };
     /** Claude is set up but left alone for now (no credit, a bad key), so Groq answered. */
     claude_error?: string;
     /** false means the retriever was given the raw follow-up, not a rewrite. */
