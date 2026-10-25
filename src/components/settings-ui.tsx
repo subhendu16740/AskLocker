@@ -1,11 +1,11 @@
 // The pieces the Settings screens are built from: cards, buttons, text
-// fields, an On/Off control and a status line. Every size comes from
+// fields, an On/Off control, a switch and a status line. Every size comes from
 // src/constants/design.ts, so a card here matches a card anywhere else:
 // 15px text, 44px controls, 16px padding.
 
 import type { ReactNode } from 'react';
 import {
-  View, Text, TextInput, TouchableOpacity, ActivityIndicator, StyleSheet,
+  View, Text, TextInput, TouchableOpacity, ActivityIndicator, StyleSheet, Switch,
   type TextInputProps, type StyleProp, type ViewStyle,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
@@ -138,6 +138,29 @@ export function OnOff({ value, onChange, label }: { value: boolean; onChange: (o
   );
 }
 
+// A switch in the vault's colours, or a given one's. The web's switch draws
+// its knob teal when on unless told otherwise (activeThumbColor, which React
+// Native's types leave out), so it is told white, as on a phone.
+const WEB_KNOB = { activeThumbColor: '#FFFFFF' } as object;
+
+export function Toggle({ value, onChange, label, track, disabled }: {
+  value: boolean; onChange: (on: boolean) => void; label: string; track?: string; disabled?: boolean;
+}) {
+  const theme = useVaultTheme();
+  return (
+    <Switch
+      value={value}
+      onValueChange={onChange}
+      disabled={disabled}
+      trackColor={{ false: '#D1D5DB', true: track ?? theme.secondary }}
+      thumbColor="#FFFFFF"
+      {...WEB_KNOB}
+      style={disabled ? styles.toggleDisabled : undefined}
+      accessibilityLabel={label}
+    />
+  );
+}
+
 /** One line of news after an action: green when it worked, red when not. */
 export function Status({ kind, children }: { kind: 'ok' | 'error'; children: ReactNode }) {
   const ok = kind === 'ok';
@@ -155,6 +178,7 @@ export const screenStyles = StyleSheet.create({
 });
 
 const styles = StyleSheet.create({
+  toggleDisabled: { opacity: 0.5 },
   card: {
     backgroundColor: color.surface,
     borderRadius: radius.card,

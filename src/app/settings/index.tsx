@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
-  View, Text, TouchableOpacity, ScrollView, StyleSheet, Switch, Modal, Pressable,
+  View, Text, TouchableOpacity, ScrollView, StyleSheet, Modal, Pressable,
   ActivityIndicator, Platform,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
@@ -21,6 +21,7 @@ import {
   chooseVoice, chosenVoice, hasVoiceFor, speak, stopSpeaking, voicesFor, type DeviceVoice,
 } from '../../lib/speech';
 import { ScreenHeader, PlusStar, PlusTag } from '../../components/screen-header';
+import { Toggle } from '../../components/settings-ui';
 import { appVersion } from '../../lib/app-info';
 import { color, radius, shadow, size, space, type } from '../../constants/design';
 import { useVaultTheme } from '../../lib/vault-theme';
@@ -296,13 +297,7 @@ export default function SettingsScreen() {
                 <Text style={styles.settingLabel}>Voice assistant</Text>
                 <Text style={styles.settingSub}>Ask out loud and hear the answers</Text>
               </View>
-              <Switch
-                value={voiceMode}
-                onValueChange={setVoiceMode}
-                trackColor={{ false: '#D1D5DB', true: theme.secondary }}
-                thumbColor="#FFFFFF"
-                accessibilityLabel="Voice assistant"
-              />
+              <Toggle value={voiceMode} onChange={setVoiceMode} label="Voice assistant" />
             </View>
             {(voiceChats ? voiceChats.limit != null : isFree && freeVoiceChats != null) && (
               <View style={[styles.settingRow, styles.settingRowBorder, styles.plusNote]}>

@@ -2620,9 +2620,14 @@ where it does not.
   AskLocker opens in the one chosen; Both opens in Family, where the
   personal vault is, and gives the drawer its Family | Business switch,
   which Family or Business alone never shows. Settings › Your vaults
-  changes it ("Opens in", and "Business too" or "Family too", On or Off).
-  A first version asked twice (first, then the other too?); the owner
-  wanted one screen.
+  shows the same as two switches, Family and Business (the owner's ask,
+  25 October 2026): Family on for Family, Business on for Business, both
+  on for Both. One always stays on (the last one's switch is greyed, "Turn
+  on Business to turn this off"); turning off the one AskLocker opens in
+  makes the other the first, and Family off with no business yet goes on
+  to Create a business. It was "Opens in" and "Business too" before. A
+  first version of the welcome asked twice (first, then the other too?);
+  the owner wanted one screen.
 - **Asked of a new account only** (`needsWelcome`): in no family or business
   yet and never answered. Right after signing up that is known at once,
   from when the account was made (15 minutes); for an older account with
