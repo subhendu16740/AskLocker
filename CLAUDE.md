@@ -3515,7 +3515,8 @@ rule again once pinned chunks are mixed in.
   "nothing is kept". Say what the app does instead: "in AskLocker, only your
   family can open…", "nobody else using AskLocker can open it", "just for
   you". Settings › Privacy says all of this plainly and names the outside
-  services. It must stay true of the code and of the people who run
+  services, all but PostHog: it says usage is counted, with its switch,
+  without naming the service (the owner's ask, 25 October 2026). It must stay true of the code and of the people who run
   AskLocker, so change it with any change to sharing, search, OCR,
   embeddings, voice, Gmail import, payments or usage counts. The app made such claims until
   7 October 2026. The agreement everyone accepts at the start
@@ -3545,8 +3546,9 @@ rule again once pinned chunks are mixed in.
   it) and off on a device where Settings › Privacy's switch is off. The
   PostHog project (AskLocker, EU Cloud) discards IP addresses and has
   autocapture, recordings, heatmaps and surveys off; its time zone is
-  India's. Settings › Privacy names
-  PostHog in builds that send. How many documents each category has is a
+  India's. Settings › Privacy, in builds that send, says screens, taps
+  and document types are counted, "never what is in them", beside the
+  switch, and does not name PostHog (the owner's ask, 25 October 2026). How many documents each category has is a
   query, not an event: `supabase/queries/document-categories.sql` counts
   category ids across every vault and reads nothing else.
 - **Copy is short and plain** (since 10 October 2026, when the owner said
@@ -3566,9 +3568,11 @@ rule again once pinned chunks are mixed in.
   creating a vault asks only its name (the description field, shown
   nowhere, is gone); Home's offers (fingerprint, set up your family) are
   a title, one line and two buttons. Settings › Privacy keeps every fact
-  it must (see the rule above) in one or two lines a card, the outside
-  services together in one card, and what the agreement leaves out (AI
-  can be wrong, not a backup, Family Plus ending) under Good to know.
+  it must (see the rule above) as rows of a short title and one line, in
+  13px (25 October 2026, when the owner found its cards too wordy), in
+  four groups: Your documents, Other services (one row a service), Good to
+  know (what the agreement leaves out: AI can be wrong, not a backup, a
+  family plan ending) and Your account (usage counts, Delete account).
 - **★ Family Plus marks what only Plus families get** (`<PlusTag />`; in a
   business it reads ★ Plus, `plusName()`, 051):
   500 MB on Plus and 2 GB on Pro instead of 50 MB a vault (and 50 MB for

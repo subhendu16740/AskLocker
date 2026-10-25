@@ -1,23 +1,64 @@
-// Settings › Privacy — who can see what, and where a document's text goes.
-// Every sentence here has to stay true of the code, and of the people who run
-// AskLocker: documents are not end-to-end encrypted, so nothing here may
+// Settings › Privacy — who can see what, and where a document's text goes,
+// one short line each (the owner's ask, 25 October 2026: the cards read as
+// too wordy). Every line has to stay true of the code, and of the people who
+// run AskLocker: documents are not end-to-end encrypted, so nothing here may
 // promise that nobody but the family can see them. Check it when changing
-// sharing, search, OCR, embeddings, voice, notifications, Gmail import,
-// payments or usage counts.
+// sharing, search, OCR, embeddings, voice, Gmail import, payments or usage
+// counts. Usage counts are said, with their switch, without naming the
+// service that keeps them (the owner's ask, the same day).
 
-import { useEffect, useState } from 'react';
-import { ScrollView, Text } from 'react-native';
+import { useEffect, useState, type ReactNode } from 'react';
+import { ScrollView, Text, TouchableOpacity, View, StyleSheet } from 'react-native';
+import { Feather } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ScreenHeader } from '../../components/screen-header';
-import { Card, CardTitle, Body, OnOff, SecondaryButton, screenStyles } from '../../components/settings-ui';
+import { Toggle, screenStyles } from '../../components/settings-ui';
 import { analyticsBuilt, analyticsOn, setAnalyticsOn } from '../../lib/analytics';
 import { DEFAULT_PLAN_LIMITS } from '../../lib/plans';
+import { useVaultTheme } from '../../lib/vault-theme';
+import { color, radius, shadow, size, space, type } from '../../constants/design';
 
-const bold = { fontWeight: '600' as const };
+type Item = { icon: string; title: string; line: string; right?: ReactNode; onPress?: () => void; hide?: boolean };
+
+function Group({ title, items }: { title: string; items: Item[] }) {
+  const theme = useVaultTheme();
+  const shown = items.filter((i) => !i.hide);
+  return (
+    <View style={styles.group}>
+      <Text style={styles.groupTitle}>{title}</Text>
+      <View style={styles.card}>
+        {shown.map((item, i) => {
+          const inner = (
+            <>
+              <View style={[styles.iconWrap, { backgroundColor: theme.tint }]}>
+                <Feather name={item.icon as any} size={16} color={theme.primary} />
+              </View>
+              <View style={styles.text}>
+                <Text style={styles.title}>{item.title}</Text>
+                <Text style={styles.line}>{item.line}</Text>
+              </View>
+              {item.right}
+              {item.onPress && <Feather name="chevron-right" size={16} color="#9CA3AF" />}
+            </>
+          );
+          const rowStyle = [styles.row, i > 0 && styles.rowBorder];
+          return item.onPress ? (
+            <TouchableOpacity key={item.title} style={rowStyle} onPress={item.onPress} activeOpacity={0.7} accessibilityRole="button">
+              {inner}
+            </TouchableOpacity>
+          ) : (
+            <View key={item.title} style={rowStyle}>{inner}</View>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
 
 export default function PrivacyScreen() {
-  // Usage counts (analytics.ts): only builds made with a PostHog key send any.
+  const theme = useVaultTheme();
+  // Usage counts (analytics.ts): only production builds send any.
   const [counts, setCounts] = useState<boolean | null>(null);
   useEffect(() => {
     if (analyticsBuilt) analyticsOn().then(setCounts);
@@ -26,93 +67,75 @@ export default function PrivacyScreen() {
   return (
     <SafeAreaView style={screenStyles.safe} edges={['top']}>
       <ScreenHeader title="Privacy" fallback="/settings" />
-      <ScrollView contentContainerStyle={screenStyles.body}>
-        <Card>
-          <CardTitle icon="users">Who can see your documents</CardTitle>
-          <Body>Your family, and anyone you send a share link to. Your personal vault is yours alone.</Body>
-        </Card>
+      <ScrollView contentContainerStyle={styles.body}>
+        <Group
+          title="Your documents"
+          items={[
+            { icon: 'users', title: 'Who can see them', line: "Your vault's members, and anyone you send a share link. Your personal vault is yours alone." },
+            { icon: 'lock', title: 'Encrypted, not end-to-end', line: 'Our servers read them to search, and our team can open them.' },
+            { icon: 'link', title: 'Share links', line: 'Anyone with the link can open that one document until it expires or you turn it off.' },
+            { icon: 'plus-square', title: 'Emergency cards', line: 'Your family can see them. Never sent to AI.', hide: theme.business },
+          ]}
+        />
 
-        <Card>
-          <CardTitle icon="eye">What AskLocker can see</CardTitle>
-          <Body>
-            Your documents are encrypted on the way and on disk, but not end-to-end. Our servers read the text to
-            search it, and the people who run AskLocker can open your documents.
-          </Body>
-        </Card>
+        <Group
+          title="Other services"
+          items={[
+            { icon: 'message-circle', title: 'Answers', line: 'Your question and the best matching parts go to Anthropic or Groq. Never your whole vault.' },
+            { icon: 'search', title: 'Search', line: "Search data is made on our servers or at Cloudflare, which doesn't train AI on it." },
+            { icon: 'file-text', title: 'Reading files', line: 'Photos and spreadsheets are read on your device. Scanned PDFs and Gmail photos go to OCR.space.' },
+            { icon: 'mic', title: 'Voice', line: "Uses your browser's speech service. In Chrome, that's Google." },
+            { icon: 'credit-card', title: 'Payments', line: 'Razorpay takes your card or UPI details. We never see them.' },
+            { icon: 'mail', title: 'Gmail import', line: 'Until you pick a file, we keep only its sender, subject and name. Never the email.' },
+          ]}
+        />
 
-        <Card>
-          <CardTitle icon="share-2">What goes to other services</CardTitle>
-          <Body>
-            <Text style={bold}>Search:</Text> your passages and questions become search data on our own servers, or at
-            Cloudflare, which doesn't use them to train AI.
-          </Body>
-          <Body><Text style={bold}>Answers:</Text> your question and the best passages go to Anthropic (Claude) or Groq. Never your whole vault.</Body>
-          <Body>
-            <Text style={bold}>Reading:</Text> photos and spreadsheets you upload are read on your device. Scanned
-            PDFs and photos from Gmail go to OCR.space.
-          </Body>
-          <Body><Text style={bold}>Voice:</Text> your browser's own speech service. In Chrome, that's Google's.</Body>
-          <Body><Text style={bold}>Notifications:</Text> your browser's push service, which can't read them.</Body>
-          <Body>
-            <Text style={bold}>Payments:</Text> Razorpay takes your card or UPI details, never us. We check your
-            country to pick ₹ or $, and don't keep it.
-          </Body>
-        </Card>
+        <Group
+          title="Good to know"
+          items={[
+            { icon: 'alert-circle', title: 'AI can be wrong', line: 'Check the document before you rely on an answer.' },
+            { icon: 'archive', title: 'Not a backup', line: 'Keep the originals of important papers.' },
+            {
+              icon: 'clock', title: 'If your family plan ends', hide: theme.business,
+              line: `The newest documents over free space go after ${DEFAULT_PLAN_LIMITS.graceDays} days. We warn you first.`,
+            },
+          ]}
+        />
 
-        <Card>
-          <CardTitle icon="link">Share links</CardTitle>
-          <Body>Anyone with the link can open that one document until it expires or is turned off.</Body>
-        </Card>
-
-        <Card>
-          <CardTitle icon="plus-square">Emergency cards</CardTitle>
-          <Body>Your family can see them. They're never sent to the AI.</Body>
-        </Card>
-
-        <Card>
-          <CardTitle icon="mail">Import from Gmail</CardTitle>
-          <Body>Until you pick a file, we keep only each attachment's sender, subject and name. Never the email.</Body>
-        </Card>
-
-        {/* What the agreement (062) leaves out: it says only what happens to documents. */}
-        <Card>
-          <CardTitle icon="info">Good to know</CardTitle>
-          <Body>Answers are written by AI and can be wrong. Check the document before you rely on one.</Body>
-          <Body>AskLocker is not a backup. Keep the originals of important papers.</Body>
-          <Body>
-            If Family Plus ends, a vault's newest documents over its free space are removed after{' '}
-            {DEFAULT_PLAN_LIMITS.graceDays} days. We warn you first.
-          </Body>
-        </Card>
-
-        {analyticsBuilt && (
-          <Card>
-            <CardTitle icon="bar-chart-2">How the app is used</CardTitle>
-            <Body>
-              PostHog counts which screens are used and the kinds of documents added, like "Passport". Never
-              what they say, your questions or your name.
-            </Body>
-            {counts !== null && (
-              <OnOff
-                label="Share usage counts"
-                value={counts}
-                onChange={(on) => { setCounts(on); setAnalyticsOn(on); }}
-              />
-            )}
-          </Card>
-        )}
-
-        <Card>
-          <CardTitle icon="user-x">Leaving or deleting</CardTitle>
-          <Body>
-            Deleting your account is immediate. Documents you added to a family stay there, so delete any you want
-            gone first.
-          </Body>
-          <Body>Backup copies expire on their own. What other services already got, they keep under their own rules.</Body>
-          <SecondaryButton label="Manage Family" icon="users" onPress={() => router.push('/family' as any)} />
-          <SecondaryButton label="Delete account" icon="user-x" onPress={() => router.push('/settings/delete-account' as any)} />
-        </Card>
+        <Group
+          title="Your account"
+          items={[
+            {
+              icon: 'bar-chart-2', title: 'App usage', hide: !analyticsBuilt,
+              line: 'We count screens and taps, and document types like Passport. Never what is in them.',
+              right: counts !== null && (
+                <Toggle label="Share app usage" value={counts} onChange={(on) => { setCounts(on); setAnalyticsOn(on); }} />
+              ),
+            },
+            {
+              icon: 'user-x', title: 'Delete account',
+              line: 'Immediate. Documents you added to a family stay there, so delete them first.',
+              onPress: () => router.push('/settings/delete-account' as any),
+            },
+          ]}
+        />
       </ScrollView>
     </SafeAreaView>
   );
 }
+
+const styles = StyleSheet.create({
+  body: { paddingVertical: space.lg, paddingBottom: 40 },
+  group: { paddingHorizontal: space.lg, marginBottom: space.lg },
+  groupTitle: { ...type.overline, marginBottom: space.sm, marginLeft: space.xs },
+  card: { backgroundColor: color.surface, borderRadius: radius.card, ...shadow.card },
+  row: {
+    flexDirection: 'row', alignItems: 'center', gap: space.md,
+    paddingHorizontal: space.lg, paddingVertical: space.md, minHeight: size.row,
+  },
+  rowBorder: { borderTopWidth: 1, borderTopColor: color.divider },
+  iconWrap: { width: size.iconBox, height: size.iconBox, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+  text: { flex: 1, minWidth: 0, gap: 2 },
+  title: { ...type.caption, fontWeight: '600', color: color.text },
+  line: type.caption,
+});
