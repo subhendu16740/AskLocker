@@ -42,7 +42,7 @@ function faq(payments: PaymentsStatus | null): { q: string; a: string }[] {
     },
     {
       q: 'How many questions can I ask?',
-      a: `On Free, you can ask ${DEFAULT_PLAN_LIMITS.questions.free} questions a month, and the count starts again on the 1st. Questions that get no answer don't count, but you can only try ${DEFAULT_PLAN_LIMITS.questionTriesPerDay.free} a day. ★ Family Plus and Pro have no monthly limit, and each person can ask up to ${DEFAULT_PLAN_LIMITS.questionTriesPerDay.plus} a day.`,
+      a: `On Free, you can ask ${DEFAULT_PLAN_LIMITS.questions.free} questions a month, and the count starts again on the 1st. Questions that get no answer don't count, but you can only try ${DEFAULT_PLAN_LIMITS.questionTriesPerDay.free} a day. ★ Family Plus gives the family ${count(DEFAULT_PLAN_LIMITS.familyQuestions)} a month to share and Family Pro ${count(DEFAULT_PLAN_LIMITS.familyPro.questions)}, and each person can try up to ${DEFAULT_PLAN_LIMITS.questionTriesPerDay.plus} a day.`,
     },
     {
       q: 'Are there other limits?',
@@ -50,7 +50,7 @@ function faq(payments: PaymentsStatus | null): { q: string; a: string }[] {
     },
     {
       q: 'Can I ask by speaking?',
-      a: `Yes. Turn on Voice assistant in Settings › Accessibility, then tap the mic on Ask and speak. On Free, you get ${DEFAULT_PLAN_LIMITS.voiceAnswers.free} voice chats in English. ★ Family Plus and Pro have no limit, in Hindi and other Indian languages too.`,
+      a: 'Yes. Turn on Voice assistant in Settings › Accessibility, then tap the mic on Ask and speak. It\'s free on every plan, in English, Hindi and the other languages there.',
     },
     {
       q: 'How do I sign in?',
@@ -98,7 +98,7 @@ function faq(payments: PaymentsStatus | null): { q: string; a: string }[] {
     },
     {
       q: 'How much space do we get?',
-      a: `On Free, each person can add ${FREE_PERSON_STORAGE_LABEL} in all. A family vault holds ${FREE_STORAGE_LABEL} from everyone together, and your personal vault ${FREE_PERSONAL_STORAGE_LABEL}, saved chats included. ★ Family Plus gives a vault ${formatBytes(DEFAULT_PLAN_LIMITS.plus)} and Family Pro ${formatBytes(DEFAULT_PLAN_LIMITS.familyPro.storage)}. If a paid plan ends while a vault is over its free space, you have ${DEFAULT_PLAN_LIMITS.graceDays} days to renew or delete documents, or the newest ones above it are removed.`,
+      a: `On Free, a family vault holds ${FREE_STORAGE_LABEL} from everyone together and your personal vault ${FREE_PERSONAL_STORAGE_LABEL}, saved chats included, and each person can add ${FREE_PERSON_STORAGE_LABEL} in all. ★ Family Plus gives a vault ${formatBytes(DEFAULT_PLAN_LIMITS.plus)} and Family Pro ${formatBytes(DEFAULT_PLAN_LIMITS.familyPro.storage)}. If a paid plan ends while a vault is over its free space, you have ${DEFAULT_PLAN_LIMITS.graceDays} days to renew or delete documents, or the newest ones above it are removed.`,
     },
     {
       q: 'How do reminders work?',
@@ -106,7 +106,7 @@ function faq(payments: PaymentsStatus | null): { q: string; a: string }[] {
     },
     {
       q: 'What does ★ Family Plus mean?',
-      a: `It marks what the paid plans for the whole family add${forSale ? '' : ', coming soon'}. Family Plus is ${plusPrice('inr')} or ${plusPrice('inr', 'yearly')} in India (${plusPrice('usd')} or ${plusPrice('usd', 'yearly')} elsewhere), with ${DEFAULT_PLAN_LIMITS.members.plus} members and ${formatBytes(DEFAULT_PLAN_LIMITS.plus)}. Family Pro is ${plusPrice('inr', 'monthly', 'family_pro')} or ${plusPrice('inr', 'yearly', 'family_pro')} (${plusPrice('usd', 'monthly', 'family_pro')} or ${plusPrice('usd', 'yearly', 'family_pro')}), with ${DEFAULT_PLAN_LIMITS.familyPro.members} members and ${formatBytes(DEFAULT_PLAN_LIMITS.familyPro.storage)}. Both add questions and voice with no monthly limit, Indian languages, 30-day share links, expiry and birthday reminders and Gmail import.`,
+      a: `It marks what the paid plans for the whole family add${forSale ? '' : ', coming soon'}. Family Plus is ${plusPrice('inr')} or ${plusPrice('inr', 'yearly')} in India (${plusPrice('usd')} or ${plusPrice('usd', 'yearly')} elsewhere), with ${DEFAULT_PLAN_LIMITS.members.plus} members and ${formatBytes(DEFAULT_PLAN_LIMITS.plus)}. Family Pro is ${plusPrice('inr', 'monthly', 'family_pro')} or ${plusPrice('inr', 'yearly', 'family_pro')} (${plusPrice('usd', 'monthly', 'family_pro')} or ${plusPrice('usd', 'yearly', 'family_pro')}), with ${DEFAULT_PLAN_LIMITS.familyPro.members} members and ${formatBytes(DEFAULT_PLAN_LIMITS.familyPro.storage)}. Both add more questions, 30-day share links, expiry and birthday reminders and Gmail import. Pro also reads documents in Indian languages.`,
     },
     ...(forSale ? [{
       q: 'How do I pay for Family Plus or Pro?',
@@ -118,9 +118,14 @@ function faq(payments: PaymentsStatus | null): { q: string; a: string }[] {
     },
     {
       q: 'Why can\'t AskLocker find something in my document?',
-      a: 'Blurry or dark photos are hard to read. Retake the photo in good light. If your documents use another language, add it in Settings › Document languages (★ Family Plus).',
+      a: 'Blurry or dark photos are hard to read. Retake the photo in good light. If your documents use another language, add it in Settings › Document languages (★ Family Pro).',
     },
   ];
+}
+
+/** 2000 → "2,000"; null (no number) → "no limit". */
+function count(n: number | null): string {
+  return n == null ? 'no limit' : String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 }
 
 // In Business mode the answers are a business's: its plans (Plus, Pro and
@@ -145,7 +150,7 @@ function businessFaq(): { q: string; a: string }[] {
     },
     {
       q: 'How many questions can I ask?',
-      a: `On Free, each person can ask ${L.questions.free} questions a month and try ${L.questionTriesPerDay.free} a day. With ★ Plus, Pro or Enterprise, each person gets ${plus.questionsFairUse} a month and ${plus.questionTriesPerDay} tries a day.`,
+      a: `On Free, each person can ask ${L.questions.free} questions a month and try ${L.questionTriesPerDay.free} a day. ★ Plus gives the business ${count(plus.questions)} a month to share, Pro ${count(pro.questions)} and Enterprise ${ent.questions == null ? 'no monthly limit' : count(ent.questions)}, and each person can try ${plus.questionTriesPerDay} a day.`,
     },
     {
       q: 'Are there other limits?',
@@ -153,7 +158,7 @@ function businessFaq(): { q: string; a: string }[] {
     },
     {
       q: 'Can I ask by speaking?',
-      a: `Yes. Turn on Voice assistant in Settings › Accessibility, then tap the mic on Ask and speak. On Free, you get ${L.voiceAnswers.free} voice chats, and the paid plans have no limit.`,
+      a: 'Yes. Turn on Voice assistant in Settings › Accessibility, then tap the mic on Ask and speak. It\'s free on every plan, in English, Hindi and the other languages there.',
     },
     {
       q: 'How do I add someone to my team?',
@@ -169,7 +174,7 @@ function businessFaq(): { q: string; a: string }[] {
     },
     {
       q: 'What does ★ Plus mean?',
-      a: `It marks what the paid plans add. Plus is ${businessPrice('business_plus')}, Pro ${businessPrice('business_pro')} and Enterprise ${businessPrice('business_enterprise')}. To get one, open Plans from the menu and tap Ask us.`,
+      a: `It marks what the paid plans add. Plus is ${businessPrice('business_plus')}, Pro ${businessPrice('business_pro')} and Enterprise ${businessPrice('business_enterprise')}. Pro and Enterprise also read records in Indian languages. To get one, open Plans from the menu and tap Ask us.`,
     },
     {
       q: 'How do I share with someone outside the business?',
@@ -189,7 +194,7 @@ function businessFaq(): { q: string; a: string }[] {
     },
     {
       q: 'Why can\'t AskLocker find something in my record?',
-      a: 'Blurry or dark photos are hard to read. Retake the photo in good light. If your records use another language, add it in Settings › Document languages.',
+      a: 'Blurry or dark photos are hard to read. Retake the photo in good light. If your records use another language, add it in Settings › Document languages (★ Pro).',
     },
   ];
 }

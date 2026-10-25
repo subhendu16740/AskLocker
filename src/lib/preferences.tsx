@@ -15,7 +15,7 @@ import { supabase } from './supabase';
 import { storageGet, storageSet, accountKey } from './storage';
 import { DEFAULT_VOICE_LANGUAGE } from './voice-languages';
 import { DEFAULT_OCR_LANGUAGES } from './ocr-languages';
-import { usePaidPlan } from './family-plan';
+import { useIndianLanguages } from './family-plan';
 
 interface Preferences {
   voiceMode: boolean;
@@ -41,10 +41,11 @@ interface PreferencesContextType extends Preferences {
   /** False until the account row is read with birthday_reminders in it — before 035, or offline. */
   birthdaysAvailable: boolean;
   /**
-   * Indian languages, for reading documents and for voice, come with a paid
-   * plan (064). On Free, voiceLanguage and documentLanguages read English
-   * whatever was chosen, and the choice comes back with a paid plan. True
-   * while the plan is not known, which gates nothing.
+   * Reading documents in Indian languages comes with Family Pro, or a
+   * business's Pro or Enterprise (066; any paid plan under 064). Elsewhere
+   * documentLanguages read English whatever was chosen, and the choice comes
+   * back with one of those plans. Voice is in any language on every plan
+   * (066). True while the plan is not known, which gates nothing.
    */
   languagesAllowed: boolean;
 }
@@ -198,13 +199,13 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
     [prefs, persist],
   );
 
-  // On Free, English for reading and for voice (064); unknown gates nothing.
-  const languagesAllowed = usePaidPlan() !== false;
+  // Below Pro, documents are read in English (066); unknown gates nothing.
+  // Voice is in any language on every plan (066).
+  const languagesAllowed = useIndianLanguages() !== false;
 
   return (
     <PreferencesContext.Provider value={{
       ...prefs, ready, birthdaysAvailable, languagesAllowed,
-      voiceLanguage: languagesAllowed ? prefs.voiceLanguage : DEFAULT_VOICE_LANGUAGE,
       documentLanguages: languagesAllowed ? prefs.documentLanguages : DEFAULT_OCR_LANGUAGES,
       setVoiceMode, setVoiceLanguage, setDocumentLanguages, setNotificationsEnabled, setBirthdayReminders,
     }}>

@@ -2,14 +2,13 @@
 //
 // Every plan has a storage limit; none is unlimited:
 //
-//   Free          50 MB for each person to add, across their free vaults;
-//                 a family 100 MB and a business 200 MB, everyone
-//                 together; a personal vault 50 MB (060) — in total, not
-//                 a monthly allowance
-//   Family Plus   1 GB, either kind of vault — in India ₹100 a month or
-//                 ₹1,100 a year, elsewhere $10 a month or $110 a year
-//   Family Pro    10 GB (064) — in India ₹200 a month or ₹2,000 a year,
-//                 elsewhere $20 a month or $200 a year
+//   Free          50 MB a vault, family or personal, and 50 MB for each
+//                 person to add across their free vaults (060); a business
+//                 100 MB (066) — in total, not a monthly allowance
+//   Family Plus   500 MB, either kind of vault — in India ₹99 a month or
+//                 ₹999 a year, elsewhere $10 a month or $99 a year
+//   Family Pro    2 GB (064, 066) — in India ₹199 a month or ₹1,999 a year,
+//                 elsewhere $20 a month or $199 a year
 //
 // The yearly price is shown as a discount on twelve months at the monthly
 // price, crossed out (<YearlyPrice />, src/components/plus-price.tsx).
@@ -26,9 +25,9 @@
 //
 // The Supabase organisation behind the app is on Supabase's Free plan, which
 // holds 1 GB of files for the whole organisation — every vault, and DEV's test
-// files too: about five full families, or ten full personal vaults, at the free
-// limits. Past that, and before anyone is given Family Plus's 10 GB, PROD needs
-// Supabase Pro (100 GB included). CLAUDE.md, "The Supabase plan", has the rest.
+// files too: about twenty full family vaults at the free limits. Past that,
+// and before many families are on Family Pro's 2 GB, PROD needs Supabase Pro
+// (100 GB included). CLAUDE.md, "The Supabase plan", has the rest.
 // ────────────────────────────────────────────────────────────────
 
 import {
@@ -45,7 +44,7 @@ export {
 } from '../../supabase/functions/_shared/limits';
 
 export {
-  BUSINESS_PLANS, BUSINESS_PRICE, CLOSED_MESSAGE, DEFAULT_PLAN_LIMITS, FAMILY_PLANS, PLUS_FOR_SALE, PLUS_PRICE, PRO_PRICE, businessAmount, businessPlanName, businessPrice,
+  BUSINESS_PLANS, BUSINESS_PRICE, BUSINESS_YEAR_PRICE, CLOSED_MESSAGE, INDIAN_LANGUAGE_PLANS, plansHaveIndianLanguages, DEFAULT_PLAN_LIMITS, FAMILY_PLANS, PLUS_FOR_SALE, PLUS_PRICE, PRO_PRICE, businessAmount, businessPlanName, businessPrice,
   businessYearPrice, chatStorageFullMessage, familyPlanName, familyPrice, fits, formatBytes, freeVaultsText, isBusinessPlan, isFamilyPlan, nextBusinessPlan, personFits,
   personStorageFullMessage, planLabel, plusAmount, plusName, plusPrice, plusPrices, plusTwelveMonths, plusYearlyOffer, plusYearlySaving,
   storageFullMessage,
@@ -56,7 +55,7 @@ export {
 /** Free space for a family, in bytes, when the database cannot be asked. */
 export const FREE_STORAGE_BYTES = DEFAULT_PLAN_LIMITS.free;
 
-/** "100 MB", for sentences. */
+/** "50 MB", for sentences. */
 export const FREE_STORAGE_LABEL = formatBytes(FREE_STORAGE_BYTES);
 
 /** Free space for a personal vault (048), in bytes, when the database cannot be asked. */
@@ -65,7 +64,7 @@ export const FREE_PERSONAL_STORAGE_BYTES = DEFAULT_PLAN_LIMITS.freePersonal;
 /** "50 MB", for sentences. */
 export const FREE_PERSONAL_STORAGE_LABEL = formatBytes(FREE_PERSONAL_STORAGE_BYTES);
 
-/** "200 MB": what a business keeps on Free (060), for sentences. */
+/** "100 MB": what a business keeps on Free (060, 066), for sentences. */
 export const FREE_BUSINESS_STORAGE_LABEL = formatBytes(DEFAULT_PLAN_LIMITS.freeBusiness);
 
 /** "50 MB": what each person can add on Free, across their free vaults (060), for sentences. */
@@ -103,27 +102,27 @@ export function localCurrency(): PriceCurrency {
 
 // Each takes the family plan last, Family Plus when not said (064).
 
-/** "₹100 a month" (or "₹1,100 a year") where this device is. */
+/** "₹99 a month" (or "₹999 a year") where this device is. */
 export function localPlusPrice(period: PricePeriod = 'monthly', plan: FamilyPlan = 'plus'): string {
   return plusPrice(localCurrency(), period, plan);
 }
 
-/** "₹100 a month or ₹1,100 a year" where this device is. */
+/** "₹99 a month or ₹999 a year" where this device is. */
 export function localPlusPrices(plan: FamilyPlan = 'plus'): string {
   return plusPrices(localCurrency(), plan);
 }
 
-/** "₹100", "₹1,100" where this device is. */
+/** "₹99", "₹999" where this device is. */
 export function localPlusAmount(period: PricePeriod, plan: FamilyPlan = 'plus'): string {
   return plusAmount(localCurrency(), period, plan);
 }
 
-/** "1 month free" where this device is. */
+/** "Save ₹189" where this device is. */
 export function localPlusYearlySaving(plan: FamilyPlan = 'plus'): string {
   return plusYearlySaving(localCurrency(), plan);
 }
 
-/** "₹1,100 a year instead of ₹1,200" where this device is: what a screen reader hears for <YearlyPrice />. */
+/** "₹999 a year instead of ₹1,188" where this device is: what a screen reader hears for <YearlyPrice />. */
 export function localPlusYearlyOffer(plan: FamilyPlan = 'plus'): string {
   return plusYearlyOffer(localCurrency(), plan);
 }
