@@ -117,6 +117,10 @@ function faq(payments: PaymentsStatus | null): { q: string; a: string }[] {
       a: 'In Settings › Security, tap Delete account. It goes right away, with your personal vault and any family only you manage. Documents you added to other families stay there, so delete any you want gone first.',
     },
     {
+      q: 'Can I rely on the answers?',
+      a: 'Answers are written by AI and can be wrong, so check the document before you rely on one. AskLocker isn\'t a backup. Keep the originals of important papers.',
+    },
+    {
       q: 'Why can\'t AskLocker find something in my document?',
       a: 'Blurry or dark photos are hard to read. Retake the photo in good light. If your documents use another language, add it in Settings › Document languages (★ Family Pro).',
     },
@@ -191,6 +195,10 @@ function businessFaq(): { q: string; a: string }[] {
     {
       q: 'How do I delete my account?',
       a: 'In Settings › Security, tap Delete account. If you\'re the last admin of a business, make someone else an admin or delete the business first. A business never goes with an account.',
+    },
+    {
+      q: 'Can I rely on the answers?',
+      a: 'Answers are written by AI and can be wrong, so check the record before you rely on one. AskLocker isn\'t a backup. Keep the originals of important papers.',
     },
     {
       q: 'Why can\'t AskLocker find something in my record?',

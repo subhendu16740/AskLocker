@@ -1,0 +1,143 @@
+<!doctype html>
+<!--
+  AskLocker's privacy policy, at asklocker.com/privacy (Cloudflare Pages
+  serves privacy.html there; /privacy.html works on any host). Settings ›
+  Privacy links here, and the Play Store, Razorpay and Google's brand check
+  take this address. A plain page, no script, so it opens anywhere.
+
+  Every sentence has to stay true of the code and of the people who run
+  AskLocker (CLAUDE.md: never promise more privacy than AskLocker gives).
+  Change it with any change to sharing, search, OCR, embeddings, voice,
+  Gmail import, payments or usage counts, and change the date. The QA
+  self-test checks it names each service that gets document text and makes
+  none of the forbidden claims. The usage analytics service is described,
+  not named (the owner's ask, 25 October 2026).
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacy Policy · AskLocker</title>
+<meta name="description" content="What AskLocker keeps, who else gets it, and what you can do about it.">
+<link rel="icon" href="/favicon.ico">
+<style>
+  :root {
+    --bg: #F8F9FC; --card: #FFFFFF; --text: #1F2937; --muted: #6B7280;
+    --primary: #2A3D66; --line: #E5E7EB;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #0D1117; --card: #161B22; --text: #E6EDF3; --muted: #9DA7B3; --primary: #9DB4E0; --line: #30363D; }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  main { max-width: 680px; margin: 0 auto; padding: 24px 16px 48px; }
+  header { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+  header img { width: 40px; height: 40px; border-radius: 10px; }
+  header a { color: var(--primary); font-weight: 600; text-decoration: none; font-size: 17px; }
+  h1 { font-size: 24px; line-height: 1.3; margin: 16px 0 4px; color: var(--primary); }
+  .date { color: var(--muted); font-size: 13px; margin: 0 0 16px; }
+  section { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 4px 20px; margin: 16px 0; }
+  h2 { font-size: 16px; margin: 16px 0 4px; }
+  ul { padding-left: 20px; margin: 8px 0 16px; }
+  li { margin: 6px 0; }
+  p { margin: 8px 0 16px; }
+  a { color: var(--primary); }
+  b { font-weight: 600; }
+  footer { color: var(--muted); font-size: 13px; text-align: center; margin-top: 24px; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <img src="/icon-192.png" alt="">
+    <a href="/">AskLocker</a>
+  </header>
+
+  <h1>Privacy Policy</h1>
+  <p class="date">Last updated 25 October 2026</p>
+  <p>
+    AskLocker keeps your family's and your business's documents, and answers questions about them.
+    This page says what we keep, who else gets it, and what you can do about it.
+    Questions? Write to <a href="mailto:support@asklocker.com">support@asklocker.com</a>.
+  </p>
+
+  <section>
+    <h2>What we keep</h2>
+    <ul>
+      <li><b>Your account:</b> your name, email address and photo from Google, and a phone number if you add one.</li>
+      <li><b>What you add:</b> your documents and the text read from them, your family tree, emergency cards, notes and saved chats.</li>
+      <li><b>Your questions,</b> to answer them. We count how many you ask.</li>
+      <li><b>Payments:</b> the plan, the amount and Razorpay's payment number. Never your card or UPI details.</li>
+      <li><b>That you agreed</b> to AskLocker's terms, and when.</li>
+      <li><b>App usage:</b> which screens are opened and which buttons are tapped, and document types like "Passport", with a random number for your device. Never what your documents say, your questions, your name or your email. Turn it off in Settings › Privacy.</li>
+      <li>To show prices in ₹ or $, we check which country you connect from. We don't keep it.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Who can open your documents</h2>
+    <ul>
+      <li>People in your vault. Your personal vault is yours alone.</li>
+      <li>Anyone you send a share link to, for that one document, until it expires or you turn it off.</li>
+      <li>Documents are encrypted when sent and when stored, but not end-to-end. Our servers read them to search them and answer you, and the people who run AskLocker can open them.</li>
+      <li>We don't sell your data, and AskLocker has no ads.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Services we use</h2>
+    <ul>
+      <li><b>Supabase</b> stores your account, documents and files, in Mumbai, India.</li>
+      <li><b>Cloudflare</b> runs our website and email, and turns parts of your documents and your questions into search data. It says it doesn't train AI on them.</li>
+      <li><b>Anthropic</b> (Claude) and <b>Groq</b> get your question and the best matching parts of your documents, to write an answer. Never your whole vault.</li>
+      <li><b>OCR.space</b> reads scanned PDFs, and photos imported from Gmail. Photos and spreadsheets you upload are read on your own device.</li>
+      <li><b>Google</b> signs you in. If you connect Gmail, we look at emails' senders, subjects and attachment names to find documents, and download only the ones you pick. We never keep the email itself. In Chrome, voice goes to Google's speech service.</li>
+      <li><b>Razorpay</b> takes payments. Your card or UPI details go only to Razorpay.</li>
+      <li><b>Your browser's push service</b> carries notifications. They're encrypted, so it can't read them.</li>
+      <li><b>A usage analytics service</b> in the EU keeps the app usage counts above. It throws away internet addresses.</li>
+    </ul>
+    <p>Each keeps what it gets under its own privacy policy.</p>
+  </section>
+
+  <section>
+    <h2>How long we keep it</h2>
+    <ul>
+      <li>Until you delete it, or delete your account.</li>
+      <li>Deleting your account is immediate. Your personal vault goes with it, and any family only you manage. Documents you added to other families stay with them, so delete those first.</li>
+      <li>If a family's paid plan ends, its newest documents over the free space are removed after 30 days. We warn you first.</li>
+      <li>Payment records stay with the vault they paid for, without your name once your account is deleted.</li>
+      <li>Copies in backups and logs expire on their own.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Your choices</h2>
+    <ul>
+      <li>Delete any document you added, in All documents.</li>
+      <li>Leave a family or business in Manage Family.</li>
+      <li>Turn off app usage in Settings › Privacy, and notifications in Settings › Notifications.</li>
+      <li>Disconnect Gmail on the Import from Gmail screen.</li>
+      <li>Delete your account in Settings › Security.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Good to know</h2>
+    <ul>
+      <li>Answers are written by AI and can be wrong. Check the document before you rely on one.</li>
+      <li>AskLocker is not a backup. Keep the originals of important papers.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Changes</h2>
+    <p>When this page changes, so does the date at the top. If what happens to your documents changes, AskLocker asks you to agree again.</p>
+  </section>
+
+  <footer>AskLocker · <a href="mailto:support@asklocker.com">support@asklocker.com</a></footer>
+</main>
+</body>
+</html>
