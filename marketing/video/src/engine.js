@@ -19,6 +19,8 @@ export const PORTRAIT = params.get('orientation') === 'portrait';
 export const SHORT = params.get('cut') === 'short';
 // The family film's voice scene can speak another of the app's voice languages.
 export const LANG = params.get('lang') || '';
+// Which film: family, nri (the family film told by a son abroad) or business.
+export const FILM = ['nri', 'business'].includes(params.get('film')) ? params.get('film') : 'family';
 export const W = PORTRAIT ? 1080 : 1920;
 export const H = PORTRAIT ? 1920 : 1080;
 
