@@ -4,7 +4,8 @@ The AskLocker launch films as MP4 files. This branch holds only these videos.
 It is never merged into `dev` or `main`; delete it to remove them.
 
 The films are made from code in `marketing/video/` on `dev` (see its README).
-These were rendered on 26 October 2026 from `dev` at commit 43b4710.
+These were rendered on 26 October 2026 from `dev` at commit 43b4710; the NRI
+film from the same commit with its story added (`?film=nri`).
 
 | File | Length | For |
 |---|---|---|
@@ -12,6 +13,10 @@ These were rendered on 26 October 2026 from `dev` at commit 43b4710.
 | `asklocker-family-9x16.mp4` | 2:15 | Full-length vertical posts |
 | `asklocker-family-9x16-short.mp4` | 1:11 | Reels, Shorts, WhatsApp |
 | `asklocker-family-16x9-short.mp4` | 1:11 | LinkedIn and X feeds |
+| `asklocker-nri-16x9.mp4` | 2:15 | The family film told by a son abroad (Toronto): landing page, YouTube, LinkedIn |
+| `asklocker-nri-9x16.mp4` | 2:15 | Full-length vertical posts |
+| `asklocker-nri-9x16-short.mp4` | 1:11 | Reels, Shorts, WhatsApp |
+| `asklocker-nri-16x9-short.mp4` | 1:11 | LinkedIn and X feeds |
 | `asklocker-business-16x9.mp4` | 1:31 | Landing page, YouTube, LinkedIn, pitches to businesses and CAs |
 | `asklocker-business-9x16.mp4` | 1:31 | Full-length vertical posts |
 | `asklocker-business-9x16-short.mp4` | 0:59 | Reels, Shorts, WhatsApp |
@@ -24,6 +29,8 @@ These were rendered on 26 October 2026 from `dev` at commit 43b4710.
   100 GB; 100 questions each). The plans of 25 October 2026 are ₹499, ₹999 and
   ₹3,999; 2, 5, 10 and 50 people; 100 MB, 5 GB, 25 GB and 100 GB; and questions
   shared by the business. Its Team scene says "3 of 15 members"; Pro is now 10.
-- **The family film shows Gmail import**, which only Google's listed test users
-  can use until Google verifies the Gmail permission.
+- **The family and NRI films show Gmail import**, which only Google's listed
+  test users can use until Google verifies the Gmail permission.
+- **The NRI film's end card says "from ₹99 a month".** Someone abroad pays
+  $10, but only once Razorpay takes dollars (`RAZORPAY_CURRENCIES=INR,USD`).
 - Everyone and everything in the films is fictional.
