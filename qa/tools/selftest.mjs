@@ -45,7 +45,7 @@ import { estimateTokens } from '../../supabase/functions/_shared/tokens.ts';
 import { chunkText } from '../../supabase/functions/_shared/chunking.ts';
 import { MAX_DOCUMENT_TEXT, MAX_FILE_BYTES, QUESTION_INPUT_MAX, MAX_QUESTION_CHARS, fileTooLargeMessage, inVaultFolder, limitHint, providedTextLimit } from '../../supabase/functions/_shared/limits.ts';
 import { MAX_IMPORT_BYTES } from '../../supabase/functions/_shared/gmail-rules.ts';
-import { BUSINESS_PLANS, BUSINESS_PRICE, CLOSED_MESSAGE, DEFAULT_PLAN_LIMITS, PLUS_FOR_SALE, PLUS_PRICE, PRO_PRICE, familyPlanName, isFamilyPlan, businessAmount, businessPrice, businessYearPrice, chatStorageFullMessage, fits, formatBytes, freeVaultsText, isBusinessPlan, nextBusinessPlan, personFits, personStorageFullMessage, planLabel, plusName, plusAmount, plusPrice, plusPrices, plusTwelveMonths, plusYearlyOffer, plusYearlySaving, storageFullMessage } from '../../supabase/functions/_shared/plan-text.ts';
+import { BUSINESS_PLANS, BUSINESS_PRICE, BUSINESS_YEAR_PRICE, CLOSED_MESSAGE, plansHaveIndianLanguages, DEFAULT_PLAN_LIMITS, PLUS_FOR_SALE, PLUS_PRICE, PRO_PRICE, familyPlanName, isFamilyPlan, businessAmount, businessPrice, businessYearPrice, chatStorageFullMessage, fits, formatBytes, freeVaultsText, isBusinessPlan, nextBusinessPlan, personFits, personStorageFullMessage, planLabel, plusName, plusAmount, plusPrice, plusPrices, plusTwelveMonths, plusYearlyOffer, plusYearlySaving, storageFullMessage } from '../../supabase/functions/_shared/plan-text.ts';
 import { mentionsDate, mentionsAmount, mentionsPhone, mentionsText, refuses, devanagariShare, scriptShare, hasMarkdown } from '../lib/match.mjs';
 import { judgeAnswer } from '../lib/checks/ask.mjs';
 import { EMBED_ALLOWANCE } from '../lib/results.mjs';
@@ -689,26 +689,26 @@ await test('every suite stays inside its Groq budget', () => {
 
 await test('plans: every limit is finite, and a full vault says why and what to do (038–048)', () => {
   const GB = 1024 ** 3, MB = 1024 ** 2;
-  // What 039–060 leave in plan_limits: one row per plan; on Free 50 MB for
-  // each person to add across their free vaults, 100 MB for a family and
-  // 200 MB for a business, everyone together, and 50 MB for a personal
-  // vault (060), Plus 1 GB and Pro 10 GB for either (064);
-  // 30 days after Plus ends before anything above Free goes, 4 members on
-  // Free and 8 on Plus (049), 10 voice chats for each person on Free (043),
-  // and 20 questions a month for each person on Free, none on Plus up to
-  // fair use (049), and on Plus 200 a month the whole family shares (053).
-  // A business (051) has its own plans. On Free a person creates one family
-  // and one business (059; one of either under 054), and Family Plus adds
-  // 100 documents and 50 question tries a day.
+  // What 039–066 leave in plan_limits: one row per plan; on Free 50 MB a
+  // vault, family or personal, and 100 MB a business, and 50 MB for each
+  // person to add across their free vaults (060, 066); Plus 500 MB and Pro
+  // 2 GB for either (066); 30 days after a paid plan ends before anything
+  // above Free goes; 2 members on Free, 4 on Plus and 8 on Pro (064); voice
+  // with no limit on any plan (066; 10 on Free before); 20 questions a month
+  // for each person on Free, and a month shared by the vault on every paid
+  // plan but Enterprise (066): Plus 500, Pro 2,000, Business Plus 1,000 and
+  // Pro 5,000. A business (051) has its own plans. On Free a person creates
+  // one family and one business (059), and Family Plus adds 100 documents
+  // and 50 question tries a day.
   assert.deepEqual(DEFAULT_PLAN_LIMITS, {
-    free: 100 * MB, freePersonal: 50 * MB, freeBusiness: 200 * MB, freePerson: 50 * MB, plus: 1 * GB, graceDays: 30,
-    familyPro: { storage: 10 * GB, members: 8 },
+    free: 50 * MB, freePersonal: 50 * MB, freeBusiness: 100 * MB, freePerson: 50 * MB, plus: 500 * MB, graceDays: 30,
+    familyPro: { storage: 2 * GB, members: 8, questions: 2000 },
     members: { free: 2, plus: 4 },
-    freeBusinessMembers: 4,
-    voiceAnswers: { free: 10, plus: null },
+    freeBusinessMembers: 2,
+    voiceAnswers: { free: null, plus: null },
     questions: { free: 20, plus: null },
-    questionsFairUse: null,
-    familyQuestions: null,
+    questionsFairUse: 500,
+    familyQuestions: 500,
     questionTriesPerDay: { free: 10, plus: 50 },
     uploadsPerDay: { free: 50, plus: 100 },
     familiesPerPerson: 1,
@@ -717,31 +717,43 @@ await test('plans: every limit is finite, and a full vault says why and what to 
     notesPerPerson: { free: 20, paid: 500 },
     invitesPerDay: { free: 20, plus: 20 },
     business: {
-      business_plus: { storage: 10 * GB, members: 10, questionsFairUse: 100, questionTriesPerDay: 30, uploadsPerDay: 300, invitesPerDay: 20 },
-      business_pro: { storage: 25 * GB, members: 15, questionsFairUse: 100, questionTriesPerDay: 30, uploadsPerDay: 300, invitesPerDay: 20 },
-      business_enterprise: { storage: 100 * GB, members: 50, questionsFairUse: 100, questionTriesPerDay: 30, uploadsPerDay: 300, invitesPerDay: 50 },
+      business_plus: { storage: 5 * GB, members: 5, questions: 1000, questionsShared: true, questionTriesPerDay: 30, uploadsPerDay: 300, invitesPerDay: 20 },
+      business_pro: { storage: 25 * GB, members: 10, questions: 5000, questionsShared: true, questionTriesPerDay: 30, uploadsPerDay: 300, invitesPerDay: 20 },
+      business_enterprise: { storage: 100 * GB, members: 50, questions: null, questionsShared: false, questionTriesPerDay: 30, uploadsPerDay: 300, invitesPerDay: 50 },
     },
   });
-  assert.deepEqual(PLUS_PRICE, { monthly: { inr: 100, usd: 10 }, yearly: { inr: 1100, usd: 110 } });
-  // Family Pro (064): the owner's prices, ₹200 / ₹2,000 and $20 / $200.
-  assert.deepEqual(PRO_PRICE, { monthly: { inr: 200, usd: 20 }, yearly: { inr: 2000, usd: 200 } });
-  // The Plans page says what a year saves in months ("1 month free"): a year
-  // must cost a whole number of months, fewer than twelve.
+  // The owner's prices, 25 October 2026 (066): ₹99 / ₹999 and $10 / $99 for
+  // Plus, ₹199 / ₹1,999 and $20 / $199 for Pro.
+  assert.deepEqual(PLUS_PRICE, { monthly: { inr: 99, usd: 10 }, yearly: { inr: 999, usd: 99 } });
+  assert.deepEqual(PRO_PRICE, { monthly: { inr: 199, usd: 20 }, yearly: { inr: 1999, usd: 199 } });
+  // A year must cost less than twelve months, and stay under ₹2,000, above
+  // which UPI charges merchants 0.4%.
   for (const price of [PLUS_PRICE, PRO_PRICE]) {
-    for (const c of ['inr', 'usd']) {
-      const months = price.yearly[c] / price.monthly[c];
-      assert.ok(Number.isInteger(months) && months < 12, `${c}: a year costs ${months} months`);
-    }
+    for (const c of ['inr', 'usd']) assert.ok(price.yearly[c] < 12 * price.monthly[c], `${c}: a year costs less than twelve months`);
+    assert.ok(price.yearly.inr < 2000, 'a year stays under ₹2,000');
   }
   // apply_plan_payment() (064) keeps the time left when moving between Plus
-  // and Pro at Pro costing twice Plus a month; the prices must still say so.
-  for (const c of ['inr', 'usd']) assert.equal(PRO_PRICE.monthly[c], 2 * PLUS_PRICE.monthly[c], `${c}: Pro is twice Plus a month`);
+  // and Pro at Pro costing twice Plus a month; ₹199 is close enough to twice ₹99.
+  for (const c of ['inr', 'usd']) {
+    const ratio = PRO_PRICE.monthly[c] / PLUS_PRICE.monthly[c];
+    assert.ok(Math.abs(ratio - 2) < 0.05, `${c}: Pro is about twice Plus a month (${ratio})`);
+  }
+  // Business prices before GST (066): a year about ten months.
+  assert.deepEqual(BUSINESS_PRICE, { business_plus: 499, business_pro: 999, business_enterprise: 3999 });
+  assert.deepEqual(BUSINESS_YEAR_PRICE, { business_plus: 4999, business_pro: 9999, business_enterprise: 39999 });
+  assert.equal(businessPrice('business_pro'), '₹999 a month + GST');
+  assert.equal(businessYearPrice('business_enterprise'), '₹39,999 a year + GST');
+  assert.equal(businessAmount('business_plus', 'yearly'), '₹4,999');
+  // Reading documents in Indian languages: Family Pro, Business Pro and Enterprise (066).
+  assert.ok(plansHaveIndianLanguages(['free', 'family_pro']));
+  assert.ok(plansHaveIndianLanguages(['business_enterprise']));
+  assert.ok(!plansHaveIndianLanguages(['free', 'plus', 'business_plus']));
   assert.equal(familyPlanName('plus'), 'Family Plus');
   assert.equal(familyPlanName('family_pro'), 'Family Pro');
-  assert.equal(plusYearlySaving('inr', 'family_pro'), '2 months free');
-  assert.equal(plusPrice('inr', 'monthly', 'family_pro'), '₹200 a month');
-  assert.equal(plusPrice('usd', 'yearly', 'family_pro'), '$200 a year');
-  assert.equal(plusTwelveMonths('inr', 'family_pro'), '₹2,400');
+  assert.equal(plusYearlySaving('inr', 'family_pro'), 'Save ₹389');
+  assert.equal(plusPrice('inr', 'monthly', 'family_pro'), '₹199 a month');
+  assert.equal(plusPrice('usd', 'yearly', 'family_pro'), '$199 a year');
+  assert.equal(plusTwelveMonths('inr', 'family_pro'), '₹2,388');
   assert.equal(planLabel('family_pro'), 'Family Pro');
   assert.ok(isFamilyPlan('family_pro') && isFamilyPlan('plus') && !isFamilyPlan('business_pro') && !isFamilyPlan('free'));
   // What the creation screen and Help say a person on Free may create: one
@@ -752,28 +764,29 @@ await test('plans: every limit is finite, and a full vault says why and what to 
   assert.equal(freeVaultsText({ familiesPerPerson: 1, businessesPerPerson: 1, vaultsPerPerson: 2 }), 'one family and one business');
   assert.equal(freeVaultsText({ familiesPerPerson: 1, businessesPerPerson: 0, vaultsPerPerson: null }), 'one family');
   assert.equal(freeVaultsText({ familiesPerPerson: 1, businessesPerPerson: 1, vaultsPerPerson: 0 }), null);
-  assert.equal(plusYearlySaving('inr'), '1 month free');
-  assert.equal(plusYearlySaving('usd'), '1 month free');
-  assert.equal(plusPrice('inr'), '₹100 a month');
+  assert.equal(plusYearlySaving('inr'), 'Save ₹189');
+  assert.equal(plusYearlySaving('usd'), 'Save $21');
+  assert.equal(plusPrice('inr'), '₹99 a month');
   assert.equal(plusPrice('usd'), '$10 a month');
-  assert.equal(plusPrice('inr', 'yearly'), '₹1,100 a year');
-  assert.equal(plusPrice('usd', 'yearly'), '$110 a year');
-  assert.equal(plusPrices('inr'), '₹100 a month or ₹1,100 a year');
-  assert.equal(plusAmount('inr', 'yearly'), '₹1,100');
+  assert.equal(plusPrice('inr', 'yearly'), '₹999 a year');
+  assert.equal(plusPrice('usd', 'yearly'), '$99 a year');
+  assert.equal(plusPrices('inr'), '₹99 a month or ₹999 a year');
+  assert.equal(plusAmount('inr', 'yearly'), '₹999');
   assert.equal(plusAmount('usd', 'monthly'), '$10');
   // The yearly price is shown against twelve months at the monthly price,
   // crossed out: a real price, worked out, so the discount is a real one.
-  assert.equal(plusTwelveMonths('inr'), '₹1,200');
+  assert.equal(plusTwelveMonths('inr'), '₹1,188');
   assert.equal(plusTwelveMonths('usd'), '$120');
-  assert.equal(plusYearlyOffer('inr'), '₹1,100 a year instead of ₹1,200');
-  assert.equal(plusYearlyOffer('usd'), '$110 a year instead of $120');
+  assert.equal(plusYearlyOffer('inr'), '₹999 a year instead of ₹1,188');
+  assert.equal(plusYearlyOffer('usd'), '$99 a year instead of $120');
   assert.equal(formatBytes(512), '512 B');
   assert.equal(formatBytes(2048), '2 KB');
   assert.equal(formatBytes(1.25 * MB), '1.3 MB');
   assert.equal(formatBytes(250 * MB), '250 MB');
-  assert.equal(formatBytes(DEFAULT_PLAN_LIMITS.free), '100 MB');
+  assert.equal(formatBytes(DEFAULT_PLAN_LIMITS.free), '50 MB');
   assert.equal(formatBytes(DEFAULT_PLAN_LIMITS.freePersonal), '50 MB');
-  assert.equal(formatBytes(DEFAULT_PLAN_LIMITS.freeBusiness), '200 MB');
+  assert.equal(formatBytes(DEFAULT_PLAN_LIMITS.freeBusiness), '100 MB');
+  assert.equal(formatBytes(DEFAULT_PLAN_LIMITS.plus), '500 MB');
   assert.equal(formatBytes(DEFAULT_PLAN_LIMITS.freePerson), '50 MB');
   // A person on Free who has added their 50 MB across their free vaults (060).
   const me = { usedBytes: 48 * MB, limitBytes: 50 * MB };
@@ -797,17 +810,17 @@ await test('plans: every limit is finite, and a full vault says why and what to 
   assert.match(full, /^Your family's storage is full, with 1\.01 GB of 1 GB used\./);
   // Until Plus can be bought, nothing offers to sell it.
   if (!PLUS_FOR_SALE) {
-    assert.match(full, /Family Plus is coming soon, with 1 GB for ₹100 a month\.$/);
+    assert.match(full, /Family Plus is coming soon, with 500 MB for ₹99 a month\.$/);
     assert.doesNotMatch(full, /move to/);
   }
-  assert.match(storageFullMessage({ ...free, usedBytes: GB }, 0, { price: plusPrices('inr') }), /with 1 GB for ₹100 a month or ₹1,100 a year\.$/);
+  assert.match(storageFullMessage({ ...free, usedBytes: GB }, 0, { price: plusPrices('inr') }), /with 500 MB for ₹99 a month or ₹999 a year\.$/);
   // The server cannot tell where the person is, so it names no price.
-  assert.match(storageFullMessage({ ...free, usedBytes: GB }), /with 1 GB\.$/);
+  assert.match(storageFullMessage({ ...free, usedBytes: GB }), /with 500 MB\.$/);
   const plus = storageFullMessage({ plan: 'plus', limitBytes: GB, usedBytes: GB }, 0, { price: plusPrice('usd') });
   assert.equal(plus, "Your family's storage is full, with 1 GB of 1 GB used. Delete documents you don't need to make room.");
-  // Where Pro can be bought, a full Plus vault is offered its 10 GB (064); a full Pro vault makes room.
+  // Where Pro can be bought, a full Plus vault is offered its 2 GB (064, 066); a full Pro vault makes room.
   assert.equal(storageFullMessage({ plan: 'plus', limitBytes: GB, usedBytes: GB }, 0, { forSale: true }),
-    "Your family's storage is full, with 1 GB of 1 GB used. Delete documents you don't need, or move to Family Pro and get 10 GB.");
+    "Your family's storage is full, with 1 GB of 1 GB used. Delete documents you don't need, or move to Family Pro and get 2 GB.");
   assert.equal(storageFullMessage({ plan: 'family_pro', limitBytes: 10 * GB, usedBytes: 10 * GB }, 0, { forSale: true }),
     "Your family's storage is full, with 10 GB of 10 GB used. Delete documents you don't need to make room.");
   // Plus has ended and the family holds more than Free: the day it loses the excess, and how to keep it.
@@ -817,12 +830,12 @@ await test('plans: every limit is finite, and a full vault says why and what to 
   // with no room needs Family Plus; on Plus, room is made by deleting.
   const chatFree = chatStorageFullMessage({ plan: 'free', limitBytes: GB, usedBytes: GB }, { price: plusPrices('inr') });
   assert.match(chatFree, /^There's no room to save this chat\. Your family has used 1 GB of 1 GB\. .*Family Plus/);
-  assert.match(chatFree, /1 GB for ₹100 a month or ₹1,100 a year\./);
+  assert.match(chatFree, /500 MB for ₹99 a month or ₹999 a year\./);
   if (!PLUS_FOR_SALE) assert.match(chatFree, /Family Plus is coming soon, with .*Until then, delete documents you don't need\.$/);
   assert.equal(chatStorageFullMessage({ plan: 'plus', limitBytes: GB, usedBytes: GB }, { price: plusPrice('usd') }),
     "There's no room to save this chat. Your family has used 1 GB of 1 GB. Delete documents or saved chats you don't need to make room.");
   assert.equal(chatStorageFullMessage({ plan: 'plus', limitBytes: GB, usedBytes: GB }, { forSale: true }),
-    "There's no room to save this chat. Your family has used 1 GB of 1 GB. To save more, move to Family Pro and get 10 GB. Or delete documents you don't need.");
+    "There's no room to save this chat. Your family has used 1 GB of 1 GB. To save more, move to Family Pro and get 2 GB. Or delete documents you don't need.");
   // A personal vault (048) is "your personal vault", never "your family".
   const mine = { plan: 'free', limitBytes: 100 * MB, usedBytes: 99 * MB, personal: true };
   assert.match(storageFullMessage(mine, 3 * MB), /^This file is 3 MB, but your personal vault has only 1 MB left\./);
@@ -835,17 +848,17 @@ await test('plans: every limit is finite, and a full vault says why and what to 
 
 await test('razorpay: the server sets the price, and only Razorpay\'s signature makes a payment count (044)', async () => {
   // The amounts are PLUS_PRICE's, in paise and cents: what the Plus page shows is what is charged.
-  assert.equal(plusOrderAmount('monthly', 'INR'), 10000);
-  assert.equal(plusOrderAmount('yearly', 'INR'), 110000);
+  assert.equal(plusOrderAmount('monthly', 'INR'), 9900);
+  assert.equal(plusOrderAmount('yearly', 'INR'), 99900);
   assert.equal(plusOrderAmount('monthly', 'USD'), 1000);
-  assert.equal(plusOrderAmount('yearly', 'USD'), 11000);
+  assert.equal(plusOrderAmount('yearly', 'USD'), 9900);
   assert.equal(plusOrderDescription('monthly'), 'Family Plus — 1 month');
   assert.equal(plusOrderDescription('yearly'), 'Family Plus — 1 year');
   // Family Pro (064): PRO_PRICE's amounts, and its own name on the receipt.
-  assert.equal(plusOrderAmount('monthly', 'INR', 'family_pro'), 20000);
-  assert.equal(plusOrderAmount('yearly', 'INR', 'family_pro'), 200000);
+  assert.equal(plusOrderAmount('monthly', 'INR', 'family_pro'), 19900);
+  assert.equal(plusOrderAmount('yearly', 'INR', 'family_pro'), 199900);
   assert.equal(plusOrderAmount('monthly', 'USD', 'family_pro'), 2000);
-  assert.equal(plusOrderAmount('yearly', 'USD', 'family_pro'), 20000);
+  assert.equal(plusOrderAmount('yearly', 'USD', 'family_pro'), 19900);
   assert.equal(plusOrderDescription('monthly', 'family_pro'), 'Family Pro — 1 month');
   // No two plans and periods cost the same, so an unpaid order reused within
   // the hour (050) is the plan it was made for even where 064 is missing.
@@ -952,8 +965,8 @@ await test('razorpay: the server picks rupees or dollars from where the payer co
   assert.equal(payerCurrency(null, undefined), null);
   assert.equal(payerCurrency(null, ''), null);
   assert.equal(payerCurrency(null, 42), null);
-  assert.equal(payerCurrencyMessage('USD'), 'From where you are, Family Plus is $10 a month or $110 a year.');
-  assert.equal(payerCurrencyMessage('INR'), 'In India, Family Plus is ₹100 a month or ₹1,100 a year.');
+  assert.equal(payerCurrencyMessage('USD'), 'From where you are, Family Plus is $10 a month or $99 a year.');
+  assert.equal(payerCurrencyMessage('INR'), 'In India, Family Plus is ₹99 a month or ₹999 a year.');
 });
 
 await test('the languages suite: by hand only, every language, half a day at most', () => {
@@ -992,17 +1005,17 @@ await test('questions each month: the count, and the words when they are used up
   // A few left: said, with the plan's number.
   const few = parseAllowance({ used: 17, limit: 20, ceiling: 20, left: 3, plus: false, resets_on: '2026-11-01' });
   assert.equal(questionsLeftText(few), '3 of 20 free questions left this month');
-  // Plus: nothing said until fair use is near; then its own words.
+  // A ceiling of one's own: nothing said until it is near; then its own words.
   const plus = parseAllowance({ used: 12, limit: null, ceiling: 500, left: 488, plus: true, resets_on: '2026-11-01' });
   assert.equal(questionsLeftText(plus), null);
   const plusFull = parseAllowance({ allowed: false, used: 500, limit: null, ceiling: 500, plus: true, resets_on: '2026-12-01' });
   assert.equal(questionLimitMessage(plusFull),
-    "You've reached the fair-use limit of 500 questions this month. They start again on 1 December.");
+    "You've reached this month's limit of 500 questions. They start again on 1 December.");
   // Family Plus (053): the family's 200 shared; said once 50 or fewer are left.
   const family = parseAllowance({ used: 40, limit: null, ceiling: 200, left: 20, plus: true, resets_on: '2026-11-01',
     family_limit: 200, family_used: 180, family_left: 20 });
   assert.deepEqual(family, { used: 40, limit: null, ceiling: 200, left: 20, plus: true, resetsOn: '2026-11-01',
-    familyLimit: 200, familyUsed: 180, familyLeft: 20 });
+    familyLimit: 200, familyUsed: 180, familyLeft: 20, familyKind: 'family' });
   assert.equal(questionsLeftText(family), '20 of 200 family questions left this month');
   assert.equal(questionsLeftText({ ...family, familyUsed: 100, familyLeft: 100, left: 100 }), null);
   const familyFull = parseAllowance({ allowed: false, reason: 'family', used: 40, limit: null, ceiling: 200, plus: true,
@@ -1011,6 +1024,16 @@ await test('questions each month: the count, and the words when they are used up
   assert.equal(questionLimitMessage(familyFull), "Your family has used its 200 questions for this month. They start again on 1 November.");
   assert.match(questionLimitMessage(familyFull, 'hi-IN'), /परिवार के इस महीने के 200 सवाल/);
   assert.equal(questionsLeftText({ ...familyFull, left: 0 }), 'Your family has used its 200 questions this month');
+  // A business's shared month (066), in its own words; a tenth left before it is said.
+  const team = parseAllowance({ used: 3, limit: null, ceiling: 5000, left: 400, plus: true, resets_on: '2026-11-01',
+    family_limit: 5000, family_used: 4600, family_left: 400, family_kind: 'business', plans: ['business_pro', 'free'] });
+  assert.equal(team.familyKind, 'business');
+  assert.deepEqual(team.plans, ['business_pro', 'free']);
+  assert.equal(questionsLeftText(team), '400 of 5,000 business questions left this month');
+  assert.equal(questionsLeftText({ ...team, familyUsed: 4000, familyLeft: 1000, left: 1000 }), null);
+  assert.equal(questionLimitMessage({ ...team, reason: 'family', familyLeft: 0, familyUsed: 5000 }),
+    'Your business has used its 5,000 questions for this month. They start again on 1 November.');
+  assert.deepEqual(parseAllowance(allowanceJson(team)), team);
   // Given back: to the person and to the family.
   assert.deepEqual(givenBack(family), { ...family, used: 39, familyUsed: 179, familyLeft: 21, left: 21 });
   assert.deepEqual(parseAllowance(allowanceJson(family)), family);
@@ -1183,19 +1206,25 @@ await test('business plans: Plus, Pro and Enterprise, their prices and words, an
   assert.equal(DEFAULT_PLAN_LIMITS.businessesPerPerson, 1);
   assert.deepEqual(BUSINESS_PLANS, ['business_plus', 'business_pro', 'business_enterprise']);
   assert.ok(BUSINESS_PLANS.every(isBusinessPlan) && !isBusinessPlan('plus') && !isBusinessPlan('business') && !isBusinessPlan(null));
-  // Each plan up has more people and more space, and never less of anything.
+  // Each plan up has more people and more space, and never less of anything
+  // (questions: null is no monthly limit, the most).
+  const atLeast = (higher, lower) => higher === null || (lower !== null && higher >= lower);
   for (let i = 1; i < BUSINESS_PLANS.length; i++) {
     const lower = DEFAULT_PLAN_LIMITS.business[BUSINESS_PLANS[i - 1]], higher = DEFAULT_PLAN_LIMITS.business[BUSINESS_PLANS[i]];
     assert.ok(higher.members > lower.members && higher.storage > lower.storage, `${BUSINESS_PLANS[i]} has more people and space`);
-    for (const k of Object.keys(lower)) assert.ok(higher[k] >= lower[k], `${BUSINESS_PLANS[i]}'s ${k} is not below`);
+    for (const k of Object.keys(lower)) {
+      if (typeof lower[k] === 'boolean') continue;
+      assert.ok(atLeast(higher[k], lower[k]), `${BUSINESS_PLANS[i]}'s ${k} is not below`);
+    }
   }
-  assert.deepEqual(BUSINESS_PRICE, { business_plus: 500, business_pro: 1000, business_enterprise: 4000 });
-  assert.equal(businessAmount('business_plus'), '₹500');
-  assert.equal(businessAmount('business_enterprise'), '₹4,000');
-  assert.equal(businessPrice('business_pro'), '₹1,000 a month + GST');
-  assert.equal(businessYearPrice('business_plus'), '₹5,500 a year + GST', 'a year is eleven months');
-  assert.equal(businessYearPrice('business_pro'), '₹11,000 a year + GST');
-  assert.equal(businessYearPrice('business_enterprise'), '₹44,000 a year + GST');
+  assert.deepEqual(BUSINESS_PRICE, { business_plus: 499, business_pro: 999, business_enterprise: 3999 });
+  assert.equal(businessAmount('business_plus'), '₹499');
+  assert.equal(businessAmount('business_enterprise'), '₹3,999');
+  assert.equal(businessPrice('business_pro'), '₹999 a month + GST');
+  assert.equal(businessYearPrice('business_plus'), '₹4,999 a year + GST', 'a year is about ten months');
+  assert.equal(businessYearPrice('business_pro'), '₹9,999 a year + GST');
+  assert.equal(businessYearPrice('business_enterprise'), '₹39,999 a year + GST');
+  for (const p of BUSINESS_PLANS) assert.ok(BUSINESS_YEAR_PRICE[p] < 12 * BUSINESS_PRICE[p], `${p}: a year costs less than twelve months`);
   assert.equal(planLabel('business_plus'), 'Plus');
   assert.equal(planLabel('business_pro'), 'Pro');
   assert.equal(planLabel('business_enterprise'), 'Enterprise');
@@ -1205,14 +1234,14 @@ await test('business plans: Plus, Pro and Enterprise, their prices and words, an
   assert.equal(nextBusinessPlan('business_plus'), 'business_pro');
   assert.equal(nextBusinessPlan('business_pro'), 'business_enterprise');
   assert.equal(nextBusinessPlan('business_enterprise'), null);
-  const shop = { plan: 'free', limitBytes: 200 * MB, usedBytes: 199 * MB, business: true };
+  const shop = { plan: 'free', limitBytes: 100 * MB, usedBytes: 99 * MB, business: true };
   assert.match(storageFullMessage(shop, 3 * MB), /^This file is 3 MB, but your business has only 1 MB left\./);
   // Never Family Plus, nor its price, for a business.
-  const shopFull = storageFullMessage({ ...shop, usedBytes: 200 * MB }, 0, { forSale: true, price: plusPrice('inr') });
-  assert.equal(shopFull, "Your business's storage is full, with 200 MB of 200 MB used. Delete records you don't need, or move to Plus for 10 GB.");
-  assert.equal(storageFullMessage({ plan: 'business_plus', limitBytes: 10 * GB, usedBytes: 10 * GB, business: true }),
-    "Your business's storage is full, with 10 GB of 10 GB used. Delete records you don't need, or move to Pro for 25 GB.");
-  assert.match(chatStorageFullMessage({ ...shop, usedBytes: 200 * MB }), /^There's no room to save this chat\. Your business has used 200 MB of 200 MB\. To save more, move to Plus for 10 GB\./);
+  const shopFull = storageFullMessage({ ...shop, usedBytes: 100 * MB }, 0, { forSale: true, price: plusPrice('inr') });
+  assert.equal(shopFull, "Your business's storage is full, with 100 MB of 100 MB used. Delete records you don't need, or move to Plus for 5 GB.");
+  assert.equal(storageFullMessage({ plan: 'business_plus', limitBytes: 5 * GB, usedBytes: 5 * GB, business: true }),
+    "Your business's storage is full, with 5 GB of 5 GB used. Delete records you don't need, or move to Pro for 25 GB.");
+  assert.match(chatStorageFullMessage({ ...shop, usedBytes: 100 * MB }), /^There's no room to save this chat\. Your business has used 100 MB of 100 MB\. To save more, move to Plus for 5 GB\./);
   for (const text of [storageFullMessage(shop, 3 * MB), shopFull, chatStorageFullMessage(shop)]) {
     assert.doesNotMatch(text, /family/i, 'a business is not called a family');
   }
@@ -1402,7 +1431,7 @@ await test('the agreement the app shows is word for word what the database keeps
     assert.ok(!words.includes(claim), `promises "${claim}"`);
   }
   // It says outside services read parts of documents, but names none (the
-  // owner's ask): the names are in Settings › Privacy.
+  // owner's ask): the names are in the privacy policy (public/privacy.html).
   assert.ok(words.includes('ai services'), 'says AI services read parts of them');
   for (const name of ['huggingface', 'groq', 'ocr.space', 'supabase', 'posthog', 'razorpay']) {
     assert.ok(!words.includes(name), `names "${name}"`);
@@ -1514,9 +1543,31 @@ await test('search vectors: who makes them, at 384 numbers, inside the CPU budge
   assert.equal(r4.attempted, 3);
 });
 
+await test('the privacy policy names who gets document text and promises nothing AskLocker does not keep', () => {
+  // public/privacy.html is the policy Settings › Privacy links to, at
+  // asklocker.com/privacy. The screen names no service; the policy must name
+  // every one that gets document text or personal details (CLAUDE.md).
+  const html = readFileSync(new URL('../../public/privacy.html', import.meta.url), 'utf8');
+  const page = html.replace(/<!--[\s\S]*?-->/g, '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+  const words = page.toLowerCase();
+  for (const name of ['Supabase', 'Cloudflare', 'Anthropic', 'Groq', 'OCR.space', 'Google', 'Razorpay']) {
+    assert.ok(page.includes(name), `names ${name}`);
+  }
+  assert.ok(words.includes('not end-to-end'), 'says documents are not end-to-end encrypted');
+  assert.ok(words.includes('the people who run asklocker can open them'), 'says the people who run AskLocker can open documents');
+  for (const claim of ['100% private', 'only you can see', 'nothing is kept', 'secure', 'bank-level', 'military-grade']) {
+    assert.ok(!words.includes(claim), `promises "${claim}"`);
+  }
+  // The usage analytics service is described, not named (the owner's ask).
+  assert.ok(!words.includes('posthog'), 'names the analytics service');
+  assert.ok(words.includes('turn it off in settings › privacy'), 'says how to turn usage counts off');
+  assert.ok(page.includes(`removed after ${DEFAULT_PLAN_LIMITS.graceDays} days`), 'the days before documents go follow the plan limits');
+  assert.ok(/Last updated \d{1,2} [A-Z][a-z]+ \d{4}/.test(page), 'carries the date it last changed');
+});
+
 if (failures.length) {
   console.error(failures.map((f) => `✗ ${f}`).join('\n'));
   console.error(`\n${failures.length} self-test(s) failed, ${passed} passed.`);
   process.exit(1);
 }
-console.log(`✓ ${passed} self-tests passed — matchers, judge, run-time PDF, metadata, ticket codes, text cleaning, Gmail rules and token sealing, kinship and the family tree, emergency card checks, web push, plan limits, questions each month, limits against abuse, business papers, categories and plan words, Razorpay signatures, numbers in digits, sources the answer used, Claude's requests in Groq's shape, search-vector providers and budget, the agreement's words, questions and budget.`);
+console.log(`✓ ${passed} self-tests passed — matchers, judge, run-time PDF, metadata, ticket codes, text cleaning, Gmail rules and token sealing, kinship and the family tree, emergency card checks, web push, plan limits, questions each month, limits against abuse, business papers, categories and plan words, Razorpay signatures, numbers in digits, sources the answer used, Claude's requests in Groq's shape, search-vector providers and budget, the agreement's words, the privacy policy, questions and budget.`);

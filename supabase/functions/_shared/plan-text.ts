@@ -3,32 +3,31 @@
 // Shared by the app (src/lib/plans.ts) and Gmail import, so both say the same
 // thing when a family's storage is full. Pure TypeScript: no Deno, no React.
 //
-// Three family plans, each with a limit (039, 048, 064):
+// Three family plans, each with a limit (039, 048, 064, 066):
 //
-//   Free          50 MB for each person to add, across their free vaults;
-//                 a family 100 MB and a business 200 MB, everyone together;
-//                 a personal vault 50 MB (060); 2 members (4 before 064)
-//   Family Plus   1 GB (10 GB before 064), either kind of vault; 4 members
-//                 (8 before) — in India ₹100 a month or ₹1,100 a year,
-//                 elsewhere $10 a month or $110 a year
-//   Family Pro    10 GB; 8 members — in India ₹200 a month or ₹2,000 a
-//                 year, elsewhere $20 a month or $200 a year
+//   Free          50 MB a vault, family or personal; 50 MB for each person
+//                 to add, across their free vaults (060); 2 members
+//   Family Plus   500 MB (1 GB before 066), either kind of vault; 4 members;
+//                 500 questions a month shared by the family — in India ₹99
+//                 a month or ₹999 a year, elsewhere $10 a month or $99 a year
+//   Family Pro    2 GB (10 GB before 066); 8 members; 2,000 questions a
+//                 month shared — in India ₹199 a month or ₹1,999 a year,
+//                 elsewhere $20 a month or $199 a year
 //
 // Members are the people who sign in; anyone can be in the family tree. Each
-// person on Free has 10 voice chats (041–043) and 20 questions a month (049);
-// on Plus and Pro, voice and questions without a monthly limit (064; 200 a
-// month for the family before it, 053), and 50 tries a day each (050). A
-// share link lasts 1 or 7 days on Free, and up to 30 days on a paid plan
-// (049). Expiry and birthday reminders (048, 064), Gmail import and reading
-// and speaking Indian languages are for Plus and Pro. On Free a person
-// creates one family and one business besides their personal vault (059).
+// person on Free has 20 questions a month (049), and 10 tries a day; on Plus
+// and Pro 50 tries a day each (050). Voice has no limit, in any language, on
+// every plan (066; 10 on Free in English before). A share link lasts 1 or 7
+// days on Free, and up to 30 days on a paid plan (049). Expiry and birthday
+// reminders (048, 064) and Gmail import are for Plus and Pro; reading
+// documents in Indian languages for Pro alone (066). On Free a person creates
+// one family and one business besides their personal vault (059).
 //
-// A year of Plus costs eleven months (one month free) and a year of Pro ten
-// (two months free). The yearly price is shown against twelve months at the
-// monthly price, crossed out (₹1,200 → ₹1,100, ₹2,400 → ₹2,000), and so are
-// the months it saves — both worked out here, never typed in: a crossed-out
-// price must be one a family could really pay. How a family pays never
-// changes what it may keep.
+// A year costs about ten months. The yearly price is shown against twelve
+// months at the monthly price, crossed out (₹1,188 → ₹999, ₹2,388 → ₹1,999),
+// with what it saves (₹189) — both worked out here, never typed in: a
+// crossed-out price must be one a family could really pay. How a family pays
+// never changes what it may keep.
 //
 // When Family Plus ends (040), a vault above its free limit has 30 days to
 // renew or delete documents; then the newest documents above it are removed.
@@ -36,18 +35,18 @@
 // Business vaults (051) have plans of their own, never Family Plus, given by
 // hand for now (billed by us, GST on top):
 //
-//   Plus        10 people,  25 GB — ₹500 a month (5 people before 054)
-//   Pro         15 people, 100 GB — ₹1,000 a month
-//   Enterprise  50 people, 200 GB — ₹4,000 a month
+//   Free         2 people, 100 MB, 20 questions each a month
+//   Plus         5 people,   5 GB, 1,000 questions a month — ₹499 a month
+//   Pro         10 people,  25 GB, 5,000 questions a month — ₹999 a month
+//   Enterprise  50 people, 100 GB, no monthly limit        — ₹3,999 a month
 //
-// Each with 100 questions a person a month. Even a business that used every
-// limit at once would cost less than its plan's price, at about ₹0.20 a
-// question: Enterprise keeps about half its price even then, Plus and Pro
-// about a quarter to a third. A small business may start in a family vault
-// on Family Plus and make it a business vault later, keeping everything (054).
-// Nothing is ever removed from a business: when a paid plan ends it keeps
-// every record and adds nothing until it is renewed ("closed"); a trial that
-// ends puts it back on Free.
+// A business's questions are shared by everyone in it (066; 100 each
+// before). A year costs about ten months (₹4,999, ₹9,999, ₹39,999). Reading
+// documents in Indian languages comes with Pro and Enterprise. A small
+// business may start in a family vault and make it a business vault later,
+// keeping everything (054). Nothing is ever removed from a business: when a
+// paid plan ends it keeps every record and adds nothing until it is renewed
+// ("closed"); a trial that ends puts it back on Free.
 //
 // The limits live in the database (public.plan_limits), and the server keeps
 // them: the documents bucket refuses a new file once a family's files reach
@@ -86,11 +85,14 @@ export interface StorageRoom {
   closed?: boolean;
 }
 
-/** A business plan's numbers (051). Neither has a monthly question limit, so questionsFairUse is the most. */
+/** A business plan's numbers (051). */
 export interface BusinessPlanLimits {
   storage: number;
   members: number;
-  questionsFairUse: number;
+  /** Questions a month: shared by everyone in the business since 066 (100 each before); null: no monthly limit. */
+  questions: number | null;
+  /** Whether `questions` is the business's month together (066), not each person's. */
+  questionsShared: boolean;
   questionTriesPerDay: number | null;
   uploadsPerDay: number | null;
   invitesPerDay: number;
@@ -107,21 +109,21 @@ export interface PlanLimits {
   freePerson: number | null;
   /** What a vault may keep on Family Plus, either kind. */
   plus: number;
-  /** Family Pro (064): what a vault may keep, and its members. Every other number is Plus's. */
-  familyPro: { storage: number; members: number };
+  /** Family Pro (064): what a vault may keep, its members, and the questions the family shares a month (066; null: no monthly limit). Every other number is Plus's. */
+  familyPro: { storage: number; members: number; questions: number | null };
   /** Days a family keeps what is above the free limit after Plus ends (040). */
   graceDays: number;
   /** Members — people who sign in — a family may have, per plan (041). The family tree has no limit. */
   members: { free: number; plus: number };
-  /** People a business may have on Free (064 keeps it at 4 when a family's Free goes to 2). */
+  /** People a business may have on Free (064's own number; 2 since 066, 4 before). */
   freeBusinessMembers: number;
-  /** Voice chats each person gets, per plan; null: no limit (041; per person since 043). */
+  /** Voice chats each person gets, per plan; null: no limit (041; per person since 043; none on any plan since 066). */
   voiceAnswers: { free: number | null; plus: number | null };
   /** Questions each person may ask a month, per plan; null: no monthly limit (049). */
   questions: { free: number | null; plus: number | null };
   /** The most one person may ask in a month where there is no monthly limit (049); null: no ceiling (064). */
   questionsFairUse: number | null;
-  /** The questions everyone in a vault on Family Plus shares in a month (053); null: no family number. */
+  /** The questions everyone in a vault on Family Plus shares in a month (053; 500 since 066); null: no family number. */
   familyQuestions: number | null;
   /** Questions each person may try in a day, answered or not, per plan; null: no limit (050). */
   questionTriesPerDay: { free: number | null; plus: number | null };
@@ -145,21 +147,21 @@ const GB = 1024 ** 3;
 
 const MB = 1024 ** 2;
 
-/** What 039–060 set; plan_limits is the truth. */
+/** What 039–066 set; plan_limits is the truth. */
 export const DEFAULT_PLAN_LIMITS: PlanLimits = {
-  free: 100 * MB,
+  free: 50 * MB,
   freePersonal: 50 * MB,
-  freeBusiness: 200 * MB,
+  freeBusiness: 100 * MB,
   freePerson: 50 * MB,
-  plus: 1 * GB,
-  familyPro: { storage: 10 * GB, members: 8 },
+  plus: 500 * MB,
+  familyPro: { storage: 2 * GB, members: 8, questions: 2000 },
   graceDays: 30,
   members: { free: 2, plus: 4 },
-  freeBusinessMembers: 4,
-  voiceAnswers: { free: 10, plus: null },
+  freeBusinessMembers: 2,
+  voiceAnswers: { free: null, plus: null },
   questions: { free: 20, plus: null },
-  questionsFairUse: null,
-  familyQuestions: null,
+  questionsFairUse: 500,
+  familyQuestions: 500,
   questionTriesPerDay: { free: 10, plus: 50 },
   uploadsPerDay: { free: 50, plus: 100 },
   familiesPerPerson: 1,
@@ -168,9 +170,9 @@ export const DEFAULT_PLAN_LIMITS: PlanLimits = {
   notesPerPerson: { free: 20, paid: 500 },
   invitesPerDay: { free: 20, plus: 20 },
   business: {
-    business_plus: { storage: 10 * GB, members: 10, questionsFairUse: 100, questionTriesPerDay: 30, uploadsPerDay: 300, invitesPerDay: 20 },
-    business_pro: { storage: 25 * GB, members: 15, questionsFairUse: 100, questionTriesPerDay: 30, uploadsPerDay: 300, invitesPerDay: 20 },
-    business_enterprise: { storage: 100 * GB, members: 50, questionsFairUse: 100, questionTriesPerDay: 30, uploadsPerDay: 300, invitesPerDay: 50 },
+    business_plus: { storage: 5 * GB, members: 5, questions: 1000, questionsShared: true, questionTriesPerDay: 30, uploadsPerDay: 300, invitesPerDay: 20 },
+    business_pro: { storage: 25 * GB, members: 10, questions: 5000, questionsShared: true, questionTriesPerDay: 30, uploadsPerDay: 300, invitesPerDay: 20 },
+    business_enterprise: { storage: 100 * GB, members: 50, questions: null, questionsShared: false, questionTriesPerDay: 30, uploadsPerDay: 300, invitesPerDay: 50 },
   },
 };
 
@@ -178,16 +180,16 @@ export type PricePeriod = 'monthly' | 'yearly';
 export type PriceCurrency = 'inr' | 'usd';
 export type PlanPrice = Record<PricePeriod, Record<PriceCurrency, number>>;
 
-/** What Family Plus costs, by the month or by the year (one month free). */
+/** What Family Plus costs, by the month or by the year (about ten months; 066). */
 export const PLUS_PRICE: PlanPrice = {
-  monthly: { inr: 100, usd: 10 },
-  yearly: { inr: 1100, usd: 110 },
+  monthly: { inr: 99, usd: 10 },
+  yearly: { inr: 999, usd: 99 },
 };
 
-/** What Family Pro costs (064), by the month or by the year (two months free). */
+/** What Family Pro costs (064), by the month or by the year (about ten months; 066). */
 export const PRO_PRICE: PlanPrice = {
-  monthly: { inr: 200, usd: 20 },
-  yearly: { inr: 2000, usd: 200 },
+  monthly: { inr: 199, usd: 20 },
+  yearly: { inr: 1999, usd: 199 },
 };
 
 /** A family plan's price: what every screen shows and the payments function charges. */
@@ -233,39 +235,50 @@ export const PLUS_FOR_SALE = false;
 
 // Each takes the plan last, Family Plus when not said.
 
-/** "₹100 a month", "₹1,100 a year", "$10 a month", "$110 a year". */
+/** "₹99 a month", "₹999 a year", "$10 a month", "$99 a year". */
 export function plusPrice(currency: PriceCurrency, period: PricePeriod = 'monthly', plan: FamilyPlan = 'plus'): string {
   return `${money(currency, period, plan)} a ${period === 'monthly' ? 'month' : 'year'}`;
 }
 
-/** "₹100 a month or ₹1,100 a year". */
+/** "₹99 a month or ₹999 a year". */
 export function plusPrices(currency: PriceCurrency, plan: FamilyPlan = 'plus'): string {
   return `${plusPrice(currency, 'monthly', plan)} or ${plusPrice(currency, 'yearly', plan)}`;
 }
 
-/** The amount alone, "₹100" or "₹1,100", for a narrow column. */
+/** The amount alone, "₹99" or "₹999", for a narrow column. */
 export function plusAmount(currency: PriceCurrency, period: PricePeriod, plan: FamilyPlan = 'plus'): string {
   return money(currency, period, plan);
 }
 
 /**
- * Twelve months at the monthly price: "₹1,200", "$120". The yearly price is
+ * Twelve months at the monthly price: "₹1,188", "$120". The yearly price is
  * shown against it, crossed out.
  */
 export function plusTwelveMonths(currency: PriceCurrency, plan: FamilyPlan = 'plus'): string {
   return formatMoney(currency, 12 * familyPrice(plan).monthly[currency]);
 }
 
-/** "₹1,100 a year instead of ₹1,200", where a crossed-out price cannot be drawn or seen. */
+/** "₹999 a year instead of ₹1,188", where a crossed-out price cannot be drawn or seen. */
 export function plusYearlyOffer(currency: PriceCurrency, plan: FamilyPlan = 'plus'): string {
   return `${plusPrice(currency, 'yearly', plan)} instead of ${plusTwelveMonths(currency, plan)}`;
 }
 
-/** What paying by the year saves, in months: "1 month free", "2 months free". */
+/** What paying by the year saves, in money: "Save ₹189", "Save $21". */
 export function plusYearlySaving(currency: PriceCurrency, plan: FamilyPlan = 'plus'): string {
   const price = familyPrice(plan);
-  const months = 12 - price.yearly[currency] / price.monthly[currency];
-  return `${months} ${months === 1 ? 'month' : 'months'} free`;
+  return `Save ${formatMoney(currency, 12 * price.monthly[currency] - price.yearly[currency])}`;
+}
+
+/**
+ * The plans with reading documents in Indian languages (066): Family Pro, and
+ * a business's Pro and Enterprise. It happens on the device, so it is the
+ * app's rule. Voice is in any language on every plan.
+ */
+export const INDIAN_LANGUAGE_PLANS: readonly PlanName[] = ['family_pro', 'business_pro', 'business_enterprise'];
+
+/** Whether any of a person's plans brings Indian languages (066). */
+export function plansHaveIndianLanguages(plans: readonly string[]): boolean {
+  return plans.some((p) => (INDIAN_LANGUAGE_PLANS as readonly string[]).includes(p));
 }
 
 export function formatBytes(bytes: number): string {
@@ -314,29 +327,35 @@ export function freeVaultsText(limits: Pick<PlanLimits, 'familiesPerPerson' | 'b
 }
 
 /**
- * What a business pays a month for each plan, in rupees, before GST (051).
- * Billed by hand for now, so shown, never charged by the app. A year costs
- * eleven months.
+ * What a business pays a month for each plan, in rupees, before GST (051;
+ * 066's prices). Billed by hand for now, so shown, never charged by the app.
  */
 export const BUSINESS_PRICE: Record<BusinessPlan, number> = {
-  business_plus: 500,
-  business_pro: 1000,
-  business_enterprise: 4000,
+  business_plus: 499,
+  business_pro: 999,
+  business_enterprise: 3999,
 };
 
-/** The amount alone, "₹1,000", for a narrow column. */
-export function businessAmount(plan: BusinessPlan): string {
-  return formatMoney('inr', BUSINESS_PRICE[plan]);
+/** What a business pays for a year, about ten months (066). */
+export const BUSINESS_YEAR_PRICE: Record<BusinessPlan, number> = {
+  business_plus: 4999,
+  business_pro: 9999,
+  business_enterprise: 39999,
+};
+
+/** The amount alone, "₹999" (or a year's, "₹9,999"), for a narrow column. */
+export function businessAmount(plan: BusinessPlan, period: PricePeriod = 'monthly'): string {
+  return formatMoney('inr', period === 'yearly' ? BUSINESS_YEAR_PRICE[plan] : BUSINESS_PRICE[plan]);
 }
 
-/** "₹1,000 a month + GST". */
+/** "₹999 a month + GST". */
 export function businessPrice(plan: BusinessPlan): string {
   return `${businessAmount(plan)} a month + GST`;
 }
 
-/** "₹5,500 a year + GST": eleven months. */
+/** "₹9,999 a year + GST". */
 export function businessYearPrice(plan: BusinessPlan): string {
-  return `${formatMoney('inr', 11 * BUSINESS_PRICE[plan])} a year + GST`;
+  return `${businessAmount(plan, 'yearly')} a year + GST`;
 }
 
 /** The business plan above this one, if any: Free → Plus → Pro → Enterprise. */
@@ -363,7 +382,7 @@ export function fits(room: StorageRoom, fileBytes: number): boolean {
 
 export interface StorageMessageOptions {
   limits?: PlanLimits;
-  /** Family Plus's price where the person is ("₹100 a month or ₹1,100 a year"); the server, which cannot tell, leaves it out. */
+  /** Family Plus's price where the person is ("₹99 a month or ₹999 a year"); the server, which cannot tell, leaves it out. */
   price?: string;
   /** For a family whose Plus has ended: the day its documents above the free limit go ("4 Nov 2026"). */
   removalOn?: string;

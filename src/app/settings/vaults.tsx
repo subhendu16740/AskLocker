@@ -5,21 +5,21 @@
 // vault's owner only, family or business (057; the screen tells another
 // admin who that is), a personal vault never, since it goes with the account.
 //
-// Above them, what the welcome question asked (welcome.tsx): which one
-// AskLocker opens in, and the other too, which puts the Family | Business
-// switch in the menu (the owner's ask, 19 October 2026).
+// Above them, what the welcome question asked (welcome.tsx), as two switches,
+// Family and Business (the owner's ask, 25 October 2026): both on puts the
+// Family | Business switch in the menu.
 
 import { useCallback, useState } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useFamily, otherMode, type Uses } from '../../lib/family-context';
+import { useFamily, otherMode, type AppMode, type Uses } from '../../lib/family-context';
 import { isBusinessVault, isPersonalVault, vaultIcon, vaultName, vaultSubtitle } from '../../lib/vaults';
 import { BUSINESS_THEME, FAMILY_THEME, type VaultTheme } from '../../lib/vault-theme';
 import { track } from '../../lib/analytics';
 import { ScreenHeader } from '../../components/screen-header';
-import { Muted, OnOff, Status, screenStyles } from '../../components/settings-ui';
+import { Muted, Status, Toggle, screenStyles } from '../../components/settings-ui';
 import { color, radius, shadow, size, space, type } from '../../constants/design';
 import type { FamilyWithMembership } from '../../lib/database.types';
 
@@ -91,46 +91,55 @@ function CreateRow({ kind, theme }: { kind: 'family' | 'business'; theme: VaultT
 
 const LABEL = { family: 'Family', business: 'Business' } as const;
 
-// Which one AskLocker opens in, and the other too (the drawer's switch).
+const KINDS = [
+  { mode: 'family', line: 'Your personal vault and family vaults', icon: 'users', theme: FAMILY_THEME },
+  { mode: 'business', line: 'Business vaults for your work', icon: 'briefcase', theme: BUSINESS_THEME },
+] as const;
+
+// Family and Business, each On or Off, as the welcome question set them
+// (Family, Business, or both for Both). One always stays on. Turning off the
+// one AskLocker opens in makes the other the first.
 function UsesCard() {
-  const { uses, setUses } = useFamily();
+  const { uses, setUses, families } = useFamily();
   const [problem, setProblem] = useState(false);
-  const other = otherMode(uses.primary);
-  const change = (next: Uses) => {
-    if (next.primary === uses.primary && next.both === uses.both) return;
+  const isOn = (m: AppMode) => uses.both || uses.primary === m;
+  const toggle = (m: AppMode, on: boolean) => {
+    if (on === isOn(m)) return;
+    const other = otherMode(m);
+    if (!on && !isOn(other)) return;
+    const next: Uses = on ? { primary: uses.primary, both: true } : { primary: other, both: false };
     setProblem(false);
     track('uses_chosen', { primary: next.primary, both: next.both, where: 'settings' });
     setUses(next).catch(() => setProblem(true));
+    // Business mode needs a business: with Family off and none yet, make one.
+    if (next.primary === 'business' && !next.both && !families.some((f) => isBusinessVault(f.families))) {
+      router.push('/setup-family?kind=business' as any);
+    }
   };
   return (
     <View style={styles.group}>
       <Text style={styles.groupTitle}>How you use AskLocker</Text>
-      <View style={[styles.groupCard, styles.usesCard]}>
-        <Text style={styles.usesLabel}>Opens in</Text>
-        <View style={styles.kinds} accessibilityRole="radiogroup" accessibilityLabel="Opens in">
-          {(['family', 'business'] as const).map((m) => {
-            const theme = m === 'business' ? BUSINESS_THEME : FAMILY_THEME;
-            const on = uses.primary === m;
-            return (
-              <TouchableOpacity
-                key={m}
-                onPress={() => change({ primary: m, both: uses.both })}
-                style={[styles.kind, on && { backgroundColor: theme.primary, borderColor: theme.primary }]}
-                activeOpacity={0.8}
-                accessibilityRole="radio"
-                accessibilityState={{ checked: on }}
-                aria-checked={on}
-              >
-                <Feather name={m === 'business' ? 'briefcase' : 'users'} size={16} color={on ? '#FFFFFF' : theme.primary} />
-                <Text style={[styles.kindText, { color: on ? '#FFFFFF' : theme.primary }]}>{LABEL[m]}</Text>
-              </TouchableOpacity>
-            );
-          })}
+      <View style={styles.groupCard}>
+        {KINDS.map((k, i) => {
+          const on = isOn(k.mode);
+          const last = on && !isOn(otherMode(k.mode));
+          return (
+            <View key={k.mode} style={[styles.row, i > 0 && styles.rowBorder]}>
+              <View style={[styles.iconWrap, { backgroundColor: k.theme.tint }]}>
+                <Feather name={k.icon} size={16} color={k.theme.primary} />
+              </View>
+              <View style={styles.text}>
+                <Text style={styles.name}>{LABEL[k.mode]}</Text>
+                <Text style={styles.sub}>{last ? `Turn on ${LABEL[otherMode(k.mode)]} to turn this off` : k.line}</Text>
+              </View>
+              <Toggle value={on} onChange={(v) => toggle(k.mode, v)} disabled={last} track={k.theme.secondary} label={LABEL[k.mode]} />
+            </View>
+          );
+        })}
+        <View style={[styles.usesNote, styles.rowBorder]}>
+          <Muted>With both on, the menu has a Family | Business switch.</Muted>
+          {problem && <Status kind="error">Saved on this device. AskLocker saves it to your account next time it opens.</Status>}
         </View>
-        <Text style={[styles.usesLabel, styles.usesLabelNext]}>{LABEL[other]} too</Text>
-        <OnOff value={uses.both} onChange={(on) => change({ primary: uses.primary, both: on })} label={`${LABEL[other]} too`} />
-        <Muted>Adds a Family | Business switch to the menu.</Muted>
-        {problem && <Status kind="error">Saved on this device. AskLocker saves it to your account next time it opens.</Status>}
       </View>
     </View>
   );
@@ -234,13 +243,5 @@ const styles = StyleSheet.create({
   actionText: { ...type.caption, fontWeight: '600' },
   createText: { ...type.label, fontWeight: '600' },
   empty: { paddingHorizontal: space.lg, paddingVertical: space.md },
-  usesCard: { padding: space.lg, gap: space.sm },
-  usesLabel: type.label,
-  usesLabelNext: { marginTop: space.sm },
-  kinds: { flexDirection: 'row', gap: space.sm },
-  kind: {
-    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.sm,
-    minHeight: 40, borderRadius: radius.control, borderWidth: 1, borderColor: color.inputBorder, backgroundColor: color.surface,
-  },
-  kindText: type.label,
+  usesNote: { paddingHorizontal: space.lg, paddingVertical: space.md, gap: space.sm },
 });

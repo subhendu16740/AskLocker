@@ -276,10 +276,10 @@ export default function SearchScreen() {
     });
   }, [voiceLanguage]);
 
-  // Voice chats (041–043): on the free plan each person has 10 of their own —
-  // a question asked by voice or an answer read aloud, one per question —
-  // then they type and read, and Family Plus brings voice back. How many are
-  // left is always on show in voice mode. Each new answer is claimed before
+  // Voice chats (041–043): free with no limit on every plan since 066. Where
+  // a database still counts them (before 066, 10 each on Free) — a question
+  // asked by voice or an answer read aloud, one per question — the person
+  // then types and reads, and how many are left is on show in voice mode. Each new answer is claimed before
   // it is read; one heard already is read again without counting. When the
   // server cannot be asked, the answer is read.
   const heardIds = useRef(new Set<string>());

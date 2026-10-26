@@ -11,6 +11,10 @@
 // side by side with their prices before GST — and is never offered Family
 // Plus: its plans are set up with us (ask in Settings › Feedback), not
 // bought here. Nothing is ever removed from a business.
+//
+// Under the vault's plan, both pages show what has been used of it (the
+// owner's ask, 25 October 2026): questions this month, space, members and,
+// on Free, what the person has added (<UsagePanel />).
 
 import { useCallback, useRef, useState } from 'react';
 import { View, Text, ScrollView, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
@@ -21,12 +25,15 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFamily } from '../lib/family-context';
 import { isBusinessVault, isPersonalVault, vaultName } from '../lib/vaults';
 import { forgetOnPlus, useFamilyPlan, usePaymentsStatus, type BusinessFeature, type PlusFeature } from '../lib/family-plan';
-import { PaymentError, createPlusOrder, fetchPlanLimits, fetchPlusPeriod, verifyPlusPayment } from '../lib/api';
+import {
+  PaymentError, createPlusOrder, fetchPersonStorage, fetchPlanLimits, fetchPlusPeriod, fetchQuestionStatus, fetchStorageStatus,
+  verifyPlusPayment, type FamilyPlanStatus,
+} from '../lib/api';
 import { checkoutSupported, openCheckout } from '../lib/razorpay';
 import {
-  CLOSED_MESSAGE, DEFAULT_PLAN_LIMITS, businessAmount, businessPlanName, familyPlanName, formatBytes, isBusinessPlan,
+  CLOSED_MESSAGE, DEFAULT_PLAN_LIMITS, NEARLY_FULL, businessAmount, businessPlanName, familyPlanName, formatBytes, isBusinessPlan,
   localCurrency, localPlusAmount, localPlusPrice, localPlusYearlyOffer, localPlusYearlySaving, nextBusinessPlan,
-  type BusinessPlan, type FamilyPlan, type PlanLimits,
+  type BusinessPlan, type BusinessPlanLimits, type FamilyPlan, type PersonRoom, type PlanLimits, type PlanName, type QuestionAllowance,
 } from '../lib/plans';
 import { longDate } from '../lib/dates';
 import { ScreenHeader } from '../components/screen-header';
@@ -49,35 +56,41 @@ interface Row {
   feature?: PlusFeature;
 }
 
-// "10 each" (per person, 043), or "No limit".
+/** 2000 → "2,000". */
+const thousands = (n: number) => String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+
+// "10 each" (per person, 043), or "No limit" (every plan since 066).
 const voiceCell = (n: number | null): Cell => (n == null ? 'No limit' : `${n} each`);
-// "20 each" a month (049), or "No limit" (Plus and Pro since 064).
-const questionsCell = (n: number | null): Cell => (n == null ? 'No limit' : `${n} each`);
+// "20 each" a month (049), "500 shared" by the vault (053, 066), or "No limit".
+const questionsCell = (each: number | null, shared: number | null): Cell =>
+  shared != null ? `${thousands(shared)} shared` : each == null ? 'No limit' : `${thousands(each)} each`;
 
 /**
  * What the plans give, clearest first. A star after a feature: it is more on
  * a paid plan. Family tree and emergency cards are on every plan, so they are
- * not here (the owner's ask, 23 October 2026).
+ * not here (the owner's ask, 23 October 2026). A plan is for one vault, a
+ * family's or someone's personal one, so both vaults' space shows.
  */
-function rows(limits: PlanLimits, freeSpace: number): Row[] {
+function rows(limits: PlanLimits): Row[] {
   const all: Array<Row | null> = [
     { label: 'Members', sub: 'People who sign in', free: String(limits.members.free), plus: String(limits.members.plus), pro: String(limits.familyPro.members), feature: 'members' },
-    { label: 'Space', sub: 'For your documents', free: formatBytes(freeSpace), plus: formatBytes(limits.plus), pro: formatBytes(limits.familyPro.storage), feature: 'storage' },
+    { label: 'Family vault', sub: 'Space for everyone together', free: formatBytes(limits.free), plus: formatBytes(limits.plus), pro: formatBytes(limits.familyPro.storage), feature: 'storage' },
+    { label: 'Personal vault', sub: 'Space for your own documents', free: formatBytes(limits.freePersonal), plus: formatBytes(limits.plus), pro: formatBytes(limits.familyPro.storage), feature: 'storage' },
     // Before 049 nobody's questions are counted, on any plan.
     limits.questions.free == null ? null : {
-      label: 'Questions', sub: 'Each month', free: questionsCell(limits.questions.free),
-      // 053's family number, where a database still has it.
-      plus: limits.familyQuestions != null ? `${limits.familyQuestions} family` : questionsCell(limits.questions.plus),
-      pro: limits.familyQuestions != null ? `${limits.familyQuestions} family` : questionsCell(limits.questions.plus),
+      label: 'Questions', sub: 'Each month', free: questionsCell(limits.questions.free, null),
+      plus: questionsCell(limits.questions.plus, limits.familyQuestions),
+      pro: questionsCell(limits.questions.plus, limits.familyPro.questions),
       feature: 'questions',
     },
-    { label: 'Ask by voice', sub: 'Talk and hear answers', free: voiceCell(limits.voiceAnswers.free), plus: voiceCell(limits.voiceAnswers.plus), pro: voiceCell(limits.voiceAnswers.plus), feature: 'voice' },
+    { label: 'Ask by voice', sub: 'Talk and hear answers, any language', free: voiceCell(limits.voiceAnswers.free), plus: voiceCell(limits.voiceAnswers.plus), pro: voiceCell(limits.voiceAnswers.plus), feature: 'voice' },
     limits.questions.free == null ? null : {
       label: 'Share a document', sub: 'A link for your CA or agent', free: '7 days', plus: '30 days', pro: '30 days', feature: 'links',
     },
     { label: 'Expiry reminders', sub: 'Before a passport or policy runs out', free: false, plus: true, pro: true, feature: 'reminders' },
     { label: 'Birthday reminders', sub: 'For everyone in your tree', free: false, plus: true, pro: true, feature: 'birthdays' },
-    { label: 'Indian languages', sub: 'Read and talk in Hindi and more', free: 'English', plus: true, pro: true, feature: 'languages' },
+    // Family Pro alone since 066; voice is in any language on every plan.
+    { label: 'Indian languages', sub: 'Read documents in Hindi and more', free: 'English', plus: 'English', pro: true, feature: 'languages' },
     { label: 'Import from Gmail', sub: 'Attachments from your email', free: false, plus: true, pro: true, feature: 'gmail' },
   ];
   return all.filter((r): r is Row => r !== null);
@@ -88,12 +101,12 @@ const BROUGHT_BY: Record<PlusFeature, { icon: string; text: (name: string) => st
   reminders: { icon: 'clock', text: (n) => `Expiry reminders come with ${n}.` },
   gmail: { icon: 'mail', text: (n) => `Import from Gmail comes with ${n}.` },
   storage: { icon: 'hard-drive', text: (n) => `More space comes with ${n}.` },
-  voice: { icon: 'mic', text: (n) => `Asking by voice with no limit comes with ${n}.` },
+  voice: { icon: 'mic', text: () => 'Asking by voice is free on every plan, in any language.' },
   questions: { icon: 'message-circle', text: (n) => `More questions come with ${n}.` },
   members: { icon: 'users', text: (n) => `Room for more members comes with ${n}.` },
   links: { icon: 'link', text: (n) => `30-day share links come with ${n}.` },
   birthdays: { icon: 'gift', text: (n) => `Birthday reminders come with ${n}.` },
-  languages: { icon: 'globe', text: (n) => `Indian languages come with ${n}.` },
+  languages: { icon: 'globe', text: () => 'Reading documents in Indian languages comes with Family Pro.' },
 };
 
 const said = (cell: Cell) => (cell === true ? 'yes' : cell === false ? 'no' : cell);
@@ -120,6 +133,8 @@ function FamilyPlus() {
   const [limits, setLimits] = useState<PlanLimits>(DEFAULT_PLAN_LIMITS);
   // The plan they chose, whose monthly and yearly prices show.
   const [chosen, setChosen] = useState<FamilyPlan | null>(null);
+  // How the plan running now was paid for: a month or a year.
+  const [period, setPeriod] = useState<'monthly' | 'yearly' | null>(null);
   const scroll = useRef<ScrollView>(null);
   const choiceAt = useRef(0);
   // Members and space come with Pro for a family already on Plus.
@@ -131,8 +146,9 @@ function FamilyPlus() {
     track('plus_viewed', { feature: feature && feature in BROUGHT_BY ? feature : 'none' });
     refresh(true);
     fetchPlanLimits().then((l) => { if (!cancelled) setLimits(l); });
+    if (currentFamily) fetchPlusPeriod(currentFamily.id).then((p) => { if (!cancelled) setPeriod(p); }).catch(() => null);
     return () => { cancelled = true; };
-  }, [refresh, feature]));
+  }, [refresh, feature, currentFamily?.id]));
 
   const choose = (p: FamilyPlan) => {
     setChosen(p);
@@ -143,9 +159,9 @@ function FamilyPlus() {
   // The Current column: none while unknown, and none once a plan has ended.
   const currentColumn = onPlan ? FAMILY_COLUMNS.indexOf(onPlan) : plan === 'free' && !closed ? 0 : -1;
   const familyName = currentFamily ? vaultName(currentFamily) : undefined;
-  // What this vault may keep on Free (048): a personal vault less than a family.
+  // What this vault may keep on Free (048).
   const freeHere = isPersonalVault(currentFamily) ? limits.freePersonal : limits.free;
-  const table = rows(limits, freeHere);
+  const table = rows(limits);
 
   // ─── Paying (044, 064) ──────────────────────────────────
   const payments = usePaymentsStatus();
@@ -249,7 +265,7 @@ function FamilyPlus() {
             <Feather name="check-circle" size={18} color="#15803D" />
             <Text style={[styles.stateText, { color: '#15803D' }]}>
               {familyName ?? 'Your family'} has {familyPlanName(onPlan)}
-              {trial ? ' on trial' : ''}{paidUntil ? `, until ${longDate(new Date(paidUntil))}` : ''}.
+              {trial ? ' on trial' : period ? `, paid ${period}` : ''}{paidUntil ? `, until ${longDate(new Date(paidUntil))}` : ''}.
             </Text>
           </View>
         ) : plan === 'free' && closed ? (
@@ -272,6 +288,8 @@ function FamilyPlus() {
             <Text style={styles.stateText}>{familyName ?? 'Your family'} is on Free.</Text>
           </View>
         ) : null}
+
+        <UsagePanel limits={limits} plan={closed ? null : plan} tone={color.primary} />
 
         {/* The plan chosen: its monthly and yearly price, and paying. */}
         <View onLayout={(e) => { choiceAt.current = e.nativeEvent.layout.y; }}>
@@ -418,10 +436,9 @@ function FamilyPlus() {
         </Card>
 
         <Muted>
-          {limits.questions.free != null && limits.questions.plus == null && limits.familyQuestions == null && limits.questionTriesPerDay.plus != null
-            ? `Questions on Plus and Pro have no monthly limit. Each person can ask up to ${limits.questionTriesPerDay.plus} a day.\n`
-            : ''}
-          {`If a paid plan ends and a vault is over its free space, the newest documents over it are removed after ${limits.graceDays} days.`}
+          {'A plan is for one vault.'}
+          {limits.freePerson != null ? ` On Free, each person can add ${formatBytes(limits.freePerson)} in all, across free vaults.` : ''}
+          {`\nIf a paid plan ends and a vault is over its free space, the newest documents over it are removed after ${limits.graceDays} days.`}
         </Muted>
       </ScrollView>
     </SafeAreaView>
@@ -456,6 +473,123 @@ function CurrentColumn({ from, to, count, width, tone, tint }: {
   );
 }
 
+// ─── What has been used of the plan (the owner's ask, 25 October 2026) ───
+
+interface UsageLine {
+  label: string;
+  sub: string;
+  /** "12 of 20 left", "34 MB of 50 MB", "No limit". */
+  text: string;
+  /** How much is used, 0 to 1, for the bar; null draws none. */
+  share: number | null;
+}
+
+/** The people who sign in a vault may have on its plan. */
+function memberLimit(limits: PlanLimits, plan: PlanName, business: boolean): number {
+  if (isBusinessPlan(plan)) return limits.business[plan].members;
+  if (business) return limits.freeBusinessMembers;
+  if (plan === 'family_pro') return limits.familyPro.members;
+  return plan === 'plus' ? limits.members.plus : limits.members.free;
+}
+
+/**
+ * Under the vault's plan: questions left this month (the vault's shared
+ * month, or the person's own 20 on Free), the vault's space, its members and,
+ * on Free, what the person has added across free vaults (060). A line shows
+ * once it is known; nothing shows while the plan is not (or once a paid plan
+ * has ended).
+ */
+function UsagePanel({ limits, plan, tone, business = false }: {
+  limits: PlanLimits; plan: PlanName | null; tone: string; business?: boolean;
+}) {
+  const { currentFamily, members } = useFamily();
+  const familyId = currentFamily?.id ?? null;
+  const [questions, setQuestions] = useState<QuestionAllowance | null>(null);
+  const [room, setRoom] = useState<FamilyPlanStatus | null>(null);
+  const [person, setPerson] = useState<PersonRoom | null>(null);
+
+  useFocusEffect(useCallback(() => {
+    if (!familyId) return;
+    let cancelled = false;
+    fetchQuestionStatus().then((q) => { if (!cancelled) setQuestions(q); }).catch(() => null);
+    fetchStorageStatus(familyId).then((r) => { if (!cancelled) setRoom(r); }).catch(() => null);
+    fetchPersonStorage().then((p) => { if (!cancelled) setPerson(p); }).catch(() => null);
+    return () => { cancelled = true; };
+  }, [familyId]));
+
+  if (!plan || !currentFamily) return null;
+  const lines: UsageLine[] = [];
+
+  if (questions) {
+    if (questions.familyLimit != null && questions.familyLeft != null) {
+      const whose = questions.familyKind === 'business' ? 'business' : 'family';
+      lines.push({
+        label: 'Questions', sub: `Shared by the ${whose}, this month`,
+        text: `${thousands(questions.familyLeft)} of ${thousands(questions.familyLimit)} left`,
+        share: questions.familyLimit > 0 ? 1 - questions.familyLeft / questions.familyLimit : 1,
+      });
+    } else if (questions.ceiling != null) {
+      const left = questions.left ?? Math.max(questions.ceiling - questions.used, 0);
+      lines.push({
+        label: 'Questions', sub: 'Yours, this month',
+        text: `${thousands(left)} of ${thousands(questions.ceiling)} left`,
+        share: questions.ceiling > 0 ? 1 - left / questions.ceiling : 1,
+      });
+    } else {
+      lines.push({ label: 'Questions', sub: 'This month', text: 'No limit', share: null });
+    }
+  }
+  if (room) {
+    lines.push({
+      label: 'Space', sub: business ? 'Used by the business' : 'Used in this vault',
+      text: `${formatBytes(room.usedBytes)} of ${formatBytes(room.limitBytes)}`,
+      share: room.limitBytes > 0 ? room.usedBytes / room.limitBytes : 1,
+    });
+  }
+  if (person && plan === 'free') {
+    lines.push({
+      label: 'You added', sub: 'Across free vaults',
+      text: `${formatBytes(person.usedBytes)} of ${formatBytes(person.limitBytes)}`,
+      share: person.limitBytes > 0 ? person.usedBytes / person.limitBytes : 1,
+    });
+  }
+  if (!isPersonalVault(currentFamily) && members.length > 0) {
+    const most = memberLimit(limits, plan, business);
+    lines.push({
+      label: business ? 'People' : 'Members', sub: 'People who sign in',
+      text: `${members.length} of ${most}`,
+      share: most > 0 ? members.length / most : 1,
+    });
+  }
+  if (!lines.length) return null;
+
+  return (
+    <Card style={styles.usageCard}>
+      <Text style={styles.usageTitle}>What you've used</Text>
+      {lines.map((l) => {
+        const share = l.share == null ? null : Math.min(Math.max(l.share, 0), 1);
+        const fill = share == null ? tone : share >= 1 ? '#B91C1C' : share >= NEARLY_FULL ? '#B45309' : tone;
+        return (
+          <View key={l.label} style={styles.usageLine} accessible accessibilityLabel={`${l.label}, ${l.sub}: ${l.text}`}>
+            <View style={styles.usageHead}>
+              <View style={styles.usageLabelBox}>
+                <Text style={styles.usageLabel}>{l.label}</Text>
+                <Text style={styles.usageSub}>{l.sub}</Text>
+              </View>
+              <Text style={[styles.usageValue, { color: share != null && share >= 1 ? '#B91C1C' : color.text }]}>{l.text}</Text>
+            </View>
+            {share != null && (
+              <View style={styles.usageTrack}>
+                <View style={[styles.usageFill, { width: `${Math.max(share * 100, share > 0 ? 2 : 0)}%`, backgroundColor: fill }]} />
+              </View>
+            )}
+          </View>
+        );
+      })}
+    </Card>
+  );
+}
+
 type BusinessColumn = 'free' | BusinessPlan;
 const COLUMNS: readonly BusinessColumn[] = ['free', ...PAID];
 const columnName = (c: BusinessColumn) => (c === 'free' ? 'Free' : businessPlanName(c));
@@ -465,6 +599,7 @@ const BUSINESS_BROUGHT_BY: Record<PlusFeature | BusinessFeature, { icon: string;
   ...(Object.fromEntries(Object.entries(BROUGHT_BY).map(([k, v]) => [k, { icon: v.icon, text: v.text('every paid plan') }])) as
     Record<PlusFeature, { icon: string; text: string }>),
   questions: { icon: 'message-circle', text: 'More questions come with every paid plan.' },
+  languages: { icon: 'globe', text: 'Reading records in Indian languages comes with Pro and Enterprise.' },
   members: { icon: 'users', text: 'Room for more people comes with a bigger plan.' },
   // The business's own (056).
   overview: { icon: 'refresh-cw', text: 'Renewals and bills due come with every paid plan.' },
@@ -483,6 +618,9 @@ function businessRows(limits: PlanLimits): BusinessRow[] {
   const row = (free: Cell, pick: (p: BusinessPlan) => Cell) =>
     ({ free, ...Object.fromEntries(PAID.map((p) => [p, pick(p)])) }) as Record<BusinessColumn, Cell>;
   const freeVoice = limits.voiceAnswers.free;
+  // "1,000 shared" a month by the business (066), "100 each" (051), or "No limit".
+  const questions = (b: BusinessPlanLimits) =>
+    b.questions == null ? 'No limit' : `${thousands(b.questions)} ${b.questionsShared ? 'shared' : 'each'}`;
   return [
     { label: '★ People', cells: row(String(limits.freeBusinessMembers), (p) => String(limits.business[p].members)), feature: 'members' },
     // 060: on Free, each person's own number across their free vaults, and the business's for everyone together.
@@ -491,11 +629,14 @@ function businessRows(limits: PlanLimits): BusinessRow[] {
       : []),
     { label: 'Space for the business, together', cells: row(formatBytes(limits.freeBusiness), (p) => formatBytes(limits.business[p].storage)), feature: 'storage' },
     {
-      label: '★ Each person\'s questions',
-      cells: row(`${limits.questions.free ?? 20} a month`, (p) => `${limits.business[p].questionsFairUse} a month`),
+      label: '★ Questions a month',
+      cells: row(`${limits.questions.free ?? 20} each`, (p) => questions(limits.business[p])),
       feature: 'questions',
     },
-    { label: '★ Voice chats', cells: row(freeVoice == null ? true : `${freeVoice} each`, () => true), feature: 'voice' },
+    // On every plan since 066, so no star.
+    { label: freeVoice == null ? 'Voice, any language' : '★ Voice chats', cells: row(freeVoice == null ? true : `${freeVoice} each`, () => true), feature: 'voice' },
+    // Pro and Enterprise since 066.
+    { label: '★ Indian languages', cells: row('English', (p) => (p === 'business_plus' ? 'English' : true)), feature: 'languages' },
     { label: '★ 30-day share links', cells: row(false, () => true), feature: 'links' },
     { label: '★ Expiry reminders', cells: row(false, () => true), feature: 'reminders' },
     { label: '★ Import from Gmail', cells: row(false, () => true), feature: 'gmail' },
@@ -556,7 +697,7 @@ function BusinessPlans() {
               </View>
             ))}
           </View>
-          <Text style={styles.heroNote}>A month, plus GST. Pay for a year and get 1 month free.</Text>
+          <Text style={styles.heroNote}>A month, plus GST. A year saves about 2 months.</Text>
         </LinearGradient>
 
         {onPlan ? (
@@ -578,6 +719,8 @@ function BusinessPlans() {
             <Text style={[styles.stateText, { color: biz.primary }]}>{vault} is on Free.</Text>
           </View>
         ) : null}
+
+        <UsagePanel limits={limits} plan={closed ? null : plan} tone={biz.primary} business />
 
         <Card style={styles.tableCard}>
           {currentColumn >= 0 && (
@@ -611,7 +754,7 @@ function BusinessPlans() {
           <View
             style={[styles.row, styles.priceRow]}
             accessible
-            accessibilityLabel={`Price a month, plus GST: Free nothing, ${PAID.map((p) => `${businessPlanName(p)} ${businessAmount(p)}`).join(', ')}.`}
+            accessibilityLabel={`Price, plus GST: Free nothing, ${PAID.map((p) => `${businessPlanName(p)} ${businessAmount(p)} a month or ${businessAmount(p, 'yearly')} a year`).join(', ')}.`}
           >
             <Text style={[styles.label, styles.priceLabel]}>Price</Text>
             <View style={[styles.value, styles.valueBiz]}>
@@ -621,6 +764,8 @@ function BusinessPlans() {
               <View key={p} style={[styles.value, styles.valueBiz]}>
                 <Text style={[styles.cellText, { color: biz.primary }]}>{businessAmount(p)}</Text>
                 <Text style={styles.cellPer}>a month</Text>
+                <Text style={[styles.cellText, styles.cellYear, { color: biz.primary }]}>{businessAmount(p, 'yearly')}</Text>
+                <Text style={styles.cellPer}>a year</Text>
               </View>
             ))}
           </View>
@@ -745,6 +890,16 @@ const styles = StyleSheet.create({
   priceRow: { borderBottomWidth: 0 },
   priceLabel: { fontWeight: '600', color: color.text },
   payCard: { gap: space.sm },
+  usageCard: { gap: space.md },
+  usageTitle: { ...type.heading },
+  usageLine: { gap: space.xs },
+  usageHead: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  usageLabelBox: { flex: 1, gap: 2 },
+  usageLabel: { ...type.body, fontSize: 14, lineHeight: 20 },
+  usageSub: { fontSize: 12, lineHeight: 16, color: color.textMuted },
+  usageValue: { fontSize: 14, lineHeight: 20, fontWeight: '600' },
+  usageTrack: { height: 6, borderRadius: 3, backgroundColor: color.divider, overflow: 'hidden' },
+  usageFill: { height: 6, borderRadius: 3 },
   payTitle: { ...type.heading },
   payBtn: {
     minHeight: 52, borderRadius: radius.control, alignItems: 'center', justifyContent: 'center',
