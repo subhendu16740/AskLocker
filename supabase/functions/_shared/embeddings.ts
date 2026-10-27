@@ -34,8 +34,9 @@
 // ────────────────────────────────────────────────────────────────
 
 import {
-  chooseEmbeddingProvider, cloudflareBody, cloudflareModel, embeddingModelId, meanPool, normalise,
-  runWithinBudget, truncateAndNormalise, CLOUDFLARE_BATCH, EMBEDDING_DIMS, HUGGINGFACE_MODEL,
+  chooseEmbeddingProvider, cloudflareBody, cloudflareModel, cloudflareRetryable, embeddingModelId, meanPool,
+  normalise, runWithinBudget, truncateAndNormalise, CLOUDFLARE_ATTEMPTS, CLOUDFLARE_BATCH, CLOUDFLARE_RETRY_MS,
+  EMBEDDING_DIMS, HUGGINGFACE_MODEL,
   type EmbeddingEnv, type EmbeddingProvider,
 } from './embedding-choice.ts';
 
@@ -180,15 +181,18 @@ async function embedGteSmall(texts: string[], budgetMs = Number.POSITIVE_INFINIT
 // { result: { data: number[][], shape }, success, errors }. Qwen3 takes 32
 // texts a call. Its vectors are cut to 384 (truncateAndNormalise). Past the
 // free daily allowance Cloudflare refuses, and search falls back to keywords
-// until the next day (00:00 UTC).
+// until the next day (00:00 UTC). A passing fault on Cloudflare's side is
+// tried once more, 400 ms later (cloudflareRetryable).
 
 const CLOUDFLARE_URL = `https://api.cloudflare.com/client/v4/accounts/${env.CLOUDFLARE_ACCOUNT_ID?.trim()}/ai/run/${cloudflareModel(env)}`;
 
-async function embedCloudflare(texts: string[], kind: 'query' | 'passage'): Promise<EmbedResult> {
-  const vectors: (number[] | null)[] = texts.map(() => null);
-  let error: string | undefined;
-  for (let start = 0; start < texts.length; start += CLOUDFLARE_BATCH) {
-    const batch = texts.slice(start, start + CLOUDFLARE_BATCH);
+/**
+ * One call for one batch, tried once more after a passing fault on
+ * Cloudflare's side (cloudflareRetryable) or a failed connection.
+ */
+async function callCloudflare(batch: string[], kind: 'query' | 'passage'): Promise<{ data: unknown } | { error: string }> {
+  for (let attempt = 1; ; attempt++) {
+    const last = attempt >= CLOUDFLARE_ATTEMPTS;
     try {
       const response = await fetch(CLOUDFLARE_URL, {
         method: 'POST',
@@ -198,27 +202,44 @@ async function embedCloudflare(texts: string[], kind: 'query' | 'passage'): Prom
         },
         body: JSON.stringify(cloudflareBody(cloudflareModel(env), kind, batch)),
       });
-      if (!response.ok) {
-        const text = (await response.text()).replace(/\s+/g, ' ').slice(0, 160);
+      if (response.ok) {
+        const payload = await response.json() as { result?: { data?: unknown[] }; data?: unknown[] };
+        return { data: payload.result?.data ?? payload.data };
+      }
+      const raw = await response.text();
+      if (last || !cloudflareRetryable(response.status, raw)) {
+        const text = raw.replace(/\s+/g, ' ').slice(0, 160);
         // "HTTP 429 …" first, as HuggingFace's are, so QA reads a used-up
         // allowance as an outside limit rather than a fault in the app.
-        error = `HTTP ${response.status} (Cloudflare Workers AI${response.status === 429 ? ' allowance or rate limit' : ''}): ${text}`;
-        console.warn(`[embed] ${error}`);
-        break;
+        return { error: `HTTP ${response.status} (Cloudflare Workers AI${response.status === 429 ? ' allowance or rate limit' : ''}): ${text}` };
       }
-      const payload = await response.json() as { result?: { data?: unknown[] }; data?: unknown[] };
-      const data = payload.result?.data ?? payload.data;
-      if (!Array.isArray(data) || data.length !== batch.length) {
-        error = `Cloudflare gave ${Array.isArray(data) ? data.length : typeof data} vectors for ${batch.length} texts`;
-        console.warn(`[embed] ${error}`);
-        break;
-      }
-      data.forEach((v, i) => { vectors[start + i] = truncateAndNormalise(v); });
+      console.warn(`[embed] Cloudflare answered HTTP ${response.status}; trying once more`);
     } catch (err) {
-      error = `Cloudflare unreachable: ${String(err).slice(0, 160)}`;
+      if (last) return { error: `Cloudflare unreachable: ${String(err).slice(0, 160)}` };
+      console.warn(`[embed] Cloudflare unreachable (${String(err).slice(0, 80)}); trying once more`);
+    }
+    await new Promise(resolve => setTimeout(resolve, CLOUDFLARE_RETRY_MS));
+  }
+}
+
+async function embedCloudflare(texts: string[], kind: 'query' | 'passage'): Promise<EmbedResult> {
+  const vectors: (number[] | null)[] = texts.map(() => null);
+  let error: string | undefined;
+  for (let start = 0; start < texts.length; start += CLOUDFLARE_BATCH) {
+    const batch = texts.slice(start, start + CLOUDFLARE_BATCH);
+    const reply = await callCloudflare(batch, kind);
+    if ('error' in reply) {
+      error = reply.error;
       console.warn(`[embed] ${error}`);
       break;
     }
+    const data = reply.data;
+    if (!Array.isArray(data) || data.length !== batch.length) {
+      error = `Cloudflare gave ${Array.isArray(data) ? data.length : typeof data} vectors for ${batch.length} texts`;
+      console.warn(`[embed] ${error}`);
+      break;
+    }
+    data.forEach((v, i) => { vectors[start + i] = truncateAndNormalise(v); });
   }
   return {
     vectors,

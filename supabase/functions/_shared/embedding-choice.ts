@@ -44,6 +44,23 @@ export const CLOUDFLARE_DEFAULT_MODEL = '@cf/qwen/qwen3-embedding-0.6b';
 /** Cloudflare's Qwen3 embedding takes at most 32 texts a call. */
 export const CLOUDFLARE_BATCH = 32;
 
+/** A Cloudflare call is tried twice at most, this long apart. */
+export const CLOUDFLARE_ATTEMPTS = 2;
+export const CLOUDFLARE_RETRY_MS = 400;
+
+/**
+ * Whether a failed Cloudflare call is worth one more try: Cloudflare's own
+ * fault (any 5xx; on 27 October 2026 PROD met a 503 "Unknown internal
+ * error", code 3048, between calls that worked) or "Capacity temporarily
+ * exceeded, please try again" (429, code 3040). Not the day's free
+ * allowance used up (429, code 3036), which lasts until 00:00 UTC, and not
+ * a request Cloudflare refuses (4xx), which would fail the same way again.
+ */
+export function cloudflareRetryable(status: number, body: string): boolean {
+  if (status >= 500) return true;
+  return status === 429 && /"code"\s*:\s*3040\b/.test(body);
+}
+
 /**
  * Qwen3-Embedding reads a question better with a task line in front of it
  * (its model card: 1–5% better retrieval). Passages go in as they are.

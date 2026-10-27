@@ -3383,6 +3383,11 @@ nothing else calls a provider. Which one is chosen from the secrets
   name another model only if it is Matryoshka-trained (EmbeddingGemma is);
   cutting bge-m3's vectors would rank by noise. Past the day's allowance
   Cloudflare answers 429 and search falls back to keywords until 00:00 UTC.
+  A passing fault on its side (any 5xx, or 429 code 3040, out of capacity)
+  is tried once more 400 ms later (`cloudflareRetryable()`): on 27 October
+  2026 PROD met a 503 "Unknown internal error", code 3048 (not in
+  Cloudflare's list of errors), between calls that worked, and that
+  question was searched by keywords alone.
 - **Measured on 24 October 2026**, offline, on QA's eleven Indian-language
   documents (text as written, not as the PDF reader mangles it) among seven
   English ones, an English question per document with the name kept in its
