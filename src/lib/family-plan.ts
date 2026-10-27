@@ -2,14 +2,15 @@
 //
 // Starred features (★, <PlusTag />) are for Family Plus families: today
 // expiry reminders and the Reminders page (048), Import from Gmail,
-// questions after each person's 20 a month (a family's 500 a month since
-// 066), more members, and share links that last 30 days (049); reading
-// documents in Indian languages for Family Pro (066). Voice is free on every
+// questions after each person's 20 a month (a family's 250 a month since
+// 067), more members, and share links that last 30 days (049); reading
+// documents in Indian languages (Plus and up since 067). Voice is on every
 // plan, in any language (066). For a free family, tapping
 // one opens /plus, which shows Free and Plus side by side, and the screens
 // themselves send a free family there too (after a refresh, or from a link).
-// Storage beyond the free 50 MB is kept by the server (038, 048, 066), the
-// server makes expiry and birthday reminders only for a vault on Plus or Pro,
+// Storage beyond the free 100 MB a person is kept by the server (038, 048,
+// 067), the server makes one expiry reminder a document on Free and every
+// stage for everyone only on Plus or Pro (067), birthdays only on a paid plan,
 // and Gmail import refuses a free family on the server as well.
 //
 // A business (051) has its own plans, Plus, Pro and Enterprise, never Family Plus. Its ★

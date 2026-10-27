@@ -262,7 +262,9 @@ Deno.serve(async (req) => {
       });
     }
     if (claim) counted = { userId, allowance: claim.allowance };
-    // No answer came: the question is given back, once.
+    // A question counts once it is asked, found or not (067: the search
+    // and the judge have spent their tokens either way). It is given back,
+    // once, only when the AI service failed: a degraded answer or an error.
     const giveBack = async () => {
       if (!counted) return undefined;
       const back = counted;
@@ -420,7 +422,7 @@ Deno.serve(async (req) => {
     };
 
     if (candidates.length === 0) {
-      const questions = await giveBack();
+      const questions = counted?.allowance ?? undefined;
       return jsonResponse({
         answer: nothingFoundMessage(language),
         sources: [],
@@ -434,7 +436,7 @@ Deno.serve(async (req) => {
     // considered — rather than letting the model improvise from junk.
     if (chunks.length === 0) {
       const considered = uniqNames(candidates).slice(0, 3).join(', ');
-      const questions = await giveBack();
+      const questions = counted?.allowance ?? undefined;
       return jsonResponse({
         answer: nothingRelevantMessage(language, considered),
         sources: [],

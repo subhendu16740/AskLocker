@@ -59,39 +59,40 @@ interface Row {
 /** 2000 → "2,000". */
 const thousands = (n: number) => String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 
-// "10 each" (per person, 043), or "No limit" (every plan since 066).
-const voiceCell = (n: number | null): Cell => (n == null ? 'No limit' : `${n} each`);
-// "20 each" a month (049), "500 shared" by the vault (053, 066), or "No limit".
+// "20 per person" a month (049), "250 shared" by the vault (053, 067), or "No limit".
 const questionsCell = (each: number | null, shared: number | null): Cell =>
-  shared != null ? `${thousands(shared)} shared` : each == null ? 'No limit' : `${thousands(each)} each`;
+  shared != null ? `${thousands(shared)} shared` : each == null ? 'No limit' : `${thousands(each)} per person`;
 
 /**
- * What the plans give, clearest first. A star after a feature: it is more on
- * a paid plan. Family tree and emergency cards are on every plan, so they are
- * not here (the owner's ask, 23 October 2026). A plan is for one vault, a
- * family's or someone's personal one, so both vaults' space shows.
+ * What the plans give, as plain as the owner asked (27 October 2026): space in
+ * MB and GB, one number for questions, and nothing a buyer need not weigh —
+ * voice is in the questions row ("type or speak"), daily tries are a hidden
+ * safety net. A star after a feature: it is more on a paid plan. Family tree
+ * and emergency cards are on every plan, so a line under the table says so.
  */
 function rows(limits: PlanLimits): Row[] {
   const all: Array<Row | null> = [
-    { label: 'Members', sub: 'People who sign in', free: String(limits.members.free), plus: String(limits.members.plus), pro: String(limits.familyPro.members), feature: 'members' },
-    { label: 'Family vault', sub: 'Space for everyone together', free: formatBytes(limits.free), plus: formatBytes(limits.plus), pro: formatBytes(limits.familyPro.storage), feature: 'storage' },
-    { label: 'Personal vault', sub: 'Space for your own documents', free: formatBytes(limits.freePersonal), plus: formatBytes(limits.plus), pro: formatBytes(limits.familyPro.storage), feature: 'storage' },
+    { label: 'People', sub: 'Each gets their own login', free: String(limits.members.free), plus: String(limits.members.plus), pro: String(limits.familyPro.members), feature: 'members' },
+    {
+      label: 'Space',
+      free: limits.freePerson != null ? `${formatBytes(limits.freePerson)} per person` : formatBytes(limits.free),
+      plus: `${formatBytes(limits.plus)} shared`, pro: `${formatBytes(limits.familyPro.storage)} shared`, feature: 'storage',
+    },
     // Before 049 nobody's questions are counted, on any plan.
     limits.questions.free == null ? null : {
-      label: 'Questions', sub: 'Each month', free: questionsCell(limits.questions.free, null),
+      label: 'Questions a month', sub: 'Type or speak', free: questionsCell(limits.questions.free, null),
       plus: questionsCell(limits.questions.plus, limits.familyQuestions),
       pro: questionsCell(limits.questions.plus, limits.familyPro.questions),
       feature: 'questions',
     },
-    { label: 'Ask by voice', sub: 'Talk and hear answers, any language', free: voiceCell(limits.voiceAnswers.free), plus: voiceCell(limits.voiceAnswers.plus), pro: voiceCell(limits.voiceAnswers.plus), feature: 'voice' },
+    { label: 'Expiry reminders', sub: 'Before a passport or policy runs out', free: '1 reminder', plus: 'For everyone', pro: 'For everyone', feature: 'reminders' },
+    { label: 'Birthday reminders', sub: 'For everyone in your tree', free: false, plus: true, pro: true, feature: 'birthdays' },
     limits.questions.free == null ? null : {
       label: 'Share a document', sub: 'A link for your CA or agent', free: '7 days', plus: '30 days', pro: '30 days', feature: 'links',
     },
-    { label: 'Expiry reminders', sub: 'Before a passport or policy runs out', free: false, plus: true, pro: true, feature: 'reminders' },
-    { label: 'Birthday reminders', sub: 'For everyone in your tree', free: false, plus: true, pro: true, feature: 'birthdays' },
-    // Family Pro alone since 066; voice is in any language on every plan.
-    { label: 'Indian languages', sub: 'Read documents in Hindi and more', free: 'English', plus: 'English', pro: true, feature: 'languages' },
-    { label: 'Import from Gmail', sub: 'Attachments from your email', free: false, plus: true, pro: true, feature: 'gmail' },
+    // Plus and up since 067 (Pro alone under 066); read from photos on the device.
+    { label: 'Hindi and other Indian languages', sub: 'Read from photos of documents', free: false, plus: true, pro: true, feature: 'languages' },
+    { label: 'Import from Gmail', sub: 'Attachments from your email', free: false, plus: 'Beta', pro: 'Beta', feature: 'gmail' },
   ];
   return all.filter((r): r is Row => r !== null);
 }
@@ -101,12 +102,12 @@ const BROUGHT_BY: Record<PlusFeature, { icon: string; text: (name: string) => st
   reminders: { icon: 'clock', text: (n) => `Expiry reminders come with ${n}.` },
   gmail: { icon: 'mail', text: (n) => `Import from Gmail comes with ${n}.` },
   storage: { icon: 'hard-drive', text: (n) => `More space comes with ${n}.` },
-  voice: { icon: 'mic', text: () => 'Asking by voice is free on every plan, in any language.' },
+  voice: { icon: 'mic', text: () => 'Ask by voice on every plan, in any language. Each answer uses one of your questions.' },
   questions: { icon: 'message-circle', text: (n) => `More questions come with ${n}.` },
   members: { icon: 'users', text: (n) => `Room for more members comes with ${n}.` },
   links: { icon: 'link', text: (n) => `30-day share links come with ${n}.` },
   birthdays: { icon: 'gift', text: (n) => `Birthday reminders come with ${n}.` },
-  languages: { icon: 'globe', text: () => 'Reading documents in Indian languages comes with Family Pro.' },
+  languages: { icon: 'globe', text: (n) => `Reading Hindi and other Indian languages comes with ${n}.` },
 };
 
 const said = (cell: Cell) => (cell === true ? 'yes' : cell === false ? 'no' : cell);
@@ -219,7 +220,7 @@ function FamilyPlus() {
   };
 
   const planLine = (p: FamilyPlan) =>
-    `${p === 'family_pro' ? limits.familyPro.members : limits.members.plus} members · ${formatBytes(p === 'family_pro' ? limits.familyPro.storage : limits.plus)}`;
+    `${p === 'family_pro' ? limits.familyPro.members : limits.members.plus} people · ${formatBytes(p === 'family_pro' ? limits.familyPro.storage : limits.plus)}`;
 
   return (
     <SafeAreaView style={screenStyles.safe} edges={['top']}>
@@ -256,7 +257,7 @@ function FamilyPlus() {
             ))}
           </View>
           <Text style={styles.heroNote}>
-            {familyName ? `One plan for everyone in ${familyName}.` : 'One plan for everyone in the family.'}
+            {isPersonalVault(currentFamily) ? 'A plan for your personal vault.' : familyName ? `One plan for everyone in ${familyName}.` : 'One plan for everyone in the family.'}
           </Text>
         </LinearGradient>
 
@@ -436,8 +437,7 @@ function FamilyPlus() {
         </Card>
 
         <Muted>
-          {'A plan is for one vault.'}
-          {limits.freePerson != null ? ` On Free, each person can add ${formatBytes(limits.freePerson)} in all, across free vaults.` : ''}
+          {'A plan covers the vault you pay for. Family tree and emergency cards are free on every plan.'}
           {`\nIf a paid plan ends and a vault is over its free space, the newest documents over it are removed after ${limits.graceDays} days.`}
         </Muted>
       </ScrollView>
@@ -539,24 +539,26 @@ function UsagePanel({ limits, plan, tone, business = false }: {
       lines.push({ label: 'Questions', sub: 'This month', text: 'No limit', share: null });
     }
   }
-  if (room) {
-    lines.push({
-      label: 'Space', sub: business ? 'Used by the business' : 'Used in this vault',
-      text: `${formatBytes(room.usedBytes)} of ${formatBytes(room.limitBytes)}`,
-      share: room.limitBytes > 0 ? room.usedBytes / room.limitBytes : 1,
-    });
-  }
+  // One space line, as the table says it (067): on Free what you have added
+  // of your 100 MB a person, which fills before the vault's own limit; on a
+  // paid plan what the vault holds of its shared space.
   if (person && plan === 'free') {
     lines.push({
-      label: 'You added', sub: 'Across free vaults',
+      label: 'Space', sub: 'What you added, on Free',
       text: `${formatBytes(person.usedBytes)} of ${formatBytes(person.limitBytes)}`,
       share: person.limitBytes > 0 ? person.usedBytes / person.limitBytes : 1,
+    });
+  } else if (room) {
+    lines.push({
+      label: 'Space', sub: business ? 'Shared by the business' : 'Shared by everyone in this vault',
+      text: `${formatBytes(room.usedBytes)} of ${formatBytes(room.limitBytes)}`,
+      share: room.limitBytes > 0 ? room.usedBytes / room.limitBytes : 1,
     });
   }
   if (!isPersonalVault(currentFamily) && members.length > 0) {
     const most = memberLimit(limits, plan, business);
     lines.push({
-      label: business ? 'People' : 'Members', sub: 'People who sign in',
+      label: 'People', sub: 'Each gets their own login',
       text: `${members.length} of ${most}`,
       share: most > 0 ? members.length / most : 1,
     });
@@ -599,7 +601,7 @@ const BUSINESS_BROUGHT_BY: Record<PlusFeature | BusinessFeature, { icon: string;
   ...(Object.fromEntries(Object.entries(BROUGHT_BY).map(([k, v]) => [k, { icon: v.icon, text: v.text('every paid plan') }])) as
     Record<PlusFeature, { icon: string; text: string }>),
   questions: { icon: 'message-circle', text: 'More questions come with every paid plan.' },
-  languages: { icon: 'globe', text: 'Reading records in Indian languages comes with Pro and Enterprise.' },
+  languages: { icon: 'globe', text: 'Reading Hindi and other Indian languages comes with every paid plan.' },
   members: { icon: 'users', text: 'Room for more people comes with a bigger plan.' },
   // The business's own (056).
   overview: { icon: 'refresh-cw', text: 'Renewals and bills due come with every paid plan.' },
@@ -617,33 +619,29 @@ function businessRows(limits: PlanLimits): BusinessRow[] {
   // Free's cell first, then each paid plan's.
   const row = (free: Cell, pick: (p: BusinessPlan) => Cell) =>
     ({ free, ...Object.fromEntries(PAID.map((p) => [p, pick(p)])) }) as Record<BusinessColumn, Cell>;
-  const freeVoice = limits.voiceAnswers.free;
   // "1,000 shared" a month by the business (066), "100 each" (051), or "No limit".
   const questions = (b: BusinessPlanLimits) =>
-    b.questions == null ? 'No limit' : `${thousands(b.questions)} ${b.questionsShared ? 'shared' : 'each'}`;
+    b.questions == null ? 'No limit' : `${thousands(b.questions)} ${b.questionsShared ? 'shared' : 'per person'}`;
+  // As plain as the family table (27 October 2026): space in MB and GB, one
+  // number for questions, voice inside them, nothing a buyer need not weigh.
   return [
     { label: '★ People', cells: row(String(limits.freeBusinessMembers), (p) => String(limits.business[p].members)), feature: 'members' },
-    // 060: on Free, each person's own number across their free vaults, and the business's for everyone together.
-    ...(limits.freePerson != null
-      ? [{ label: 'Each person can add, in all', cells: row(formatBytes(limits.freePerson), () => true) }]
-      : []),
-    { label: 'Space for the business, together', cells: row(formatBytes(limits.freeBusiness), (p) => formatBytes(limits.business[p].storage)), feature: 'storage' },
     {
-      label: '★ Questions a month',
-      cells: row(`${limits.questions.free ?? 20} each`, (p) => questions(limits.business[p])),
+      label: '★ Space',
+      cells: row(limits.freePerson != null ? `${formatBytes(limits.freePerson)} per person` : formatBytes(limits.freeBusiness),
+        (p) => `${formatBytes(limits.business[p].storage)} shared`),
+      feature: 'storage',
+    },
+    {
+      label: '★ Questions a month, type or speak',
+      cells: row(`${limits.questions.free ?? 20} per person`, (p) => questions(limits.business[p])),
       feature: 'questions',
     },
-    // On every plan since 066, so no star.
-    { label: freeVoice == null ? 'Voice, any language' : '★ Voice chats', cells: row(freeVoice == null ? true : `${freeVoice} each`, () => true), feature: 'voice' },
-    // Pro and Enterprise since 066.
-    { label: '★ Indian languages', cells: row('English', (p) => (p === 'business_plus' ? 'English' : true)), feature: 'languages' },
-    { label: '★ 30-day share links', cells: row(false, () => true), feature: 'links' },
-    { label: '★ Expiry reminders', cells: row(false, () => true), feature: 'reminders' },
-    { label: '★ Import from Gmail', cells: row(false, () => true), feature: 'gmail' },
     { label: '★ Renewals and bills due', cells: row(false, () => true), feature: 'overview' },
     { label: '★ Money in and out', cells: row(false, (p) => p !== 'business_plus'), feature: 'money' },
-    { label: 'Notes each', cells: row(String(limits.notesPerPerson.free ?? 20), () => String(limits.notesPerPerson.paid ?? 500)) },
-    { label: '★ Reminders on notes', cells: row(false, () => true), feature: 'notes' },
+    { label: '★ Reminders and 30-day links', cells: row(false, () => true), feature: 'reminders' },
+    // Every paid plan since 067 (Pro and Enterprise under 066).
+    { label: '★ Hindi and other Indian languages', cells: row(false, () => true), feature: 'languages' },
   ];
 }
 
