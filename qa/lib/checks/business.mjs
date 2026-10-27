@@ -164,8 +164,8 @@ begin
              and n.user_id = '${userA}' and n.title = v_fam || ' has Family Plus' and n.message like 'Room for % GB of documents, until %') || ';';
   -- 053: on Family Plus the family shares its month; at its number, a
   -- question is refused for the family. 064 took the number away (a
-  -- question past 500 was allowed), and 066 brings it back at 500 (the
-  -- block rolls back, as always).
+  -- question past 500 was allowed), 066 brought it back at 500 and 067
+  -- made it 250 (the block rolls back, as always).
   if exists (select 1 from information_schema.columns where table_schema = 'public'
               and table_name = 'plan_limits' and column_name = 'family_questions_per_month') then
     insert into public.question_usage (user_id, month) values ('${userA}', public.question_month())
@@ -548,7 +548,7 @@ export async function runBusinessChecks(cfg, { a, b, anon, vaultA, vaultB }, res
   check('db-family-unchanged', "A family's Family Plus starts and ends exactly as before",
     result.family_given === 'true' && result.family_ended === 'true',
     `${said('family_given')}, ${said('family_ended')}`);
-  check('db-pro-questions', 'On Pro, a member asks with Pro\'s number (5,000 for the business since 066)', result.pro_questions === 'true', said('pro_questions'));
+  check('db-pro-questions', 'On Pro, a member asks with Pro\'s number (2,000 for the business since 067)', result.pro_questions === 'true', said('pro_questions'));
   if (result.family_pool === 'none' || result.family_pool == null) {
     results.add('business', 'db-family-questions', 'Family Plus: a family that has used its month\'s questions is refused (053)', 'skipped',
       { why: 'migration 053 is not applied to DEV yet' });
@@ -557,7 +557,7 @@ export async function runBusinessChecks(cfg, { a, b, anon, vaultA, vaultB }, res
     check('db-family-questions', 'Family Plus: no monthly limit, a question past 500 this month is allowed (064)',
       result.family_pool === 'allowed' || result.family_pool === 'tries', said('family_pool'));
   } else {
-    check('db-family-questions', 'Family Plus: a family that has used its month\'s questions is refused (053; 500 since 066)',
+    check('db-family-questions', 'Family Plus: a family that has used its month\'s questions is refused (053; 250 since 067)',
       result.family_pool === 'family', said('family_pool'));
   }
   if (result.pro_given === 'none' || result.pro_given == null) {

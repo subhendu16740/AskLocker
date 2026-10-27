@@ -9,12 +9,14 @@ Expo / React Native app (SDK 55) with expo-router. Backend is Supabase
 
 **The app is called AskLocker** (asklocker.com; the .in and .app were free
 too when it was named, 6 October 2026). It was FamilyVault until then, and
-three things keep the old name on purpose: the GitHub repository and this
-checkout's directory (renaming a repository is a separate step on GitHub,
-which redirects the old address), the comments in migrations already applied
-to both projects (an applied migration is never edited), and the `fv:`
-prefix on the device's storage keys in `src/lib/storage.ts` (changing it
-would sign everyone out and forget their settings). Everything a person
+two things keep the old name on purpose: the comments in migrations already
+applied to both projects (an applied migration is never edited), and the
+`fv:` prefix on the device's storage keys in `src/lib/storage.ts` (changing
+it would sign everyone out and forget their settings). The GitHub
+repository was renamed `subhendu16740/AskLocker` on 27 October 2026, and
+GitHub redirects the old address; a checkout made before keeps its folder
+name, and the Vercel project its name, so DEV's address is still
+`family-vault-git-dev-…` until DEV moves to Cloudflare. Everything a person
 sees says AskLocker: the app name, slug and scheme in `app.config.ts`, the
 Android package `com.asklocker.app`, the web manifest and service worker,
 the login and share pages, Help, About, the notifications and emails the
@@ -139,7 +141,9 @@ Four things will mislead you if you assume otherwise:
    own, kept by the member triggers (`vault_max_members()`, service role
    only): see [Family Pro](#family-pro--a-second-family-plan-and-what-free-keeps-064);
    066 changes numbers and two functions, nothing a client writes: see
-   [The plans of 25 October 2026](#the-plans-of-25-october-2026--shared-months-smaller-space-free-voice-066)).
+   [The plans of 25 October 2026](#the-plans-of-25-october-2026--shared-months-smaller-space-free-voice-066);
+   067 changes numbers and one server function: see
+   [The plans of 27 October 2026](#the-plans-of-27-october-2026--more-space-fewer-shared-questions-one-free-reminder-067)).
    **A new writable
    column needs its own `GRANT` in a migration.** Nobody joins a family
    without saying yes: only an admin asks a person in, through the
@@ -701,7 +705,7 @@ copies, so DEV needs its own secrets and its own `documents` storage bucket.
   for that visit (the redirect sign-in comes back as a new page load, so
   `noteSignInStarted()` marks it in sessionStorage and `takeFreshSignIn()`
   reads it, 15 minutes at most).
-- **Its first version (subhendu16740/FamilyVault#68, #69) was a lock only**,
+- **Its first version (subhendu16740/AskLocker#68, #69) was a lock only**,
   with a key kept on the device and nothing at Supabase: it unlocked a
   signed-in AskLocker but could not sign anyone in, so after signing out it
   was Google again. Such an entry (`{ id }` in `accountKey.appLock`) is
@@ -830,8 +834,8 @@ tabs. `(tabs)` is a layout group, so routes are `/home`, `/search`, `/upload`.
 | `dates.ts` | `parseDocumentDate()`: expiry dates exactly as ingest stores them (DD/MM/YYYY and kin, YYYY-MM-DD, "19 October 2026") |
 | `emergency.ts` | The emergency card's shape, blood groups (`bloodGroupLabel()`: "A−", "Bombay (hh)"), `telHref()`, and `cardProblem()` — the same checks and messages as `save_emergency_card()`, so the form can say what is wrong before saving |
 | `family-people.ts` | Whose a document can be: everyone in the tree, you first (`useDocumentOwners()`, members only before 031), and a person's expiry badge (`badgeFromExpiries()`) |
-| `plans.ts` | What each plan allows (038–066): the limits as 039–066 set them — storage (on Free 50 MB for a family, 50 MB for a personal vault, `freePersonal`, 100 MB for a business, `freeBusiness`, and 50 MB for each person across their free vaults, `freePerson`, 060, 066; 500 MB on Plus and 2 GB on Pro, `familyPro`, 066; a person at their 50 MB: `personFits()`, `personStorageFullMessage()`), 2 members on Free (a business 2, `freeBusinessMembers`), 4 on Plus and 8 on Pro, 20 questions a month for each person on Free (049) and a month shared by the vault on Plus (500, `familyQuestions`) and Pro (2,000, `familyPro.questions`), a business's in `business[plan].questions` (066), voice with no limit (066) (`DEFAULT_PLAN_LIMITS`, used only when the database cannot be asked), Family Plus's and Pro's prices, monthly and yearly (`PLUS_PRICE`, `PRO_PRICE`, `familyPrice()`, `familyPlanName()`; each price function takes the plan last, Plus when not said; `localPlusPrice()` / `localPlusPrices()` show rupees in India, dollars elsewhere, by the device's time zone; the yearly one against twelve months, crossed out, and what it saves: `plusTwelveMonths()`, `plusYearlySaving()`, "Save ₹189"), a business's (`BUSINESS_PRICE`, `BUSINESS_YEAR_PRICE`), which plans read documents in Indian languages (`INDIAN_LANGUAGE_PLANS`, `plansHaveIndianLanguages()`, 066), `storageLevel()`, and the words for a full vault (`storageFullMessage()`; for a chat, `chatStorageFullMessage()`), which live in `supabase/functions/_shared/plan-text.ts` so Gmail import says the same; 050's file limit and the words for its refusals (`MAX_FILE_BYTES`, `fileTooLargeMessage()`, `limitHint()`, `QUESTION_INPUT_MAX`) come from `_shared/limits.ts`. Whether Plus can be bought is the payments function's answer (044: `usePaymentsStatus()`, `plusForSale()`); `PLUS_FOR_SALE` (false) is only what the words assume before it answers |
-| `family-plan.ts` | Is the current family on Family Plus? `useFamilyPlan()` (from `family_storage_status()`, kept a minute per family): `isFree`, `closed` and `trial` (051), and `routeFor(feature, route)`, which sends a free family to `/plus?feature=…` instead of a starred feature. Unknown (before 038, offline) gates nothing. `usePaymentsStatus()`: can Family Plus be bought here (044). `useOnPlus()`: is the signed-in person on Plus in any vault (from `question_status()`, a minute, shared; `forgetOnPlus()` after paying), for the creation screen's "On Free" line. `useModeOnPlus()`: is any vault of the open mode on a paid plan, for the ★ after their name. `usePaidPlan()`: is the person on any paid plan, null while unknown, which gates nothing (birthday reminders' switch, 064). `useIndianLanguages()`: may the person read documents in Indian languages — Family Pro, Business Pro or Enterprise, from `question_status().plans` (066; any paid plan before it) |
+| `plans.ts` | What each plan allows (038–067): the limits as 039–067 set them — storage (on Free 100 MB for each person across their free vaults, `freePerson`, and so 200 MB for a family, 100 MB for a personal vault, `freePersonal`, 200 MB for a business, `freeBusiness`, 060, 067; 5 GB on Plus and 10 GB on Pro, `familyPro`, 067; a person at their 100 MB: `personFits()`, `personStorageFullMessage()`), 2 members on Free (a business 2, `freeBusinessMembers`), 4 on Plus and 8 on Pro, 20 questions a month for each person on Free (049) and a month shared by the vault on Plus (250, `familyQuestions`) and Pro (500, `familyPro.questions`), a business's in `business[plan].questions` (066, 067), voice with no limit (066) (`DEFAULT_PLAN_LIMITS`, used only when the database cannot be asked), Family Plus's and Pro's prices, monthly and yearly (`PLUS_PRICE`, `PRO_PRICE`, `familyPrice()`, `familyPlanName()`; each price function takes the plan last, Plus when not said; `localPlusPrice()` / `localPlusPrices()` show rupees in India, dollars elsewhere, by the device's time zone; the yearly one against twelve months, crossed out, and what it saves: `plusTwelveMonths()`, `plusYearlySaving()`, "Save ₹189"), a business's (`BUSINESS_PRICE`, `BUSINESS_YEAR_PRICE`), which plans read documents in Indian languages (`INDIAN_LANGUAGE_PLANS`, `plansHaveIndianLanguages()`: Plus and up, 067), `storageLevel()`, and the words for a full vault (`storageFullMessage()`; for a chat, `chatStorageFullMessage()`), which live in `supabase/functions/_shared/plan-text.ts` so Gmail import says the same; 050's file limit and the words for its refusals (`MAX_FILE_BYTES`, `fileTooLargeMessage()`, `limitHint()`, `QUESTION_INPUT_MAX`) come from `_shared/limits.ts`. Whether Plus can be bought is the payments function's answer (044: `usePaymentsStatus()`, `plusForSale()`); `PLUS_FOR_SALE` (false) is only what the words assume before it answers |
+| `family-plan.ts` | Is the current family on Family Plus? `useFamilyPlan()` (from `family_storage_status()`, kept a minute per family): `isFree`, `closed` and `trial` (051), and `routeFor(feature, route)`, which sends a free family to `/plus?feature=…` instead of a starred feature. Unknown (before 038, offline) gates nothing. `usePaymentsStatus()`: can Family Plus be bought here (044). `useOnPlus()`: is the signed-in person on Plus in any vault (from `question_status()`, a minute, shared; `forgetOnPlus()` after paying), for the creation screen's "On Free" line. `useModeOnPlus()`: is any vault of the open mode on a paid plan, for the ★ after their name. `usePaidPlan()`: is the person on any paid plan, null while unknown, which gates nothing (birthday reminders' switch, 064). `useIndianLanguages()`: may the person read documents in Indian languages — any paid plan, Plus and up (067; Pro alone under 066), from `question_status().plans` (any paid plan before 066) |
 | `file-types.ts` | What a picked file is (`detectFileType()`: MIME type, then name, never a web `blob:` uri) and whether the vault can keep it (PDF, JPG, PNG, and since 061 .xlsx and .csv; an old .xls is asked to be saved as .xlsx) |
 | `spreadsheet.ts` | Reading a spreadsheet when it is added (`readSpreadsheet()`): .xlsx with read-excel-file's universal build, loaded only then, .csv with the shared parser, both into `_shared/spreadsheet-text.ts`'s rows; see [Spreadsheets](#spreadsheets--xlsx-and-csv-read-in-the-app-061) |
 | `app-info.ts` | Version, release date and commit (stamped into `extra` by `app.config.ts` at build time), and the support contact Help and the privacy policy show (`support@asklocker.com`, Cloudflare Email Routing) |
@@ -841,12 +845,12 @@ tabs. `(tabs)` is a layout group, so routes are `/home`, `/search`, `/upload`.
 | `razorpay.ts` / `razorpay.web.ts` | Paying for Family Plus (044): on the web, Razorpay's own checkout window (`openCheckout`; checkout.js is loaded the first time someone pays, and card and UPI details go to Razorpay, never to us); the phone app's file is a stand-in until EAS builds exist. Types in `razorpay-types.ts` |
 | `google-button.ts` / `google-button.web.ts` | Google's own sign-in button on the web (Google Identity Services): `googleButtonAvailable()` (a client id is set and this origin is in `EXPO_PUBLIC_GOOGLE_WEB_ORIGINS`), `renderGoogleButton()` (loads Google's script once, a fresh nonce each time). The phone app's file says no, so it keeps the redirect sign-in. Types in `google-button-types.ts`; see [Signing in](#signing-in--google-only-with-googles-own-button-where-it-is-set-up) |
 | `push.ts` / `push.web.ts` | Notifications on this device (034): on the web, Web Push through `public/sw.js` (`loadPushStatus`, `turnOnPush`, `turnOffPush`, `sendTestPush`, and `forgetPushOnThisDevice` on sign-out); the phone app's file is a stand-in until EAS builds exist. Types in `push-types.ts` |
-| `preferences.tsx` | `PreferencesProvider`: voice toggle + language, document languages. Cached locally, stored on `public.users`; reads and writes fall back to the older column set so an unapplied migration degrades one setting rather than all of them. Below Family Pro (or a business's Pro), `documentLanguages` read English whatever was chosen (`languagesAllowed`, 066; any paid plan under 064); the choice comes back with one. `voiceLanguage` is any language on every plan (066) |
+| `preferences.tsx` | `PreferencesProvider`: voice toggle + language, document languages. Cached locally, stored on `public.users`; reads and writes fall back to the older column set so an unapplied migration degrades one setting rather than all of them. On Free, `documentLanguages` read English whatever was chosen (`languagesAllowed`; Plus and up since 067, Pro alone under 066); the choice comes back with a paid plan. `voiceLanguage` is any language on every plan (066) |
 | `speech.ts` | Voice: `listen`/`stopListening` (platform-split recogniser) and `speak`/`stopSpeaking` (expo-speech), in the voice chosen for the language on this device (`voicesFor`, `chooseVoice`: Settings › Accessibility › Voice, kept per language in `storage.ts`, not per account), or the best match |
 | `speech-text.ts` | `toSpeech()`: strips markdown and spells out ID numbers before they are read aloud — and a number named as one ("train number 16782", "PNR: 4512", "PIN 751001", "नंबर 16782") digit by digit, from its digits; the screen keeps the digits |
 | `voice-languages.ts` | The language picker list and the few phrases the app itself says, per language |
 | `storage.ts` | Key-value cache: localStorage on web, AsyncStorage on native |
-| `database.types.ts` | Generated Supabase types, current to 066 (030, 052, 055, 058, 059, 061 and 063 changed nothing in them, nor did 065, whose one function only the Edge Functions call, nor 066, numbers and two function bodies; 049's, 050's, 051's, 053's, 054's, 056's, 057's, 060's, 062's and 064's added by hand). Regenerate after every migration and re-append the hand-written block at the bottom (see the typecheck note) |
+| `database.types.ts` | Generated Supabase types, current to 067 (030, 052, 055, 058, 059, 061 and 063 changed nothing in them, nor did 065, whose one function only the Edge Functions call, nor 066 and 067, numbers and function bodies; 049's, 050's, 051's, 053's, 054's, 056's, 057's, 060's, 062's and 064's added by hand). Regenerate after every migration and re-append the hand-written block at the bottom (see the typecheck note) |
 
 ---
 
@@ -1447,8 +1451,8 @@ where it does not.
   (free on every plan) runs `run_reminders()` at five past every hour. From
   9 in the morning, India time, `queue_expiry_reminders()` makes each
   document's reminders for every member of a vault on **Family Plus** (048;
-  a vault on Free gets none, and nothing is recorded, so moving to Plus
-  brings each document's current stage at the next run): 90, 30 and 7 days before (each
+  a vault on Free got none until 067, which gives a family on Free one
+  reminder a document, 30 days before, for whoever added it): 90, 30 and 7 days before (each
   expiry alert's `alert_days_before`) and on the day, until three days after.
   `reminders_sent` remembers each (document, expiry date, stage), so each
   goes once, the runs after the first find nothing, and a renewed date
@@ -1694,7 +1698,9 @@ where it does not.
   `claim_question(user)` before any AI step runs — one statement, so two
   questions at once cannot both take the last — and gives it back through
   `release_question(user)` when no answer came of it: nothing found,
-  nothing relevant, a degraded answer (Groq busy or down), an error. Both
+  nothing relevant, a degraded answer (Groq busy or down), an error
+  (since 067 only a degraded answer or an error: a question counts when
+  it is asked). Both
   take a user id, so both are service role only; rag-search passes the
   caller from the session. Refused, it answers `question_limit: true` with
   the reason as the answer (`questionLimitMessage()`, English and Hindi,
@@ -1841,6 +1847,8 @@ where it does not.
 
 ### The plans of 25 October 2026 — shared months, smaller space, free voice (066)
 
+(067 changed the numbers below again: see [The plans of 27 October 2026](#the-plans-of-27-october-2026--more-space-fewer-shared-questions-one-free-reminder-067).)
+
 - **The owner's plans** (25 October 2026), for families:
 
   | | Free | Family Plus | Family Pro |
@@ -1917,6 +1925,83 @@ where it does not.
   database's numbers win, and the payments function charges the new prices
   once deployed. Data only for the numbers: check the rows by hand (the
   query is in 066's header).
+
+### The plans of 27 October 2026 — more space, fewer shared questions, one free reminder (067)
+
+- **The owner's plans** (27 October 2026), set with PROD on Supabase Pro in
+  mind, so space is cheap (files about ₹2 a GB a month, a document's text
+  and search data about ₹1 more) and questions are the cost (about ₹0.24
+  each on Claude Haiku). What a person sees on the Plans page (the owner
+  asked for it plain: space in MB and GB, one number for questions, no
+  voice or tries rows):
+
+  | Family | Free | Family Plus | Family Pro |
+  |---|---|---|---|
+  | Price | — | ₹99 a month, ₹999 a year | ₹199, ₹1,999 |
+  | People (each gets their own login) | 2 | 4 | 8 |
+  | Space | 100 MB per person (50 before) | 5 GB shared (500 MB before) | 10 GB shared (2 GB before) |
+  | Questions a month (type or speak) | 20 per person | 250 shared (500 before) | 500 shared (2,000 before) |
+  | Expiry reminders | 1 reminder (none before) | for everyone | for everyone |
+  | Birthday reminders | — | ✓ | ✓ |
+  | Share a document | 7 days | 30 days | 30 days |
+  | Hindi and other Indian languages | — | ✓ (Pro alone before) | ✓ |
+  | Import from Gmail | — | Beta | Beta |
+
+  | Business (+ GST) | Free | Plus | Pro | Enterprise |
+  |---|---|---|---|---|
+  | Price | — | ₹499, ₹4,999 a year | ₹999, ₹9,999 | ₹3,999, ₹39,999 |
+  | People | 2 | 5 | 10 | 50 |
+  | Space | 100 MB per person | 20 GB (5 before) | 50 GB (25 before) | 200 GB (100 before) |
+  | Questions a month | 20 per person | 1,000 shared | 2,000 shared (5,000 before) | 8,000 shared (no limit before) |
+  | Renewals and bills due / money in and out | — | ✓ / — | ✓ / ✓ | ✓ / ✓ |
+  | Reminders and 30-day links | — | ✓ | ✓ | ✓ |
+  | Hindi and other Indian languages | — | ✓ (Pro and Enterprise before) | ✓ | ✓ |
+
+- **Every paid plan keeps money at its heaviest use** (every question asked
+  and all the space filled, every month), after Razorpay's 2.36%: Family
+  Plus and Pro 22% on a monthly price and 8% on a yearly one, the business
+  plans 35–38% and 23–26%; at normal use (about 45 questions a month for a
+  family) 86–94%. Business Pro's 5,000 questions and Enterprise's no limit
+  lost money at full use under 066. A free person costs at most about ₹5 a
+  month. If GST registration comes (past ₹20 lakh a year), 18% comes out of
+  the family prices, and Family Plus on a yearly price then loses at its
+  heaviest: lower it to 200 questions then. Supabase Pro (about ₹2,400 a
+  month) is paid for by about 28 Plus families, or 6 on Business Plus, at
+  normal use.
+- **A question counts when it is asked** (rag-search, 067), typed or spoken,
+  found or not: the search and the judge have spent their tokens either
+  way. It is given back only when the AI service failed (a degraded answer,
+  an error). Under 049 a question that found nothing, or nothing relevant,
+  was given back, so a person could ask in a loop at no cost to their
+  count. Help says so plainly.
+- **Free: 100 MB a person** (060's `person_storage_bytes`); a free vault
+  holds what its people may add: a family 200 MB, a personal vault 100 MB,
+  a business 200 MB.
+- **One expiry reminder on Free** (`queue_family_expiry_reminders()`): a
+  family vault on Free makes one reminder a document, once 30 days or fewer
+  are left, for whoever added it while still a member; it is recorded as
+  the 30-day stage, so a vault that moves to a paid plan carries on from the
+  next stage. A business on Free gets none. After an upload with an expiry
+  date, a free family is told "We'll remind you 30 days before", with what
+  Plus adds.
+- **Daily tries** are 20 a person on Family Plus and Pro (50 before), 10 on
+  Free and 30 on a business plan: a hidden safety net, not on the Plans
+  page.
+- **Indian languages, for reading documents, are every paid plan's**
+  (`INDIAN_LANGUAGE_PLANS`: Plus and up). Reading happens on the device, the
+  language files come from a public CDN, so it costs AskLocker nothing.
+  Indian-script PDFs still lose letters on the server (the known issue), so
+  the page says "Read from photos of documents".
+- **The Plans page** says a plan covers the vault you pay for: a member's
+  personal vault stays on Free (100 MB) under a family's Plus until the
+  shared family pool is built (planned next: one 5 GB or 10 GB for the
+  family vault and every member's personal vault). From a personal vault
+  the banner reads "A plan for your personal vault."
+- **Order**: apply 067 to DEV and PROD before the release that carries it,
+  and move PROD to Supabase Pro before selling the new space. Before 067
+  the app shows the new numbers only where the database cannot be asked;
+  the database's win. Data and one function body: check the rows by hand
+  (the query is in 067's header).
 
 ### Limits against abuse — one account cannot use up what everyone shares (050)
 
@@ -2597,7 +2682,7 @@ where it does not.
   Business mode. Settings › Your vaults opens any vault, of either kind.
 - **A business wears teal and gold** (`biz` in `design.ts`: primary
   `#0F5C57`, secondary `#1A7A72`, tint `#E7F4F2`, accent `#B7791F`), a
-  family the app's navy. Orange was tried (subhendu16740/FamilyVault#92)
+  family the app's navy. Orange was tried (subhendu16740/AskLocker#92)
   and reverted the next day at the owner's ask: teal it stays. `useVaultTheme()` (`src/lib/vault-theme.ts`) is the
   open vault's colours, and the shared pieces follow it: the top bar, back
   arrow and header buttons, `settings-ui` cards, buttons and On/Off, Home's
@@ -2838,7 +2923,8 @@ where it does not.
   A business vault's tree is not read, so relations are not resolved there
   (051).
   **Each question is counted (049)** for the asker before any AI step runs,
-  and given back when no answer comes of it; past the month's allowance it
+  and given back only when the AI service failed (067; before, also when
+  nothing was found); past the month's allowance it
   answers `question_limit` without searching. Since 050 each try counts for
   the day too, and is never given back, and a question is cut to 1,000
   characters. See
@@ -3297,6 +3383,11 @@ nothing else calls a provider. Which one is chosen from the secrets
   name another model only if it is Matryoshka-trained (EmbeddingGemma is);
   cutting bge-m3's vectors would rank by noise. Past the day's allowance
   Cloudflare answers 429 and search falls back to keywords until 00:00 UTC.
+  A passing fault on its side (any 5xx, or 429 code 3040, out of capacity)
+  is tried once more 400 ms later (`cloudflareRetryable()`): on 27 October
+  2026 PROD met a 503 "Unknown internal error", code 3048 (not in
+  Cloudflare's list of errors), between calls that worked, and that
+  question was searched by keywords alone.
 - **Measured on 24 October 2026**, offline, on QA's eleven Indian-language
   documents (text as written, not as the PDF reader mangles it) among seven
   English ones, an English question per document with the name kept in its
@@ -3586,13 +3677,14 @@ rule again once pinned chunks are mixed in.
   are in it and in Help ("Can I rely on the answers?").
 - **★ Family Plus marks what only Plus families get** (`<PlusTag />`; in a
   business it reads ★ Plus, `plusName()`, 051):
-  500 MB on Plus and 2 GB on Pro instead of 50 MB a vault (and 50 MB for
-  each person to add across their free vaults, 060), 500 questions a month
-  shared by the family on Plus and 2,000 on Pro (on Free, each person has
-  20 a month, 049, 066), 4 members on Plus and 8 on Pro (2 on Free), share
-  links that last 30 days (7 on Free), expiry and birthday reminders and
-  the Reminders page (in the drawer, 048, 064), reading documents in
-  Indian languages on Pro alone (066) and Import from Gmail (on Upload) —
+  5 GB on Plus and 10 GB on Pro instead of 100 MB a person on Free (067),
+  250 questions a month shared by the family on Plus and 500 on Pro (on
+  Free, each person has 20 a month, 049, 067), 4 members on Plus and 8 on
+  Pro (2 on Free), share links that last 30 days (7 on Free), expiry
+  reminders for everyone (one, to whoever added it, on Free, 067),
+  birthday reminders and the Reminders page (in the drawer, 048, 064),
+  reading Hindi and other Indian languages (Plus and up, 067) and Import
+  from Gmail (on Upload, Beta) —
   Plus ₹99 a month or ₹999 a year in India, $10 or $99 elsewhere, Pro ₹199
   or ₹1,999, $20 or $199, paid for on the Plans page with Razorpay (044),
   or given by hand. Voice has no star: it is free on every plan (066). On the
@@ -3623,8 +3715,8 @@ rule again once pinned chunks are mixed in.
   *Document languages* is what OCR reads off the page. A family can speak
   Hindi and hold English papers, or the reverse, so never collapse them into
   one setting. Voice is any language on every plan (066). Document
-  languages are English below Family Pro (or a business's Pro) since 066
-  (`languagesAllowed` in `preferences.tsx`), and Settings sends such a
+  languages are English on Free (Plus and up since 067; Pro alone under
+  066; `languagesAllowed` in `preferences.tsx`), and Settings sends such a
   person to the Plans page instead of the picker.
 - **Voice mode** (Settings › Accessibility) is built for elderly users: one
   big control, one state at a time, everything spoken is also shown. Keep the

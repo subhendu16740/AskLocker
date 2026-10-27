@@ -90,7 +90,7 @@ Each family gets an isolated namespace for document embeddings. Enables semantic
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/subhendu16740/FamilyVault.git
+   git clone https://github.com/subhendu16740/AskLocker.git
    cd AskLocker
    ```
 

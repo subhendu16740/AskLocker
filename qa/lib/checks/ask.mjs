@@ -226,7 +226,7 @@ export async function runQuestions(cfg, { a, vaultA, notIndexed = new Map() }, r
     const used = Number(now?.used);
     // Started again before asking, the count cannot pass the number asked.
     const ok = !error && Number.isFinite(used) && used === Number(lastCount.used) && (!countStarted || used <= asked);
-    results.add('questions', 'question-count', 'Each question is counted once on the server, and an unanswered one given back (049)', ok ? 'pass' : 'fail',
+    results.add('questions', 'question-count', 'Each question is counted once on the server; only one the AI service failed is given back (049, 067)', ok ? 'pass' : 'fail',
       { why: error ? String(error.message).slice(0, 120) : `${used} counted${countStarted ? ` for ${asked} asked` : ''}; the last answer said ${lastCount.used}` });
   }
 

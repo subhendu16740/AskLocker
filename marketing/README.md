@@ -1,6 +1,6 @@
 # Marketing
 
-Go-to-market material for FamilyVault. Nothing here is part of the app build:
+Go-to-market material for AskLocker. Nothing here is part of the app build:
 Metro only bundles from `src/app`, and none of these files are TypeScript.
 
 - `strategy/index.html`: the go-to-market strategy, written for engineers

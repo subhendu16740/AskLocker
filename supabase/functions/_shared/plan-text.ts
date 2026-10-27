@@ -3,25 +3,29 @@
 // Shared by the app (src/lib/plans.ts) and Gmail import, so both say the same
 // thing when a family's storage is full. Pure TypeScript: no Deno, no React.
 //
-// Three family plans, each with a limit (039, 048, 064, 066):
+// Three family plans, each with a limit (039, 048, 064, 066, 067):
 //
-//   Free          50 MB a vault, family or personal; 50 MB for each person
-//                 to add, across their free vaults (060); 2 members
-//   Family Plus   500 MB (1 GB before 066), either kind of vault; 4 members;
-//                 500 questions a month shared by the family — in India ₹99
-//                 a month or ₹999 a year, elsewhere $10 a month or $99 a year
-//   Family Pro    2 GB (10 GB before 066); 8 members; 2,000 questions a
-//                 month shared — in India ₹199 a month or ₹1,999 a year,
+//   Free          100 MB for each person to add, across their free vaults
+//                 (060; a family vault holds 200 MB, a personal vault
+//                 100 MB); 2 members; 20 questions a month each
+//   Family Plus   5 GB (500 MB before 067); 4 members; 250 questions a
+//                 month shared by the family — in India ₹99 a month or ₹999
+//                 a year, elsewhere $10 a month or $99 a year
+//   Family Pro    10 GB (2 GB before 067); 8 members; 500 questions a month
+//                 shared — in India ₹199 a month or ₹1,999 a year,
 //                 elsewhere $20 a month or $199 a year
 //
-// Members are the people who sign in; anyone can be in the family tree. Each
-// person on Free has 20 questions a month (049), and 10 tries a day; on Plus
-// and Pro 50 tries a day each (050). Voice has no limit, in any language, on
-// every plan (066; 10 on Free in English before). A share link lasts 1 or 7
-// days on Free, and up to 30 days on a paid plan (049). Expiry and birthday
-// reminders (048, 064) and Gmail import are for Plus and Pro; reading
-// documents in Indian languages for Pro alone (066). On Free a person creates
-// one family and one business besides their personal vault (059).
+// Members are the people who sign in; anyone can be in the family tree. A
+// question counts when it is asked, typed or spoken, and is given back only
+// when the AI service failed (067). Free has 10 tries a day each, Plus and
+// Pro 20 (067; 50 before). Voice costs nothing itself, in any language, on
+// every plan (066). A share link lasts 1 or 7 days on Free, and up to 30
+// days on a paid plan (049). On Free a document gets one expiry reminder, 30
+// days before, for whoever added it (067); Plus and Pro remind everyone at
+// every stage, and bring birthday reminders (048, 064) and Gmail import.
+// Reading documents in Indian languages comes with Plus and up (067; Pro
+// alone under 066). On Free a person creates one family and one business
+// besides their personal vault (059).
 //
 // A year costs about ten months. The yearly price is shown against twelve
 // months at the monthly price, crossed out (₹1,188 → ₹999, ₹2,388 → ₹1,999),
@@ -35,14 +39,15 @@
 // Business vaults (051) have plans of their own, never Family Plus, given by
 // hand for now (billed by us, GST on top):
 //
-//   Free         2 people, 100 MB, 20 questions each a month
-//   Plus         5 people,   5 GB, 1,000 questions a month — ₹499 a month
-//   Pro         10 people,  25 GB, 5,000 questions a month — ₹999 a month
-//   Enterprise  50 people, 100 GB, no monthly limit        — ₹3,999 a month
+//   Free         2 people, 200 MB (100 MB each), 20 questions each a month
+//   Plus         5 people,  20 GB, 1,000 questions a month — ₹499 a month
+//   Pro         10 people,  50 GB, 2,000 questions a month — ₹999 a month
+//   Enterprise  50 people, 200 GB, 8,000 questions a month — ₹3,999 a month
 //
 // A business's questions are shared by everyone in it (066; 100 each
-// before). A year costs about ten months (₹4,999, ₹9,999, ₹39,999). Reading
-// documents in Indian languages comes with Pro and Enterprise. A small
+// before). 067 set the space and questions so every plan keeps money even
+// at its heaviest use. A year costs about ten months (₹4,999, ₹9,999,
+// ₹39,999). Reading documents in Indian languages comes with every paid plan. A small
 // business may start in a family vault and make it a business vault later,
 // keeping everything (054). Nothing is ever removed from a business: when a
 // paid plan ends it keeps every record and adds nothing until it is renewed
@@ -89,7 +94,7 @@ export interface StorageRoom {
 export interface BusinessPlanLimits {
   storage: number;
   members: number;
-  /** Questions a month: shared by everyone in the business since 066 (100 each before); null: no monthly limit. */
+  /** Questions a month: shared by everyone in the business since 066 (100 each before; Enterprise 8,000 since 067); null: no monthly limit. */
   questions: number | null;
   /** Whether `questions` is the business's month together (066), not each person's. */
   questionsShared: boolean;
@@ -123,7 +128,7 @@ export interface PlanLimits {
   questions: { free: number | null; plus: number | null };
   /** The most one person may ask in a month where there is no monthly limit (049); null: no ceiling (064). */
   questionsFairUse: number | null;
-  /** The questions everyone in a vault on Family Plus shares in a month (053; 500 since 066); null: no family number. */
+  /** The questions everyone in a vault on Family Plus shares in a month (053; 250 since 067, 500 under 066); null: no family number. */
   familyQuestions: number | null;
   /** Questions each person may try in a day, answered or not, per plan; null: no limit (050). */
   questionTriesPerDay: { free: number | null; plus: number | null };
@@ -147,22 +152,22 @@ const GB = 1024 ** 3;
 
 const MB = 1024 ** 2;
 
-/** What 039–066 set; plan_limits is the truth. */
+/** What 039–067 set; plan_limits is the truth. */
 export const DEFAULT_PLAN_LIMITS: PlanLimits = {
-  free: 50 * MB,
-  freePersonal: 50 * MB,
-  freeBusiness: 100 * MB,
-  freePerson: 50 * MB,
-  plus: 500 * MB,
-  familyPro: { storage: 2 * GB, members: 8, questions: 2000 },
+  free: 200 * MB,
+  freePersonal: 100 * MB,
+  freeBusiness: 200 * MB,
+  freePerson: 100 * MB,
+  plus: 5 * GB,
+  familyPro: { storage: 10 * GB, members: 8, questions: 500 },
   graceDays: 30,
   members: { free: 2, plus: 4 },
   freeBusinessMembers: 2,
   voiceAnswers: { free: null, plus: null },
   questions: { free: 20, plus: null },
-  questionsFairUse: 500,
-  familyQuestions: 500,
-  questionTriesPerDay: { free: 10, plus: 50 },
+  questionsFairUse: 250,
+  familyQuestions: 250,
+  questionTriesPerDay: { free: 10, plus: 20 },
   uploadsPerDay: { free: 50, plus: 100 },
   familiesPerPerson: 1,
   businessesPerPerson: 1,
@@ -170,9 +175,9 @@ export const DEFAULT_PLAN_LIMITS: PlanLimits = {
   notesPerPerson: { free: 20, paid: 500 },
   invitesPerDay: { free: 20, plus: 20 },
   business: {
-    business_plus: { storage: 5 * GB, members: 5, questions: 1000, questionsShared: true, questionTriesPerDay: 30, uploadsPerDay: 300, invitesPerDay: 20 },
-    business_pro: { storage: 25 * GB, members: 10, questions: 5000, questionsShared: true, questionTriesPerDay: 30, uploadsPerDay: 300, invitesPerDay: 20 },
-    business_enterprise: { storage: 100 * GB, members: 50, questions: null, questionsShared: false, questionTriesPerDay: 30, uploadsPerDay: 300, invitesPerDay: 50 },
+    business_plus: { storage: 20 * GB, members: 5, questions: 1000, questionsShared: true, questionTriesPerDay: 30, uploadsPerDay: 300, invitesPerDay: 20 },
+    business_pro: { storage: 50 * GB, members: 10, questions: 2000, questionsShared: true, questionTriesPerDay: 30, uploadsPerDay: 300, invitesPerDay: 20 },
+    business_enterprise: { storage: 200 * GB, members: 50, questions: 8000, questionsShared: true, questionTriesPerDay: 30, uploadsPerDay: 300, invitesPerDay: 50 },
   },
 };
 
@@ -270,11 +275,12 @@ export function plusYearlySaving(currency: PriceCurrency, plan: FamilyPlan = 'pl
 }
 
 /**
- * The plans with reading documents in Indian languages (066): Family Pro, and
- * a business's Pro and Enterprise. It happens on the device, so it is the
- * app's rule. Voice is in any language on every plan.
+ * The plans with reading documents in Indian languages: every paid plan,
+ * Plus and up (067; Pro alone under 066). It happens on the device and costs
+ * AskLocker nothing, so it is the app's rule. Voice is in any language on
+ * every plan.
  */
-export const INDIAN_LANGUAGE_PLANS: readonly PlanName[] = ['family_pro', 'business_pro', 'business_enterprise'];
+export const INDIAN_LANGUAGE_PLANS: readonly PlanName[] = ['plus', 'family_pro', 'business_plus', 'business_pro', 'business_enterprise'];
 
 /** Whether any of a person's plans brings Indian languages (066). */
 export function plansHaveIndianLanguages(plans: readonly string[]): boolean {
