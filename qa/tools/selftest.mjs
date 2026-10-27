@@ -22,7 +22,7 @@ import { digitsFromWords, restoreCodes } from '../../supabase/functions/_shared/
 import { takeInTurn, uniqueRelatives } from '../../supabase/functions/_shared/vaults.ts';
 import { passagesUsed, splitUsedPassages } from '../../supabase/functions/_shared/used-passages.ts';
 import { CLAUDE_MIN_MAX_TOKENS, claudeCanTake, claudeShouldRest, claudeText, claudeUsable, groqStyleReply, toClaudeRequest } from '../../supabase/functions/_shared/claude-shape.ts';
-import { chooseEmbeddingProvider, cloudflareBody, embeddingModelId, runWithinBudget, truncateAndNormalise, CLOUDFLARE_DEFAULT_MODEL, EMBEDDING_DIMS, GTE_SMALL_MODEL_ID, HUGGINGFACE_MODEL, QUERY_INSTRUCTION, UNRECORDED_MODEL } from '../../supabase/functions/_shared/embedding-choice.ts';
+import { chooseEmbeddingProvider, cloudflareBody, cloudflareRetryable, embeddingModelId, runWithinBudget, truncateAndNormalise, CLOUDFLARE_DEFAULT_MODEL, EMBEDDING_DIMS, GTE_SMALL_MODEL_ID, HUGGINGFACE_MODEL, QUERY_INSTRUCTION, UNRECORDED_MODEL } from '../../supabase/functions/_shared/embedding-choice.ts';
 import { toSpeech } from '../../src/lib/speech-text.ts';
 import {
   BUILT_IN_CATEGORIES, BUSINESS_CATEGORIES, FAMILY_CATEGORIES, SUGGESTED_CATEGORIES, categoryOrder, countedCategory, suggestCategory,
@@ -1517,6 +1517,15 @@ await test('search vectors: who makes them, at 384 numbers, inside the CPU budge
   assert.deepEqual(cloudflareBody(CLOUDFLARE_DEFAULT_MODEL, 'passage', ['p']), { documents: ['p'] });
   assert.deepEqual(cloudflareBody('@cf/google/embeddinggemma-300m', 'passage', ['p']), { text: ['title: none | text: p'] });
   assert.deepEqual(cloudflareBody('@cf/google/embeddinggemma-300m', 'query', ['q']), { text: ['task: search result | query: q'] });
+  // One more try after Cloudflare's own fault or "try again", never after
+  // the day's allowance is used up or a request it refuses.
+  assert.equal(cloudflareRetryable(503, '{"errors":[{"message":"AiError: AiError: Unknown internal error (7e12aaf4)","code":3048}],"success":false}'), true, "PROD's 503 of 27 October");
+  assert.equal(cloudflareRetryable(500, ''), true);
+  assert.equal(cloudflareRetryable(429, '{"errors":[{"message":"Capacity temporarily exceeded, please try again.","code":3040}]}'), true, 'out of capacity');
+  assert.equal(cloudflareRetryable(429, '{"errors":[{"message":"You have used up your daily free allocation of 10,000 neurons.","code":3036}]}'), false, 'day used up');
+  assert.equal(cloudflareRetryable(400, '{"errors":[{"code":5007}]}'), false);
+  assert.equal(cloudflareRetryable(401, ''), false);
+  assert.equal(cloudflareRetryable(403, '{"errors":[{"code":3023}]}'), false);
   // Matryoshka: the first 384 of 1,024, scaled back to length 1.
   const long = Array.from({ length: 1024 }, (_, i) => (i < EMBEDDING_DIMS ? 2 : 100));
   const cut = truncateAndNormalise(long);
