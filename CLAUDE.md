@@ -9,12 +9,14 @@ Expo / React Native app (SDK 55) with expo-router. Backend is Supabase
 
 **The app is called AskLocker** (asklocker.com; the .in and .app were free
 too when it was named, 6 October 2026). It was FamilyVault until then, and
-three things keep the old name on purpose: the GitHub repository and this
-checkout's directory (renaming a repository is a separate step on GitHub,
-which redirects the old address), the comments in migrations already applied
-to both projects (an applied migration is never edited), and the `fv:`
-prefix on the device's storage keys in `src/lib/storage.ts` (changing it
-would sign everyone out and forget their settings). Everything a person
+two things keep the old name on purpose: the comments in migrations already
+applied to both projects (an applied migration is never edited), and the
+`fv:` prefix on the device's storage keys in `src/lib/storage.ts` (changing
+it would sign everyone out and forget their settings). The GitHub
+repository was renamed `subhendu16740/AskLocker` on 27 October 2026, and
+GitHub redirects the old address; a checkout made before keeps its folder
+name, and the Vercel project its name, so DEV's address is still
+`family-vault-git-dev-…` until DEV moves to Cloudflare. Everything a person
 sees says AskLocker: the app name, slug and scheme in `app.config.ts`, the
 Android package `com.asklocker.app`, the web manifest and service worker,
 the login and share pages, Help, About, the notifications and emails the
@@ -703,7 +705,7 @@ copies, so DEV needs its own secrets and its own `documents` storage bucket.
   for that visit (the redirect sign-in comes back as a new page load, so
   `noteSignInStarted()` marks it in sessionStorage and `takeFreshSignIn()`
   reads it, 15 minutes at most).
-- **Its first version (subhendu16740/FamilyVault#68, #69) was a lock only**,
+- **Its first version (subhendu16740/AskLocker#68, #69) was a lock only**,
   with a key kept on the device and nothing at Supabase: it unlocked a
   signed-in AskLocker but could not sign anyone in, so after signing out it
   was Google again. Such an entry (`{ id }` in `accountKey.appLock`) is
@@ -2680,7 +2682,7 @@ where it does not.
   Business mode. Settings › Your vaults opens any vault, of either kind.
 - **A business wears teal and gold** (`biz` in `design.ts`: primary
   `#0F5C57`, secondary `#1A7A72`, tint `#E7F4F2`, accent `#B7791F`), a
-  family the app's navy. Orange was tried (subhendu16740/FamilyVault#92)
+  family the app's navy. Orange was tried (subhendu16740/AskLocker#92)
   and reverted the next day at the owner's ask: teal it stays. `useVaultTheme()` (`src/lib/vault-theme.ts`) is the
   open vault's colours, and the shared pieces follow it: the top bar, back
   arrow and header buttons, `settings-ui` cards, buttons and On/Off, Home's

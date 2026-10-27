@@ -38,7 +38,7 @@ the domain to another registrar once it is 60 days old (from 5 December
 
 1. Sign up at dash.cloudflare.com (free, no card).
 2. **Workers & Pages › Create › Pages › Connect to Git**. Allow
-   Cloudflare's GitHub app on `subhendu16740/FamilyVault`, then pick it.
+   Cloudflare's GitHub app on `subhendu16740/AskLocker`, then pick it.
 3. Fill in:
 
    | Setting | Value |
