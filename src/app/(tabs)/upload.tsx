@@ -645,8 +645,9 @@ export default function UploadScreen() {
             {uploadResult?.expiresOn && (
               <View style={styles.offer}>
                 <Text style={styles.offerText}>
-                  It expires on {longDate(uploadResult.expiresOn)}. ★ With {plusName(toBusiness)}, everyone gets reminders
-                  90, 30 and 7 days before.
+                  {/* On Free a family's document gets one reminder, for whoever added it (067); a business's none. */}
+                  It expires on {longDate(uploadResult.expiresOn)}.{toBusiness ? '' : ' We\'ll remind you 30 days before.'} ★ With{' '}
+                  {plusName(toBusiness)}, everyone is reminded 90, 30 and 7 days before.
                 </Text>
                 <TouchableOpacity
                   onPress={() => {

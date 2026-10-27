@@ -88,19 +88,27 @@ export async function runUploadChecks(cfg, { a, vaultA }, results, today) {
     }
 
     // An expiry inside 90 days becomes a notification for every member — on
-    // Family Plus (048); a vault on Free gets none. Before 048 every vault got
-    // one. family_storage_status() says the plan, and its `personal` field
-    // (048's) whether DEV has the migration.
+    // Family Plus (048); a vault on Free got none under 048, and since 067
+    // gets one, 30 days before, for whoever added the document (this one is
+    // ~20 days off, so A gets it). Before 048 every vault got one.
+    // family_storage_status() says the plan, and its `personal` field (048's)
+    // whether DEV has the migration; Free's 100 MB a person (anyone may read
+    // plan_limits) says whether it has 067.
     const { data: rooms } = await a.client.rpc('family_storage_status', { p_family_id: vaultA.id });
     const room = rooms?.[0] ?? null;
     const remindersArePlus = !!room && 'personal' in room;
-    const expectReminder = !remindersArePlus || room.plan === 'plus' || room.plan === 'family_pro';
+    const { data: freeRow } = await a.client.from('plan_limits').select('person_storage_bytes').eq('plan', 'free').maybeSingle();
+    const oneOnFree = Number(freeRow?.person_storage_bytes ?? 0) >= 100 * 1024 * 1024;
+    const expectReminder = !remindersArePlus || room.plan === 'plus' || room.plan === 'family_pro' || oneOnFree;
     const { data: created, error: checkErr } = await a.client.rpc('check_expiry_notifications', { p_family_id: vaultA.id });
     const { data: inbox, error: inboxErr } = await a.client.rpc('get_user_notifications', { p_user_id: a.user.id, p_limit: 50, p_offset: 0 });
     const mine = (inbox ?? []).find((n) => n.document_ref === up.docId && n.type === 'expiry');
     const failure = checkErr ? `check_expiry_notifications: ${checkErr.message}` : inboxErr ? `get_user_notifications: ${inboxErr.message}` : null;
     if (expectReminder) {
-      results.add('upload', 'vehicle:notification', 'Its expiry alert became a notification (check_expiry_notifications → get_user_notifications)',
+      const title = oneOnFree && room?.plan === 'free'
+        ? 'On Free, whoever added it gets one expiry reminder (067)'
+        : 'Its expiry alert became a notification (check_expiry_notifications → get_user_notifications)';
+      results.add('upload', 'vehicle:notification', title,
         !failure && mine ? 'pass' : 'fail', {
           why: failure ?? (mine ? `"${mine.title}"` : `no notification for this document (check created ${created ?? 0})`),
         });

@@ -9,7 +9,7 @@ import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { SUPPORT_EMAIL, SUPPORT_PHONE } from '../../lib/app-info';
 import {
-  DEFAULT_PLAN_LIMITS, FREE_BUSINESS_STORAGE_LABEL, FREE_PERSONAL_STORAGE_LABEL, FREE_PERSON_STORAGE_LABEL, businessPrice, FREE_STORAGE_LABEL,
+  DEFAULT_PLAN_LIMITS, FREE_PERSON_STORAGE_LABEL, businessPrice,
   MAX_FILE_BYTES, PLUS_FOR_SALE, formatBytes, freeVaultsText,
   plusPrice,
 } from '../../lib/plans';
@@ -42,7 +42,7 @@ function faq(payments: PaymentsStatus | null): { q: string; a: string }[] {
     },
     {
       q: 'How many questions can I ask?',
-      a: `On Free, you can ask ${DEFAULT_PLAN_LIMITS.questions.free} questions a month, and the count starts again on the 1st. Questions that get no answer don't count, but you can only try ${DEFAULT_PLAN_LIMITS.questionTriesPerDay.free} a day. ★ Family Plus gives the family ${count(DEFAULT_PLAN_LIMITS.familyQuestions)} a month to share and Family Pro ${count(DEFAULT_PLAN_LIMITS.familyPro.questions)}, and each person can try up to ${DEFAULT_PLAN_LIMITS.questionTriesPerDay.plus} a day.`,
+      a: `On Free, each person can ask ${DEFAULT_PLAN_LIMITS.questions.free} questions a month, typed or spoken. The count starts again on the 1st. ★ Family Plus gives the family ${count(DEFAULT_PLAN_LIMITS.familyQuestions)} a month to share, and Family Pro ${count(DEFAULT_PLAN_LIMITS.familyPro.questions)}. A question counts even when nothing is found, unless something went wrong on our side.`,
     },
     {
       q: 'Are there other limits?',
@@ -50,7 +50,7 @@ function faq(payments: PaymentsStatus | null): { q: string; a: string }[] {
     },
     {
       q: 'Can I ask by speaking?',
-      a: 'Yes. Turn on Voice assistant in Settings › Accessibility, then tap the mic on Ask and speak. It\'s free on every plan, in English, Hindi and the other languages there.',
+      a: 'Yes. Turn on Voice assistant in Settings › Accessibility, then tap the mic on Ask and speak. It works on every plan, in English, Hindi and the other languages there. Each answer uses one of your questions.',
     },
     {
       q: 'How do I sign in?',
@@ -98,15 +98,15 @@ function faq(payments: PaymentsStatus | null): { q: string; a: string }[] {
     },
     {
       q: 'How much space do we get?',
-      a: `On Free, a family vault holds ${FREE_STORAGE_LABEL} from everyone together and your personal vault ${FREE_PERSONAL_STORAGE_LABEL}, saved chats included, and each person can add ${FREE_PERSON_STORAGE_LABEL} in all. ★ Family Plus gives a vault ${formatBytes(DEFAULT_PLAN_LIMITS.plus)} and Family Pro ${formatBytes(DEFAULT_PLAN_LIMITS.familyPro.storage)}. If a paid plan ends while a vault is over its free space, you have ${DEFAULT_PLAN_LIMITS.graceDays} days to renew or delete documents, or the newest ones above it are removed.`,
+      a: `On Free, each person can add ${FREE_PERSON_STORAGE_LABEL}, saved chats included. ★ Family Plus gives the vault you pay for ${formatBytes(DEFAULT_PLAN_LIMITS.plus)} and Family Pro ${formatBytes(DEFAULT_PLAN_LIMITS.familyPro.storage)}, shared by everyone in it. If a paid plan ends while a vault is over its free space, you have ${DEFAULT_PLAN_LIMITS.graceDays} days to renew or delete documents, or the newest ones above it are removed.`,
     },
     {
       q: 'How do reminders work?',
-      a: 'With ★ Family Plus or Pro, everyone in the family is reminded 90, 30 and 7 days before a document expires, and on the day, and on each birthday in the family tree. To get them on your phone or computer, turn them on in Settings › Notifications.',
+      a: 'On Free, whoever adds a document gets one reminder, 30 days before it expires. With ★ Family Plus or Pro, everyone in the family is reminded 90, 30 and 7 days before, and on the day, and on each birthday in the family tree. To get them on your phone or computer, turn them on in Settings › Notifications.',
     },
     {
       q: 'What does ★ Family Plus mean?',
-      a: `It marks what the paid plans for the whole family add${forSale ? '' : ', coming soon'}. Family Plus is ${plusPrice('inr')} or ${plusPrice('inr', 'yearly')} in India (${plusPrice('usd')} or ${plusPrice('usd', 'yearly')} elsewhere), with ${DEFAULT_PLAN_LIMITS.members.plus} members and ${formatBytes(DEFAULT_PLAN_LIMITS.plus)}. Family Pro is ${plusPrice('inr', 'monthly', 'family_pro')} or ${plusPrice('inr', 'yearly', 'family_pro')} (${plusPrice('usd', 'monthly', 'family_pro')} or ${plusPrice('usd', 'yearly', 'family_pro')}), with ${DEFAULT_PLAN_LIMITS.familyPro.members} members and ${formatBytes(DEFAULT_PLAN_LIMITS.familyPro.storage)}. Both add more questions, 30-day share links, expiry and birthday reminders and Gmail import. Pro also reads documents in Indian languages.`,
+      a: `It marks what the paid plans for the whole family add${forSale ? '' : ', coming soon'}. Family Plus is ${plusPrice('inr')} or ${plusPrice('inr', 'yearly')} in India (${plusPrice('usd')} or ${plusPrice('usd', 'yearly')} elsewhere), with ${DEFAULT_PLAN_LIMITS.members.plus} members and ${formatBytes(DEFAULT_PLAN_LIMITS.plus)}. Family Pro is ${plusPrice('inr', 'monthly', 'family_pro')} or ${plusPrice('inr', 'yearly', 'family_pro')} (${plusPrice('usd', 'monthly', 'family_pro')} or ${plusPrice('usd', 'yearly', 'family_pro')}), with ${DEFAULT_PLAN_LIMITS.familyPro.members} members and ${formatBytes(DEFAULT_PLAN_LIMITS.familyPro.storage)}. Both add more questions, 30-day share links, reminders for everyone, reading Hindi and other Indian languages, and Gmail import.`,
     },
     ...(forSale ? [{
       q: 'How do I pay for Family Plus or Pro?',
@@ -122,7 +122,7 @@ function faq(payments: PaymentsStatus | null): { q: string; a: string }[] {
     },
     {
       q: 'Why can\'t AskLocker find something in my document?',
-      a: 'Blurry or dark photos are hard to read. Retake the photo in good light. If your documents use another language, add it in Settings › Document languages (★ Family Pro).',
+      a: 'Blurry or dark photos are hard to read. Retake the photo in good light. If your documents use another language, add it in Settings › Document languages (★ Family Plus).',
     },
   ];
 }
@@ -154,7 +154,7 @@ function businessFaq(): { q: string; a: string }[] {
     },
     {
       q: 'How many questions can I ask?',
-      a: `On Free, each person can ask ${L.questions.free} questions a month and try ${L.questionTriesPerDay.free} a day. ★ Plus gives the business ${count(plus.questions)} a month to share, Pro ${count(pro.questions)} and Enterprise ${ent.questions == null ? 'no monthly limit' : count(ent.questions)}, and each person can try ${plus.questionTriesPerDay} a day.`,
+      a: `On Free, each person can ask ${L.questions.free} questions a month, typed or spoken. ★ Plus gives the business ${count(plus.questions)} a month to share, Pro ${count(pro.questions)} and Enterprise ${ent.questions == null ? 'no monthly limit' : count(ent.questions)}. A question counts even when nothing is found, unless something went wrong on our side.`,
     },
     {
       q: 'Are there other limits?',
@@ -162,7 +162,7 @@ function businessFaq(): { q: string; a: string }[] {
     },
     {
       q: 'Can I ask by speaking?',
-      a: 'Yes. Turn on Voice assistant in Settings › Accessibility, then tap the mic on Ask and speak. It\'s free on every plan, in English, Hindi and the other languages there.',
+      a: 'Yes. Turn on Voice assistant in Settings › Accessibility, then tap the mic on Ask and speak. It works on every plan, in English, Hindi and the other languages there. Each answer uses one of your questions.',
     },
     {
       q: 'How do I add someone to my team?',
@@ -170,7 +170,7 @@ function businessFaq(): { q: string; a: string }[] {
     },
     {
       q: 'How much space do we get?',
-      a: `On Free, a business holds ${FREE_BUSINESS_STORAGE_LABEL} from everyone together, and each person can add ${FREE_PERSON_STORAGE_LABEL} in all. ★ Plus gives ${formatBytes(plus.storage)}, Pro ${formatBytes(pro.storage)} and Enterprise ${formatBytes(ent.storage)}. If a paid plan ends, nothing is removed, but you can't add records until you renew.`,
+      a: `On Free, each person can add ${FREE_PERSON_STORAGE_LABEL}. ★ Plus gives the business ${formatBytes(plus.storage)}, Pro ${formatBytes(pro.storage)} and Enterprise ${formatBytes(ent.storage)}, shared by everyone in it. If a paid plan ends, nothing is removed, but you can't add records until you renew.`,
     },
     {
       q: 'How do reminders work?',
@@ -178,7 +178,7 @@ function businessFaq(): { q: string; a: string }[] {
     },
     {
       q: 'What does ★ Plus mean?',
-      a: `It marks what the paid plans add. Plus is ${businessPrice('business_plus')}, Pro ${businessPrice('business_pro')} and Enterprise ${businessPrice('business_enterprise')}. Pro and Enterprise also read records in Indian languages. To get one, open Plans from the menu and tap Ask us.`,
+      a: `It marks what the paid plans add. Plus is ${businessPrice('business_plus')}, Pro ${businessPrice('business_pro')} and Enterprise ${businessPrice('business_enterprise')}. Every paid plan also reads Hindi and other Indian languages. To get one, open Plans from the menu and tap Ask us.`,
     },
     {
       q: 'How do I share with someone outside the business?',
@@ -202,7 +202,7 @@ function businessFaq(): { q: string; a: string }[] {
     },
     {
       q: 'Why can\'t AskLocker find something in my record?',
-      a: 'Blurry or dark photos are hard to read. Retake the photo in good light. If your records use another language, add it in Settings › Document languages (★ Pro).',
+      a: 'Blurry or dark photos are hard to read. Retake the photo in good light. If your records use another language, add it in Settings › Document languages (★ Plus).',
     },
   ];
 }

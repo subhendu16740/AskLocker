@@ -360,7 +360,7 @@ export default function SettingsScreen() {
               <View style={styles.settingText}>
                 <Text style={styles.settingLabel}>Document languages</Text>
                 <Text style={styles.settingSub}>
-                  {languagesAllowed ? 'Languages your documents are in' : `★ Indian languages with ${theme.business ? 'Pro' : 'Family Pro'}`}
+                  {languagesAllowed ? 'Languages your documents are in' : `★ Indian languages with ${theme.business ? 'Plus' : 'Family Plus'}`}
                 </Text>
               </View>
               <Text style={styles.settingValue} numberOfLines={1}>

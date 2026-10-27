@@ -689,27 +689,27 @@ await test('every suite stays inside its Groq budget', () => {
 
 await test('plans: every limit is finite, and a full vault says why and what to do (038–048)', () => {
   const GB = 1024 ** 3, MB = 1024 ** 2;
-  // What 039–066 leave in plan_limits: one row per plan; on Free 50 MB a
-  // vault, family or personal, and 100 MB a business, and 50 MB for each
-  // person to add across their free vaults (060, 066); Plus 500 MB and Pro
-  // 2 GB for either (066); 30 days after a paid plan ends before anything
-  // above Free goes; 2 members on Free, 4 on Plus and 8 on Pro (064); voice
-  // with no limit on any plan (066; 10 on Free before); 20 questions a month
-  // for each person on Free, and a month shared by the vault on every paid
-  // plan but Enterprise (066): Plus 500, Pro 2,000, Business Plus 1,000 and
-  // Pro 5,000. A business (051) has its own plans. On Free a person creates
-  // one family and one business (059), and Family Plus adds 100 documents
-  // and 50 question tries a day.
+  // What 039–067 leave in plan_limits: one row per plan; on Free 100 MB for
+  // each person to add across their free vaults (060, 067), a family vault
+  // 200 MB, a personal vault 100 MB and a business 200 MB; Plus 5 GB and Pro
+  // 10 GB (067); 30 days after a paid plan ends before anything above Free
+  // goes; 2 members on Free, 4 on Plus and 8 on Pro (064); voice with no
+  // limit on any plan (066); 20 questions a month for each person on Free,
+  // and a month shared by the vault on every paid plan (066, 067): Plus 250,
+  // Pro 500, Business Plus 1,000, Pro 2,000 and Enterprise 8,000. A business
+  // (051) has its own plans: 20, 50 and 200 GB (067). On Free a person
+  // creates one family and one business (059), and Family Plus adds 100
+  // documents and 20 question tries a day (067).
   assert.deepEqual(DEFAULT_PLAN_LIMITS, {
-    free: 50 * MB, freePersonal: 50 * MB, freeBusiness: 100 * MB, freePerson: 50 * MB, plus: 500 * MB, graceDays: 30,
-    familyPro: { storage: 2 * GB, members: 8, questions: 2000 },
+    free: 200 * MB, freePersonal: 100 * MB, freeBusiness: 200 * MB, freePerson: 100 * MB, plus: 5 * GB, graceDays: 30,
+    familyPro: { storage: 10 * GB, members: 8, questions: 500 },
     members: { free: 2, plus: 4 },
     freeBusinessMembers: 2,
     voiceAnswers: { free: null, plus: null },
     questions: { free: 20, plus: null },
-    questionsFairUse: 500,
-    familyQuestions: 500,
-    questionTriesPerDay: { free: 10, plus: 50 },
+    questionsFairUse: 250,
+    familyQuestions: 250,
+    questionTriesPerDay: { free: 10, plus: 20 },
     uploadsPerDay: { free: 50, plus: 100 },
     familiesPerPerson: 1,
     businessesPerPerson: 1,
@@ -717,9 +717,9 @@ await test('plans: every limit is finite, and a full vault says why and what to 
     notesPerPerson: { free: 20, paid: 500 },
     invitesPerDay: { free: 20, plus: 20 },
     business: {
-      business_plus: { storage: 5 * GB, members: 5, questions: 1000, questionsShared: true, questionTriesPerDay: 30, uploadsPerDay: 300, invitesPerDay: 20 },
-      business_pro: { storage: 25 * GB, members: 10, questions: 5000, questionsShared: true, questionTriesPerDay: 30, uploadsPerDay: 300, invitesPerDay: 20 },
-      business_enterprise: { storage: 100 * GB, members: 50, questions: null, questionsShared: false, questionTriesPerDay: 30, uploadsPerDay: 300, invitesPerDay: 50 },
+      business_plus: { storage: 20 * GB, members: 5, questions: 1000, questionsShared: true, questionTriesPerDay: 30, uploadsPerDay: 300, invitesPerDay: 20 },
+      business_pro: { storage: 50 * GB, members: 10, questions: 2000, questionsShared: true, questionTriesPerDay: 30, uploadsPerDay: 300, invitesPerDay: 20 },
+      business_enterprise: { storage: 200 * GB, members: 50, questions: 8000, questionsShared: true, questionTriesPerDay: 30, uploadsPerDay: 300, invitesPerDay: 50 },
     },
   });
   // The owner's prices, 25 October 2026 (066): ₹99 / ₹999 and $10 / $99 for
@@ -744,10 +744,13 @@ await test('plans: every limit is finite, and a full vault says why and what to 
   assert.equal(businessPrice('business_pro'), '₹999 a month + GST');
   assert.equal(businessYearPrice('business_enterprise'), '₹39,999 a year + GST');
   assert.equal(businessAmount('business_plus', 'yearly'), '₹4,999');
-  // Reading documents in Indian languages: Family Pro, Business Pro and Enterprise (066).
+  // Reading documents in Indian languages: every paid plan, Plus and up (067).
+  assert.ok(plansHaveIndianLanguages(['free', 'plus']));
+  assert.ok(plansHaveIndianLanguages(['business_plus']));
   assert.ok(plansHaveIndianLanguages(['free', 'family_pro']));
   assert.ok(plansHaveIndianLanguages(['business_enterprise']));
-  assert.ok(!plansHaveIndianLanguages(['free', 'plus', 'business_plus']));
+  assert.ok(!plansHaveIndianLanguages(['free']));
+  assert.ok(!plansHaveIndianLanguages([]));
   assert.equal(familyPlanName('plus'), 'Family Plus');
   assert.equal(familyPlanName('family_pro'), 'Family Pro');
   assert.equal(plusYearlySaving('inr', 'family_pro'), 'Save ₹389');
@@ -783,11 +786,11 @@ await test('plans: every limit is finite, and a full vault says why and what to 
   assert.equal(formatBytes(2048), '2 KB');
   assert.equal(formatBytes(1.25 * MB), '1.3 MB');
   assert.equal(formatBytes(250 * MB), '250 MB');
-  assert.equal(formatBytes(DEFAULT_PLAN_LIMITS.free), '50 MB');
-  assert.equal(formatBytes(DEFAULT_PLAN_LIMITS.freePersonal), '50 MB');
-  assert.equal(formatBytes(DEFAULT_PLAN_LIMITS.freeBusiness), '100 MB');
-  assert.equal(formatBytes(DEFAULT_PLAN_LIMITS.plus), '500 MB');
-  assert.equal(formatBytes(DEFAULT_PLAN_LIMITS.freePerson), '50 MB');
+  assert.equal(formatBytes(DEFAULT_PLAN_LIMITS.free), '200 MB');
+  assert.equal(formatBytes(DEFAULT_PLAN_LIMITS.freePersonal), '100 MB');
+  assert.equal(formatBytes(DEFAULT_PLAN_LIMITS.freeBusiness), '200 MB');
+  assert.equal(formatBytes(DEFAULT_PLAN_LIMITS.plus), '5 GB');
+  assert.equal(formatBytes(DEFAULT_PLAN_LIMITS.freePerson), '100 MB');
   // A person on Free who has added their 50 MB across their free vaults (060).
   const me = { usedBytes: 48 * MB, limitBytes: 50 * MB };
   assert.ok(personFits(me, 2 * MB), 'a file that exactly fills what is left fits');
@@ -810,17 +813,17 @@ await test('plans: every limit is finite, and a full vault says why and what to 
   assert.match(full, /^Your family's storage is full, with 1\.01 GB of 1 GB used\./);
   // Until Plus can be bought, nothing offers to sell it.
   if (!PLUS_FOR_SALE) {
-    assert.match(full, /Family Plus is coming soon, with 500 MB for ₹99 a month\.$/);
+    assert.match(full, /Family Plus is coming soon, with 5 GB for ₹99 a month\.$/);
     assert.doesNotMatch(full, /move to/);
   }
-  assert.match(storageFullMessage({ ...free, usedBytes: GB }, 0, { price: plusPrices('inr') }), /with 500 MB for ₹99 a month or ₹999 a year\.$/);
+  assert.match(storageFullMessage({ ...free, usedBytes: GB }, 0, { price: plusPrices('inr') }), /with 5 GB for ₹99 a month or ₹999 a year\.$/);
   // The server cannot tell where the person is, so it names no price.
-  assert.match(storageFullMessage({ ...free, usedBytes: GB }), /with 500 MB\.$/);
+  assert.match(storageFullMessage({ ...free, usedBytes: GB }), /with 5 GB\.$/);
   const plus = storageFullMessage({ plan: 'plus', limitBytes: GB, usedBytes: GB }, 0, { price: plusPrice('usd') });
   assert.equal(plus, "Your family's storage is full, with 1 GB of 1 GB used. Delete documents you don't need to make room.");
   // Where Pro can be bought, a full Plus vault is offered its 2 GB (064, 066); a full Pro vault makes room.
   assert.equal(storageFullMessage({ plan: 'plus', limitBytes: GB, usedBytes: GB }, 0, { forSale: true }),
-    "Your family's storage is full, with 1 GB of 1 GB used. Delete documents you don't need, or move to Family Pro and get 2 GB.");
+    "Your family's storage is full, with 1 GB of 1 GB used. Delete documents you don't need, or move to Family Pro and get 10 GB.");
   assert.equal(storageFullMessage({ plan: 'family_pro', limitBytes: 10 * GB, usedBytes: 10 * GB }, 0, { forSale: true }),
     "Your family's storage is full, with 10 GB of 10 GB used. Delete documents you don't need to make room.");
   // Plus has ended and the family holds more than Free: the day it loses the excess, and how to keep it.
@@ -830,12 +833,12 @@ await test('plans: every limit is finite, and a full vault says why and what to 
   // with no room needs Family Plus; on Plus, room is made by deleting.
   const chatFree = chatStorageFullMessage({ plan: 'free', limitBytes: GB, usedBytes: GB }, { price: plusPrices('inr') });
   assert.match(chatFree, /^There's no room to save this chat\. Your family has used 1 GB of 1 GB\. .*Family Plus/);
-  assert.match(chatFree, /500 MB for ₹99 a month or ₹999 a year\./);
+  assert.match(chatFree, /5 GB for ₹99 a month or ₹999 a year\./);
   if (!PLUS_FOR_SALE) assert.match(chatFree, /Family Plus is coming soon, with .*Until then, delete documents you don't need\.$/);
   assert.equal(chatStorageFullMessage({ plan: 'plus', limitBytes: GB, usedBytes: GB }, { price: plusPrice('usd') }),
     "There's no room to save this chat. Your family has used 1 GB of 1 GB. Delete documents or saved chats you don't need to make room.");
   assert.equal(chatStorageFullMessage({ plan: 'plus', limitBytes: GB, usedBytes: GB }, { forSale: true }),
-    "There's no room to save this chat. Your family has used 1 GB of 1 GB. To save more, move to Family Pro and get 2 GB. Or delete documents you don't need.");
+    "There's no room to save this chat. Your family has used 1 GB of 1 GB. To save more, move to Family Pro and get 10 GB. Or delete documents you don't need.");
   // A personal vault (048) is "your personal vault", never "your family".
   const mine = { plan: 'free', limitBytes: 100 * MB, usedBytes: 99 * MB, personal: true };
   assert.match(storageFullMessage(mine, 3 * MB), /^This file is 3 MB, but your personal vault has only 1 MB left\./);
@@ -1238,10 +1241,10 @@ await test('business plans: Plus, Pro and Enterprise, their prices and words, an
   assert.match(storageFullMessage(shop, 3 * MB), /^This file is 3 MB, but your business has only 1 MB left\./);
   // Never Family Plus, nor its price, for a business.
   const shopFull = storageFullMessage({ ...shop, usedBytes: 100 * MB }, 0, { forSale: true, price: plusPrice('inr') });
-  assert.equal(shopFull, "Your business's storage is full, with 100 MB of 100 MB used. Delete records you don't need, or move to Plus for 5 GB.");
-  assert.equal(storageFullMessage({ plan: 'business_plus', limitBytes: 5 * GB, usedBytes: 5 * GB, business: true }),
-    "Your business's storage is full, with 5 GB of 5 GB used. Delete records you don't need, or move to Pro for 25 GB.");
-  assert.match(chatStorageFullMessage({ ...shop, usedBytes: 100 * MB }), /^There's no room to save this chat\. Your business has used 100 MB of 100 MB\. To save more, move to Plus for 5 GB\./);
+  assert.equal(shopFull, "Your business's storage is full, with 100 MB of 100 MB used. Delete records you don't need, or move to Plus for 20 GB.");
+  assert.equal(storageFullMessage({ plan: 'business_plus', limitBytes: 20 * GB, usedBytes: 20 * GB, business: true }),
+    "Your business's storage is full, with 20 GB of 20 GB used. Delete records you don't need, or move to Pro for 50 GB.");
+  assert.match(chatStorageFullMessage({ ...shop, usedBytes: 100 * MB }), /^There's no room to save this chat\. Your business has used 100 MB of 100 MB\. To save more, move to Plus for 20 GB\./);
   for (const text of [storageFullMessage(shop, 3 * MB), shopFull, chatStorageFullMessage(shop)]) {
     assert.doesNotMatch(text, /family/i, 'a business is not called a family');
   }
@@ -1250,8 +1253,8 @@ await test('business plans: Plus, Pro and Enterprise, their prices and words, an
   assert.ok(fits({ ...shop, usedBytes: 5 * MB }, 1));
   assert.equal(storageFullMessage({ ...shop, usedBytes: 5 * MB, closed: true }, 3 * MB), CLOSED_MESSAGE);
   assert.equal(CLOSED_MESSAGE, "Your business's plan has ended. Your records stay. To add new ones, renew the plan.");
-  assert.equal(storageFullMessage({ plan: 'business_pro', limitBytes: 25 * GB, usedBytes: 25 * GB, business: true }),
-    "Your business's storage is full, with 25 GB of 25 GB used. Delete records you don't need, or move to Enterprise for 100 GB.");
+  assert.equal(storageFullMessage({ plan: 'business_pro', limitBytes: 50 * GB, usedBytes: 50 * GB, business: true }),
+    "Your business's storage is full, with 50 GB of 50 GB used. Delete records you don't need, or move to Enterprise for 200 GB.");
   assert.equal(storageFullMessage({ plan: 'business_enterprise', limitBytes: 100 * GB, usedBytes: 100 * GB, business: true }),
     "Your business's storage is full, with 100 GB of 100 GB used. Delete records you don't need to make room.");
   assert.equal(chatStorageFullMessage({ plan: 'business_enterprise', limitBytes: 100 * GB, usedBytes: 100 * GB, business: true }),

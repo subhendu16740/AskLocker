@@ -41,8 +41,8 @@ interface PreferencesContextType extends Preferences {
   /** False until the account row is read with birthday_reminders in it — before 035, or offline. */
   birthdaysAvailable: boolean;
   /**
-   * Reading documents in Indian languages comes with Family Pro, or a
-   * business's Pro or Enterprise (066; any paid plan under 064). Elsewhere
+   * Reading documents in Indian languages comes with every paid plan, Plus
+   * and up (067; Pro alone under 066, any paid plan under 064). Elsewhere
    * documentLanguages read English whatever was chosen, and the choice comes
    * back with one of those plans. Voice is in any language on every plan
    * (066). True while the plan is not known, which gates nothing.
