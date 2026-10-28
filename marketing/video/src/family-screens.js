@@ -26,7 +26,7 @@ export const STORY = {
   scanFile: 'scan_1793506263481.jpg',
   // The end card. Leave ctaNote or url empty to show nothing there.
   cta: 'Start your family vault',
-  ctaNote: 'Free to start · ★ Family Plus ₹100 a month',
+  ctaNote: 'Free to start · ★ Family Plus ₹99 a month',
   url: '',
 };
 
@@ -56,9 +56,9 @@ export const VOICE_LANGUAGES = [
 // metadata.ts, extractMetadata) reads exactly what the "Read off the page"
 // callout shows: "Policy Number" (not "Policy No.", whose full stop the regex
 // rejects), "Sum insured", "Valid till". Nothing above the policy row may
-// contain the word "policy", or the regex grabs the next word. The callout
-// leaves out the name: the name pattern runs on into the next line's first
-// word ("Ramesh Sharma Members"), so it would not read cleanly.
+// contain the word "policy", or the regex grabs the next word. The insured's
+// name ends in "(Self)", which stops the name pattern there: without it the
+// pattern ran on into the next line's first word ("Ramesh Sharma Members").
 export function policyPaper(id = '') {
   return `<div class="paper" ${id ? `id="${id}"` : ''}>
     <div class="pp-head">
@@ -68,7 +68,7 @@ export function policyPaper(id = '') {
     </div>
     <div class="pp-title">FAMILY FLOATER HEALTH PLAN</div>
     <div class="pp-row"><span class="pp-k">Policy Number</span><b>${STORY.policyNo}</b></div>
-    <div class="pp-row"><span class="pp-k">Insured name</span><b>${STORY.papa}</b></div>
+    <div class="pp-row"><span class="pp-k">Insured name</span><b>${STORY.papa} (Self)</b></div>
     <div class="pp-row"><span class="pp-k">Members covered</span><span>Ramesh Sharma, Sunita Sharma</span></div>
     <div class="pp-row"><span class="pp-k">Sum insured</span><b>₹10,00,000</b></div>
     <div class="pp-row"><span class="pp-k">Policy period</span><span>15/03/2026 to 14/03/2027</span></div>
@@ -82,7 +82,7 @@ export function policyPaper(id = '') {
 
 // ─── Upload (src/app/(tabs)/upload.tsx) ──────────────────────────────────
 
-function uploadScreen() {
+export function uploadScreen() {
   return `<section class="scr" id="scr-upload">${sbFill}
     ${header('Upload Document')}
     <div class="up-body">
@@ -119,7 +119,7 @@ function vaultField() {
       <span id="vf-hint1">Everyone in ${STORY.familyName} will see it.</span></div>`;
 }
 
-function tagScreen() {
+export function tagScreen() {
   // Everyone in the family tree, you first ("(Me)"), then in the order they
   // were added: the relation in English, and the nickname the family gave,
   // if any (family-people.ts, 045).
@@ -179,7 +179,7 @@ function gmailRow([id, file, isImg, meta, subject, reason, cat], ticked) {
     </div></div>`;
 }
 
-function gmailScreen() {
+export function gmailScreen() {
   const owners = [['go-me', STORY.youFull, true], ['go-papa', 'Papa'], ['go-maa', 'Maa'], ['go-priya', 'Priya']];
   return `<section class="scr" id="scr-gmail">${sbFill}
     ${header('Import from Gmail', { right: plusTag() })}
@@ -221,7 +221,7 @@ function askEmpty(id, ic, title, sub) {
   </div>`;
 }
 
-function askScreen() {
+export function askScreen() {
   const turns = [{
     q: "What is Papa's health insurance policy number?", loading: 'Searching documents...',
     a: `Papa's health insurance policy number is <mark class="hl" id="ask-hl">${STORY.policyNo}</mark>, with ${STORY.insurer}. It's valid till 14 March 2027, with a sum insured of ₹10,00,000.`,
@@ -239,7 +239,7 @@ function askScreen() {
   </section>`;
 }
 
-function voiceScreen(lang) {
+export function voiceScreen(lang) {
   // The voice scene's language (src/voice-lines.js): the full film's Hindi
   // unless ?lang= names another. The app's own phrases come in English or Hindi.
   const V = VOICE_LINES[lang || 'hi'];
@@ -278,7 +278,7 @@ function voiceScreen(lang) {
 
 // ─── Home and the drawer ─────────────────────────────────────────────────
 
-function homeScreen() {
+export function homeScreen() {
   // Category colours from home.tsx; anything it does not map is grey. Every
   // document says which vault it is in.
   const doc = (name, ic, cat, color, vault, line) => `<div class="doc-card">
@@ -334,7 +334,7 @@ function treeCard(id, name, rel, { me = false, onApp = false, badge = '' } = {})
     ${badge ? `<div class="tc-exp">${badge}</div>` : ''}</div>`;
 }
 
-function treeScreen() {
+export function treeScreen() {
   // The layout is family-tree-view.tsx's, in the same flex boxes: a unit is a
   // person and their spouse, a branch is a unit with its children below.
   const kid = (pos, inner) => `<div class="kid"><div class="bar"><i class="${pos === 'first' || pos === 'only' ? '' : 'on'}"></i><i class="${pos === 'last' || pos === 'only' ? '' : 'on'}"></i></div><div class="vl"></div>${inner}</div>`;
@@ -372,7 +372,7 @@ function treeScreen() {
 const cardTitle = (ic, title) => `<div class="card-title"><span class="ct-ic">${icon(ic, 16, '#2A3D66')}</span><span>${title}</span></div>`;
 const bloodPill = (g) => `<span class="blood-pill">${icon('droplet', 12, '#B91C1C', 2.4)}<b>${g}</b></span>`;
 
-function personScreen() {
+export function personScreen() {
   const chipP = (name, me) => `<div class="pchip">${avatar(name, 24, { me })}<span>${me ? 'You' : name}</span></div>`;
   return `<section class="scr" id="scr-person">${sbFill}
     ${header(STORY.papa, { right: `<div class="v4-actions"><span class="v4-iconbtn">${icon('edit-2', 24, '#2A3D66')}</span></div>` })}
@@ -393,7 +393,7 @@ function personScreen() {
   </section>`;
 }
 
-function emergencyScreen() {
+export function emergencyScreen() {
   const call = (n) => `<div class="call-btn-g">${icon('phone', 18, '#fff')}<span>${n}</span></div>`;
   const sec = (label, value) => `<div class="em-sec"><div class="em-l">${label}</div><div class="em-v">${value}</div></div>`;
   return `<section class="scr" id="scr-emerg">${sbFill}
@@ -418,7 +418,7 @@ function emergencyScreen() {
 
 // ─── Notifications (src/app/notifications.tsx) ───────────────────────────
 
-function notificationsScreen() {
+export function notificationsScreen() {
   const card = (type, title, msg, time, unread) => {
     const [ic, bg, fg] = {
       expiry: ['clock', '#FEF2F2', '#DC2626'], birthday: ['gift', '#FDF2F8', '#DB2777'],
@@ -433,7 +433,7 @@ function notificationsScreen() {
     <div class="nt-list" id="nt-list">
       ${card('expiry', 'Car Insurance expires in 7 days', `Expires on 9 Nov 2026 · ${STORY.youFull}. Renew it soon.`, 'Just now', true)}
       ${card('birthday', `Today is ${STORY.dadi}'s 78th birthday`, 'Wish her a happy birthday.', 'Just now', true)}
-      ${card('plan', `${STORY.familyName} has Family Plus`, 'Room for 10 GB of documents, until 1 Nov 2027.', '1d ago', false)}
+      ${card('plan', `${STORY.familyName} has Family Plus`, 'Room for 5 GB of documents, until 1 Nov 2027.', '1d ago', false)}
       ${card('member', `Priya Sharma joined ${STORY.familyName}`, `Priya Sharma accepted the invitation and can now see ${STORY.familyName}'s documents, as a viewer.`, 'Oct 3', false)}
     </div>
   </section>`;

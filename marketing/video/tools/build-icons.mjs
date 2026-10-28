@@ -17,6 +17,9 @@ const NEEDED = [
   'briefcase', 'archive', 'bar-chart-2', 'edit-3', 'trash-2', 'user-minus', 'circle', 'monitor', 'copy',
   // The business film's document types
   'award', 'clipboard', 'credit-card', 'umbrella', 'pen-tool', 'percent', 'minus',
+  // The feature posters and shorts: a document's page, its share sheet, the
+  // lock, spreadsheets, who can open what
+  'share-2', 'download', 'aperture', 'grid', 'user-check',
 ];
 const missing = NEEDED.filter(n => !icons[n]);
 if (missing.length) throw new Error(`Unknown Feather icons: ${missing.join(', ')}`);

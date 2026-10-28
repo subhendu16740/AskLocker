@@ -1,7 +1,8 @@
 # AskLocker films
 
-Two launch films, as code: one for families, one for business. `src/intro.html`
-builds either as a GSAP timeline (`?film=family` or `?film=business`) that
+Two launch films, as code: one for families, one for business, and a poster
+and a short for each feature (below). `src/intro.html` builds any of them as a
+GSAP timeline (`?film=family`, `?film=business` or `?film=features`) that
 recreates the app's real screens (same layouts, copy, colours and Feather icons
 as `src/app/**`, sized by `src/constants/design.ts`; a business's screens in the
 app's teal, as Business mode has them). `tools/render.mjs` seeks the paused
@@ -79,6 +80,36 @@ title, the challenge, the five parts, chapters 01 to 03 (Capture, Ask and
 Overview), the plans and the closing card; it drops Reminders, Team, and access
 and control.
 
+**Feature posters and shorts** (`src/features.js`): one feature at a time,
+eleven of them: Ask, instant insights (a photo read the moment it is added),
+Voice, Reminders, the family tree, the emergency card, share links, who can
+open what, fingerprint sign-in, a business's Overview, and spreadsheets. Each
+has a **poster**, its line on the left and the phone on the right showing the
+feature, with a callout over the phone's edge (`asklocker-<feature>-1920x1080.png`
+and `-1080x1080.png`, in `out/posters/`), and a **short**, 9:16 and 14 to 21
+seconds: why the feature exists, how AskLocker answers it while the phone does
+it, the callout, and the end card (`asklocker-feature-<feature>-9x16.mp4`). The
+voice short plays Maa's Hindi question and the answer read back, with English
+subtitles; the business and spreadsheet ones wear Business mode's teal. They
+use the films' own screens and people, and a few screens only they need
+(`src/feature-screens.js`): a document's page with what was read off it, its
+share sheet, the lock a fingerprint opens, Upload's "Where should this go?",
+and a spreadsheet read and asked about.
+
+| Feature (`?feature=`) | Poster's headline | Short's how |
+|---|---|---|
+| `ask` | Ask your documents anything. | Just ask, the way you'd ask a person. |
+| `read` | Snap a page. Know what it says. | Snap it. AskLocker reads it. |
+| `voice` | Ask out loud. Hear the answer. | Ask out loud. Hear the answer. |
+| `reminders` | Renew it before it runs out. | Everyone is reminded in time. |
+| `tree` | It knows who "Dadi" is. | Ask by relation. It knows who you mean. |
+| `emergency` | What the doctor asks, one tap away. | One emergency card for each person. |
+| `share` | Send one document. Not your whole vault. | Send a link that expires. |
+| `vaults` | Your papers, sent and stored encrypted. | Sent and stored encrypted. |
+| `fingerprint` | Open it with a touch. | Open it with your fingerprint. |
+| `business` | Bills due, renewals, money in and out. | One overview, read from your papers. |
+| `sheets` | Ask your Excel sheets in plain words. | AskLocker reads it. You just ask. |
+
 Rendered files go to `out/`, which is not committed.
 
 ## Render
@@ -105,6 +136,20 @@ The spoken lines are committed WAVs, so rendering needs no speech engine.
 A full cut takes about eight minutes on four cores (`--workers 3` renders three
 slices in parallel and joins them losslessly).
 
+The feature posters and shorts:
+
+```bash
+./tools/features.sh                   # every short, with sound, and every poster
+./tools/features.sh voice share       # some of them
+node tools/posters.mjs --features ask --sizes 1080x1080 --scale 2   # one poster, at 2x
+node tools/render.mjs --film features --feature ask --portrait      # one short, no sound yet
+./tools/mux.sh feature-ask-9x16                                     # -> out/asklocker-feature-ask-9x16.mp4
+```
+
+A poster is the frame the feature names (`window.__hero`), taken as a PNG at
+any size (`--sizes 1920x1080,1080x1080` by default). A short takes two to
+three minutes on four cores; all eleven, about half an hour.
+
 Single frames, for checking a change without a full render:
 
 ```bash
@@ -114,7 +159,9 @@ node tools/render.mjs --film business --portrait --stills 53
 
 To watch it live, serve this folder (`npm run preview`) and open
 `src/intro.html?film=business` (or `?film=family`), adding
-`&orientation=portrait` or `&cut=short`. Space pauses, arrow keys scrub, number
+`&orientation=portrait` or `&cut=short`; a feature is
+`?film=features&feature=share&orientation=portrait` (its short) or
+`&size=1080x1080` (its poster, playing). Space pauses, arrow keys scrub, number
 keys jump to tenths of the film.
 
 ## Change it
@@ -160,6 +207,16 @@ keys jump to tenths of the film.
   `LINES` in `tools/voices_indic.py` what each voice says, with the numbers as
   words. Run it (below) to remake `audio/voices/lang/<code>-ask.wav`,
   `<code>-answer.wav` and `src/voices-langs.js`, their timings.
+- **A feature poster or short**: its entry in `FEATURES` in `src/features.js`
+  holds its words (the short's `why` and `how`, the poster's `head` and
+  `line`, where `*stars*` mark the emphasis), its screens, the taps and
+  timings of its `play()`, and how high its callout sits on a 16:9 poster
+  (`coY`). The callouts' words are `CALLOUTS` in `src/feature-screens.js`. A
+  short's why stays for its first two and a half seconds, then the how while
+  the phone works, then the callout in the how's place; `play()` returns when
+  each comes, the poster's moment (`hero`) and the end. Their music is
+  `short_music()` in `audio/score.py` (a business feature takes the business
+  film's).
 - **Fonts**: `tools/fetch-fonts.sh` refreshes the local copies in `fonts/`.
 - **Icons**: add a Feather name to `NEEDED` in `tools/build-icons.mjs` and rerun it.
 
@@ -230,10 +287,12 @@ ending trips the voice the same way.
 The films may only claim what the app does, and the app's own rule holds for
 them too: never promise more privacy than AskLocker gives (CLAUDE.md,
 Conventions). So the privacy scenes say "In AskLocker, only your family can
-open them" (or "your team"), never "secure", "private and isolated" or
-"encrypted", and the line under the cards says that search sends passages to
-outside AI services, which Settings › Privacy names. Some details were chosen
-deliberately:
+open them" (or "your team"), never "secure", "safe" or "private and isolated",
+and the line under the cards says that search sends passages to outside AI
+services, which Settings › Privacy names. "Encrypted" appears only as the
+agreement everyone accepts says it (`_shared/agreement.ts`): "Sent and stored
+encrypted", on the privacy poster and short, never "end-to-end". Some details
+were chosen deliberately:
 
 - **★ marks what needs a plan**, as the app does: Gmail import, expiry
   reminders (048) and 30-day share links are Family Plus for a family; a
@@ -248,13 +307,13 @@ deliberately:
   that Overview lists later. It shows no GST filing dates or other deadlines
   from the tax calendar: AskLocker does not track them, and the film must not
   suggest it does.
-- **The plans table is `plan_limits`** as 051, 052, 054 and 058 left it:
-  people 4, 10, 15 and 50; space 200 MB, 10 GB, 25 GB and 100 GB (058 lowered
-  the paid plans' space); questions 20 a person a month on Free and 100 on
-  every paid plan. The prices are `BUSINESS_PRICE`, before GST, and a year
-  costs eleven months. Paid business plans are given by hand, so the film says
-  they are set up on request. The limits are rows that change without a
-  release: check the table against the app before publishing.
+- **The plans table is `plan_limits`** as 067 left it: people 2, 5, 10 and
+  50; space 100 MB a person on Free, then 20 GB, 50 GB and 200 GB; questions
+  20 a person a month on Free, and a month shared by the business on a paid
+  plan (1,000, 2,000 and 8,000). The prices are `BUSINESS_PRICE`, before GST,
+  and a year costs about ten months. Paid business plans are given by hand, so
+  the film says they are set up on request. The limits are rows that change
+  without a release: check the table against the app before publishing.
 - **Gmail import's rows are what the app would show.** Each file name, sender
   and subject was run through `classifyAttachment` in
   `supabase/functions/_shared/gmail-rules.ts`; the reasons ("file name says
@@ -273,8 +332,8 @@ deliberately:
   callouts show what the app would pull out, and the category it would suggest
   ("Supplier" files the bill under Purchase Bills, as only a photo's text,
   read on the phone, can). Every GSTIN has a valid check character, or the
-  extractor would store none. The policy callout leaves out the insured's name
-  on purpose: the name pattern carries on across the line break.
+  extractor would store none. The insured's name ends in "(Self)", where the
+  name pattern stops: without it the pattern carried on into the next line.
 - **Upload asks where the file goes.** Rohan has the personal vault every
   account gets as well as Sharma Family, so the family film picks the vault
   before "Who does this belong to?" opens (046). Kavita has one business, so
@@ -310,11 +369,11 @@ deliberately:
   because espeak would read a lone "A" as the English article. The app reads
   with the phone's own voices, so on a real phone the voice will differ; the
   film's is a stand-in for one.
-- **The family has 4 members** (Family Plus allows 8); Dadi, Neha and Aarav
+- **The family has 4 members** (Family Plus allows 4); Dadi, Neha and Aarav
   are in the tree without accounts, which the tree allows. **Arora Electric
-  has 3 of Pro's 15**, and the CA's invitation holds a place until she answers.
-- **The end cards' prices** are `PLUS_PRICE` (Family Plus, ₹100 a month) and
-  `BUSINESS_PRICE` (from ₹500 a month, plus GST) in
+  has 3 of Pro's 10**, and the CA's invitation holds a place until she answers.
+- **The end cards' prices** are `PLUS_PRICE` (Family Plus, ₹99 a month) and
+  `BUSINESS_PRICE` (from ₹499 a month, plus GST) in
   `supabase/functions/_shared/plan-text.ts`. A business plan is set up by hand
   ("Ask us"), and business vaults are a pilot for a few businesses, so check
   what the app offers before publishing either film.
@@ -324,6 +383,27 @@ deliberately:
   filter by audience), so today a family sees Business Insurance among them and
   a business sees Birth Certificate, until that is fixed; the films show what
   it should.
+
+The feature posters and shorts keep the same rules, and a few of their own:
+
+- **"Extracted Data" is what the extractor reads.** The four rows on the
+  policy's page (expiry date, policy number, name, amount) are what
+  `extractMetadata` returns for the policy paper's text, in that order (the
+  name stops at "(Self)", above).
+- **The share link was made the day the policy was added**, 1 November, for
+  7 days, so it works until 8 November; 30 days needs Family Plus, which the
+  callout says. The link is 64 hex characters after `#`, as `/s` links are.
+- **The passkey sheet is the phone's**, drawn without any company's name or
+  look: the lock screen is AskLocker's own (`app-lock-screen.tsx`), and what
+  asks for the finger is the device.
+- **The spreadsheet is read as the app reads one**: "Read 245 rows from 3
+  sheets" is Upload's own line; "Invoice No" in its first rows files it under
+  Sales Invoices (`doc-category.ts`); and the answer comes from one row of its
+  Summary sheet, which says the month's total, so nothing is added up by the
+  model.
+- **Reminders reach everyone in the family on Family Plus**, and a phone shows
+  them once its owner turns notifications on there; on Free, one reminder 30
+  days before, to whoever added the document (067), which the callout says.
 
 The Sharma family, Arogya Shield, Arora Electric, Mehta Cables, its bill and
 everyone in them are fictional; the papers carry a SPECIMEN watermark, the

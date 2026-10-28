@@ -26,6 +26,12 @@ in D major at 100 bpm (formal_music):
   access and control           the drums rest
   plans                        the groove again, with a bell line
   closing card                 resolves on D
+
+A feature short (src/features.js) is one feature in 9:16, and takes its
+film's music in small: a family feature the day's F major from the first
+frame, its percussion from the moment the how comes in, resolving on F for
+the end card (short_music); a business feature the formal piece, calm until
+the how and the groove after it.
 """
 import json
 import pathlib
@@ -457,13 +463,25 @@ def resolution_music(bus, t0, t_end, total):
         place(bus, at, pad([midi(n) for n in voicing], 3.4, attack=0.6, release=1.4, cutoff=1300), 0.25)
         for k, n in enumerate(mel):
             place(bus, at + k * 0.55, pluck(midi(n), 2.2, bright=0.6, decay=1.3), 0.15)
-    # End card: resolve on F with a rising shimmer.
+    end_card_music(bus, t_end, total)
+
+
+def end_card_music(bus, t_end, total):
+    """The end card: resolve on F with a rising shimmer."""
     place(bus, t_end, pad([midi(n) for n in [41, 53, 57, 60, 65, 69, 72]], total - t_end + 0.5, attack=0.4, release=2.2, cutoff=2000), 0.2)
     place(bus, t_end, sine_bass(midi(29), total - t_end, attack=0.05, release=2.0), 0.18)
     for i, n in enumerate([72, 77, 81, 84]):
         place(bus, t_end + 0.3 + i * 0.13, bell(midi(n), 2.6), 0.11, pan=-0.3 + 0.2 * i)
     for k, n in enumerate([65, 69, 72, 77, 72, 69]):
         place(bus, t_end + 1.2 + k * 0.31, pluck(midi(n), 1.8, bright=0.7), 0.09)
+
+
+def short_music(bus, sec, total):
+    """A family feature short: the day's music from the first frame, a swell
+    to open, percussion from the how, and the end card's resolve."""
+    end = sec['end']
+    day_music(bus, 0.0, end + 0.4, 0.0, build_at=sec['how'])
+    end_card_music(bus, end, total)
 
 
 # The business film's chords: bass, pad voicing, arpeggio (eighth notes).
@@ -562,7 +580,15 @@ def main():
         scramble_a = ticks[0] - 1.9 if ticks else 7.0
         scramble_b = ticks[-1] + 1.9 if ticks else 16.0
 
-    if not sfx_only and story:
+    # A feature short says which film's look it wears.
+    feature = next((c for c in cues if c['type'] == 'section' and c['name'] == 'feature'), None)
+
+    if not sfx_only and feature:
+        if feature.get('look') == 'business':
+            formal_music(music, {'solution': sec['how'], 'end': sec['end']}, total)
+        else:
+            short_music(music, sec, total)
+    elif not sfx_only and story:
         night_music(music, 0.0, reveal, hit, ring_stop)
         pulse(music, scramble_a, scramble_b)
         day_music(music, day, night2 + 0.4, reveal, build_at=day + 10.0,

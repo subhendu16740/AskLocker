@@ -19,8 +19,11 @@ export const PORTRAIT = params.get('orientation') === 'portrait';
 export const SHORT = params.get('cut') === 'short';
 // The family film's voice scene can speak another of the app's voice languages.
 export const LANG = params.get('lang') || '';
-export const W = PORTRAIT ? 1080 : 1920;
-export const H = PORTRAIT ? 1920 : 1080;
+// ?size=1080x1080 sets the stage to any size (the feature posters); without it
+// the stage is 16:9 or, with ?orientation=portrait, 9:16.
+const SIZE = /^(\d+)x(\d+)$/.exec(params.get('size') || '');
+export const W = SIZE ? Number(SIZE[1]) : PORTRAIT ? 1080 : 1920;
+export const H = SIZE ? Number(SIZE[2]) : PORTRAIT ? 1920 : 1080;
 
 export const $ = (sel, root = document) => root.querySelector(sel);
 export const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
@@ -28,7 +31,8 @@ const stage = document.getElementById('stage');
 
 // ─── Build the stage ─────────────────────────────────────────────────────
 export async function build({ cards, texts, phone, callouts, subs, look = '', fontText = '' }) {
-  stage.className = `${PORTRAIT ? 'portrait' : 'landscape'}${look ? ` ${look}` : ''}`;
+  stage.className = `${PORTRAIT ? 'portrait' : W === H ? 'square' : 'landscape'}${look ? ` ${look}` : ''}`;
+  Object.assign(stage.style, { width: `${W}px`, height: `${H}px` });
   stage.innerHTML = `
     <div id="bg-night" class="layer"></div>
     <div id="bg-day" class="layer"><div class="blob b1"></div><div class="blob b2"></div><div class="blob b3"></div><div class="grid"></div></div>
@@ -381,6 +385,8 @@ export function finish(S) {
   window.__duration = T;
   window.__cues = cues;
   window.__scenes = S;
+  // The frame a poster is taken from, when the film names one.
+  window.__hero = S.hero ?? null;
   window.__seek = (t) => { tl.seek(t, false); renderMotion(); };
   window.__seek(0);
   window.__ready = true;
