@@ -19,6 +19,9 @@ export const PORTRAIT = params.get('orientation') === 'portrait';
 export const SHORT = params.get('cut') === 'short';
 // The family film's voice scene can speak another of the app's voice languages.
 export const LANG = params.get('lang') || '';
+// Which film: family, nri (the family film told by a son abroad) or business;
+// the feature shorts and posters (?film=features) use the family film's story.
+export const FILM = ['nri', 'business'].includes(params.get('film')) ? params.get('film') : 'family';
 // ?size=1080x1080 sets the stage to any size (the feature posters); without it
 // the stage is 16:9 or, with ?orientation=portrait, 9:16.
 const SIZE = /^(\d+)x(\d+)$/.exec(params.get('size') || '');

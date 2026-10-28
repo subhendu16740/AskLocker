@@ -9,9 +9,13 @@ import {
   searchIn, saveBar, askInput, whyHow, trustBlock, brand,
 } from './parts.js';
 import { VOICE_LINES, APP_PHRASES, voiceSubtitles } from './voice-lines.js';
+import { FILM } from './engine.js';
 
 // ─── Story data (edit here to re-cast the film) ──────────────────────────
-export const STORY = {
+// Two stories share these scenes: the family film (Rohan in Bengaluru) and
+// the NRI film (?film=nri: Rohan in Toronto, who set up his parents' policies
+// and deposits from abroad, so they have to ask him for any of it).
+const FAMILY_STORY = {
   you: 'Rohan',
   youFull: 'Rohan Sharma',
   email: 'rohan.sharma@gmail.com',
@@ -28,7 +32,84 @@ export const STORY = {
   cta: 'Start your family vault',
   ctaNote: 'Free to start · ★ Family Plus ₹99 a month',
   url: '',
+  // Rohan's phone shows his own time: the night of the admission, the minute
+  // after, and the morning a reminder arrives (made at 9, pushed at 9:05, India time).
+  t: { lock: '2:14', lockDate: 'Tuesday, 10 November', lock2: '2:15', day: '9:05', dayDate: 'Monday, 2 November' },
+  where: "Maa and Papa are in <b>Lucknow</b>.<br>You're in <b>Bengaluru</b>.",
+  maaMsgs: ['Beta, Papa ko hospital laaye hain 🙏', 'Insurance ka policy number maang rahe hain. Kahan rakha hai??'],
+  maaThanks: 'Mil gaya beta 🙏 Cashless approve ho gaya. Tum so jao ❤️',
+  subs: ["Son, we've brought Papa to the hospital.", "They're asking for the insurance policy number. Where is it?",
+    '“Found it, son. Cashless is approved. Go back to sleep.”'],
+  callFrom: 'Mobile · Lucknow',
+  // The scramble: what each card says, and the clock chip's place name.
+  chipWhere: '',
+  caps: ['Somewhere in 2,847 emails…', '…or the old office email?', 'The PDF wants a password.',
+    "The OTP goes to Papa's phone.", 'The original is in the almirah back home.'],
+  dead: { icon: 'mail', top: 'rohan@previous-employer.com', alert: 'lock', title: 'This account has been disabled.',
+    body: 'Group health cover documents are no longer available. Contact your IT administrator.' },
+  insight: ["You'll find it. Eventually.", "Your family won't."],
+  question: "Now imagine you're the one who can't pick up.",
+  why: {
+    gmail: 'Your policies are buried somewhere in *2,847 emails.*',
+    scan: ['The originals sit in an almirah, *in another city.*', 'Photograph them once.'],
+    voice: ['Not every parent types, *or reads English.*', 'They ask out loud and hear the answer.'],
+    alerts: ['Policies lapse quietly.|You find out *the day you need~one.*',
+      '90, 30 and 7 days before a policy or passport runs out, on their phones too. Birthdays as well.'],
+  },
+  res: { kicker: 'The same night, with AskLocker', h1b: 'Sorted in a minute.', sub: 'No calls. No passwords. No digging through inboxes.' },
+  // Gmail import: whose the documents are, and the import button's total.
+  gmailOwner: 'go-me',
+  gmailSize: '≈2.1 MB',
+  sonPhone: '+91 91234 56789',
+  // The morning's reminders, in the server's words (051's queue_family_expiry_reminders,
+  // 064's set_family_plan).
+  expiry: ['Car Insurance expires in 7 days', 'Expires on 9 Nov 2026 · Rohan Sharma. Renew it soon.'],
+  planNote: 'Room for 5 GB of documents, until 1 Nov 2027.',
 };
+
+const NRI_STORY = {
+  ...FAMILY_STORY,
+  // From 066: Family Plus is ₹99 a month in India and $10 abroad. A payer
+  // abroad pays in dollars only once RAZORPAY_CURRENCIES says INR,USD, so the
+  // card names the rupee price, which anyone in the family in India can pay.
+  ctaNote: 'Free to start · ★ Family Plus from ₹99 a month',
+  // Toronto in November is UTC−5, 10½ hours behind India: 2:14 AM on Tuesday
+  // 10 November in Lucknow is 3:44 PM on Monday 9 November in Toronto, and a
+  // reminder pushed at 9:05 India time on 2 November reaches him at 10:35 PM
+  // on 1 November (Canada's clocks went back that morning).
+  t: { lock: '3:44', lockDate: 'Monday, 9 November', lock2: '3:45', day: '10:35', dayDate: 'Sunday, 1 November' },
+  where: "Maa and Papa are in <b>Lucknow</b>.<br>You're in <b>Toronto</b>, 10½ hours behind.",
+  maaMsgs: ['Beta, Papa ko hospital laaye hain 🙏', 'Policy number maang rahe hain. Tumne hi li thi na??'],
+  maaThanks: 'Mil gaya beta 🙏 Cashless approve ho gaya. Tum aaram se kaam karo ❤️',
+  subs: ["Son, we've brought Papa to the hospital.", "They want the policy number. You're the one who bought it, right?",
+    '“Found it, son. Cashless is approved. Carry on with your work.”'],
+  callFrom: 'Mobile · India',
+  chipWhere: ' in Lucknow',
+  caps: ['Somewhere in 2,847 emails…', 'The helpline opens at 8 AM.', 'The PDF wants a password.',
+    "The OTP goes to Papa's phone.", 'The original is in an almirah, half a world away.'],
+  dead: { icon: 'phone', top: 'Arogya Shield · Customer care', alert: 'phone-off', title: 'Our lines are closed.',
+    body: 'Customer care is open 8 AM to 8 PM, India time. Please call back then.' },
+  insight: ['You handle all of it, from abroad.', "They can't find any of it."],
+  question: "Now imagine you're in a meeting when she calls.",
+  why: {
+    gmail: 'Their policies and deposits land in *your inbox,* not theirs.',
+    scan: ['The originals sit in an almirah, *in Lucknow.*', 'Photograph them on your next trip home.'],
+    voice: ['Maa shouldn\'t have to *call you for a number.*', 'She asks out loud and hears the answer.'],
+    alerts: ['Policies lapse quietly,|*half a world away.*',
+      '90, 30 and 7 days before a policy or passport runs out, on your phone and theirs. Birthdays as well.'],
+  },
+  res: { kicker: 'The same night in Lucknow, with AskLocker', h1b: 'Sorted before your meeting ends.',
+    sub: 'No calls across time zones. No passwords. No digging through inboxes.' },
+  // Everything he imports is Papa's: his policies, deposits, tax and ID.
+  gmailOwner: 'go-papa',
+  gmailSize: '≈2.6 MB',
+  // 555-0100 to 555-0199 are North America's numbers for fiction.
+  sonPhone: '+1 416 555 0142',
+  // The passport's 30-day stage is due on 2 November in India: it expires on 2 December.
+  expiry: ['Papa Passport expires in 30 days', 'Expires on 2 Dec 2026 · Ramesh Sharma. A good time to renew it.'],
+};
+
+export const STORY = FILM === 'nri' ? NRI_STORY : FAMILY_STORY;
 
 // Upload offers twelve categories, in this order, before More… (the family
 // order in supabase/functions/_shared/doc-category.ts).
@@ -153,7 +234,15 @@ export function tagScreen() {
 // The rows are what supabase/functions/_shared/gmail-rules.ts makes of these
 // emails: run classifyAttachment on them and you get these reasons and
 // categories. The senders are generic on purpose; no real company appears.
-const GMAIL_SUGGESTED = [
+// In the NRI film they are Papa's papers that reach Rohan's inbox, because he
+// bought, paid or asked for them from abroad.
+const GMAIL_SUGGESTED = FILM === 'nri' ? [
+  ['gm-r1', 'LIC_Premium_Receipt_Papa.pdf', false, 'Policy Services · 2 Oct 2026 · 210 KB', 'Premium paid, thank you', 'file name says life insurance', 'Life Insurance'],
+  ['gm-r2', 'FD_Statement_Papa.pdf', false, 'Bank Alerts · 1 Oct 2026 · 142 KB', 'Fixed deposit statement', 'file name says statement', 'Bank Statements'],
+  ['gm-r3', 'Property_Tax_Receipt_2026.pdf', false, 'Municipal Payments · 15 Jul 2026 · 88 KB', 'Property tax paid', 'file name says property', 'Property Documents'],
+  ['gm-r4', 'PAN_Card_Papa.pdf', false, 'Ramesh Sharma · 3 Mar 2026 · 1.2 MB', 'PAN card copy', 'file name says PAN', 'PAN Card'],
+  ['gm-r5', 'Papa Passport.pdf', false, 'Ramesh Sharma · 18 Aug 2026 · 980 KB', 'Passport scan for the visa', 'file name says passport', 'Passport'],
+] : [
   ['gm-r1', 'Statement_Oct_2026.pdf', false, 'Card Statements · 31 Oct 2026 · 186 KB', 'Your credit card statement for October 2026', 'file name says statement', 'Bank Statements'],
   ['gm-r2', 'ETicket_PNR_4521896307.pdf', false, 'Rail Bookings · 14 Oct 2026 · 96 KB', 'Booking confirmation, PNR 4521896307', 'file name says travel', 'Visa / Travel Docs'],
   ['gm-r3', 'Form16_FY2025-26.pdf', false, 'Payroll Team · 12 Jun 2026 · 238 KB', 'Form 16 for FY 2025-26', 'file name says tax', 'Tax Returns'],
@@ -180,7 +269,8 @@ function gmailRow([id, file, isImg, meta, subject, reason, cat], ticked) {
 }
 
 export function gmailScreen() {
-  const owners = [['go-me', STORY.youFull, true], ['go-papa', 'Papa'], ['go-maa', 'Maa'], ['go-priya', 'Priya']];
+  const owners = [['go-me', STORY.youFull], ['go-papa', 'Papa'], ['go-maa', 'Maa'], ['go-priya', 'Priya']]
+    .map(([id, l]) => [id, l, id === STORY.gmailOwner]);
   return `<section class="scr" id="scr-gmail">${sbFill}
     ${header('Import from Gmail', { right: plusTag() })}
     <div class="gm-scroll"><div class="gm-inner" id="gm-inner">
@@ -203,7 +293,7 @@ export function gmailScreen() {
       </div>
     </div></div>
     <div class="gm-footer" id="gm-footer" style="opacity:0">
-      <div class="gm-import" id="gm-import"><span id="gm-import-label">Import 5 documents (≈2.1 MB)</span>
+      <div class="gm-import" id="gm-import"><span id="gm-import-label">Import 5 documents (${STORY.gmailSize})</span>
         <div class="busy" id="gm-busy" style="opacity:0">${spinner('#fff', 20, 'gm-spin2')}<span id="gm-busy-label">Importing 1 of 5…</span></div></div>
       <div class="gm-into">Into ${STORY.familyName}</div>
     </div>
@@ -298,10 +388,15 @@ export function homeScreen() {
       .map((l) => `<span class="stat-link"><u>${l}</u>${icon('chevron-right', 14, '#2A3D66')}</span>`).join('<span class="div">|</span>')}</div></div>
     <div class="section"><div class="section-head"><div class="section-title">Recent Documents</div><span class="see-all">See all</span></div><div class="doc-list">
       ${doc(STORY.scanFile, 'image', 'Health Insurance', '#22C55E', true, `Father · ${STORY.papa} · Today`)}
+      ${FILM === 'nri' ? `
+      ${doc('Papa Passport.pdf', 'file-text', 'Passport', '#3B82F6', true, `Father · ${STORY.papa} · Today`)}
+      ${doc('PAN_Card_Papa.pdf', 'file-text', 'PAN Card', '#6B7280', true, `Father · ${STORY.papa} · Today`)}
+      ${doc('FD_Statement_Papa.pdf', 'file-text', 'Bank Statements', '#A855F7', true, `Father · ${STORY.papa} · Today`)}
+      ${doc('LIC_Premium_Receipt_Papa.pdf', 'file-text', 'Life Insurance', '#22C55E', true, `Father · ${STORY.papa} · Today`)}` : `
       ${doc('Car Insurance.pdf', 'file-text', 'Vehicle Insurance', '#6B7280', true, `${STORY.youFull} · Today`)}
       ${doc('PAN_Card_Rohan.pdf', 'file-text', 'PAN Card', '#6B7280', false, `${STORY.youFull} · Today`)}
       ${doc('Form16_FY2025-26.pdf', 'file-text', 'Tax Returns', '#6B7280', false, `${STORY.youFull} · Today`)}
-      ${doc('ETicket_PNR_4521896307.pdf', 'file-text', 'Visa / Travel Docs', '#6B7280', false, `${STORY.youFull} · Today`)}
+      ${doc('ETicket_PNR_4521896307.pdf', 'file-text', 'Visa / Travel Docs', '#6B7280', false, `${STORY.youFull} · Today`)}`}
     </div></div>
     ${tabBar('home', 'home')}
     <div class="drawer" id="drawer">
@@ -409,7 +504,7 @@ export function emergencyScreen() {
         <div class="em-sec" id="em-ins"><div class="em-l">Health insurance</div><div class="em-v">${STORY.insurer}<br>Policy <mark class="hl" id="em-hl">${STORY.policyNo}</mark></div></div>
         <div class="em-sec"><div class="em-l">People to call</div>
           <div class="em-person"><div class="em-v">${STORY.maa}<span class="em-m">  ·  Wife</span></div>${call('+91 98765 12345')}</div>
-          <div class="em-person"><div class="em-v">${STORY.youFull}<span class="em-m">  ·  Son</span></div>${call('+91 91234 56789')}</div></div>
+          <div class="em-person"><div class="em-v">${STORY.youFull}<span class="em-m">  ·  Son</span></div>${call(STORY.sonPhone)}</div></div>
         <div class="muted em-upd">Updated 3 October 2026 by you</div>
       </div>
     </div></div>
@@ -431,9 +526,9 @@ export function notificationsScreen() {
   return `<section class="scr" id="scr-notifs">${sbFill}
     ${header('Notifications')}
     <div class="nt-list" id="nt-list">
-      ${card('expiry', 'Car Insurance expires in 7 days', `Expires on 9 Nov 2026 · ${STORY.youFull}. Renew it soon.`, 'Just now', true)}
+      ${card('expiry', STORY.expiry[0], STORY.expiry[1], 'Just now', true)}
       ${card('birthday', `Today is ${STORY.dadi}'s 78th birthday`, 'Wish her a happy birthday.', 'Just now', true)}
-      ${card('plan', `${STORY.familyName} has Family Plus`, 'Room for 5 GB of documents, until 1 Nov 2027.', '1d ago', false)}
+      ${card('plan', `${STORY.familyName} has Family Plus`, STORY.planNote, '1d ago', false)}
       ${card('member', `Priya Sharma joined ${STORY.familyName}`, `Priya Sharma accepted the invitation and can now see ${STORY.familyName}'s documents, as a viewer.`, 'Oct 3', false)}
     </div>
   </section>`;
@@ -441,18 +536,15 @@ export function notificationsScreen() {
 
 /** The next morning: a reminder and a birthday, as web pushes. */
 export function lockDayScreen() {
-  return lockScreen('scr-lockday', '9:05', 'Monday, 2 November', `<div class="lstack">
-      ${pushNotif('pn1', 'Car Insurance expires in 7 days', `Expires on 9 Nov 2026 · ${STORY.youFull}. Renew it soon.`)}
+  return lockScreen('scr-lockday', STORY.t.day, STORY.t.dayDate, `<div class="lstack">
+      ${pushNotif('pn1', STORY.expiry[0], STORY.expiry[1])}
       ${pushNotif('pn2', `Today is ${STORY.dadi}'s 78th birthday`, 'Wish her a happy birthday.')}</div>`);
 }
 
 export function phone(lang = '') {
   return phoneShell(`
-    ${lockScreen('scr-lock', '2:14', 'Tuesday, 10 November', lockNotif('ln1', 'Maa', [
-      'Beta, Papa ko hospital laaye hain 🙏',
-      'Insurance ka policy number maang rahe hain. Kahan rakha hai??',
-    ]))}
-    ${callScreen({ label: 'Incoming call', name: 'Maa', sub: 'Mobile · Lucknow' })}
+    ${lockScreen('scr-lock', STORY.t.lock, STORY.t.lockDate, lockNotif('ln1', 'Maa', STORY.maaMsgs))}
+    ${callScreen({ label: 'Incoming call', name: 'Maa', sub: STORY.callFrom })}
     ${uploadScreen()}
     ${gmailScreen()}
     ${cameraScreen(policyPaper())}
@@ -465,7 +557,7 @@ export function phone(lang = '') {
     ${emergencyScreen()}
     ${lockDayScreen()}
     ${notificationsScreen()}
-    ${lockScreen('scr-lock2', '2:15', 'Tuesday, 10 November', lockNotif('ln2', 'Maa', ['Mil gaya beta 🙏 Cashless approve ho gaya. Tum so jao ❤️']))}`, '2:14');
+    ${lockScreen('scr-lock2', STORY.t.lock2, STORY.t.lockDate, lockNotif('ln2', 'Maa', [STORY.maaThanks]))}`, STORY.t.lock);
 }
 
 // ─── Film layers ─────────────────────────────────────────────────────────
@@ -481,8 +573,8 @@ export function scrambleCards() {
     <div class="sc-row"><span><b>Premium receipt</b> · Thank you for your payment…</span><span>Apr 2024</span></div>
   </div>
   <div class="sc" id="sc-work" style="width:430px">
-    <div class="sc-top">${icon('mail', 18, '#6B7280')}<b>rohan@previous-employer.com</b></div>
-    <div class="sc-alert">${icon('lock', 22, '#B91C1C')}<div><b>This account has been disabled.</b><br>Group health cover documents are no longer available. Contact your IT administrator.</div></div>
+    <div class="sc-top">${icon(STORY.dead.icon, 18, '#6B7280')}<b>${STORY.dead.top}</b></div>
+    <div class="sc-alert">${icon(STORY.dead.alert, 22, '#B91C1C')}<div><b>${STORY.dead.title}</b><br>${STORY.dead.body}</div></div>
   </div>
   <div class="sc sc-center" id="sc-pdf" style="width:400px">
     <div class="sc-file">${icon('file-text', 18, '#DC2626')}<span>Policy_Schedule_FINAL(2).pdf</span></div>
@@ -509,41 +601,37 @@ export function textBlocks() {
   return `
   <div class="tblock on-dark" id="t-hook">
     <div class="clock-big"><span class="t">2:14</span><span class="ampm">AM</span></div>
-    <div class="where">Maa and Papa are in <b>Lucknow</b>.<br>You're in <b>Bengaluru</b>.</div>
+    <div class="where">${STORY.where}</div>
   </div>
-  <div class="time-chip" id="time-chip">${icon('clock', 24, '#D4807B', 2.4)}<span id="chip-time">2:16 AM</span></div>
+  <div class="time-chip" id="time-chip">${icon('clock', 24, '#D4807B', 2.4)}<span id="chip-time">2:16 AM${STORY.chipWhere}</span></div>
   <div class="cap-top" id="caps">
-    <div class="cap-line" id="cap1">${words('Somewhere in 2,847 emails…')}</div>
-    <div class="cap-line" id="cap2">${words('…or the old office email?')}</div>
-    <div class="cap-line" id="cap3">${words('The PDF wants a password.')}</div>
-    <div class="cap-line" id="cap4">${words("The OTP goes to Papa's phone.")}</div>
-    <div class="cap-line" id="cap5">${words('The original is in the almirah back home.')}</div>
+    ${STORY.caps.map((c, i) => `<div class="cap-line" id="cap${i + 1}">${words(c)}</div>`).join('\n    ')}
   </div>
   <div class="center-block on-dark" id="t-insight">
-    <div class="big" id="ins-1">${words("You'll find it. Eventually.")}</div>
-    <div class="big-em" id="ins-2">${words("Your family won't.")}</div>
+    <div class="big" id="ins-1">${words(STORY.insight[0])}</div>
+    <div class="big-em" id="ins-2">${words(STORY.insight[1])}</div>
   </div>
   <div class="center-block on-dark" id="t-stat">
     <div class="stat-num" id="stat-num"><span class="rs">₹</span><span id="stat-val">1.84</span> lakh crore</div>
     <div class="stat-line" id="stat-line">of Indians' money lies unclaimed. <b>“In many cases, families are simply unaware that such assets exist.”</b></div>
     <div class="stat-src" id="stat-src">Ministry of Finance, 2025</div>
   </div>
-  <div class="q-block on-dark" id="t-question"><div class="big">${words("Now imagine you're the one who can't pick up.")}</div></div>
+  <div class="q-block on-dark" id="t-question"><div class="big">${words(STORY.question)}</div></div>
   ${brand('brand', 'Every family document. One question away.')}
-  ${whyHow('t-gmail', 'Gmail import', 'mail', 'Your policies are buried somewhere in *2,847 emails.*',
+  ${whyHow('t-gmail', 'Gmail import', 'mail', STORY.why.gmail,
     'AskLocker finds them for you.', 'It lists the attachments that look like documents. Nothing comes in until you tick it.', { plus: '★ Family Plus' })}
-  ${whyHow('t-scan', 'Scan', 'camera', 'The originals sit in an almirah, *in another city.*',
-    'Photograph them once.', 'AskLocker reads the page and pulls out the policy number and expiry date.')}
+  ${whyHow('t-scan', 'Scan', 'camera', STORY.why.scan[0],
+    STORY.why.scan[1], 'AskLocker reads the page and pulls out the policy number and expiry date.')}
   ${whyHow('t-ask', 'Ask', 'message-circle', 'In a panic, *nobody remembers* which file has the number.',
     "Just ask, the way you'd ask a person.", 'The answer comes from your own documents, with the source attached.')}
-  ${whyHow('t-voice', 'Voice', 'mic', 'Not every parent types, *or reads English.*',
-    'They ask out loud and hear the answer.', 'Speech to text and text to speech, in nine Indian languages and English.', { after: langs })}
+  ${whyHow('t-voice', 'Voice', 'mic', STORY.why.voice[0],
+    STORY.why.voice[1], 'Speech to text and text to speech, in nine Indian languages and English.', { after: langs })}
   ${whyHow('t-tree', 'Family tree', 'git-branch', 'Dadi and the kids *never sign in.*|And everyone says “Dadi”, not “Kamala~Sharma”.',
     'Everyone goes in one family tree.', 'With or without an account, by the names your family uses. Ask by relation, and AskLocker knows who you mean.')}
   ${whyHow('t-emerg', 'Emergency card', 'plus-square', 'The doctor asks: blood~group? Allergies? Medicines?|At 2~AM, *nobody remembers.*',
     'One emergency card for each person.', 'With the policy number too. Anyone in the family can open it, and every number is one tap from the dialler.')}
-  ${whyHow('t-alerts', 'Reminders', 'bell', 'Policies lapse quietly.|You find out *the day you need~one.*',
-    'Everyone is reminded in time.', '90, 30 and 7 days before a policy or passport runs out, on their phones too. Birthdays as well.', { plus: '★ Family Plus' })}
+  ${whyHow('t-alerts', 'Reminders', 'bell', STORY.why.alerts[0],
+    'Everyone is reminded in time.', STORY.why.alerts[1], { plus: '★ Family Plus' })}
   ${trustBlock('Policies, IDs, medical records: *the most private papers* a family has.', 'In AskLocker, only your family can open them.', [
     ['lock', 'Invite-only', 'Nobody joins unless an admin asks and they say yes.'],
     ['users', 'Nobody else', "Nobody else using AskLocker can open your family's documents."],
@@ -551,11 +639,11 @@ export function textBlocks() {
     ['eye-off', 'Yours alone', "Your personal vault is yours alone. Your family won't see it."],
   ], 'Search sends passages of your documents to outside AI services. Settings › Privacy names them.')}
   <div class="tblock on-dark res-block" id="t-res">
-    <div class="kicker">${icon('heart', 22, 'currentColor', 2.4)}<span>The same night, with AskLocker</span></div>
+    <div class="kicker">${icon('heart', 22, 'currentColor', 2.4)}<span>${STORY.res.kicker}</span></div>
     <div class="clock-big"><span class="t" id="res-time">2:14</span><span class="ampm">AM</span></div>
     <div class="res-lines"><div class="h1" id="res-h1a">${words('Maa asks. AskLocker answers.')}</div>
-      <div class="h1" id="res-h1b">${words('Sorted in a minute.')}</div></div>
-    <div class="sub" id="res-sub">No calls. No passwords. No digging through inboxes.</div>
+      <div class="h1" id="res-h1b">${words(STORY.res.h1b)}</div></div>
+    <div class="sub" id="res-sub">${STORY.res.sub}</div>
   </div>
   ${brand('endcard', 'Every family document. One question away.', { cta: STORY.cta, ctaNote: STORY.ctaNote, url: STORY.url, end: true })}`;
 }
@@ -598,10 +686,10 @@ export function subtitles(lang = '') {
   // Without subtitles (English), the voice lines' stay empty and unseen.
   const line = (id, text) => `<div class="subline on-light" id="${id}"${text ? '' : ' style="display:none"'}>${text ?? ''}</div>`;
   return `
-    <div class="subline" id="sub-1">Son, we've brought Papa to the hospital.</div>
-    <div class="subline" id="sub-2">They're asking for the insurance policy number. Where is it?</div>
+    <div class="subline" id="sub-1">${STORY.subs[0]}</div>
+    <div class="subline" id="sub-2">${STORY.subs[1]}</div>
     ${line('sub-3', v?.q)}
     ${line('sub-4', v?.a1)}
     ${line('sub-4b', v?.a2)}
-    <div class="subline" id="sub-5">“Found it, son. Cashless is approved. Go back to sleep.”</div>`;
+    <div class="subline" id="sub-5">${STORY.subs[2]}</div>`;
 }

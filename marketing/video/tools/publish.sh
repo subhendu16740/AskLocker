@@ -4,6 +4,7 @@
 #   marketing/<family|business>/films/    asklocker-<film>-<16x9|9x16>[-short].mp4
 #   marketing/<family|business>/shorts/   asklocker-<family|business>-<feature>-9x16[-sfx-only].mp4
 #   marketing/<family|business>/posters/  asklocker-<family|business>-<feature>-<size>.png
+#   marketing/nri/films/                  asklocker-nri-<16x9|9x16>[-short].mp4 (the family film told from abroad)
 # A business feature's key starts biz- in src/features.js; its files drop it.
 # The films go with music only (tools/mux.sh also writes -sfx-only ones);
 # the shorts go both ways, for posting with a platform's own music. Each
@@ -17,12 +18,14 @@ for a in family business; do
   rm -rf "$DEST/$a/films" "$DEST/$a/shorts" "$DEST/$a/posters"
   mkdir -p "$DEST/$a/films" "$DEST/$a/shorts" "$DEST/$a/posters"
 done
+rm -rf "$DEST/nri/films"
+mkdir -p "$DEST/nri/films"
 
 audience() { # a file's name, from asklocker-feature- or asklocker- on -> "<audience> <name>"
   if [[ $1 == biz-* ]]; then echo "business ${1#biz-}"; else echo "family $1"; fi
 }
 
-for f in out/asklocker-family-*.mp4 out/asklocker-business-*.mp4; do
+for f in out/asklocker-family-*.mp4 out/asklocker-nri-*.mp4 out/asklocker-business-*.mp4; do
   [ -e "$f" ] || continue
   [[ $f == *-sfx-only.mp4 ]] && continue
   name=$(basename "$f")
@@ -40,8 +43,6 @@ for f in out/posters/asklocker-*.png; do
   cp "$f" "$DEST/$a/posters/asklocker-$a-$name"
 done
 
-for a in family business; do
-  for k in films shorts posters; do
-    echo "$a/$k: $(find "$DEST/$a/$k" -type f | wc -l) files, $(du -sh "$DEST/$a/$k" | cut -f1)"
-  done
+for d in family/films family/shorts family/posters nri/films business/films business/shorts business/posters; do
+  echo "$d: $(find "$DEST/$d" -type f | wc -l) files, $(du -sh "$DEST/$d" | cut -f1)"
 done

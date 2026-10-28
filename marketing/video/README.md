@@ -1,8 +1,9 @@
 # AskLocker films
 
-Two launch films, as code: one for families, one for business, and a poster
-and a short for each feature (below). `src/intro.html` builds any of them as a
-GSAP timeline (`?film=family`, `?film=business` or `?film=features`) that
+Three launch films, as code: two for families (one told from abroad) and one
+for business, and a poster and a short for each feature (below).
+`src/intro.html` builds any of them as a GSAP timeline (`?film=family`,
+`?film=nri`, `?film=business` or `?film=features`) that
 recreates the app's real screens (same layouts, copy, colours and Feather icons
 as `src/app/**`, sized by `src/constants/design.ts`; a business's screens in the
 app's teal, as Business mode has them). `tools/render.mjs` seeks the paused
@@ -29,6 +30,19 @@ ten voice languages in their own scripts, and you hear it work: Maa asks her
 question aloud in Hindi, and the app reads its answer back to her, policy
 number spelled out, with English subtitles under both.
 
+**For families abroad** (`?film=nri`): the family film's scenes, music and
+Hindi voices, told by a son who lives abroad. Rohan is in Toronto and set up
+his parents' policies, deposits and tax from there, so the emails come to him
+and Maa and Papa don't know what is in their own name. At 2:14 AM in Lucknow it
+is 3:44 PM in Toronto: Maa's message reaches him at work, the insurer's
+helpline is closed till morning, and the call comes while he is in a meeting.
+His Gmail import brings in Papa's papers (an LIC receipt, a fixed deposit
+statement, the property tax, his PAN and passport), the paper policy is
+photographed on his last trip home, and Maa asks AskLocker herself instead of
+calling him. It is the same film with another story: `NRI_STORY` in
+`src/family-screens.js` holds everything that differs (the times on his phone,
+the messages, the scramble, the headlines, the Gmail rows, the reminders).
+
 **For business** (`src/business.js`): a title card, then the challenge in two
 statements: what a business keeps (eight kinds of papers), and the dates inside
 them, Arora Electric's next 90 days on one timeline. Then the product in five
@@ -52,6 +66,10 @@ app's theme colour, navy in both modes.
 | `asklocker-family-9x16.mp4` | 2:15 | Full-length vertical posts |
 | `asklocker-family-9x16-short.mp4` | 1:11 | Reels, Shorts, WhatsApp forwards |
 | `asklocker-family-16x9-short.mp4` | 1:11 | LinkedIn and X feeds |
+| `asklocker-nri-16x9.mp4` | 2:15 | The family film told from abroad: landing page, YouTube, LinkedIn |
+| `asklocker-nri-9x16.mp4` | 2:15 | Full-length vertical posts |
+| `asklocker-nri-9x16-short.mp4` | 1:11 | Reels, Shorts, WhatsApp forwards |
+| `asklocker-nri-16x9-short.mp4` | 1:11 | LinkedIn and X feeds |
 | `asklocker-business-16x9.mp4` | 1:31 | Landing page, YouTube, LinkedIn, pitches to businesses and CAs |
 | `asklocker-business-9x16.mp4` | 1:31 | Full-length vertical posts |
 | `asklocker-business-9x16-short.mp4` | 0:59 | Reels, Shorts, WhatsApp forwards |
@@ -121,7 +139,8 @@ about. `tools/publish.sh` copies them, with the films, into the repository's
 
 Rendered files go to `out/`, which is not committed; `tools/publish.sh` copies
 the finished films, shorts and posters into `marketing/family/` and
-`marketing/business/`, which are (see `marketing/README.md`).
+`marketing/business/`, and the NRI film into `marketing/nri/`, which are (see
+`marketing/README.md`).
 
 ## Render
 
@@ -135,6 +154,7 @@ npx playwright install chromium       # skip if Chromium is already provisioned
 python3 -m pip install numpy scipy
 
 node tools/render.mjs                             # family, 16:9, full -> out/video-family-16x9.mp4
+node tools/render.mjs --film nri                  # families abroad  -> out/video-nri-16x9.mp4
 node tools/render.mjs --film business --portrait  # business, 9:16    -> out/video-business-9x16.mp4
 node tools/render.mjs --film business --portrait --short
 node tools/render.mjs --portrait --short --lang ta   # the family short, voice scene in Tamil -> family-9x16-short-ta
@@ -156,14 +176,14 @@ The feature posters and shorts, every film cut at once, and the copy into
 node tools/posters.mjs --features ask --sizes 1080x1080 --scale 2   # one poster, at 2x
 node tools/render.mjs --film features --feature ask --portrait      # one short, no sound yet
 ./tools/mux.sh feature-ask-9x16                                     # -> out/asklocker-feature-ask-9x16.mp4
-./tools/films.sh                      # all eight film cuts, with sound (or name some: business-9x16)
-./tools/publish.sh                    # out/ -> marketing/<family|business>/<films|shorts|posters>/
+./tools/films.sh                      # all twelve film cuts, with sound (or name some: nri-9x16)
+./tools/publish.sh                    # out/ -> marketing/<family|business>/<films|shorts|posters>/, marketing/nri/films/
 ```
 
 A poster is the frame the feature names (`window.__hero`), taken as a PNG at
 any size (`--sizes 1920x1080,1080x1080` by default). A short takes two to
-three minutes on four cores; all seventeen, about 45 minutes; all eight film
-cuts, about two hours. `publish.sh` replaces the six folders in `marketing/`
+three minutes on four cores; all seventeen, about 45 minutes; all twelve film
+cuts, about three hours. `publish.sh` replaces the seven folders in `marketing/`
 with what `out/` holds, so render everything first. The films go there with
 music; the shorts with and without.
 
@@ -175,7 +195,7 @@ node tools/render.mjs --film business --portrait --stills 53
 ```
 
 To watch it live, serve this folder (`npm run preview`) and open
-`src/intro.html?film=business` (or `?film=family`), adding
+`src/intro.html?film=business` (or `?film=family`, `?film=nri`), adding
 `&orientation=portrait` or `&cut=short`; a feature is
 `?film=features&feature=share&orientation=portrait` (its short) or
 `&size=1080x1080` (its poster, playing). Space pauses, arrow keys scrub, number
@@ -183,12 +203,13 @@ keys jump to tenths of the film.
 
 ## Change it
 
-- **What both films share**: `src/engine.js` builds the stage and holds the
+- **What the films share**: `src/engine.js` builds the stage and holds the
   timeline helpers (taps, typing, screen pushes, the why-then-how text, callouts,
-  the drawer); `src/parts.js` holds the screen parts both films draw (top bar,
+  the drawer); `src/parts.js` holds the screen parts the films draw (top bar,
   tab bar, lock screen, call, camera, Ask's bubbles and input, the end card).
   `src/main.js` only picks the film.
-- **The people, the documents, the end card**: `STORY` at the top of
+- **The people, the documents, the end card**: `FAMILY_STORY` (and `NRI_STORY`,
+  which overrides it for the film told from abroad) at the top of
   `src/family-screens.js` and `BIZ` at the top of `src/business-screens.js`.
   `ctaNote` is the line under the call to action (the price); set `STORY.url`
   before publishing to show an address.
@@ -372,6 +393,17 @@ were chosen deliberately:
 - **The CA joins by invitation.** She shows as Pending approval until she
   accepts, and once in, as a viewer, she sees every record the business keeps:
   there are no per-folder permissions yet, and the film does not suggest any.
+- **The NRI film keeps two clocks honestly.** Rohan's phone shows Toronto's
+  time and India's stays on the big clock and Maa's phone. Toronto is UTC−5
+  in November (Canada's clocks went back on 1 November 2026), 10½ hours
+  behind India. Reminders are made at 9 and pushed at 9:05 India time for
+  everyone (034), so his arrives at 10:35 PM on Sunday 1 November, and says
+  "Today" for Dadi's birthday, which is already 2 November in India. Its Gmail
+  rows were run through `classifyAttachment` like the family film's, his
+  emergency-card number is in North America's 555-01xx range for fiction, and
+  the plan notice says 5 GB, Family Plus's space since 067. The end card names
+  the rupee price (₹99, `PLUS_PRICE`), which anyone in the family in India can
+  pay: a payer abroad pays $10 only once `RAZORPAY_CURRENCIES` says `INR,USD`.
 - **The voice languages** are the list in `src/lib/voice-languages.ts`:
   English (India), Hindi, Bengali, Tamil, Telugu, Marathi, Gujarati, Kannada,
   Malayalam and Punjabi. Whether a phone can speak a language depends on the

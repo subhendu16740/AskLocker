@@ -6,6 +6,7 @@
 //
 //   node tools/render.mjs                   the family film, 16:9, 1920x1080 -> out/video-family-16x9.mp4
 //   node tools/render.mjs --film business   the business film -> out/video-business-16x9.mp4
+//   node tools/render.mjs --film nri        the family film told from abroad -> out/video-nri-16x9.mp4
 //   add --portrait for 9:16 (1080x1920), --short for the ~70s cut:
 //   the tag is <film>-16x9, <film>-9x16, <film>-16x9-short or <film>-9x16-short
 //   --lang ta puts the family film's voice scene in that voice language
@@ -46,9 +47,9 @@ const stills = opt('stills', null);
 const size = orientation === 'portrait' ? { width: 1080, height: 1920 } : { width: 1920, height: 1080 };
 const short = flag('short');
 const film = opt('film', 'family');
-if (!['family', 'business', 'features'].includes(film)) throw new Error(`--film is family, business or features, not ${film}`);
+if (!['family', 'nri', 'business', 'features'].includes(film)) throw new Error(`--film is family, nri, business or features, not ${film}`);
 const lang = opt('lang', '');
-if (lang && film !== 'family') throw new Error('--lang is for the family film, whose voice scene it changes');
+if (lang && !['family', 'nri'].includes(film)) throw new Error('--lang is for the family and NRI films, whose voice scene it changes');
 const feature = opt('feature', '');
 if ((film === 'features') !== Boolean(feature)) throw new Error('--feature names one feature of --film features (src/features.js)');
 const shape = orientation === 'portrait' ? '9x16' : '16x9';
