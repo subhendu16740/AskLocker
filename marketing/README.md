@@ -23,8 +23,8 @@ be shared publicly.
 
 | Folder | What | Shapes |
 |---|---|---|
-| `family/films/` | The family film: a night when a policy number can't be found, then the same night with AskLocker | 16:9 and 9:16, full (2:15) and `-short` (1:11) |
-| `business/films/` | The business film: a formal product film for shops, clinics and CAs | 16:9 and 9:16, full (1:31) and `-short` (0:59) |
+| `family/films/` | The family film: a night when a policy number can't be found, then the same night with AskLocker | 2:15 in [16:9](./family/films/asklocker-family-16x9.mp4) and [9:16](./family/films/asklocker-family-9x16.mp4); 1:11 in [16:9](./family/films/asklocker-family-16x9-short.mp4) and [9:16](./family/films/asklocker-family-9x16-short.mp4) |
+| `business/films/` | The business film: a formal product film for shops, clinics and CAs | 1:31 in [16:9](./business/films/asklocker-business-16x9.mp4) and [9:16](./business/films/asklocker-business-9x16.mp4); 0:59 in [16:9](./business/films/asklocker-business-16x9-short.mp4) and [9:16](./business/films/asklocker-business-9x16-short.mp4) |
 | `family/shorts/`, `business/shorts/` | One feature each: why it exists, the app doing it, the end card | 9:16, 14 to 21 seconds, with music, and `-sfx-only` without it |
 | `family/posters/`, `business/posters/` | One feature each: its line, and the phone showing it | 1:1 (`1080x1080`) and 16:9 (`1920x1080`) |
 
