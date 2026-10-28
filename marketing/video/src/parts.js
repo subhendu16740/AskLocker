@@ -88,7 +88,9 @@ export function avatar(name, size, { me = false, onApp = false } = {}) {
   return `<div class="av ${me ? 'me' : ''}" style="width:${size}px;height:${size}px;font-size:${size >= 48 ? 18 : 13}px">${initials}${badge}</div>`;
 }
 
-export const words = (text) => text.split(' ').map((w) => `<span class="w"><span class="wi">${w}</span></span>`).join(' ');
+// Each word in its own span, for the word-by-word reveal; ~ is a space that
+// never breaks, so a line can keep its last words together.
+export const words = (text) => text.split(' ').map((w) => `<span class="w"><span class="wi">${w.replace(/~/g, ' ')}</span></span>`).join(' ');
 // Like words(), for a "why" line: *stars* mark the emphasis, | breaks the
 // line, and ~ is a space that never breaks.
 export const rich = (text) => text.split('|').map((line) => line.split(/(\*[^*]+\*)/).filter((p) => p.trim()).map((part) => {
