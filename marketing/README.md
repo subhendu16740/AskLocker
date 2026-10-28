@@ -3,8 +3,8 @@
 Go-to-market material for AskLocker. Nothing here is part of the app build:
 Metro only bundles from `src/app`, and none of these files are TypeScript.
 
-- `family/` and `business/`: the finished films, feature shorts and posters,
-  ready to post (below).
+- `family/`, `nri/` and `business/`: the finished films, feature shorts and
+  posters, ready to post (below).
 - `video/`: the code that makes them: both films and every feature's short and
   poster, in 16:9, 9:16 and 1:1. See [`video/README.md`](video/README.md) to
   render them.
@@ -15,7 +15,7 @@ Metro only bundles from `src/app`, and none of these files are TypeScript.
   files sit in `strategy/media/`, which is not committed.
 
 `video/out/`, where everything is rendered, is gitignored; `video/tools/publish.sh`
-copies the finished files into `family/` and `business/`, which are committed.
+copies the finished files into `family/`, `nri/` and `business/`, which are committed.
 All of it shows a fictional family and business and SPECIMEN papers, so it can
 be shared publicly.
 
@@ -24,6 +24,7 @@ be shared publicly.
 | Folder | What | Shapes |
 |---|---|---|
 | `family/films/` | The family film: a night when a policy number can't be found, then the same night with AskLocker | 2:15 in [16:9](./family/films/asklocker-family-16x9.mp4) and [9:16](./family/films/asklocker-family-9x16.mp4); 1:11 in [16:9](./family/films/asklocker-family-16x9-short.mp4) and [9:16](./family/films/asklocker-family-9x16-short.mp4) |
+| `nri/films/` | The family film for Indians abroad: the same night, told by a son in Toronto who looks after his parents' papers from there | 2:15 in [16:9](./nri/films/asklocker-nri-16x9.mp4) and [9:16](./nri/films/asklocker-nri-9x16.mp4); 1:11 in [16:9](./nri/films/asklocker-nri-16x9-short.mp4) and [9:16](./nri/films/asklocker-nri-9x16-short.mp4) |
 | `business/films/` | The business film: a formal product film for shops, clinics and CAs | 1:31 in [16:9](./business/films/asklocker-business-16x9.mp4) and [9:16](./business/films/asklocker-business-9x16.mp4); 0:59 in [16:9](./business/films/asklocker-business-16x9-short.mp4) and [9:16](./business/films/asklocker-business-9x16-short.mp4) |
 | `family/shorts/`, `business/shorts/` | One feature each: why it exists, the app doing it, the end card | 9:16, 14 to 21 seconds, with music, and `-sfx-only` without it |
 | `family/posters/`, `business/posters/` | One feature each: its line, and the phone showing it | 1:1 (`1080x1080`) and 16:9 (`1920x1080`) |
@@ -61,8 +62,14 @@ and slides.
   check them against the app's Plans page first.
 - **Gmail import is still in testing.** Until Google verifies AskLocker's
   Gmail access, only listed test users can connect a mailbox, and the family
-  film shows it (it is not in the feature shorts or posters). Hold the family
-  film back from the public until then, or ask for a cut without it.
+  and NRI films show it (it is not in the feature shorts or posters). Hold
+  both films back from the public until then, or ask for cuts without it.
+- **The NRI film's end card shows the rupee price** (₹99 a month), which
+  anyone in the family in India can pay. Paying from abroad is in dollars
+  ($10 a month) and works only once Razorpay takes dollars
+  (`RAZORPAY_CURRENCIES=INR,USD`). Until then the app tells someone abroad that
+  paying from there is coming soon. Reminders arrive at 9 in the morning India
+  time, which is the evening before in Toronto, and the film shows that.
 - **Business vaults are a pilot**: paid business plans are set up by hand.
 - **Say what the app does, never more** (`CLAUDE.md`, Conventions): never
   "secure", "safe" or "100% private". "Sent and stored encrypted" and "In
@@ -74,7 +81,7 @@ and slides.
 After a change to the app or the words, from `video/`:
 
 ```bash
-./tools/films.sh       # the eight film cuts, with sound
+./tools/films.sh       # the twelve film cuts, with sound
 ./tools/features.sh    # every feature short and poster
 ./tools/publish.sh     # copy them here
 ```
