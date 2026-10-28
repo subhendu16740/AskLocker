@@ -19,7 +19,8 @@ import { chromium } from 'playwright';
 
 const ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const OUT = join(ROOT, 'out', 'posters');
-const ALL = ['ask', 'read', 'voice', 'reminders', 'tree', 'emergency', 'share', 'vaults', 'fingerprint', 'business', 'sheets'];
+const ALL = ['ask', 'read', 'voice', 'reminders', 'tree', 'emergency', 'share', 'vaults', 'fingerprint',
+  'biz-capture', 'biz-ask', 'biz-overview', 'biz-reminders', 'biz-team', 'biz-share', 'biz-access', 'biz-sheets'];
 
 const args = process.argv.slice(2);
 const opt = (name, fallback) => {

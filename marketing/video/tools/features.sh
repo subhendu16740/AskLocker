@@ -5,7 +5,8 @@
 #        the names are FEATURES' keys in src/features.js)
 set -euo pipefail
 cd "$(dirname "$0")/.."
-ALL=(ask read voice reminders tree emergency share vaults fingerprint business sheets)
+ALL=(ask read voice reminders tree emergency share vaults fingerprint
+  biz-capture biz-ask biz-overview biz-reminders biz-team biz-share biz-access biz-sheets)
 if [ $# -gt 0 ]; then FEATURES=("$@"); else FEATURES=("${ALL[@]}"); fi
 
 for f in "${FEATURES[@]}"; do

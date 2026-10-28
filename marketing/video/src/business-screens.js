@@ -149,7 +149,7 @@ export function askScreen() {
 
 function drawerPanel() {
   // Plans is the business's Family Plus row: its star in the business's gold.
-  const items = [['home', 'Home'], ['bar-chart-2', 'Overview', '', 'dr-overview'], ['edit-3', 'My notes'],
+  const items = [['home', 'Home'], ['bar-chart-2', 'Overview', '', 'dr-overview'], ['edit-3', 'My notes', '', 'dr-notes'],
     ['briefcase', 'Manage team', '', 'dr-team'], ['clock', 'Reminders', 'Plus'], ['star', 'Plans'], ['settings', 'Settings']];
   const modeBtn = (m, ic, label) => {
     const on = m === 'business';
@@ -262,7 +262,7 @@ export function overviewScreen() {
 
 // ─── My notes (src/app/notes.tsx, 056) ───────────────────────────────────
 
-function notesScreen() {
+export function notesScreen() {
   const note = (id, text, when, done = false) => `<div class="nt-note${done ? ' done' : ''}" id="${id}">
       <span class="nn-check"><span class="nn-off">${icon('circle', 20, '#6B7280')}</span><span class="nn-on">${icon('check-circle', 20, '#16A34A')}</span></span>
       <div class="nn-body"><div class="nn-t">${text}</div>${when ? `<div class="nn-when">${icon('bell', 12, '#1A7A72')}<span>${when}</span></div>` : ''}</div>
@@ -288,7 +288,7 @@ function notesScreen() {
 
 // ─── Manage team (src/app/family.tsx in Business mode) ───────────────────
 
-function teamScreen() {
+export function teamScreen() {
   const member = (id, name, role, { me = false, admin = false } = {}) => `<div class="tm-card" id="${id}">
       <div class="tm-av${me ? ' me' : ''}">${name.split(/[\s,]+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase()}</div>
       <div class="tm-info"><div class="tm-n"><span>${name}</span><span class="tm-star">★</span>${me ? '<span class="tm-pill you">You</span>' : ''}${admin ? '<span class="tm-pill admin">Admin</span>' : ''}</div>
@@ -326,6 +326,13 @@ function teamScreen() {
   </section>`;
 }
 
+/** The next morning: an expiry reminder and a note's reminder, as web pushes. */
+export function lockDayScreen() {
+  return lockScreen('scr-lockday', '9:05', 'Monday, 19 October', `<div class="lstack">
+      ${pushNotif('pn1', 'Shop Insurance 2025-26 expires in 30 days', 'Expires on 18 Nov 2026. A good time to renew it.')}
+      ${pushNotif('pn2', `Call ${BIZ.supplier} about the credit note`, `Your note in ${BIZ.name}`)}</div>`);
+}
+
 export function phone() {
   return phoneShell(`
     ${uploadScreen()}
@@ -334,9 +341,7 @@ export function phone() {
     ${askScreen()}
     ${homeScreen()}
     ${overviewScreen()}
-    ${lockScreen('scr-lockday', '9:05', 'Monday, 19 October', `<div class="lstack">
-      ${pushNotif('pn1', 'Shop Insurance 2025-26 expires in 30 days', 'Expires on 18 Nov 2026. A good time to renew it.')}
-      ${pushNotif('pn2', `Call ${BIZ.supplier} about the credit note`, `Your note in ${BIZ.name}`)}</div>`)}
+    ${lockDayScreen()}
     ${notesScreen()}
     ${teamScreen()}`, '10:14');
 }

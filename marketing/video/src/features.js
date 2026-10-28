@@ -22,7 +22,7 @@ import { icon, logoMark, phoneShell, lockScreen, pushNotif, cameraScreen, whyHow
 import * as FAM from './family-screens.js';
 import * as BUS from './business-screens.js';
 import {
-  documentScreen, vaultsScreen, appLockScreen, sheetTagScreen, sheetAskScreen, SHARE, SHEET_Q, SALES, CALLOUTS, NAVY,
+  documentScreen, vaultsScreen, appLockScreen, sheetTagScreen, sheetAskScreen, DOCS, SHEET_Q, SALES, CALLOUTS, NAVY, TEAL,
 } from './feature-screens.js';
 import { VOICE_LINES, voiceSubtitles } from './voice-lines.js';
 import { VOICES } from './voices.js';
@@ -86,6 +86,101 @@ function pulse(sel, t, rgb = '212,128,123', a = 0.45) {
 }
 function glow(sel, t, rgb = '212,128,123', a = 0.14) {
   tl.fromTo(sel, { backgroundColor: `rgba(${rgb},0)` }, { backgroundColor: `rgba(${rgb},${a})`, duration: 0.35, yoyo: true, repeat: 1, ease: 'sine.inOut', ...IR }, t);
+}
+
+/** Upload's camera: the guides, the scan line, the shutter, then the photo
+ * read on the next screen, and the category its words point to. Returns when
+ * it has been read. */
+function snapPhoto(t, { shutter, slot, cat }) {
+  tl.fromTo('#cam-guides', { scale: 1.08, autoAlpha: 0 }, { scale: 1, autoAlpha: 1, duration: 0.5, ...IR }, t);
+  tl.set('#cam-scan', { autoAlpha: 1 }, t + 0.2);
+  tl.fromTo('#cam-scan', { y: 0 }, { y: 440, duration: 0.9, ease: 'power1.inOut', ...IR }, t + 0.2);
+  tl.set('#cam-scan', { autoAlpha: 0 }, t + 1.1);
+  cue(t + 0.2, 'scan', { dur: 0.9 });
+  tap(t + 1.3, shutter, { press: '#cam-shutter' });
+  tl.fromTo('#shutter', { autoAlpha: 0 }, { autoAlpha: 0.95, duration: 0.06, ease: 'none', ...IR }, t + 1.32);
+  tl.to('#shutter', { autoAlpha: 0, duration: 0.35, ease: 'power1.out' }, t + 1.4);
+  cue(t + 1.32, 'shutter');
+  nav('scr-camera', 'scr-tag', t + 1.65, 'fade', 0.35);
+  chrome(t + 1.65, 'app');
+  tl.fromTo('#ocr-fill', { scaleX: 0 }, { scaleX: 1, duration: 1.4, ease: 'power1.inOut', ...IR }, t + 1.85);
+  cue(t + 1.85, 'process', { dur: 1.4 });
+  const r0 = t + 3.3;
+  tl.to('#ocr-card', { autoAlpha: 0, duration: 0.2, ease: 'none' }, r0);
+  fadeIn('#ocr-done', r0, { from: 4, duration: 0.3 });
+  tl.to(slot, { height: $('#ocr-done').offsetHeight, duration: 0.3, ease: 'power2.out' }, r0);
+  tl.set([`#c-${cat}-sel`, '#cat-hint'], { autoAlpha: 1 }, r0);
+  cue(r0 + 0.05, 'ding');
+  return r0;
+}
+
+/** Save, the Uploaded dialog, View, and the document's page scrolled down to
+ * what was read off it. Returns when it has scrolled. */
+function saveAndView(sv, { save, view }, scroll, doc, rgb, a = 0.14) {
+  tap(sv, save, { scroll });
+  tl.to('#save-busy', { autoAlpha: 1, duration: 0.12, ease: 'none' }, sv + 0.02);
+  tl.to('#save-btn', { opacity: 0.7, duration: 0.12, ease: 'none' }, sv + 0.05);
+  tl.set('#save-busy', { autoAlpha: 0 }, sv + 0.6);
+  tl.set('#save-btn', { opacity: 1 }, sv + 0.6);
+  tl.fromTo('#up-dialog', { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.25, ease: 'none', ...IR }, sv + 0.6);
+  tl.fromTo('#up-dialog-box', { scale: 0.92 }, { scale: 1, duration: 0.35, ease: 'power2.out', ...IR }, sv + 0.6);
+  cue(sv + 0.65, 'success');
+  tap(sv + 1.3, view, { press: '#up-dialog .b.o' });
+  nav('scr-tag', 'scr-doc', sv + 1.45, 'push');
+  const d = sv + 2.2;
+  tl.to('#dp-inner', { y: -doc, duration: 0.8, ease: 'power2.inOut' }, d);
+  glow('#dp-meta-title, .dp-meta', d + 0.9, rgb, a);
+  return d;
+}
+
+/** A document's share sheet, measured: it sits on the bottom edge, so it is
+ * taller once the link is made, and Copy link is measured in that layout. */
+function shareSetup() {
+  const h = (s) => $(s).offsetHeight;
+  const formH = h('#ss-form');
+  const madeH = h('#ss-made');
+  const noneH = h('#ss-none');
+  const rowH = h('#ss-row');
+  $('#ss-swap1').style.height = `${madeH}px`;
+  $('#ss-swap2').style.height = `${rowH}px`;
+  const copy = at('#ss-copy');
+  $('#ss-swap1').style.height = `${formH}px`;
+  $('#ss-swap2').style.height = `${noneH}px`;
+  const P = { share: at('#dp-share'), input: at('#ss-input'), make: at('#ss-make'), copy };
+  gsap.set(['#ss-made', '#ss-row', '#ss-dim'], { autoAlpha: 0 });
+  gsap.set('#ss-sheet', { yPercent: 105 });
+  return { madeH, rowH, P };
+}
+
+/** Share, who it is for, Make a link (7 days is chosen already), Copy link. */
+function sharePlay(t, { madeH, rowH, P }, note, accent) {
+  tap(t, P.share, { press: '#dp-share' });
+  tl.to('#ss-dim', { autoAlpha: 1, duration: 0.25, ease: 'none' }, t + 0.1);
+  tl.to('#ss-sheet', { yPercent: 0, duration: 0.4, ease: 'power3.out' }, t + 0.1);
+  cue(t + 0.1, 'whoosh-soft');
+  tap(t + 1.0, P.input);
+  tl.set('#ss-input', { borderColor: accent }, t + 1.02);
+  tl.set('#ss-caret', { autoAlpha: 1 }, t + 1.05);
+  tl.set('#ss-ph', { autoAlpha: 0 }, t + 1.15);
+  type('#ss-typed', note, t + 1.15, 0.7);
+  tl.set('#ss-caret', { autoAlpha: 0 }, t + 2.05);
+  tl.set('#ss-input', { borderColor: '#D1D5DB' }, t + 2.05);
+  tap(t + 2.2, P.make, { press: '#ss-make' });
+  tl.to('#ss-busy', { autoAlpha: 1, duration: 0.12, ease: 'none' }, t + 2.22);
+  // The link, shown once; and it joins the document's working links.
+  const m = t + 2.85;
+  tl.to('#ss-form', { autoAlpha: 0, duration: 0.15, ease: 'none' }, m);
+  tl.to('#ss-made', { autoAlpha: 1, duration: 0.25, ease: 'none' }, m + 0.2);
+  tl.to('#ss-swap1', { height: madeH, duration: 0.35, ease: 'power2.inOut' }, m);
+  tl.to('#ss-none', { autoAlpha: 0, duration: 0.15, ease: 'none' }, m);
+  tl.to('#ss-row', { autoAlpha: 1, duration: 0.25, ease: 'none' }, m + 0.2);
+  tl.to('#ss-swap2', { height: rowH, duration: 0.35, ease: 'power2.inOut' }, m);
+  cue(m, 'ding');
+  const k = m + 1.5;
+  tap(k, P.copy, { press: '#ss-copy' });
+  swap('#ss-copy .ss-copy-a', '#ss-copied', k + 0.02, 0.15);
+  cue(k + 0.05, 'pop-soft');
+  return { how: t + 0.1, callout: m + 0.3, hero: k + 0.9, end: k + 1.9 };
 }
 
 // ═════════════════════════════════════════════════════════════════════════
@@ -160,26 +255,7 @@ const FEATURES = {
     },
     play(t, c) {
       const { P } = c;
-      tl.fromTo('#cam-guides', { scale: 1.08, autoAlpha: 0 }, { scale: 1, autoAlpha: 1, duration: 0.5, ...IR }, t);
-      tl.set('#cam-scan', { autoAlpha: 1 }, t + 0.2);
-      tl.fromTo('#cam-scan', { y: 0 }, { y: 440, duration: 0.9, ease: 'power1.inOut', ...IR }, t + 0.2);
-      tl.set('#cam-scan', { autoAlpha: 0 }, t + 1.1);
-      cue(t + 0.2, 'scan', { dur: 0.9 });
-      tap(t + 1.3, P.shutter, { press: '#cam-shutter' });
-      tl.fromTo('#shutter', { autoAlpha: 0 }, { autoAlpha: 0.95, duration: 0.06, ease: 'none', ...IR }, t + 1.32);
-      tl.to('#shutter', { autoAlpha: 0, duration: 0.35, ease: 'power1.out' }, t + 1.4);
-      cue(t + 1.32, 'shutter');
-      nav('scr-camera', 'scr-tag', t + 1.65, 'fade', 0.35);
-      chrome(t + 1.65, 'app');
-      tl.fromTo('#ocr-fill', { scaleX: 0 }, { scaleX: 1, duration: 1.4, ease: 'power1.inOut', ...IR }, t + 1.85);
-      cue(t + 1.85, 'process', { dur: 1.4 });
-      // Read: what it found, and the category its words point to.
-      const r0 = t + 3.3;
-      tl.to('#ocr-card', { autoAlpha: 0, duration: 0.2, ease: 'none' }, r0);
-      fadeIn('#ocr-done', r0, { from: 4, duration: 0.3 });
-      tl.to(c.slot, { height: $('#ocr-done').offsetHeight, duration: 0.3, ease: 'power2.out' }, r0);
-      tl.set([`#c-${FAM.HEALTH}-sel`, '#cat-hint'], { autoAlpha: 1 }, r0);
-      cue(r0 + 0.05, 'ding');
+      const r0 = snapPhoto(t, { shutter: P.shutter, slot: c.slot, cat: FAM.HEALTH });
       // Where it goes, and whose it is: Sharma Family, Papa's.
       const s1 = Math.min(c.maxBefore, P.vaultTitle.top - P.top.top - 12);
       tl.to('#tag-inner', { y: -s1, duration: 0.6, ease: 'power2.inOut' }, r0 + 0.9);
@@ -203,21 +279,8 @@ const FEATURES = {
       swap('#p-me-sel', '#p-papa-sel', v + 1.06, 0.16);
       const s3 = Math.max(s2, Math.min(c.max, P.save.top + P.save.h + 16 - (P.top.top + c.view)));
       tl.to('#tag-inner', { y: -s3, duration: 0.55, ease: 'power2.inOut' }, v + 1.4);
-      const sv = v + 2.1;
-      tap(sv, P.save, { scroll: s3 });
-      tl.to('#save-busy', { autoAlpha: 1, duration: 0.12, ease: 'none' }, sv + 0.02);
-      tl.to('#save-btn', { opacity: 0.7, duration: 0.12, ease: 'none' }, sv + 0.05);
-      tl.set('#save-busy', { autoAlpha: 0 }, sv + 0.6);
-      tl.set('#save-btn', { opacity: 1 }, sv + 0.6);
-      tl.fromTo('#up-dialog', { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.25, ease: 'none', ...IR }, sv + 0.6);
-      tl.fromTo('#up-dialog-box', { scale: 0.92 }, { scale: 1, duration: 0.35, ease: 'power2.out', ...IR }, sv + 0.6);
-      cue(sv + 0.65, 'success');
-      // View: the document's own page, and what was read off it.
-      tap(sv + 1.3, P.view, { press: '#up-dialog .b.o' });
-      nav('scr-tag', 'scr-doc', sv + 1.45, 'push');
-      const d = sv + 2.2;
-      tl.to('#dp-inner', { y: -c.doc, duration: 0.8, ease: 'power2.inOut' }, d);
-      glow('#dp-meta-title, .dp-meta', d + 0.9);
+      // Save, then View: the document's own page, and what was read off it.
+      const d = saveAndView(v + 2.1, P, s3, c.doc, '212,128,123');
       return { how: t + 0.1, callout: r0 + 0.3, hero: d + 2.3, end: d + 3.3 };
     },
   },
@@ -309,10 +372,7 @@ const FEATURES = {
     head: 'Renew it *before it runs out.*',
     line: 'Everyone in the family hears 90, 30 and 7 days before a policy or passport runs out. Birthdays too.',
     time: '9:05', first: 'scr-lockday', os: true,
-    screens: () => `${lockScreen('scr-lockday', '9:05', 'Monday, 2 November', `<div class="lstack">
-      ${pushNotif('pn1', 'Car Insurance expires in 7 days', `Expires on 9 Nov 2026 · ${STORY.youFull}. Renew it soon.`)}
-      ${pushNotif('pn2', `Today is ${STORY.dadi}'s 78th birthday`, 'Wish her a happy birthday.')}</div>`)}
-      ${FAM.notificationsScreen()}`,
+    screens: () => `${FAM.lockDayScreen()}${FAM.notificationsScreen()}`,
     coY: 742,
     setup: () => ({ P: { pn1: at('#pn1') } }),
     play(t, c) {
@@ -406,54 +466,8 @@ const FEATURES = {
     time: '9:41', first: 'scr-doc',
     screens: () => documentScreen({ share: true }),
     coY: 330,
-    setup() {
-      const h = (s) => $(s).offsetHeight;
-      const formH = h('#ss-form');
-      const madeH = h('#ss-made');
-      const noneH = h('#ss-none');
-      const rowH = h('#ss-row');
-      // The sheet sits on the bottom edge, so it is taller once the link is
-      // made: Copy link is measured in that layout.
-      $('#ss-swap1').style.height = `${madeH}px`;
-      $('#ss-swap2').style.height = `${rowH}px`;
-      const copy = at('#ss-copy');
-      $('#ss-swap1').style.height = `${formH}px`;
-      $('#ss-swap2').style.height = `${noneH}px`;
-      const P = { share: at('#dp-share'), input: at('#ss-input'), make: at('#ss-make'), copy };
-      gsap.set(['#ss-made', '#ss-row', '#ss-dim'], { autoAlpha: 0 });
-      gsap.set('#ss-sheet', { yPercent: 105 });
-      return { madeH, rowH, P };
-    },
-    play(t, { madeH, rowH, P }) {
-      tap(t, P.share, { press: '#dp-share' });
-      tl.to('#ss-dim', { autoAlpha: 1, duration: 0.25, ease: 'none' }, t + 0.1);
-      tl.to('#ss-sheet', { yPercent: 0, duration: 0.4, ease: 'power3.out' }, t + 0.1);
-      cue(t + 0.1, 'whoosh-soft');
-      // Who it is for, then Make a link: 7 days is chosen already.
-      tap(t + 1.0, P.input);
-      tl.set('#ss-input', { borderColor: NAVY }, t + 1.02);
-      tl.set('#ss-caret', { autoAlpha: 1 }, t + 1.05);
-      tl.set('#ss-ph', { autoAlpha: 0 }, t + 1.15);
-      type('#ss-typed', SHARE.note, t + 1.15, 0.7);
-      tl.set('#ss-caret', { autoAlpha: 0 }, t + 2.05);
-      tl.set('#ss-input', { borderColor: '#D1D5DB' }, t + 2.05);
-      tap(t + 2.2, P.make, { press: '#ss-make' });
-      tl.to('#ss-busy', { autoAlpha: 1, duration: 0.12, ease: 'none' }, t + 2.22);
-      // The link, shown once; and it joins the document's working links.
-      const m = t + 2.85;
-      tl.to('#ss-form', { autoAlpha: 0, duration: 0.15, ease: 'none' }, m);
-      tl.to('#ss-made', { autoAlpha: 1, duration: 0.25, ease: 'none' }, m + 0.2);
-      tl.to('#ss-swap1', { height: madeH, duration: 0.35, ease: 'power2.inOut' }, m);
-      tl.to('#ss-none', { autoAlpha: 0, duration: 0.15, ease: 'none' }, m);
-      tl.to('#ss-row', { autoAlpha: 1, duration: 0.25, ease: 'none' }, m + 0.2);
-      tl.to('#ss-swap2', { height: rowH, duration: 0.35, ease: 'power2.inOut' }, m);
-      cue(m, 'ding');
-      const k = m + 1.5;
-      tap(k, P.copy, { press: '#ss-copy' });
-      swap('#ss-copy .ss-copy-a', '#ss-copied', k + 0.02, 0.15);
-      cue(k + 0.05, 'pop-soft');
-      return { how: t + 0.1, callout: m + 0.3, hero: k + 0.9, end: k + 1.9 };
-    },
+    setup: shareSetup,
+    play: (t, c) => sharePlay(t, c, DOCS.policy.share.note, NAVY),
   },
 
   // ─── Who can open what: a vault for every document ────────────────────
@@ -544,8 +558,65 @@ const FEATURES = {
     },
   },
 
-  // ─── Business: the overview, read from the papers ─────────────────────
-  business: {
+  // ═══ A business's: Arora Electric, on Pro ═════════════════════════════
+  // ─── Capture: a supplier's bill photographed, filed and read ──────────
+  'biz-capture': {
+    theme: 'business', kicker: 'Capture', icon: 'camera',
+    why: 'Bills arrive by email, on chat apps *and on~paper.*',
+    how: 'Snap it. AskLocker files it and reads it.',
+    head: 'Snap a bill. *Know what it says.*',
+    line: 'AskLocker reads the GSTIN, bill number, total and due date, and files it under Purchase Bills.',
+    time: '10:14', first: 'scr-camera', os: true,
+    screens: () => `${cameraScreen(BUS.billPaper())}${BUS.tagScreen()}${documentScreen({ doc: 'bill' })}`,
+    coY: 362,
+    setup() {
+      fitScroll('#tag-scroll', '#scr-tag');
+      // The bill is shorter than the camera's frame: centre it.
+      $('#cam-doc').style.marginTop = `${-$('#cam-doc').offsetHeight / 2}px`;
+      // Measured as it will be once the photo is read, then put back.
+      const slot = $('#scr-tag .ocr-slot');
+      slot.style.height = `${$('#ocr-done').offsetHeight}px`;
+      const P = {
+        shutter: at('#cam-shutter'), save: at('#save-btn'), top: at('#tag-inner'), cat: at('#cat-hint'), view: at('#up-dialog .b.o'),
+      };
+      const view = $('#tag-scroll').offsetHeight;
+      const max = $('#tag-inner').offsetHeight - view;
+      slot.style.height = '';
+      const doc = $('#dp-inner').offsetHeight - $('#dp-scroll').offsetHeight;
+      gsap.set(['#cat-hint', `#c-${BUS.PURCHASE}-sel`], { autoAlpha: 0 });
+      return { slot, P, view, max, doc };
+    },
+    play(t, c) {
+      const { P } = c;
+      const r0 = snapPhoto(t, { shutter: P.shutter, slot: c.slot, cat: BUS.PURCHASE });
+      // Down to the category its words point to (Purchase Bills), and Save.
+      const s = Math.min(c.max, Math.max(P.cat.top - P.top.top - 48, P.save.top + P.save.h + 16 - (P.top.top + c.view)));
+      tl.to('#tag-inner', { y: -s, duration: 0.7, ease: 'power2.inOut' }, r0 + 0.9);
+      pulse(`#c-${BUS.PURCHASE}`, r0 + 1.7, '15,92,87', 0.35);
+      const d = saveAndView(r0 + 2.5, P, s, c.doc, '15,92,87', 0.12);
+      return { how: t + 0.1, callout: r0 + 0.3, hero: d + 2.3, end: d + 3.3 };
+    },
+  },
+
+  // ─── Ask: a question, answered from the business's own papers ─────────
+  'biz-ask': {
+    theme: 'business', kicker: 'Ask', icon: 'message-circle',
+    why: 'When is that bill due? *Someone digs through~files.*',
+    how: 'Ask anything. Get the answer and its source.',
+    head: 'Ask your records *anything.*',
+    line: 'Plain questions, answered from your own bills and papers, with the document it came from.',
+    time: '10:14', first: 'scr-ask',
+    screens: () => BUS.askScreen(),
+    coY: 640,
+    setup: () => askSetup('ask', 'scr-ask', `When is the ${BUS.BIZ.supplier} bill due, and how much is it?`),
+    play(t, c) {
+      const ans = askTurn('ask', t, c);
+      return { how: t, callout: ans + 0.8, hero: ans + 2.3, end: ans + 3.8 };
+    },
+  },
+
+  // ─── Overview: renewals, bills due, money in and out ──────────────────
+  'biz-overview': {
     theme: 'business', kicker: 'For business', icon: 'briefcase',
     why: 'Due dates and totals sit *inside a~pile~of~bills.*',
     how: 'One overview, read from your papers.',
@@ -583,8 +654,145 @@ const FEATURES = {
     },
   },
 
+  // ─── Reminders: a renewal and a note's reminder, on the lock screen ───
+  'biz-reminders': {
+    theme: 'business', kicker: 'Reminders', icon: 'bell', plus: '★ Plus',
+    why: 'Licences and policies lapse quietly, *and then cost~you.*',
+    how: 'Reminded before anything lapses.',
+    head: 'Renew it *before it lapses.*',
+    line: 'Everyone in the business hears before a licence or policy runs out. Your own notes remind you too.',
+    time: '9:05', first: 'scr-lockday', os: true,
+    screens: () => `${BUS.lockDayScreen()}${BUS.notesScreen()}`,
+    coY: 742,
+    setup: () => ({ P: { pn2: at('#pn2'), nn1: at('#nn-1 .nn-check') } }),
+    play(t, { P }) {
+      vibrate(t);
+      notify('#pn1', t + 0.05);
+      vibrate(t + 0.9);
+      notify('#pn2', t + 0.95);
+      // The note's reminder opens My notes; the call made, it is ticked off.
+      const s = t + 4.3;
+      tap(s, P.pn2, { press: '#pn2' });
+      nav('scr-lockday', 'scr-notes', s + 0.15, 'zoom', 0.4);
+      chrome(s + 0.15, 'app', '9:06');
+      const d = s + 1.5;
+      tap(d, P.nn1);
+      swap('#nn-1 .nn-off', '#nn-1 .nn-on', d + 0.02, 0.15);
+      tl.to('#nn-1 .nn-t', { color: '#6B7280', duration: 0.15, ease: 'none' }, d + 0.02);
+      tl.set('#nn-1 .nn-t', { textDecoration: 'line-through' }, d + 0.02);
+      cue(d + 0.05, 'ding');
+      return { how: t + 0.1, callout: t + 1.8, hero: t + 3.7, end: d + 1.5 };
+    },
+  },
+
+  // ─── Team: the CA invited, and pending until she accepts ──────────────
+  'biz-team': {
+    theme: 'business', kicker: 'Team', icon: 'users',
+    why: 'Your CA wants the papers *every single~month.*',
+    how: 'Invite your team and your CA.',
+    head: 'Your team and your CA, *by invitation.*',
+    line: 'They join only when they accept. What someone adds stays with the business, even after they leave.',
+    time: '10:14', first: 'scr-team',
+    screens: () => BUS.teamScreen(),
+    coY: 720,
+    setup() {
+      // The banner and the pending invitation open once it is sent.
+      const banner = $('#tm-banner');
+      const pending = $('#tm-pending');
+      const h = { banner: banner.offsetHeight, pending: pending.offsetHeight };
+      const P = { add: at('#tm-add'), email: at('#tm-email'), shown: at('#tm-shown'), send: at('#tm-send') };
+      banner.style.height = '0px';
+      pending.style.height = '0px';
+      gsap.set([banner, pending, '#tm-dim'], { autoAlpha: 0 });
+      gsap.set('#tm-sheet', { yPercent: 105 });
+      return { banner, pending, h, P };
+    },
+    play(t, { banner, pending, h, P }) {
+      // Add: their email, and the name the team will see.
+      tap(t, P.add, { press: '#tm-add' });
+      tl.to('#tm-dim', { autoAlpha: 1, duration: 0.25, ease: 'none' }, t + 0.1);
+      tl.to('#tm-sheet', { yPercent: 0, duration: 0.4, ease: 'power3.out' }, t + 0.1);
+      cue(t + 0.1, 'whoosh-soft');
+      tap(t + 0.85, P.email);
+      tl.to('#tm-email', { borderColor: TEAL, duration: 0.1, ease: 'none' }, t + 0.87);
+      tl.set('#tm-email-ph', { autoAlpha: 0 }, t + 0.95);
+      type('#tm-email-typed', BUS.BIZ.caEmail, t + 0.95, 0.95);
+      tap(t + 2.15, P.shown);
+      tl.to('#tm-email', { borderColor: '#D1D5DB', duration: 0.1, ease: 'none' }, t + 2.17);
+      tl.to('#tm-shown', { borderColor: TEAL, duration: 0.1, ease: 'none' }, t + 2.17);
+      tl.set('#tm-shown-ph', { autoAlpha: 0 }, t + 2.25);
+      type('#tm-shown-typed', BUS.BIZ.caShown, t + 2.25, 0.8);
+      const s = t + 3.4;
+      tap(s, P.send, { press: '#tm-send' });
+      tl.to('#tm-shown', { borderColor: '#D1D5DB', duration: 0.1, ease: 'none' }, s + 0.02);
+      tl.to('#tm-sheet', { yPercent: 105, duration: 0.35, ease: 'power3.in' }, s + 0.1);
+      tl.to('#tm-dim', { autoAlpha: 0, duration: 0.3, ease: 'none' }, s + 0.15);
+      // Asked, not added: she shows as Pending approval until she accepts.
+      tl.to(banner, { height: h.banner, autoAlpha: 1, duration: 0.4, ease: 'power2.out' }, s + 0.4);
+      tl.to(pending, { height: h.pending, autoAlpha: 1, duration: 0.4, ease: 'power2.out' }, s + 0.5);
+      cue(s + 0.45, 'success');
+      pulse('#tm-pending .tm-card', s + 1.3, '183,121,31', 0.35);
+      return { how: t, callout: s + 0.8, hero: s + 2.4, end: s + 4.2 };
+    },
+  },
+
+  // ─── Share: one bill, by a link that ends ─────────────────────────────
+  'biz-share': {
+    theme: 'business', kicker: 'Share by link', icon: 'link',
+    why: 'Your CA needs this one bill, *right~now.*',
+    how: 'Send a link that expires.',
+    head: 'Send one record. *Not the whole vault.*',
+    line: 'A link for your CA, bank or buyer. It opens without an account, and stops working when you say.',
+    time: '10:14', first: 'scr-doc',
+    screens: () => documentScreen({ doc: 'bill', share: true }),
+    coY: 330,
+    setup: shareSetup,
+    play: (t, c) => sharePlay(t, c, DOCS.bill.share.note, TEAL),
+  },
+
+  // ─── Access and control: who is in, and as what ──────────────────────
+  'biz-access': {
+    theme: 'business', kicker: 'Access and control', icon: 'shield',
+    why: 'Invoices, payroll, contracts: *the papers a business runs~on.*',
+    how: 'Sent and stored encrypted.',
+    head: 'Your records, sent and stored *encrypted.*',
+    line: 'In AskLocker, only your team can open them, and admins decide who joins.',
+    time: '10:14', first: 'scr-home',
+    screens: () => `${BUS.homeScreen()}${BUS.teamScreen()}${BUS.notesScreen()}`,
+    coY: 330,
+    setup() {
+      // Manage team as it is before anyone is asked: no banner, no invitation.
+      $('#tm-banner').style.height = '0px';
+      $('#tm-pending').style.height = '0px';
+      gsap.set(['#tm-banner', '#tm-pending', '#tm-dim'], { autoAlpha: 0 });
+      gsap.set('#tm-sheet', { yPercent: 105 });
+      return { P: { avatar: at('#scr-home-avatar'), team: at('#dr-team'), notes: at('#dr-notes'), back: at('#scr-team .v4-back') } };
+    },
+    play(t, { P }) {
+      const open = (a, row, to, from = 'scr-home') => {
+        tap(a, P.avatar, { press: '#scr-home-avatar' });
+        drawer('#drawer', a + 0.08, true);
+        tap(a + 0.95, P[row], { press: `#dr-${row}` });
+        drawer('#drawer', a + 1.05, false);
+        nav(from, to, a + 1.2, 'push');
+      };
+      // Manage team: who is in, and as what (one admin, and viewers).
+      open(t, 'team', 'scr-team');
+      const r = t + 1.9;
+      ['#tm-me', '#tm-ravi', '#tm-sunil'].forEach((card, i) => pulse(card, r + i * 0.18, '15,92,87', 0.3));
+      glow('.tm-only', r + 1.0, '15,92,87', 0.1);
+      // Then My notes: each person's own, which nobody else in the team opens.
+      const b = r + 2.2;
+      tap(b, P.back, { press: '#scr-team .v4-back' });
+      nav('scr-team', 'scr-home', b + 0.1, 'back', 0.4);
+      open(b + 0.8, 'notes', 'scr-notes');
+      glow('.nn-intro', b + 2.6, '15,92,87', 0.12);
+      return { how: t + 1.2, callout: r + 0.2, hero: r + 1.9, end: b + 4.2 };
+    },
+  },
+
   // ─── Spreadsheets: an .xlsx read when it is added, then asked ─────────
-  sheets: {
+  'biz-sheets': {
     theme: 'business', kicker: 'Spreadsheets', icon: 'grid',
     why: '245 rows, three sheets, *and one number you need.*',
     how: 'AskLocker reads it. You just ask.',

@@ -11,35 +11,54 @@ import {
   uploadedDialog, THEME,
 } from './parts.js';
 import { STORY, policyPaper } from './family-screens.js';
-import { BIZ, MONEY } from './business-screens.js';
+import { BIZ, MONEY, billPaper } from './business-screens.js';
 
 const NAVY = THEME.family.primary;
 const TEAL = THEME.business.primary;
 
 // ─── A document's page (src/app/document/[id].tsx) ───────────────────────
-// Papa's policy, a week after Rohan photographed it. "Extracted Data" is
-// what supabase/functions/_shared/metadata.ts reads off policyPaper(): run
-// extractMetadata on its text and you get these four rows, in this order.
-export const POLICY_META = [
-  ['Expiry date', '14/03/2027'],
-  ['Policy number', STORY.policyNo],
-  ['Name', STORY.papa],
-  ['Amount', '10,00,000'],
-];
+// The two documents the films photograph: Papa's policy, a week after Rohan
+// took it, and Mehta Cables' bill to Arora Electric. "Extracted Data" is what
+// supabase/functions/_shared/metadata.ts reads off the paper: run
+// extractMetadata on policyPaper()'s or billPaper()'s text and you get these
+// rows, in this order, under the page's own labels (META_LABELS). A business
+// has no family tree, so its page names nobody the document belongs to.
+export const DOCS = {
+  policy: {
+    theme: 'family', file: STORY.scanFile, paper: policyPaper,
+    tags: [['blue', 'Health Insurance'], ['purple', 'Father'], ['gray', 'Nov 2026']],
+    info: [['Uploaded', 'November 1, 2026'], ['File size', '1.4 MB'], ['Type', 'JPG'], ['Category', 'Health Insurance'], ['Uploaded by', STORY.youFull]],
+    owner: STORY.papa,
+    meta: [['Expiry date', '14/03/2027'], ['Policy number', STORY.policyNo], ['Name', STORY.papa], ['Amount', '10,00,000']],
+    // Made on 1 November, the day the policy was added, for 7 days.
+    share: { note: 'CA Mehta', until: '8 November 2026', who: 'You or a family admin' },
+  },
+  bill: {
+    theme: 'business', file: BIZ.scanFile, paper: billPaper,
+    tags: [['blue', 'Purchase Bills'], ['gray', 'Oct 2026']],
+    info: [['Uploaded', 'October 3, 2026'], ['File size', '1.2 MB'], ['Type', 'JPG'], ['Category', 'Purchase Bills'], ['Uploaded by', BIZ.owner]],
+    owner: '',
+    meta: [['Total', '1,18,000.00'], ['GSTIN', BIZ.supplierGstin], ['GSTIN', BIZ.gstin], ['Invoice number', BIZ.billNo],
+      ['Invoice date', '02/10/2026'], ['Due date', '25/10/2026']],
+    // Made on 19 October, the business film's "today", for 7 days. The app's
+    // sheet says "a family admin" in a business too; in a business any admin
+    // can turn a link off, which is what this says.
+    share: { note: 'CA Pooja', until: '26 October 2026', who: 'You or an admin' },
+  },
+};
 
 // A share link's secret (two v4 UUIDs, 64 hex characters after #s).
 export const SHARE_URL = 'https://asklocker.com/s#4f9c2e71b8d04a1c9e35d6f0a2b7c8e1d3a64f05c9b24e8a8f17d2c6e0b9a3f4';
-// Made on 1 November, the day the policy was added, for 7 days.
-export const SHARE = { note: 'CA Mehta', until: '8 November 2026', untilShort: '8 November 2026' };
 
-function shareSheet() {
+function shareSheet(d) {
   const chip = (id, label, on) => `<div class="ss-chip${on ? ' on' : ''}" id="${id}">${label}</div>`;
+  const { note, until, who } = d.share;
   return `<div class="ss-dim" id="ss-dim"></div>
     <div class="ss-sheet" id="ss-sheet">
       <i class="ss-handle"></i>
       <div class="ss-head"><span>Share by link</span>${icon('x', 24, '#6B7280')}</div>
       <div class="ss-body">
-        <div class="ss-intro">Anyone with the link can open this document without an account. You or a family admin can turn it off any time.</div>
+        <div class="ss-intro">Anyone with the link can open this document without an account. ${who} can turn it off any time.</div>
         <div class="ss-swap" id="ss-swap1">
           <div class="ss-form" id="ss-form">
             <div class="ss-field"><div class="ss-l">Who is it for? (optional)</div>
@@ -53,35 +72,35 @@ function shareSheet() {
             <div class="ss-link">${SHARE_URL}</div>
             <div class="ss-btn" id="ss-copy"><span class="ss-copy-a">${icon('copy', 16, '#fff')}<span>Copy link</span></span>
               <span class="ss-copy-b" id="ss-copied" style="opacity:0">${icon('check', 16, '#fff')}<span>Copied</span></span></div>
-            <div class="ss-btn2">${icon('share-2', 16, NAVY)}<span>Send it…</span></div>
-            <div class="ss-muted">Works until ${SHARE.until}. Copy it now. It won't be shown again.</div>
+            <div class="ss-btn2">${icon('share-2', 16, THEME[d.theme].primary)}<span>Send it…</span></div>
+            <div class="ss-muted">Works until ${until}. Copy it now. It won't be shown again.</div>
           </div>
         </div>
         <div class="ss-section">Links for this document</div>
         <div class="ss-swap" id="ss-swap2">
           <div class="ss-none" id="ss-none">No working links.</div>
-          <div class="ss-row" id="ss-row"><div class="ss-rt"><div class="ss-r1">For ${SHARE.note} · until ${SHARE.untilShort}</div>
+          <div class="ss-row" id="ss-row"><div class="ss-rt"><div class="ss-r1">For ${note} · until ${until}</div>
             <div class="ss-r2">Not opened yet · made by you</div></div><span class="ss-off">Turn off</span></div>
         </div>
       </div>
     </div>`;
 }
 
-export function documentScreen({ share = false } = {}) {
+export function documentScreen({ doc = 'policy', share = false } = {}) {
+  const d = DOCS[doc];
   const tag = (cls, text) => `<span class="dp-tag ${cls}">${text}</span>`;
   const row = (label, value) => `<div class="dp-row"><span class="dp-l">${label}</span><span class="dp-v">${value}</span></div>`;
-  const meta = POLICY_META.map(([k, v], i) => `<div class="dp-row dp-meta" id="dp-m${i}"><span class="dp-l">${k}</span><span class="dp-v">${v}</span></div>`).join('');
+  const meta = d.meta.map(([k, v], i) => `<div class="dp-row dp-meta" id="dp-m${i}"><span class="dp-l">${k}</span><span class="dp-v">${v}</span></div>`).join('');
   const action = (id, ic, label, bg, c) => `<div class="dp-act" id="${id}"><span class="dp-aic" style="background:${bg}">${icon(ic, 18, c)}</span><span>${label}</span></div>`;
-  return `<section class="scr" id="scr-doc">${sbFill}
-    ${header(STORY.scanFile)}
-    <div class="dp-tags">${tag('blue', 'Health Insurance')}${tag('purple', 'Father')}${tag('gray', 'Nov 2026')}</div>
+  return `<section class="scr${d.theme === 'business' ? ' biz' : ''}" id="scr-doc">${sbFill}
+    ${header(d.file, { theme: d.theme })}
+    <div class="dp-tags">${d.tags.map(([cls, text]) => tag(cls, text)).join('')}</div>
     <div class="dp-scroll" id="dp-scroll"><div class="dp-inner" id="dp-inner">
-      <div class="dp-preview"><div class="preview-photo dp-photo"><div class="grain"></div><div class="preview-doc">${policyPaper()}</div></div></div>
+      <div class="dp-preview"><div class="preview-photo dp-photo"><div class="grain"></div><div class="preview-doc">${d.paper()}</div></div></div>
       <div class="dp-card" id="dp-info">
         <div class="dp-ct">Document Information</div>
-        ${row('Uploaded', 'November 1, 2026')}${row('File size', '1.4 MB')}${row('Type', 'JPG')}
-        ${row('Category', 'Health Insurance')}${row('Uploaded by', STORY.youFull)}
-        <div class="dp-row"><span class="dp-l">Belongs to</span><span class="dp-owner"><i>${STORY.papa[0]}</i><span class="dp-v">${STORY.papa}</span></span></div>
+        ${d.info.map(([label, value]) => row(label, value)).join('')}
+        ${d.owner ? `<div class="dp-row"><span class="dp-l">Belongs to</span><span class="dp-owner"><i>${d.owner[0]}</i><span class="dp-v">${d.owner}</span></span></div>` : ''}
         <div class="dp-ct later" id="dp-meta-title">Extracted Data</div>
         ${meta}
       </div>
@@ -90,7 +109,7 @@ export function documentScreen({ share = false } = {}) {
       ${action('dp-share', 'share-2', 'Share', '#EFF6FF', '#2563EB')}${action('dp-dl', 'download', 'Download', '#F0FDF4', '#16A34A')}
       ${action('dp-edit', 'edit-3', 'Edit', '#FFFBEB', '#D97706')}${action('dp-del', 'trash-2', 'Delete', '#FEF2F2', '#DC2626')}
     </div>
-    ${share ? shareSheet() : ''}
+    ${share ? shareSheet(d) : ''}
   </section>`;
 }
 
@@ -236,7 +255,9 @@ export function sheetAskScreen() {
 }
 
 // ─── Callouts: beside the phone on a poster, in the text's place in a short ─
-const check = (t, ic = 'check') => `<div class="co-check">${icon(ic, 16, '#16A34A', 2.6)}<span>${t}</span></div>`;
+const check = (t, ic = 'check', c = '#16A34A') => `<div class="co-check">${icon(ic, 16, c, 2.6)}<span>${t}</span></div>`;
+// A business's callouts tick in its teal, as the business film's do.
+const tick = (t, ic = 'check') => check(t, ic, TEAL);
 const ask = (q, who) => `<div class="co-ask"><span class="q">“${q}”</span>${icon('chevron-right', 16, '#9CA3AF', 2.4)}<span class="who">${who}</span></div>`;
 const label = (ic, t) => `<div class="co-label">${icon(ic, 14, 'currentColor', 2.6)}<span>${t}</span></div>`;
 
@@ -271,10 +292,33 @@ export const CALLOUTS = {
   fingerprint: () => `<div class="callout" id="co-f" style="width:380px">${label('aperture', 'A passkey on your phone')}
     ${check('Sign in with Google once')}${check('Then your fingerprint or face')}${check('No password to remember')}
     ${check('Your fingerprint stays on your phone')}</div>`,
-  business: () => `<div class="callout" id="co-f" style="width:370px">${label('bar-chart-2', 'Read from your papers')}
-    ${check('Renewals from licences and policies')}${check('Bills due from due dates on bills')}${check('Money in and out from invoice totals')}
+  // ─── A business's ───
+  'biz-capture': () => `<div class="callout" id="co-f" style="width:380px">${label('zap', 'From one photo')}
+    ${tick('Read on your phone, in seconds', 'smartphone')}${tick('Filed under Purchase Bills', 'folder')}
+    ${tick('GSTINs checked before they are kept', 'check-circle')}</div>`,
+  'biz-ask': () => `<div class="callout" id="co-f" style="width:370px">${label('file-text', 'Where the answer came from')}
+    <div class="co-row"><span class="co-k">Document</span><span class="co-v sm">${BIZ.scanFile}</span></div>
+    <div class="co-row"><span class="co-k">Category</span><span class="co-v sm">Purchase Bills</span></div>
+    <div class="co-foot">${icon('check', 14, '#16A34A', 2.6)}<span>Tap it to open the bill</span></div></div>`,
+  'biz-overview': () => `<div class="callout" id="co-f" style="width:370px">${label('bar-chart-2', 'Read from your papers')}
+    ${tick('Renewals from licences and policies')}${tick('Bills due from due dates on bills')}${tick('Money in and out from invoice totals')}
     <div class="co-quiet">Renewals and bills due on Plus. Money in and out on Pro.</div></div>`,
-  sheets: () => `<div class="callout" id="co-f" style="width:360px">${label('grid', 'Every row, with its columns')}
+  'biz-reminders': () => `<div class="callout" id="co-f" style="width:410px">${label('bell', 'Before it lapses')}
+    <div class="co-steps"><i class="track"></i>
+      ${[['90', 'days'], ['30', 'days'], ['7', 'days'], ['On the', 'day']].map(([a, b]) => `<div class="co-step"><i class="dot"></i><b>${a}</b><span>${b}</span></div>`).join('')}</div>
+    <div class="co-foot">${icon('edit-3', 14, '#16A34A', 2.6)}<span>Notes remind you on the day you pick</span></div>
+    <div class="co-quiet">For everyone in the business, on Plus and up.</div></div>`,
+  'biz-team': () => `<div class="callout" id="co-f" style="width:390px">${label('users', 'By invitation')}
+    ${tick('People join only when they accept', 'user-check')}${tick('Admins and viewers', 'shield')}
+    ${tick('Records stay when people leave', 'archive')}
+    <div class="co-quiet">5 people on Plus, 10 on Pro, 50 on Enterprise.</div></div>`,
+  'biz-share': () => `<div class="callout" id="co-f" style="width:400px">${label('link', 'One record, one link')}
+    ${tick('Opens without an account')}${tick('Lasts 1 or 7 days, or 30 on a paid plan')}${tick('Turn it off any time')}${tick('See how often it was opened')}</div>`,
+  // Who sees what in a business: its records, and each person's own notes (056).
+  'biz-access': () => `<div class="callout" id="co-f" style="width:400px">${label('lock', 'Who can open what')}
+    ${tick('Records: everyone in the team', 'users')}${tick('My notes: nobody else in the team', 'edit-3')}
+    ${tick('Only people you invite can join', 'user-check')}${tick('Records stay when people leave', 'archive')}</div>`,
+  'biz-sheets': () => `<div class="callout" id="co-f" style="width:360px">${label('grid', 'Every row, with its columns')}
     <div class="co-row"><span class="co-k">Read</span><span class="co-v">${SHEET.rows} rows · ${SHEET.sheets} sheets</span></div>
     <div class="co-row"><span class="co-k">Files</span><span class="co-v">.xlsx and .csv</span></div>
     <div class="co-foot">${icon('check', 14, '#16A34A', 2.6)}<span>Read the moment you add it</span></div></div>`,

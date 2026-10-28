@@ -439,6 +439,13 @@ export function notificationsScreen() {
   </section>`;
 }
 
+/** The next morning: a reminder and a birthday, as web pushes. */
+export function lockDayScreen() {
+  return lockScreen('scr-lockday', '9:05', 'Monday, 2 November', `<div class="lstack">
+      ${pushNotif('pn1', 'Car Insurance expires in 7 days', `Expires on 9 Nov 2026 · ${STORY.youFull}. Renew it soon.`)}
+      ${pushNotif('pn2', `Today is ${STORY.dadi}'s 78th birthday`, 'Wish her a happy birthday.')}</div>`);
+}
+
 export function phone(lang = '') {
   return phoneShell(`
     ${lockScreen('scr-lock', '2:14', 'Tuesday, 10 November', lockNotif('ln1', 'Maa', [
@@ -456,9 +463,7 @@ export function phone(lang = '') {
     ${treeScreen()}
     ${personScreen()}
     ${emergencyScreen()}
-    ${lockScreen('scr-lockday', '9:05', 'Monday, 2 November', `<div class="lstack">
-      ${pushNotif('pn1', 'Car Insurance expires in 7 days', `Expires on 9 Nov 2026 · ${STORY.youFull}. Renew it soon.`)}
-      ${pushNotif('pn2', `Today is ${STORY.dadi}'s 78th birthday`, 'Wish her a happy birthday.')}</div>`)}
+    ${lockDayScreen()}
     ${notificationsScreen()}
     ${lockScreen('scr-lock2', '2:15', 'Tuesday, 10 November', lockNotif('ln2', 'Maa', ['Mil gaya beta 🙏 Cashless approve ho gaya. Tum so jao ❤️']))}`, '2:14');
 }

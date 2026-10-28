@@ -81,22 +81,22 @@ Overview), the plans and the closing card; it drops Reminders, Team, and access
 and control.
 
 **Feature posters and shorts** (`src/features.js`): one feature at a time,
-eleven of them: Ask, instant insights (a photo read the moment it is added),
-Voice, Reminders, the family tree, the emergency card, share links, who can
-open what, fingerprint sign-in, a business's Overview, and spreadsheets. Each
-has a **poster**, its line on the left and the phone on the right showing the
-feature, with a callout over the phone's edge (`asklocker-<feature>-1920x1080.png`
+nine for families with the Sharmas and eight for business with Arora Electric.
+Each has a **poster**, its line on the left and the phone on the right showing
+the feature, with a callout over the phone's edge (`asklocker-<feature>-1920x1080.png`
 and `-1080x1080.png`, in `out/posters/`), and a **short**, 9:16 and 14 to 21
 seconds: why the feature exists, how AskLocker answers it while the phone does
 it, the callout, and the end card (`asklocker-feature-<feature>-9x16.mp4`). The
 voice short plays Maa's Hindi question and the answer read back, with English
-subtitles; the business and spreadsheet ones wear Business mode's teal. They
-use the films' own screens and people, and a few screens only they need
-(`src/feature-screens.js`): a document's page with what was read off it, its
-share sheet, the lock a fingerprint opens, Upload's "Where should this go?",
-and a spreadsheet read and asked about.
+subtitles; the business ones wear Business mode's teal and gold. They use the
+films' own screens and people, and a few screens only they need
+(`src/feature-screens.js`): a document's page with what was read off it (the
+policy, and the supplier's bill), its share sheet, the lock a fingerprint
+opens, Upload's "Where should this go?", and a spreadsheet read and asked
+about. `tools/publish.sh` copies them, with the films, into the repository's
+`marketing/` folder (below).
 
-| Feature (`?feature=`) | Poster's headline | Short's how |
+| For families (`?feature=`) | Poster's headline | Short's how |
 |---|---|---|
 | `ask` | Ask your documents anything. | Just ask, the way you'd ask a person. |
 | `read` | Snap a page. Know what it says. | Snap it. AskLocker reads it. |
@@ -107,10 +107,21 @@ and a spreadsheet read and asked about.
 | `share` | Send one document. Not your whole vault. | Send a link that expires. |
 | `vaults` | Your papers, sent and stored encrypted. | Sent and stored encrypted. |
 | `fingerprint` | Open it with a touch. | Open it with your fingerprint. |
-| `business` | Bills due, renewals, money in and out. | One overview, read from your papers. |
-| `sheets` | Ask your Excel sheets in plain words. | AskLocker reads it. You just ask. |
 
-Rendered files go to `out/`, which is not committed.
+| For business (`?feature=`) | Poster's headline | Short's how |
+|---|---|---|
+| `biz-capture` | Snap a bill. Know what it says. | Snap it. AskLocker files it and reads it. |
+| `biz-ask` | Ask your records anything. | Ask anything. Get the answer and its source. |
+| `biz-overview` | Bills due, renewals, money in and out. | One overview, read from your papers. |
+| `biz-reminders` | Renew it before it lapses. | Reminded before anything lapses. |
+| `biz-team` | Your team and your CA, by invitation. | Invite your team and your CA. |
+| `biz-share` | Send one record. Not the whole vault. | Send a link that expires. |
+| `biz-access` | Your records, sent and stored encrypted. | Sent and stored encrypted. |
+| `biz-sheets` | Ask your Excel sheets in plain words. | AskLocker reads it. You just ask. |
+
+Rendered files go to `out/`, which is not committed; `tools/publish.sh` copies
+the finished films, shorts and posters into `marketing/family/` and
+`marketing/business/`, which are (see `marketing/README.md`).
 
 ## Render
 
@@ -136,19 +147,25 @@ The spoken lines are committed WAVs, so rendering needs no speech engine.
 A full cut takes about eight minutes on four cores (`--workers 3` renders three
 slices in parallel and joins them losslessly).
 
-The feature posters and shorts:
+The feature posters and shorts, every film cut at once, and the copy into
+`marketing/`:
 
 ```bash
 ./tools/features.sh                   # every short, with sound, and every poster
-./tools/features.sh voice share       # some of them
+./tools/features.sh voice biz-share   # some of them
 node tools/posters.mjs --features ask --sizes 1080x1080 --scale 2   # one poster, at 2x
 node tools/render.mjs --film features --feature ask --portrait      # one short, no sound yet
 ./tools/mux.sh feature-ask-9x16                                     # -> out/asklocker-feature-ask-9x16.mp4
+./tools/films.sh                      # all eight film cuts, with sound (or name some: business-9x16)
+./tools/publish.sh                    # out/ -> marketing/<family|business>/<films|shorts|posters>/
 ```
 
 A poster is the frame the feature names (`window.__hero`), taken as a PNG at
 any size (`--sizes 1920x1080,1080x1080` by default). A short takes two to
-three minutes on four cores; all eleven, about half an hour.
+three minutes on four cores; all seventeen, about 45 minutes; all eight film
+cuts, about two hours. `publish.sh` replaces the six folders in `marketing/`
+with what `out/` holds, so render everything first. The films go there with
+music; the shorts with and without.
 
 Single frames, for checking a change without a full render:
 
@@ -404,6 +421,17 @@ The feature posters and shorts keep the same rules, and a few of their own:
 - **Reminders reach everyone in the family on Family Plus**, and a phone shows
   them once its owner turns notifications on there; on Free, one reminder 30
   days before, to whoever added the document (067), which the callout says.
+- **The bill's page shows what the extractor reads off it**: its total, both
+  GSTINs, the bill number, its date and when it is due, in the order
+  `extractMetadata` returns them. A business has no family tree, so the page
+  names nobody it belongs to.
+- **A business's share sheet says "You or an admin can turn it off."** The
+  app's sheet says "a family admin" in a business too, which is its slip: in a
+  business, whoever made a link or any admin turns it off. The film shows what
+  it should, as it does for Ask's categories (above).
+- **My notes are each person's own** (056), which the business privacy short
+  shows with the app's own line ("Nobody else in the team can open them").
+  Reminders on notes, and renewal reminders, need a paid plan (★ Plus).
 
 The Sharma family, Arogya Shield, Arora Electric, Mehta Cables, its bill and
 everyone in them are fictional; the papers carry a SPECIMEN watermark, the

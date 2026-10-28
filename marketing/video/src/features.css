@@ -42,6 +42,7 @@
 /* A business poster or short: teal and gold, as Business mode wears them. */
 .biz-look .pst-kicker, .biz-look .kicker { color: var(--teal-2); }
 .biz-look .em { color: #B7791F; }
+.biz-look .k-plus { background: #FFF6E6; color: #8A5A12; }
 .biz-look .pst-brand b { color: var(--teal); }
 .biz-look .pst-halo { background: radial-gradient(closest-side, rgba(26, 122, 114, 0.24), rgba(26, 122, 114, 0)); }
 .biz-look .pst-ring { border-color: rgba(183, 121, 31, 0.22); }
@@ -159,3 +160,8 @@
 .sh-pic { width: 64px; height: 64px; border-radius: 32px; background: #fff; display: grid; place-items: center; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06); }
 .sh-kind { font: 500 15px/20px var(--ui); color: var(--ink-2); }
 .scr.biz .save-btn, .scr.biz .save-btn .busy { background: linear-gradient(90deg, #0F5C57, #1A7A72); }
+
+/* In a business the share sheet's buttons wear its teal (settings-ui's
+ * buttons follow the vault); the day chips stay navy, as the app has them. */
+.scr.biz .ss-btn, .scr.biz .ss-btn .busy, .scr.biz .ss-copy-b { background: var(--teal); }
+.scr.biz .ss-btn2 { border-color: var(--teal); color: var(--teal); }
