@@ -1,7 +1,8 @@
 # AskLocker films
 
-Two launch films, as code: one for families, one for business. `src/intro.html`
-builds either as a GSAP timeline (`?film=family` or `?film=business`) that
+Three launch films, as code: two for families (one told from abroad) and one
+for business. `src/intro.html` builds each as a GSAP timeline (`?film=family`,
+`?film=nri` or `?film=business`) that
 recreates the app's real screens (same layouts, copy, colours and Feather icons
 as `src/app/**`, sized by `src/constants/design.ts`; a business's screens in the
 app's teal, as Business mode has them). `tools/render.mjs` seeks the paused
@@ -28,6 +29,19 @@ ten voice languages in their own scripts, and you hear it work: Maa asks her
 question aloud in Hindi, and the app reads its answer back to her, policy
 number spelled out, with English subtitles under both.
 
+**For families abroad** (`?film=nri`): the family film's scenes, music and
+Hindi voices, told by a son who lives abroad. Rohan is in Toronto and set up
+his parents' policies, deposits and tax from there, so the emails come to him
+and Maa and Papa don't know what is in their own name. At 2:14 AM in Lucknow it
+is 3:44 PM in Toronto: Maa's message reaches him at work, the insurer's
+helpline is closed till morning, and the call comes while he is in a meeting.
+His Gmail import brings in Papa's papers (an LIC receipt, a fixed deposit
+statement, the property tax, his PAN and passport), the paper policy is
+photographed on his last trip home, and Maa asks AskLocker herself instead of
+calling him. It is the same film with another story: `NRI_STORY` in
+`src/family-screens.js` holds everything that differs (the times on his phone,
+the messages, the scramble, the headlines, the Gmail rows, the reminders).
+
 **For business** (`src/business.js`): a title card, then the challenge in two
 statements: what a business keeps (eight kinds of papers), and the dates inside
 them, Arora Electric's next 90 days on one timeline. Then the product in five
@@ -51,6 +65,10 @@ app's theme colour, navy in both modes.
 | `asklocker-family-9x16.mp4` | 2:15 | Full-length vertical posts |
 | `asklocker-family-9x16-short.mp4` | 1:11 | Reels, Shorts, WhatsApp forwards |
 | `asklocker-family-16x9-short.mp4` | 1:11 | LinkedIn and X feeds |
+| `asklocker-nri-16x9.mp4` | 2:15 | The family film told from abroad: landing page, YouTube, LinkedIn |
+| `asklocker-nri-9x16.mp4` | 2:15 | Full-length vertical posts |
+| `asklocker-nri-9x16-short.mp4` | 1:11 | Reels, Shorts, WhatsApp forwards |
+| `asklocker-nri-16x9-short.mp4` | 1:11 | LinkedIn and X feeds |
 | `asklocker-business-16x9.mp4` | 1:31 | Landing page, YouTube, LinkedIn, pitches to businesses and CAs |
 | `asklocker-business-9x16.mp4` | 1:31 | Full-length vertical posts |
 | `asklocker-business-9x16-short.mp4` | 0:59 | Reels, Shorts, WhatsApp forwards |
@@ -93,6 +111,7 @@ npx playwright install chromium       # skip if Chromium is already provisioned
 python3 -m pip install numpy scipy
 
 node tools/render.mjs                             # family, 16:9, full -> out/video-family-16x9.mp4
+node tools/render.mjs --film nri                  # families abroad  -> out/video-nri-16x9.mp4
 node tools/render.mjs --film business --portrait  # business, 9:16    -> out/video-business-9x16.mp4
 node tools/render.mjs --film business --portrait --short
 node tools/render.mjs --portrait --short --lang ta   # the family short, voice scene in Tamil -> family-9x16-short-ta
@@ -124,7 +143,8 @@ keys jump to tenths of the film.
   the drawer); `src/parts.js` holds the screen parts both films draw (top bar,
   tab bar, lock screen, call, camera, Ask's bubbles and input, the end card).
   `src/main.js` only picks the film.
-- **The people, the documents, the end card**: `STORY` at the top of
+- **The people, the documents, the end card**: `FAMILY_STORY` (and `NRI_STORY`,
+  which overrides it for the film told from abroad) at the top of
   `src/family-screens.js` and `BIZ` at the top of `src/business-screens.js`.
   `ctaNote` is the line under the call to action (the price); set `STORY.url`
   before publishing to show an address.
@@ -296,6 +316,17 @@ deliberately:
 - **The CA joins by invitation.** She shows as Pending approval until she
   accepts, and once in, as a viewer, she sees every record the business keeps:
   there are no per-folder permissions yet, and the film does not suggest any.
+- **The NRI film keeps two clocks honestly.** Rohan's phone shows Toronto's
+  time and India's stays on the big clock and Maa's phone. Toronto is UTC−5
+  in November (Canada's clocks went back on 1 November 2026), 10½ hours
+  behind India. Reminders are made at 9 and pushed at 9:05 India time for
+  everyone (034), so his arrives at 10:35 PM on Sunday 1 November, and says
+  "Today" for Dadi's birthday, which is already 2 November in India. Its Gmail
+  rows were run through `classifyAttachment` like the family film's, his
+  emergency-card number is in North America's 555-01xx range for fiction, and
+  the plan notice says 0.5 GB, which is how `set_family_plan` rounds 066's
+  500 MB. The end card names the rupee price (₹99, `PLUS_PRICE`): a payer
+  abroad pays $10 only once `RAZORPAY_CURRENCIES` says `INR,USD`.
 - **The voice languages** are the list in `src/lib/voice-languages.ts`:
   English (India), Hindi, Bengali, Tamil, Telugu, Marathi, Gujarati, Kannada,
   Malayalam and Punjabi. Whether a phone can speak a language depends on the
