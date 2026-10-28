@@ -441,11 +441,11 @@ const FEATURES = {
       tl.to('#ss-busy', { autoAlpha: 1, duration: 0.12, ease: 'none' }, t + 2.22);
       // The link, shown once; and it joins the document's working links.
       const m = t + 2.85;
-      tl.to('#ss-form', { autoAlpha: 0, duration: 0.2, ease: 'none' }, m);
-      tl.to('#ss-made', { autoAlpha: 1, duration: 0.25, ease: 'none' }, m + 0.1);
+      tl.to('#ss-form', { autoAlpha: 0, duration: 0.15, ease: 'none' }, m);
+      tl.to('#ss-made', { autoAlpha: 1, duration: 0.25, ease: 'none' }, m + 0.2);
       tl.to('#ss-swap1', { height: madeH, duration: 0.35, ease: 'power2.inOut' }, m);
       tl.to('#ss-none', { autoAlpha: 0, duration: 0.15, ease: 'none' }, m);
-      tl.to('#ss-row', { autoAlpha: 1, duration: 0.25, ease: 'none' }, m + 0.15);
+      tl.to('#ss-row', { autoAlpha: 1, duration: 0.25, ease: 'none' }, m + 0.2);
       tl.to('#ss-swap2', { height: rowH, duration: 0.35, ease: 'power2.inOut' }, m);
       cue(m, 'ding');
       const k = m + 1.5;
