@@ -235,6 +235,13 @@ keys jump to tenths of the film.
   access and control, the groove again with a bell line for the plans, and a
   resolve on D for the closing card. Each part starts on a `section` cue from
   the timeline, so a downbeat lands on each change of scene.
+- **The sound effects**: the `sfx_*` functions in `audio/score.py`, placed on
+  the timeline's cues. They are soft on purpose. Every chime is `bell()`: the
+  note and two quiet harmonics, a rounded attack, nothing above 4 kHz. They
+  play on D, A and E, which belong to all three films' keys, and a phone's
+  vibration is a low hum under its chime. Until 30 October 2026 a notification
+  was a metallic E6 and A6 bell over a rattling square-wave buzz, louder than
+  the music, and people found it unpleasant.
 - **The spoken lines**: `LINES` in `tools/voices.py`, then run it (below). It
   writes `audio/voices/ask-hi.wav` and `answer-hi.wav`, and `src/voices.js`
   with how long each runs and where the policy number starts in the answer;

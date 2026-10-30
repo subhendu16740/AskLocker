@@ -68,6 +68,11 @@ def bandpass(x, lo, hi, order=2):
     return signal.sosfilt(signal.butter(order, [lo, hi], 'band', fs=SR, output='sos'), x)
 
 
+def soft_start(t, seconds):
+    """Rises from 0 to 1 over `seconds` on a half cosine, so a note starts without a click."""
+    return 0.5 - 0.5 * np.cos(np.pi * np.clip(t / seconds, 0, 1))
+
+
 def adsr(n, a, r, sustain=1.0):
     env = np.full(n, sustain)
     na, nr = min(n, int(a * SR)), min(n, int(r * SR))
@@ -130,10 +135,13 @@ def pluck(freq, dur=1.6, bright=1.0, decay=0.85):
 
 
 def bell(freq, dur=1.8):
+    """A soft chime: the note and two quiet harmonics, an 8 ms rounded attack and
+    nothing above 4 kHz. A struck bell's overtones (4.2 and 5.4 times the note)
+    and a 2 ms attack made every chime clang and click."""
     t = t_axis(dur)
-    parts = [(1, 1.0, 1.6), (2.0, 0.35, 2.4), (3.01, 0.18, 3.6), (4.2, 0.12, 5.0), (5.4, 0.06, 7.0)]
+    parts = [(1, 1.0, 1.6), (2.0, 0.2, 2.8), (3.0, 0.05, 4.5)]
     out = sum(a * np.sin(2 * np.pi * freq * r * t) * np.exp(-t * d) for r, a, d in parts)
-    return out * (1 - np.exp(-t / 0.002))
+    return lowpass(out * soft_start(t, 0.008), 4000)
 
 
 def sine_bass(freq, dur, attack=0.02, release=0.3):
@@ -189,15 +197,23 @@ def sfx_key():
 
 
 def sfx_buzz(dur=0.45):
+    """The phone vibrating: a low hum in two soft pulses, under the chime. It was
+    a 150 Hz square wave rattling 28 times a second, louder than the chime, and
+    it was most of what a notification sounded like."""
     t = t_axis(dur)
-    tone = signal.square(2 * np.pi * 150 * t) * 0.5 + np.sin(2 * np.pi * 150 * t)
-    am = 0.6 + 0.4 * np.sin(2 * np.pi * 28 * t)
-    return lowpass(tone * am, 900) * adsr(len(t), 0.01, 0.06) * 0.55
+    tone = np.sin(2 * np.pi * 165 * t) + 0.12 * np.sin(2 * np.pi * 330 * t)
+    pulses = np.sin(np.pi * (t % (dur / 2)) / (dur / 2)) ** 2
+    return lowpass(tone * pulses, 600) * 0.2
 
+
+# The chimes sit on D and A (and E), which belong to all three films' keys:
+# D minor at night, F major by day, D major for business.
 
 def sfx_notif():
-    a = bell(midi(88), 1.2) * 0.55
-    b = bell(midi(93), 1.4) * 0.5
+    """A notification: two soft notes a fifth apart, D5 then A5 (E6 and A6
+    before, which pierced)."""
+    a = bell(midi(74), 1.2) * 0.55
+    b = bell(midi(81), 1.4) * 0.5
     out = np.zeros(int(1.6 * SR))
     out[: len(a)] += a
     k = int(0.11 * SR)
@@ -281,19 +297,22 @@ def sfx_scan(dur):
 
 
 def sfx_process(dur):
+    """Reading a page: quick, quiet notes from D5 to D6, rounded at the start."""
     out = np.zeros(int((dur + 0.3) * SR))
     for k in np.arange(0, dur, 0.09):
-        f = RNG.choice([1760, 1975, 2217, 2637])
-        t = t_axis(0.05)
-        s = np.sin(2 * np.pi * f * t) * np.exp(-t / 0.01) * RNG.uniform(0.3, 0.7)
+        f = midi(RNG.choice([74, 76, 81, 86]))
+        t = t_axis(0.08)
+        s = np.sin(2 * np.pi * f * t) * np.exp(-t / 0.018) * soft_start(t, 0.004) * RNG.uniform(0.3, 0.7)
         i = int(k * SR)
         out[i:i + len(s)] += s
-    return out * 0.12
+    return out * 0.1
 
 
 def sfx_success():
+    """Saved: D5, A5 and D6 rising (a C major chord before, which clashed with
+    the business film's D major)."""
     out = np.zeros(int(1.6 * SR))
-    for i, n in enumerate([84, 88, 91]):
+    for i, n in enumerate([74, 81, 86]):
         s = bell(midi(n), 1.2) * (0.5 - 0.08 * i)
         k = int(i * 0.075 * SR)
         out[k:k + len(s)] += s[: len(out) - k]
@@ -301,7 +320,8 @@ def sfx_success():
 
 
 def sfx_ding():
-    return bell(midi(91), 1.0) * 0.3
+    """Done: one soft A5 (G6 before)."""
+    return bell(midi(81), 1.0) * 0.3
 
 
 def sfx_send():
@@ -309,8 +329,9 @@ def sfx_send():
 
 
 def sfx_answer():
+    """An answer arrives: A4 then E5, an octave below the old pair."""
     out = np.zeros(int(1.4 * SR))
-    for i, n in enumerate([81, 88]):
+    for i, n in enumerate([69, 76]):
         s = bell(midi(n), 1.2) * 0.35
         k = int(i * 0.09 * SR)
         out[k:k + len(s)] += s[: len(out) - k]
@@ -318,10 +339,12 @@ def sfx_answer():
 
 
 def sfx_mic():
-    out = np.zeros(int(0.35 * SR))
-    for i, f in enumerate([880, 1320]):
-        t = t_axis(0.09)
-        s = np.sin(2 * np.pi * f * t) * adsr(len(t), 0.005, 0.05)
+    """The mic turns on: two short soft notes, D5 then A5 (880 and 1320 Hz
+    beeps before)."""
+    out = np.zeros(int(0.45 * SR))
+    for i, n in enumerate([74, 81]):
+        t = t_axis(0.25)
+        s = np.sin(2 * np.pi * midi(n) * t) * np.exp(-t / 0.07) * soft_start(t, 0.006)
         k = int(i * 0.08 * SR)
         out[k:k + len(s)] += s
     return out * 0.22
