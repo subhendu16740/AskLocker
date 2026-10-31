@@ -168,11 +168,19 @@ begin
   -- made it 250 (the block rolls back, as always).
   if exists (select 1 from information_schema.columns where table_schema = 'public'
               and table_name = 'plan_limits' and column_name = 'family_questions_per_month') then
-    insert into public.question_usage (user_id, month) values ('${userA}', public.question_month())
-      on conflict (user_id, month) do nothing;
-    update public.question_usage
-       set questions = coalesce((select family_questions_per_month from public.plan_limits where plan = 'plus'), 500)
-     where user_id = '${userA}' and month = public.question_month();
+    if to_regclass('public.vault_question_usage') is not null then
+      -- 069: the vault keeps its own count; A's own stays as it is.
+      insert into public.vault_question_usage (family_id, month, questions)
+      values ('${familyA}', public.question_month(),
+              coalesce((select family_questions_per_month from public.plan_limits where plan = 'plus'), 500))
+      on conflict (family_id, month) do update set questions = excluded.questions;
+    else
+      insert into public.question_usage (user_id, month) values ('${userA}', public.question_month())
+        on conflict (user_id, month) do nothing;
+      update public.question_usage
+         set questions = coalesce((select family_questions_per_month from public.plan_limits where plan = 'plus'), 500)
+       where user_id = '${userA}' and month = public.question_month();
+    end if;
     v_out := v_out || 'family_pool=' || coalesce(public.claim_question('${userA}')->>'reason', 'allowed') || ';'
              || 'family_number=' || coalesce((select family_questions_per_month::text from public.plan_limits where plan = 'plus'), 'none') || ';';
   else

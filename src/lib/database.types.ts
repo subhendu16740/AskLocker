@@ -1153,18 +1153,21 @@ export type Database = {
       }
       question_usage: {
         Row: {
+          charged_family: string | null
           month: string
           questions: number
           updated_at: string
           user_id: string
         }
         Insert: {
+          charged_family?: string | null
           month: string
           questions?: number
           updated_at?: string
           user_id: string
         }
         Update: {
+          charged_family?: string | null
           month?: string
           questions?: number
           updated_at?: string
@@ -1375,6 +1378,35 @@ export type Database = {
           voice_mode_enabled?: boolean
         }
         Relationships: []
+      }
+      vault_question_usage: {
+        Row: {
+          family_id: string
+          month: string
+          questions: number
+          updated_at: string
+        }
+        Insert: {
+          family_id: string
+          month: string
+          questions?: number
+          updated_at?: string
+        }
+        Update: {
+          family_id?: string
+          month?: string
+          questions?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vault_question_usage_family_id_fkey"
+            columns: ["family_id"]
+            isOneToOne: false
+            referencedRelation: "families"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {

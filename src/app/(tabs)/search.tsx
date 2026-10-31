@@ -136,6 +136,13 @@ export default function SearchScreen() {
       setChatFull({ text: err.message, plusLink: err.room?.plan === 'free' || err.room?.plan === 'plus' });
       return;
     }
+    // Answers from a vault this person has left (069): the server refuses
+    // the chat, so stop following the conversation and say why.
+    if ((err as { hint?: string } | null)?.hint === 'source_vault') {
+      setSaveStopped(true);
+      showSaveNotice('error', "This chat has answers from a vault you're no longer in, so it can't be saved.", 7000);
+      return;
+    }
     showSaveNotice('error', isMissingMigration(err)
       ? "Saving chats isn't available yet."
       : limitHint(err) === 'chat_limit'

@@ -149,7 +149,12 @@ Four things will mislead you if you assume otherwise:
    counts as their one free business, no client writes `audit_logs`, and an
    invitation's address lookup is checked and counted first
    (`invite_lookup_guard()`, service role only): see
-   [The owner stays the owner](#the-owner-stays-the-owner-and-the-activity-log-is-the-servers-068)).
+   [The owner stays the owner](#the-owner-stays-the-owner-and-the-activity-log-is-the-servers-068);
+   069's count of a paid vault's questions, `vault_question_usage`, is the
+   server's alone — written only by `claim_question` and
+   `release_question` — and a saved chat may hold answers only from vaults
+   its owner is in, and goes when they leave any of them (triggers): see
+   [Questions counted by the vault, chats by their sources](#questions-counted-by-the-vault-chats-by-their-sources-069)).
    **A new writable
    column needs its own `GRANT` in a migration.** Nobody joins a family
    without saying yes: only an admin asks a person in, through the
@@ -196,10 +201,13 @@ errors**) and `npm run build` are the local gates.
 
 **`qa/` is an end-to-end suite against the DEV project**, run by
 `.github/workflows/qa.yml` — after every Edge Function deploy to DEV, nightly
-at 03:10 IST, and on pushes that change `qa/`. It uploads synthetic SPECIMEN
+at 03:10 IST, and on pushes to `dev` that change `qa/` (a push to another
+branch runs only the offline self-test: the Management API token, which
+reaches PROD, is in the `supabase` GitHub environment, which only `dev` and
+`main` may use; the deploy workflow uses it too). It uploads synthetic SPECIMEN
 documents to its own vault (QA Vault A, account A), asks questions about
 them, and checks the answers on facts and sources, never wording. It also
-runs the 023 sweep and the 024 DEV/PROD fingerprint, 178 access probes (a
+runs the 023 sweep and the 024 DEV/PROD fingerprint, over 200 access probes (a
 logged-out visitor and a second account must be refused everywhere, Gmail
 import's endpoints, the family tree and its nicknames, emergency cards, linking,
 notification devices, share links, invitations, plans and personal vaults
@@ -543,6 +551,13 @@ defaults to `single`, so the export emits exactly one `index.html` and no
 per-route HTML. Without the catch-all rewrite, `/home` and every other deep
 link 404s on refresh.
 
+**No page may be framed.** `public/_headers` (Cloudflare Pages; copied to
+`dist/` by the export) and the `headers` in `vercel.json` send
+`X-Frame-Options: DENY` and `frame-ancestors 'none'`, with `nosniff` and a
+referrer policy, on every path: a framed AskLocker could be clickjacked into
+a tap on Accept or Delete. Change both together, and check the live headers
+after a release (`curl -sI https://asklocker.com/home`).
+
 **Environment split — this is what keeps previews away from real data:**
 
 | Vercel environment | Supabase project |
@@ -633,6 +648,13 @@ copies, so DEV needs its own secrets and its own `documents` storage bucket.
   this build (set it for that Vercel environment, then redeploy), or this
   address missing from the list, with the list the build has
   (`googleButtonReason()`).
+- **The redirect sign-in is PKCE** (`flowType: 'pkce'` in `supabase.ts`):
+  Supabase sends the browser back with `?code=`, which only the browser that
+  started it can exchange, since its verifier is in that browser's storage
+  (on the web supabase-js exchanges it itself, `detectSessionInUrl`; the
+  phone app calls `exchangeCodeForSession`). The implicit flow it replaced
+  (until 31 October 2026) put the tokens in the address, so a link carrying
+  someone's tokens signed whoever opened it into that account.
 - **The redirect still needs its wildcard.** It sends
   `redirectTo: window.location.origin`, and every preview gets a fresh
   subdomain, so Supabase → Authentication → URL Configuration must contain
@@ -716,6 +738,13 @@ copies, so DEV needs its own secrets and its own `documents` storage bucket.
   signed-in AskLocker but could not sign anyone in, so after signing out it
   was Google again. Such an entry (`{ id }` in `accountKey.appLock`) is
   dropped when read, and its key let go (`forgetLockKey()`).
+- **Unlocked by someone else's passkey, the page starts again.** A
+  synced passkey list can hold another account's, and the sign-in it makes
+  is theirs: when the session after unlocking is not the account that was
+  locked, the web app reloads at Home rather than show the old account's
+  screens to the new one. Ask also starts a new conversation whenever the
+  signed-in account changes, so nothing of one account's chat stays on
+  screen for the next.
 - **A shared document (`/s`) is never behind the lock.**
 - **The phone app's `app-lock-device.ts` is a stand-in** until EAS builds
   exist: it needs Supabase's two-step passkey API with a native passkey
@@ -856,7 +885,7 @@ tabs. `(tabs)` is a layout group, so routes are `/home`, `/search`, `/upload`.
 | `speech-text.ts` | `toSpeech()`: strips markdown and spells out ID numbers before they are read aloud — and a number named as one ("train number 16782", "PNR: 4512", "PIN 751001", "नंबर 16782") digit by digit, from its digits; the screen keeps the digits |
 | `voice-languages.ts` | The language picker list and the few phrases the app itself says, per language |
 | `storage.ts` | Key-value cache: localStorage on web, AsyncStorage on native |
-| `database.types.ts` | Generated Supabase types, current to 068 (030, 052, 055, 058, 059, 061 and 063 changed nothing in them, nor did 065, whose one function only the Edge Functions call, nor 066 and 067, numbers and function bodies; 049's, 050's, 051's, 053's, 054's, 056's, 057's, 060's, 062's, 064's and 068's added by hand). Regenerate after every migration and re-append the hand-written block at the bottom (see the typecheck note) |
+| `database.types.ts` | Generated Supabase types, current to 069 (030, 052, 055, 058, 059, 061 and 063 changed nothing in them, nor did 065, whose one function only the Edge Functions call, nor 066 and 067, numbers and function bodies; 049's, 050's, 051's, 053's, 054's, 056's, 057's, 060's, 062's, 064's, 068's and 069's added by hand). Regenerate after every migration and re-append the hand-written block at the bottom (see the typecheck note) |
 
 ---
 
@@ -1172,7 +1201,9 @@ where it does not.
   cascade passes RLS by design. That is why deleting needed no separate
   "after leaving" rule: a delete's WHERE clause is read under the SELECT
   policy, which a former member no longer passes, so the rows go with the
-  membership instead.
+  membership instead. Since 069 a chat also goes with every vault its
+  answers came from, wherever it is kept (see
+  [069](#questions-counted-by-the-vault-chats-by-their-sources-069)).
 - **Bounded**: `messages` is a JSON array of at most 256 KB; the app keeps the
   newest 100 turns, 6,000 characters each, and each source's id and name
   only. Before 028 the app says saving is not switched on yet.
@@ -1488,7 +1519,10 @@ where it does not.
   cascades.
 - **The push function makes its own keys.** Its first `key` call generates
   this project's VAPID pair and keeps it, with the function's address and
-  the public anon key, in `push_config` (service role only). That is the
+  the public anon key, in `push_config` (service role only). The key is the
+  function's own `SUPABASE_ANON_KEY`, never one a request sends (the
+  function refuses to set up without it), so nobody can leave their own key
+  for the clock to call with. That is the
   whole setup: no secret to set. `run_reminders()` calls `push`'s `send`
   through `pg_net` at that address when something is waiting, between 8 in
   the morning and 10 at night India time, and `send` keeps the same quiet
@@ -1749,7 +1783,10 @@ where it does not.
   whole month. A normal family asks about 45. The owner set it on 17
   October 2026; with it, Family Plus keeps about 28% a month (21% on a
   year) even when a family uses everything, and about 87% at normal use.
-- **Nothing new is counted.** `family_questions_used()` adds up the
+- **Nothing new is counted** (until 069, which gives each paid vault its
+  own count, so leaving takes nothing back: see
+  [069](#questions-counted-by-the-vault-chats-by-their-sources-069)).
+  `family_questions_used()` added up the
   members' own counts (049's `question_usage`) for the month, so a question
   given back to its asker (`release_question`, when no answer came) is given
   back to the family too. 049 counts per person, not per vault: a member's
@@ -2828,6 +2865,43 @@ where it does not.
   writes the activity log, and add-member answers `personal_vault` for an
   address with no account. Before 068 those checks are skipped.
 
+### Questions counted by the vault, chats by their sources (069)
+
+- **A paid vault counts its own questions.** The shared month (053, 066,
+  067: 250 on Family Plus, 500 on Pro, 1,000 to 8,000 for a business) was
+  the sum of the current members' own counts, so leaving or being removed
+  took a person's questions out of the vault's total: cycling accounts
+  through a vault reopened questions already spent, and someone joining
+  brought in what they had asked elsewhere. `vault_question_usage` (one row
+  a vault a month, RLS on, no client grant) is raised by `claim_question()`
+  under the vault's row lock and lowered by `release_question()`, which
+  gives back to the vault the person's latest question was charged to
+  (`question_usage.charged_family`). `family_questions_used()` reads it, so
+  `question_status()` and `family_question_room()` follow unchanged. 069
+  starts each paid vault's month from the old sum.
+- **A saved chat goes with every vault its answers came from.** Ask across
+  vaults (046) keeps a chat under the open vault, often the personal one,
+  while its answers, sources and vault names can come from a family; 028
+  tied it only to the open vault's membership. Now a trigger refuses saving
+  a chat whose sources name a vault its owner is not in (HINT
+  `source_vault`; Ask says so and stops saving that chat), and leaving,
+  being removed or the vault being deleted takes that person's chats whose
+  sources name it, wherever they are kept (`saved_chats_follow_members()`).
+  069 deleted the chats already saved with answers from a vault their owner
+  had left. `saved_chat_vaults()` reads a chat's vaults from its JSON
+  (service role only).
+- QA checks both: no client reads or raises a vault's count, a Family Plus
+  vault at its number refuses a question by its own count, B cannot save a
+  chat with QA Vault A's answers, and B's chat with them goes when B leaves.
+  Before 069 those checks are skipped.
+
+### Edge Functions load supabase-js at one version
+
+- Every function imports `https://esm.sh/@supabase/supabase-js@2.117.2`, the
+  app's own version (`package-lock.json`), never the moving `@2`, so a
+  deploy cannot pick up a release nobody has read. Move the app and the
+  functions together, in one change.
+
 ### The agreement — what everyone agrees to, and when (062)
 
 - **Before signing in, as the intro's last step** (the owner's ask, 23
@@ -3331,6 +3405,9 @@ layout from coordinates.
 - Fallbacks, in order: layout extraction → the old regex parser (no positions,
   so no tables) → OCR.space. A PDF with no text layer yields nothing from the
   first two, which is the signal that it is scanned.
+- **It stops reading at `MAX_DOCUMENT_TEXT`** (500,000 characters, 050), so
+  a long PDF is not held whole in memory only to be cut afterwards; `pages`
+  is the pages actually read.
 - `EXTRACTOR_VERSION` in `_shared/ingest.ts` records which reader produced a
   family's stored text. Bumping it re-runs extraction over stored PDFs, the
   same way changing the embedding model re-runs embedding.

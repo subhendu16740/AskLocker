@@ -284,6 +284,11 @@ const familyQuestionsJudge = (expect) => (outcome) => {
   }
   return judge(expect, outcome);
 };
+// A paid vault's own count of questions (069) is the server's: no client
+// reads it. Skipped until 069 is on DEV (no such table).
+const vaultQuestionsJudge = (expect) => (outcome) => (missingTable(outcome.error)
+  ? ['skipped', 'migration 069 is not applied to DEV yet']
+  : judge(expect, outcome));
 // A family vault made a business (054): only its admin sees what would
 // change, or makes the move; the rule itself is the server's. Skipped until 054.
 const businessVaultJudge = (expect) => (outcome) => {
@@ -1197,6 +1202,9 @@ export async function runAccessChecks(cfg, { a, b, anon, vaultA, vaultB, docsA }
     ['B', "read everyone's question counts", questionsJudge('refused-or-empty'), onQuestions(() => b.client.from('question_usage').select('questions').limit(5))],
     ['anon', "add up QA Vault A's questions this month (server-only)", familyQuestionsJudge('refused'), rpc(anon, 'family_questions_used', { p_family_id: A.family })],
     ['B', "add up QA Vault A's questions this month (server-only)", familyQuestionsJudge('refused'), rpc(b, 'family_questions_used', { p_family_id: A.family })],
+    ['anon', "read paid vaults' question counts (server-only)", vaultQuestionsJudge('refused-or-empty'), () => anon.client.from('vault_question_usage').select('family_id, questions').limit(5)],
+    ['B', "read QA Vault A's question count (server-only)", vaultQuestionsJudge('refused-or-empty'), () => b.client.from('vault_question_usage').select('questions').eq('family_id', A.family)],
+    ['B', "raise QA Vault A's question count (server-only)", vaultQuestionsJudge('refused'), () => b.client.from('vault_question_usage').insert({ family_id: A.family, month: '2026-10-01', questions: 9999 })],
     ['B', "ask which of account A's families has questions left (server-only)", familyQuestionsJudge('refused'), rpc(b, 'family_question_room', { p_user_id: A.user })],
     ['anon', 'see what making QA Vault A a business would change', businessVaultJudge('refused'), rpc(anon, 'business_vault_preview', { p_family_id: A.family })],
     ['anon', 'make QA Vault A a business vault', businessVaultJudge('refused'), rpc(anon, 'make_business_vault', { p_family_id: A.family })],
@@ -1373,6 +1381,30 @@ export async function runAccessChecks(cfg, { a, b, anon, vaultA, vaultB, docsA }
       results.add('access', 'personal-vault-lookup', title,
         r.status === 409 && r.data?.status === 'personal_vault' ? 'pass' : 'fail',
         { why: `HTTP ${r.status}: ${r.data?.status ?? JSON.stringify(r.data).slice(0, 120)}` });
+    }
+  }
+
+  // ── A saved chat goes with the vaults its answers came from (069): B
+  // cannot keep, in its own vault, a chat whose sources name QA Vault A.
+  // Before 069 the save goes through, and the chat is deleted again.
+  {
+    const title = "A chat with answers from someone else's vault cannot be saved (069)";
+    const { data, error } = await b.client.from('saved_chats').insert({
+      family_id: vaultB.id,
+      title: `QA cross-vault ${cfg.runId}`,
+      messages: [{ role: 'ai', text: 'SPECIMEN answer', sources: [{ id: randomUUID(), file_name: 'SPECIMEN.pdf', family_id: A.family, family_name: 'QA Vault A' }] }],
+    }).select('id');
+    if (missingTable(error)) {
+      results.add('access', 'chat-sources', title, 'skipped', { why: 'migration 028 is not applied to DEV yet' });
+    } else if (data?.length) {
+      await b.client.from('saved_chats').delete().eq('id', data[0].id);
+      const probe = await b.client.from('vault_question_usage').select('family_id').limit(1);
+      results.add('access', 'chat-sources', title, missingTable(probe.error) ? 'skipped' : 'fail', {
+        why: missingTable(probe.error) ? 'migration 069 is not applied to DEV yet' : 'SAVED (deleted again)',
+      });
+    } else {
+      results.add('access', 'chat-sources', title, error?.hint === 'source_vault' ? 'pass' : 'fail',
+        { why: error ? short(error) : 'nothing saved, and no reason given' });
     }
   }
 
