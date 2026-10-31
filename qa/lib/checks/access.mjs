@@ -120,6 +120,9 @@ const feedbackJudge = (expect) => (outcome) => (missingTable(outcome.error)
 const savedChatsJudge = (expect, needsChat) => (outcome) => {
   if (missingTable(outcome.error) || outcome.missing) return ['skipped', 'migration 028 is not applied to DEV yet'];
   if (needsChat && outcome.noTarget) return ['skipped', "no saved chat of account A's to aim at (see its control)"];
+  // Since 069 a trigger refuses a chat naming a vault its owner is not in,
+  // before the row's policy is read: a refusal too.
+  if (outcome.error?.hint === 'source_vault') return ['pass', `refused by 069: ${short(outcome.error)}`];
   return typeof expect === 'function' ? expect(outcome) : judge(expect, outcome);
 };
 
