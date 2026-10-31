@@ -18,6 +18,8 @@ import { useFamily, otherMode, type AppMode, type Uses } from '../../lib/family-
 import { isBusinessVault, isPersonalVault, vaultIcon, vaultName, vaultSubtitle } from '../../lib/vaults';
 import { BUSINESS_THEME, FAMILY_THEME, type VaultTheme } from '../../lib/vault-theme';
 import { track } from '../../lib/analytics';
+import { useAuth } from '../../lib/auth';
+import { fetchVaultOwners } from '../../lib/api';
 import { ScreenHeader } from '../../components/screen-header';
 import { Muted, Status, Toggle, screenStyles } from '../../components/settings-ui';
 import { color, radius, shadow, size, space, type } from '../../constants/design';
@@ -147,7 +149,13 @@ function UsesCard() {
 
 export default function VaultsScreen() {
   const { families, currentFamily, switchFamily, refreshFamilies, uses } = useFamily();
-  useFocusEffect(useCallback(() => { refreshFamilies().catch(() => {}); }, [refreshFamilies]));
+  const { user } = useAuth();
+  // Who owns each vault (068); null before 068, when every admin is offered the move.
+  const [owners, setOwners] = useState<Record<string, string> | null>(null);
+  useFocusEffect(useCallback(() => {
+    refreshFamilies().catch(() => {});
+    fetchVaultOwners().then(setOwners).catch(() => setOwners(null));
+  }, [refreshFamilies]));
 
   const familyVaults = [
     ...families.filter((f) => isPersonalVault(f.families)),
@@ -167,6 +175,8 @@ export default function VaultsScreen() {
       onPress: () => router.push({ pathname: '/delete-vault', params: { family: v.family_id } } as any),
     };
     if (isBusinessVault(v.families)) return [remove];
+    // Only the owner makes a family a business (068).
+    if (owners && owners[v.family_id] !== user?.id) return [remove];
     return [
       {
         label: 'Make it a business', icon: 'briefcase',
