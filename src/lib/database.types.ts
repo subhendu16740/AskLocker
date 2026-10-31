@@ -1725,6 +1725,11 @@ export type Database = {
         Returns: { limit_bytes: number | null; used_bytes: number }[]
       }
       person_plans: { Args: { p_user_id: string }; Returns: string[] }
+      my_vault_owners: {
+        Args: never
+        Returns: { family_id: string; owner_id: string | null }[]
+      }
+      invite_lookup_guard: { Args: { p_family_id: string; p_invited_by: string }; Returns: undefined }
       purge_business: {
         Args: { p_confirm_name: string; p_family_id: string; p_user_id: string }
         Returns: string

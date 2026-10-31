@@ -314,6 +314,13 @@ const agreementJudge = (expect) => (outcome) => {
   }
   return typeof expect === 'function' ? expect(outcome) : judge(expect, outcome);
 };
+// The owner and the activity log (068): nobody but the server writes the
+// log, whose invite_sent rows 050's limits count, and a person learns only
+// who owns the vaults they are in. Skipped until 068 is on DEV.
+const ownersJudge = (expect) => (outcome) => {
+  if (outcome.missing) return ['skipped', 'migration 068 is not applied to DEV yet'];
+  return typeof expect === 'function' ? expect(outcome) : judge(expect, outcome);
+};
 // The words DEV keeps for the app's version must be the app's, byte for byte:
 // the record says what the screen said. A paste can turn line breaks into
 // CR LF (062 on DEV did; 063 takes them out), which reads the same and is not.
@@ -926,6 +933,20 @@ export async function runAccessChecks(cfg, { a, b, anon, vaultA, vaultB, docsA }
     return run();
   };
 
+  // ── Who owns a vault (068): account A sees itself as QA Vault A's owner.
+  // Also the control for the activity-log probes below: before 068 any
+  // signed-in account could write that log, so they are skipped until then.
+  const ownersMissing = await (async () => {
+    const { data, error } = await a.client.rpc('my_vault_owners');
+    const missing = String(error?.code) === 'PGRST202';
+    const row = (data ?? []).find((r) => r.family_id === A.family);
+    results.add('access', 'control:vault-owner', 'Control — account A is told it owns QA Vault A (068)',
+      missing ? 'skipped' : row?.owner_id === A.user ? 'pass' : 'fail',
+      { why: missing ? 'migration 068 is not applied to DEV yet' : error ? short(error) : `owner ${row?.owner_id ?? 'not listed'}` });
+    return missing;
+  })();
+  const onOwners = (run) => async () => (ownersMissing ? { missing: true } : run());
+
   const probes = [
     // Logged out
     ['anon', 'list QA Vault A', 'refused-or-empty', rpc(anon, 'get_family_documents', { p_family_id: A.family, p_limit: 5, p_offset: 0 })],
@@ -1182,6 +1203,15 @@ export async function runAccessChecks(cfg, { a, b, anon, vaultA, vaultB, docsA }
     ['B', 'see what making QA Vault A a business would change', businessVaultJudge('refused'), rpc(b, 'business_vault_preview', { p_family_id: A.family })],
     ['B', 'make QA Vault A a business vault', businessVaultJudge('refused'), rpc(b, 'make_business_vault', { p_family_id: A.family })],
     ['B', 'ask what keeps QA Vault A from being a business (server-only)', businessVaultJudge('refused'), rpc(b, 'business_vault_blocker', { p_family_id: A.family })],
+    // The owner and the activity log (068).
+    ['anon', 'ask who owns any vault', ownersJudge('refused-or-empty'), onOwners(rpc(anon, 'my_vault_owners', {}))],
+    ['B', 'learn who owns QA Vault A', ownersJudge((o) => (o.error
+      ? judge('refused', o)
+      : (o.data ?? []).some((r) => r.family_id === A.family) ? ['fail', 'QA Vault A\'s owner was LISTED'] : ['pass', 'only its own vaults listed'])),
+      onOwners(rpc(b, 'my_vault_owners', {}))],
+    ['anon', 'write to the activity log', ownersJudge('refused'), onOwners(() => anon.client.from('audit_logs').insert({ user_id: A.user, family_id: A.family, action: 'qa_probe' }))],
+    ['B', "write into QA Vault A's activity log (050's invitation limits count it)", ownersJudge('refused'),
+      onOwners(() => b.client.from('audit_logs').insert({ user_id: b.user.id, family_id: A.family, action: 'qa_probe' }))],
     // A business's overview and notes (056): its members', and each note its owner's.
     ['anon', "read QA Vault A's overview", overviewJudge('refused'), rpc(anon, 'business_overview', { p_family_id: A.family })],
     ['B', "read QA Vault A's overview", overviewJudge('refused'), rpc(b, 'business_overview', { p_family_id: A.family })],
@@ -1324,6 +1354,25 @@ export async function runAccessChecks(cfg, { a, b, anon, vaultA, vaultB, docsA }
             ? ['pass', `refused (HTTP ${r.status}: the add-member on DEV is older than 046 and says so less clearly)`]
             : ['fail', `HTTP ${r.status}: ${JSON.stringify(r.data).slice(0, 160)}`];
       results.add('access', 'personal-vault-invite', title, state, { why });
+    }
+  }
+
+  // ── No address is looked up for a personal vault (068): asked to invite an
+  // address no account uses, add-member refuses the vault first (409
+  // personal_vault), so nobody learns from it whether an email is on
+  // AskLocker. Before 068 it answered 404 no_account.
+  {
+    const title = 'Inviting to a personal vault does not tell whether an address has an account (068)';
+    if (!personalA || ownersMissing) {
+      results.add('access', 'personal-vault-lookup', title, 'skipped', {
+        why: ownersMissing ? 'migration 068 is not applied to DEV yet' : "no personal vault of A's (see its control)",
+      });
+    } else {
+      const nobody = `qa-nobody-${Date.now().toString(36)}@example.com`;
+      const r = await invokeFunction(cfg, a, 'add-member', { family_id: personalA, email: nobody }, { timeoutMs: 30_000 });
+      results.add('access', 'personal-vault-lookup', title,
+        r.status === 409 && r.data?.status === 'personal_vault' ? 'pass' : 'fail',
+        { why: `HTTP ${r.status}: ${r.data?.status ?? JSON.stringify(r.data).slice(0, 120)}` });
     }
   }
 

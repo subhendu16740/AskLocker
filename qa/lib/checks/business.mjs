@@ -270,8 +270,55 @@ begin
     perform set_config('request.jwt.claims', v_service, true);
     perform set_config('request.jwt.claim.role', 'service_role', true);
     perform public.end_family_plan('${familyA}');
+    -- 068: B, made an admin of QA Vault A, can neither make it a business
+    -- nor remove its owner, A; and A, whose QA Business A is on Free, is
+    -- refused a second free business until QA Business A is on a paid plan.
+    if exists (select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+                where n.nspname = 'public' and p.proname = 'my_vault_owners') then
+      update public.family_members set role = 'admin' where family_id = '${familyA}' and user_id = '${userB}';
+      perform set_config('request.jwt.claims', v_as_b, true);
+      perform set_config('request.jwt.claim.role', 'authenticated', true);
+      perform set_config('request.jwt.claim.sub', '${userB}', true);
+      begin
+        perform public.make_business_vault('${familyA}');
+        v_out := v_out || 'coadmin_convert=ALLOWED;';
+        raise exception 'qa: undo the move' using hint = 'qa_undo';
+      exception when others then
+        get stacked diagnostics v_hint = pg_exception_hint;
+        if v_hint is distinct from 'qa_undo' then
+          v_out := v_out || 'coadmin_convert=' || coalesce(nullif(v_hint, ''), 'other') || ';';
+        end if;
+      end;
+      begin
+        delete from public.family_members where family_id = '${familyA}' and user_id = '${userA}';
+        v_out := v_out || 'coadmin_remove_owner=ALLOWED;';
+        raise exception 'qa: undo the removal' using hint = 'qa_undo';
+      exception when others then
+        get stacked diagnostics v_hint = pg_exception_hint;
+        if v_hint is distinct from 'qa_undo' then
+          v_out := v_out || 'coadmin_remove_owner=' || coalesce(nullif(v_hint, ''), 'other') || ';';
+        end if;
+      end;
+      perform set_config('request.jwt.claims', v_as_a, true);
+      perform set_config('request.jwt.claim.role', 'authenticated', true);
+      perform set_config('request.jwt.claim.sub', '${userA}', true);
+      begin
+        perform public.make_business_vault('${familyA}');
+        v_out := v_out || 'second_business=ALLOWED;';
+        raise exception 'qa: undo the move' using hint = 'qa_undo';
+      exception when others then
+        get stacked diagnostics v_hint = pg_exception_hint;
+        if v_hint is distinct from 'qa_undo' then
+          v_out := v_out || 'second_business=' || coalesce(nullif(v_hint, ''), 'other') || ';';
+        end if;
+      end;
+      perform set_config('request.jwt.claims', v_service, true);
+      perform set_config('request.jwt.claim.role', 'service_role', true);
+      perform public.set_family_plan('${bizId}', now() + interval '1 day', 'manual', null, 'business_plus');
+    end if;
     perform set_config('request.jwt.claims', v_as_a, true);
     perform set_config('request.jwt.claim.role', 'authenticated', true);
+    perform set_config('request.jwt.claim.sub', '${userA}', true);
     begin
       perform public.make_business_vault('${familyA}');
       v_out := v_out || 'converted=' || (select kind from public.families where id = '${familyA}')
@@ -580,9 +627,23 @@ export async function runBusinessChecks(cfg, { a, b, anon, vaultA, vaultB }, res
   } else {
     check('db-convert-on-plus', 'A family vault on Family Plus cannot become a business until Plus ends (054)',
       result.convert_on_plus === 'plan_active', said('convert_on_plus'));
-    check('db-convert', 'Its admin makes a family vault a business: everyone stays, on Free (054)',
+    check('db-convert', 'Its owner makes a family vault a business: everyone stays, on Free (054)',
       result.converted === 'business' && result.converted_plan === 'free' && Number(result.converted_members) >= 1,
       `${said('converted')}, ${said('converted_plan')}, members ${result.converted_members ?? '—'}`);
+    if (result.second_business == null) {
+      for (const [id, title] of [
+        ['db-coadmin-convert', 'Another admin cannot make a family vault a business (068)'],
+        ['db-coadmin-remove-owner', 'Another admin cannot remove the owner (068)'],
+        ['db-second-free-business', 'A family made a business is its owner\'s one free business (068)'],
+      ]) results.add('business', id, title, 'skipped', { why: 'migration 068 is not applied to DEV yet' });
+    } else {
+      check('db-coadmin-convert', 'Another admin cannot make a family vault a business (068)',
+        result.coadmin_convert === 'owner', said('coadmin_convert'));
+      check('db-coadmin-remove-owner', 'Another admin cannot remove the owner (068)',
+        result.coadmin_remove_owner === 'owner', said('coadmin_remove_owner'));
+      check('db-second-free-business', 'A family made a business is its owner\'s one free business (068)',
+        result.second_business === 'business_limit', said('second_business'));
+    }
     // 059 turns 054's combined number off; until it is applied to DEV, B is
     // still refused, and the check says which rule it is checking.
     if (result.free_vaults === 'none') {

@@ -143,7 +143,13 @@ Four things will mislead you if you assume otherwise:
    066 changes numbers and two functions, nothing a client writes: see
    [The plans of 25 October 2026](#the-plans-of-25-october-2026--shared-months-smaller-space-free-voice-066);
    067 changes numbers and one server function: see
-   [The plans of 27 October 2026](#the-plans-of-27-october-2026--more-space-fewer-shared-questions-one-free-reminder-067)).
+   [The plans of 27 October 2026](#the-plans-of-27-october-2026--more-space-fewer-shared-questions-one-free-reminder-067);
+   068's owner is removed or made a viewer only by themselves or the
+   server (a trigger), only the owner makes a family a business, which
+   counts as their one free business, no client writes `audit_logs`, and an
+   invitation's address lookup is checked and counted first
+   (`invite_lookup_guard()`, service role only): see
+   [The owner stays the owner](#the-owner-stays-the-owner-and-the-activity-log-is-the-servers-068)).
    **A new writable
    column needs its own `GRANT` in a migration.** Nobody joins a family
    without saying yes: only an admin asks a person in, through the
@@ -828,7 +834,7 @@ tabs. `(tabs)` is a layout group, so routes are `/home`, `/search`, `/upload`.
 | `vaults.ts` | Personal vault, family or business (046, 051): `vaultName()` ("Personal vault" everywhere), `isBusinessVault()`, `vaultWord()`, `vaultIcon()`, `splitVaults()`, `vaultSubtitle()`, `canDeleteDocument()` (whoever added it, or any admin in a business) |
 | `family-only.ts` | `useFamilyOnly()`: the family tree, a person's page and emergency cards send a business to Manage team (051) |
 | `drawer-context.tsx` | Profile drawer open/close state |
-| `api.ts` | **All** Supabase queries — documents, search, upload, RAG, notifications, adding and leaving families, invitations, Gmail import, saved chats, share links, deleting your account, plans and storage limits (`fetchStorageStatus`, `fetchPlanLimits`; `uploadDocument` throws `StorageFullError` before a file that does not fit is sent, and `saveChat` `ChatStorageFullError` for a chat, 042), voice chats (`claimVoiceAnswer`, 041; `fetchVoiceStatus`, how many are left, 042), paying for Family Plus (`fetchPaymentsStatus`, whether this project takes payments, asked once a session; `createPlusOrder`, `verifyPlusPayment`, 044), questions this month (`fetchQuestionStatus`; `ragSearch`'s `questions` and `question_limit`, 049), the expiry date found in a new upload (`fetchDocumentExpiry`, for Upload's Plus offer), personal vaults and Ask across vaults (`ensurePersonalVault`; `ragSearch`'s `vaults` option, 046), businesses (`createNewFamily(…, kind)`, `previewBusinessDeletion`, `deleteBusiness`, `fetchUseFor` / `saveUseFor`, 051; `previewBusinessVault`, `makeBusinessVault`, 054; `fetchBusinessOverview`, `setBillPaid`, `fetchNotes`, `addNote`, `updateNote`, `deleteNote`, 056), the agreement (`fetchAgreement`, `recordAgreement`, 062), and the Settings screens (profile, storage use, expiry dates, feedback) |
+| `api.ts` | **All** Supabase queries — documents, search, upload, RAG, notifications, adding and leaving families, invitations, Gmail import, saved chats, share links, deleting your account, plans and storage limits (`fetchStorageStatus`, `fetchPlanLimits`; `uploadDocument` throws `StorageFullError` before a file that does not fit is sent, and `saveChat` `ChatStorageFullError` for a chat, 042), voice chats (`claimVoiceAnswer`, 041; `fetchVoiceStatus`, how many are left, 042), paying for Family Plus (`fetchPaymentsStatus`, whether this project takes payments, asked once a session; `createPlusOrder`, `verifyPlusPayment`, 044), questions this month (`fetchQuestionStatus`; `ragSearch`'s `questions` and `question_limit`, 049), the expiry date found in a new upload (`fetchDocumentExpiry`, for Upload's Plus offer), personal vaults and Ask across vaults (`ensurePersonalVault`; `ragSearch`'s `vaults` option, 046), businesses (`createNewFamily(…, kind)`, `previewBusinessDeletion`, `deleteBusiness`, `fetchUseFor` / `saveUseFor`, 051; `previewBusinessVault`, `makeBusinessVault`, 054; `fetchBusinessOverview`, `setBillPaid`, `fetchNotes`, `addNote`, `updateNote`, `deleteNote`, 056), the agreement (`fetchAgreement`, `recordAgreement`, 062), who owns each vault (`fetchVaultOwners`, 068), and the Settings screens (profile, storage use, expiry dates, feedback) |
 | `overview.ts` | The overview's arithmetic (056), pure: `parseAmount()` ("1,18,000.00"), `formatRupees()` (lakhs and crores), `compactRupees()` for the axis, `monthlyTotals()`, `financialYearTotals()` (since 1 April), `daysFromToday()`, `whenText()` |
 | `document-groups.ts` | What Home's three counts and All documents' three tabs count, in one place: `peopleVault()` (whose people), `categoryGroups()`, `categoryCount()`, `categoryKey()`, the tab names (`DocumentsTab`) |
 | `dates.ts` | `parseDocumentDate()`: expiry dates exactly as ingest stores them (DD/MM/YYYY and kin, YYYY-MM-DD, "19 October 2026") |
@@ -850,7 +856,7 @@ tabs. `(tabs)` is a layout group, so routes are `/home`, `/search`, `/upload`.
 | `speech-text.ts` | `toSpeech()`: strips markdown and spells out ID numbers before they are read aloud — and a number named as one ("train number 16782", "PNR: 4512", "PIN 751001", "नंबर 16782") digit by digit, from its digits; the screen keeps the digits |
 | `voice-languages.ts` | The language picker list and the few phrases the app itself says, per language |
 | `storage.ts` | Key-value cache: localStorage on web, AsyncStorage on native |
-| `database.types.ts` | Generated Supabase types, current to 067 (030, 052, 055, 058, 059, 061 and 063 changed nothing in them, nor did 065, whose one function only the Edge Functions call, nor 066 and 067, numbers and function bodies; 049's, 050's, 051's, 053's, 054's, 056's, 057's, 060's, 062's and 064's added by hand). Regenerate after every migration and re-append the hand-written block at the bottom (see the typecheck note) |
+| `database.types.ts` | Generated Supabase types, current to 068 (030, 052, 055, 058, 059, 061 and 063 changed nothing in them, nor did 065, whose one function only the Edge Functions call, nor 066 and 067, numbers and function bodies; 049's, 050's, 051's, 053's, 054's, 056's, 057's, 060's, 062's, 064's and 068's added by hand). Regenerate after every migration and re-append the hand-written block at the bottom (see the typecheck note) |
 
 ---
 
@@ -2529,7 +2535,7 @@ where it does not.
   chose to let it (17 October 2026), as a way in: the 200-question cap
   (053) keeps such a shop's cost under about ₹70 a month, so it still pays,
   and the move to a business is one tap when it grows.
-- **Make this a business vault** (Settings › Your vaults › Make it a business, an admin of a family vault;
+- **Make this a business vault** (Settings › Your vaults › Make it a business, the owner of a family vault since 068, any admin before;
   `src/app/make-business.tsx`): `business_vault_preview()` says what stays,
   what changes and what goes, then `make_business_vault()` sets
   `families.kind` to business. Both take the caller from `auth.uid()` and
@@ -2782,6 +2788,45 @@ where it does not.
 - **Usage counts**: `family_deleted` and `business_deleted`, no properties.
 - Before 057, Delete on a family says deleting a family vault is not
   switched on yet, and a business's Delete goes 051's way (any admin).
+
+### The owner stays the owner, and the activity log is the server's (068)
+
+- **Only the owner removes themselves or steps down.** `family_owner()` is
+  the creator while an admin, else the longest-standing admin, so before 068
+  another admin could remove the owner, or make them a viewer, and become
+  the owner, then delete the vault (057). A trigger on `family_members`
+  (`vault_owner_stays()`) now refuses removing or demoting the owner unless
+  the owner does it (Leave, stepping down) or the server does (no session:
+  deleting an account, deleting a vault), HINT `owner`, on every kind of
+  vault. Manage Family shows the owner as Owner and offers another admin no
+  Remove on their row; `my_vault_owners()` (from `auth.uid()`) tells the app
+  who owns each vault the person is in (`fetchVaultOwners()`).
+- **Only the owner makes a family a business** (054), since a business lets
+  every admin delete anyone's documents (051). Another admin's preview says
+  who can (`not_owner`); `make_business_vault()` refuses them (42501, HINT
+  `owner`). The move also counts as the creator's one free business
+  (`business_limit`, `businesses_per_person`): `create_family()` counts kinds
+  as they are now, so making families into businesses one after another
+  gave one account any number of free businesses. Settings › Your vaults
+  offers Make it a business to the owner alone.
+- **Clients write nothing to `audit_logs`.** Supabase grants every table to
+  `anon` and `authenticated`, and 002's `audit_logs_insert` let anyone write
+  a row with their own id and any vault's. The app never writes it (every
+  writer is a function running as its owner), but 050's invitation limits
+  count its `invite_sent` rows, so any account could use up another vault's
+  invitations for the day. The policy is dropped and client writes revoked;
+  reading stays the superuser's.
+- **An invitation's lookup is checked and counted.** add-member and
+  link-account look the address up in `auth.users`. They now ask
+  `invite_lookup_guard()` first: a personal vault is refused before the
+  lookup (409 `personal_vault`), and one admin's lookups are capped at twice
+  the plan's invitations a day (429 `invite_limit`, an `invite_lookup` row
+  each), so nobody can ask, without limit or trace, whether an email is on
+  AskLocker.
+- QA checks each: a co-admin can neither remove the owner nor make the
+  vault a business, a second free business by the move is refused, no one
+  writes the activity log, and add-member answers `personal_vault` for an
+  address with no account. Before 068 those checks are skipped.
 
 ### The agreement — what everyone agrees to, and when (062)
 
