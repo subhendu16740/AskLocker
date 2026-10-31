@@ -15,7 +15,7 @@
 // What is found is visible only to the person whose mailbox it is.
 // ────────────────────────────────────────────────────────────────
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.117.2';
 import { corsHeaders } from '../_shared/cors.ts';
 import { requireUser } from '../_shared/auth.ts';
 import { SCAN_QUERY, attachmentParts, classifyAttachment, header } from '../_shared/gmail-rules.ts';

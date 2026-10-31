@@ -11,7 +11,7 @@
 // both before anything else runs.
 // ────────────────────────────────────────────────────────────────
 
-import type { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import type { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.117.2';
 import { corsHeaders } from './cors.ts';
 
 export interface Membership {

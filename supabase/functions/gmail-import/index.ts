@@ -20,7 +20,7 @@
 // here, and again by insert_family_document() for the uploader it is given.
 // ────────────────────────────────────────────────────────────────
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.117.2';
 import { corsHeaders } from '../_shared/cors.ts';
 import { requireFamilyMember } from '../_shared/auth.ts';
 import { ingestDocument } from '../_shared/ingest.ts';

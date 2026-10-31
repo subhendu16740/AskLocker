@@ -21,7 +21,7 @@
 //          405 not a POST   503 not_configured | needs_migration   500 (retried)
 // ────────────────────────────────────────────────────────────────
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.117.2';
 import { ORDER_ID, PAYMENT_ID, webhookSignatureOk } from '../_shared/razorpay.ts';
 
 const json = (status: number, body: Record<string, unknown>) =>
