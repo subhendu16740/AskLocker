@@ -4,7 +4,7 @@
 // can't answer (see _shared/ai.ts); Groq's models resolve at runtime (groq.ts)
 // ────────────────────────────────────────────────────────────────
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.117.2';
 import { embedQuery, EMBEDDING_MODEL, EMBEDS_LOCALLY, UNRECORDED_MODEL } from '../_shared/embeddings.ts';
 import { requireFamilyMember, requireVaults, selectVaultRows, vaultKind, type Vault } from '../_shared/auth.ts';
 import { runReembed, afterResponse, fillMissingVectors } from '../_shared/reembed.ts';

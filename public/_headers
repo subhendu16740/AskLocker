@@ -1,0 +1,8 @@
+# Cloudflare Pages: headers for every page and file of asklocker.com.
+# No other site may show AskLocker inside a frame, so a hidden frame cannot
+# trick someone into tapping Accept or Delete. vercel.json sends the same.
+/*
+  X-Frame-Options: DENY
+  Content-Security-Policy: frame-ancestors 'none'
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin

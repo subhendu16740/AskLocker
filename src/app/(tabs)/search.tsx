@@ -163,6 +163,16 @@ export default function SearchScreen() {
     shownFamily.current = familyId;
   }, [familyId]);
 
+  // A chat belongs to one account too: signing out (or in as someone else)
+  // while Ask stays mounted under another screen must not leave the last
+  // account's answers here.
+  const userId = user?.id ?? null;
+  const shownUser = useRef(userId);
+  useEffect(() => {
+    if (shownUser.current !== userId) startNewChat();
+    shownUser.current = userId;
+  }, [userId]);
+
   // Opened from Saved chats: /search?chat=<id>.
   useEffect(() => {
     if (!chatToOpen) return;

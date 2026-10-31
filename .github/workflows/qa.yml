@@ -6,7 +6,9 @@
 #
 #   after "Deploy Edge Functions" succeeds for dev   smoke    3 questions
 #   nightly at 03:10 IST (21:40 UTC)                 nightly  8–9 questions
-#   a push that changes qa/ (any branch but main)    smoke    3 questions
+#   a push to dev that changes qa/                   smoke    3 questions
+#   a push to any other branch (not main) that       the offline self-test
+#   changes qa/                                      and fixture check only
 #   by hand: Actions → QA → Run workflow             any suite, including
 #                                                    languages (12 questions,
 #                                                    by hand only)
@@ -32,9 +34,15 @@
 #
 # SECRETS
 #   QA_A_EMAIL, QA_A_PASSWORD, QA_B_EMAIL, QA_B_PASSWORD  the two DEV QA accounts
-#   SUPABASE_ACCESS_TOKEN  already here for the deploy workflow; used for the
-#                          database checks and to look up DEV's anon key
+#   SUPABASE_ACCESS_TOKEN  in the `supabase` environment (Settings ›
+#                          Environments), which only dev and main may use,
+#                          never a repository secret: it reaches PROD through
+#                          the Management API, so code on a branch nobody has
+#                          reviewed must never get it. The deploy workflow
+#                          uses the same environment. Used for the database
+#                          checks and to look up DEV's anon key.
 # Optional repository variable QA_SUPABASE_ANON_KEY skips that lookup.
+# A run started by hand from another branch is refused by the environment.
 
 name: QA
 
@@ -58,20 +66,49 @@ on:
         default: smoke
         options: [smoke, nightly, full, languages, no-questions]
 
-concurrency:
-  group: qa-dev
-  cancel-in-progress: false
-
 permissions:
   contents: read
   actions: read # the budget gate reads this workflow's own runs
 
 jobs:
+  # A push to a branch other than dev: the checks that need no secret. The
+  # full run needs the `supabase` environment, which only dev and main use.
+  offline:
+    if: github.event_name == 'push' && github.ref != 'refs/heads/dev'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: qa/package-lock.json
+
+      - name: Install
+        working-directory: qa
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+        run: npm ci --omit=dev --no-audit --no-fund
+
+      - name: Self-test and fixture check (offline, spends nothing)
+        working-directory: qa
+        run: |
+          node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON tools/selftest.mjs
+          node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON tools/check-fixtures.mjs
+
   qa:
-    # After a deploy, only when the deploy itself succeeded.
-    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    # After a deploy, only when the deploy itself succeeded; a push, only to dev.
+    if: >-
+      (github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success')
+      && (github.event_name != 'push' || github.ref == 'refs/heads/dev')
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    environment: supabase
+    concurrency:
+      group: qa-dev
+      cancel-in-progress: false
     env:
       DEV_PROJECT_REF: tkqsfoppwlyupentuixy
     steps:
@@ -115,7 +152,7 @@ jobs:
               TODAY=$(date -u +%F)
               EARLIER=$(gh api -X GET "repos/$GITHUB_REPOSITORY/actions/workflows/qa.yml/runs" \
                           -f created=">=$TODAY" -f per_page=100 \
-                          --jq "[.workflow_runs[] | select(.id != $GITHUB_RUN_ID) | select(.event == \"push\" or .event == \"workflow_run\")] | length" \
+                          --jq "[.workflow_runs[] | select(.id != $GITHUB_RUN_ID) | select((.event == \"push\" and .head_branch == \"dev\") or .event == \"workflow_run\")] | length" \
                         || echo 99)
               if [ "$EARLIER" -ge 2 ]; then
                 SUITE=no-questions

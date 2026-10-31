@@ -25,7 +25,7 @@
 // missing), needs_migration (026 not applied), origin_not_allowed, expired.
 // ────────────────────────────────────────────────────────────────
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.117.2';
 import { corsHeaders } from '../_shared/cors.ts';
 import { requireUser } from '../_shared/auth.ts';
 import { pkceChallenge, randomToken } from '../_shared/gmail-crypto.ts';

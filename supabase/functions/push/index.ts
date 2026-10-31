@@ -21,7 +21,7 @@
 // Answers 503 { status: 'needs_migration' } where 034 is not applied.
 // ────────────────────────────────────────────────────────────────
 
-import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.117.2";
 import { corsHeaders } from "../_shared/cors.ts";
 import { requireUser } from "../_shared/auth.ts";
 import { generateVapidKeys, sendWebPush, type PushMessage, type PushOutcome, type VapidKeys } from "../_shared/webpush.ts";
@@ -67,13 +67,17 @@ async function storedKeys(supabase: SupabaseClient): Promise<KeyRow | null | "mi
 async function ensureKeys(supabase: SupabaseClient, req: Request): Promise<VapidKeys | "missing"> {
   const row = await storedKeys(supabase);
   if (row === "missing") return "missing";
+  // The project's own public key, never one the request sends: the clock
+  // calls send with what is kept here.
+  const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
+  if (!anonKey) throw new Error("SUPABASE_ANON_KEY is not set for this function.");
   const candidate = row ? { publicKey: row.public_key, privateKey: row.private_key } : await generateVapidKeys();
   const { data, error } = await supabase.rpc("push_setup", {
     p_vapid_public: candidate.publicKey,
     p_vapid_private: candidate.privateKey,
     p_subject: row?.contact ?? CONTACT,
     p_functions_url: `${Deno.env.get("SUPABASE_URL")}/functions/v1`,
-    p_anon_key: Deno.env.get("SUPABASE_ANON_KEY") || req.headers.get("apikey"),
+    p_anon_key: anonKey,
   });
   if (error) throw new Error(error.message);
   return toKeys(((data ?? []) as KeyRow[])[0]);
