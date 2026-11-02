@@ -1364,8 +1364,15 @@ async function generateAnswer(
   opts: { language?: string; voice?: boolean; family?: string; notes?: string[] } = {},
 ): Promise<AnswerResult> {
   const langName = opts.language ? languageName(opts.language) : undefined;
-  const languageRule = langName && !opts.language!.toLowerCase().startsWith('en')
-    ? `\nReply in ${langName}. The documents are in English: translate naturally, but keep proper names, numbers (in digits), dates and identifiers exactly as written.`
+  const nonEnglish = !!langName && !opts.language!.toLowerCase().startsWith('en');
+  // A Hindi question once got "Asha Verma की passport
+  // (passport_asha_verma_specimen_v1.pdf) की समाप्ति तिथि 19/07/2033 है।":
+  // the right date, mostly in English letters, and a file name nobody wants
+  // read aloud. So everyday words are translated too, a name is written the
+  // way the question writes it, and the document is described, not named by
+  // file. Numbers, dates, codes and ID numbers stay exactly as written.
+  const languageRule = nonEnglish
+    ? `\nReply in ${langName}, in its own script. The documents are in English: translate naturally, everyday words included (passport, policy, expiry date). Write a person's name the way the question writes it; if the question does not name them, as the document does. Keep numbers (in digits), dates, codes and ID numbers exactly as written. Do not write file names: describe the document instead (for example "Asha's passport"); the app lists the documents under the answer.`
     : '';
   // Spoken answers: no markdown (a voice reads "asterisk"), no lists, a
   // date's month as a word, and the document described rather than its file
@@ -1374,7 +1381,7 @@ async function generateAnswer(
   // The app reads numbers aloud itself (toSpeech), from the digits.
   const voiceRule = opts.voice
     ? `\nYour answer will be read aloud by a voice assistant to an elderly person. Write two or three short, plain spoken sentences. No markdown, no bullet points, no asterisks, no headings. Write a date with its month as a word (for example "14 March 2027"), but every other number in digits, exactly as written: the app reads numbers aloud itself. Describe the document naturally ("this is from Mom's passport") instead of reading out a file name.`
-    : '\nIf you mention a document, reference it by its filename.';
+    : nonEnglish ? '' : '\nIf you mention a document, reference it by its filename.';
 
   if (!hasAiKey) {
     console.warn('[rag] Neither ANTHROPIC_API_KEY nor GROQ_API_KEY is set');

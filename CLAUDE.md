@@ -3108,7 +3108,13 @@ where it does not.
   `voice: true`. A non-English question is condensed *into English* before
   retrieval (the index is English) and the answer is written in the person's
   language; `voice` asks for short spoken sentences with no markdown. The
-  response echoes `answer_language`.
+  response echoes `answer_language`. An answer in another language is
+  written in that language's own script, everyday words included, a name as
+  the question writes it, and names no file (the source chips do): told to
+  keep names "exactly as written" and to cite file names, a Hindi answer
+  came back mostly in English letters, which QA's `hindi-question` failed
+  on 30 and 31 October 2026. Numbers, dates, codes and ID numbers stay as
+  the document writes them.
 - **`add-member`** — a family admin invites a person who already has an
   account, by email: checks the caller is an admin, then calls
   `invite_family_member()` (037) as the service role. Answers 200 `invited`,
