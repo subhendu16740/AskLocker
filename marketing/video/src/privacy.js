@@ -177,6 +177,11 @@ for (const k of ORDER) if (SCENES[k].visual && k !== 'ai') placeVisual(SCENES[k]
 const SHOWN = { immediateRender: true };
 const pop = (sel, t, from = 0.86) => tl.fromTo(sel, { autoAlpha: 0, scale: from }, { autoAlpha: 1, scale: 1, duration: 0.55, ease: 'back.out(1.6)', ...SHOWN }, t);
 const rise = (sel, t, { y = 26, ...extra } = {}) => tl.fromTo(sel, { autoAlpha: 0, y }, { autoAlpha: 1, y: 0, duration: 0.6, ...extra, ...SHOWN }, t);
+// A card's rows are there, faded, from the moment it comes in, and light up
+// one by one, so the card is never an empty white box.
+const light = (sel, t) => tl.fromTo(sel, { opacity: 0.16 }, { opacity: 1, duration: 0.5, ease: 'power1.out', ...SHOWN }, t);
+// A diagram placed on the stage (place() owns its x, y and scale) only fades.
+const fade = (sel, t) => tl.fromTo(sel, { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.5, ...SHOWN }, t);
 
 let onScreen = null;
 /** The phone comes in (or stays), showing a screen. */
@@ -228,16 +233,16 @@ const PLAY = {
     return { how, end: how + 6.2 };
   },
   who(t) {
-    // The card comes with its first row, never empty; the rest follow the answer.
+    // The card comes in whole, its rows faded; the first lights at once, the
+    // rest follow the answer.
     const how = t + 2.6;
-    tl.set('#dg-who', { autoAlpha: 1 }, t + 0.6);
-    rise('#dg-who .pv-card-h', t + 0.6);
+    fade('#dg-who', t + 0.6);
     const rows = [['#pw-vault', t + 0.9], ['#pw-link', how + 1.0], ['#pw-team', how + 2.6], ['#pw-svc', how + 4.6], ['#pw-else', how + 6.4]];
-    for (const [sel, at] of rows) { rise(sel, at, { y: 18 }); cue(at, 'pop-soft'); }
+    for (const [sel, at] of rows) { light(sel, at); cue(at, 'pop-soft'); }
     for (const [sel, at] of [['#pw-team', how + 3.4], ['#pw-svc', how + 5.4]]) {
       tl.fromTo(sel, { backgroundColor: 'rgba(254,243,199,0)' }, { backgroundColor: 'rgba(254,243,199,1)', duration: 0.6, ...IR }, at);
     }
-    rise('#dg-who-foot', how + 7.8, { y: 12 });
+    light('#dg-who-foot', how + 7.8);
     return { how, end: how + 11.4 };
   },
   vault(t) {
@@ -300,12 +305,12 @@ const PLAY = {
     return { how: t + 2.6, callout: read + 0.6, end: read + 6.6 };
   },
   others(t) {
+    // The card comes in whole, its rows faded, and each lights after the answer.
     const how = t + 2.6;
-    tl.set('#dg-ledger', { autoAlpha: 1 }, t + 0.5);
-    rise('#dg-ledger .pv-card-h', t + 0.5);
-    $$('#dg-ledger .pv-lg-row').forEach((row, i) => { rise(row, how + 0.3 + i * 0.75, { y: 14 }); cue(how + 0.3 + i * 0.75, 'pop-soft'); });
+    fade('#dg-ledger', t + 0.5);
+    $$('#dg-ledger .pv-lg-row').forEach((row, i) => { light(row, how + 0.3 + i * 0.75); cue(how + 0.3 + i * 0.75, 'pop-soft'); });
     const f = how + 0.3 + $$('#dg-ledger .pv-lg-row').length * 0.75 + 0.4;
-    rise('#dg-ledger-foot', f, { y: 12 });
+    light('#dg-ledger-foot', f);
     return { how, end: f + 4.2 };
   },
   control(t) {
