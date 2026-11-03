@@ -24,5 +24,6 @@ export const END_LINE = LAUNCH
   : { family: 'Every family document. One question away.',
     business: null }; // the business film's own tagline (BIZ.tagline)
 
-/** The launch set's one line. */
+/** The launch set's one line, and a business's. */
 export const LAUNCH_LINE = 'Locked on your phone. Opened only by your family.';
+export const LAUNCH_LINE_BUSINESS = 'Locked on your phone. Opened only by your team.';

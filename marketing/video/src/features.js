@@ -27,7 +27,7 @@ import {
 import { VOICE_LINES, voiceSubtitles } from './voice-lines.js';
 import { VOICES } from './voices.js';
 import { askSetup, askTurn, fitScroll, pulse, glow, snapPhoto, saveAndView, shareSetup, sharePlay } from './kit.js';
-import { LAUNCH, END_LINE } from './claims.js';
+import { LAUNCH, END_LINE, LAUNCH_LINE, LAUNCH_LINE_BUSINESS } from './claims.js';
 
 const STORY = FAM.STORY;
 const SQUARE = W === H;
@@ -714,12 +714,12 @@ if (LAUNCH) {
     tl.fromTo('#rm-r0', { boxShadow: '0 0 0 0 rgba(220,38,38,0)' }, { boxShadow: '0 0 0 3px rgba(220,38,38,0.25)', duration: 0.5, yoyo: true, repeat: 1, ease: 'sine.inOut', ...IR }, t + 1.3);
   };
   Object.assign(FEATURES.vaults, {
-    how: 'Locked on your phone. Opened only by your family.',
+    how: LAUNCH_LINE,
     head: 'Locked on your phone. *Opened only by your family.*',
     line: 'Each vault has its own key, and only the people in it have it. Nobody at AskLocker can open your documents.',
   });
   Object.assign(FEATURES['biz-access'], {
-    how: 'Locked on your phone. Opened only by your team.',
+    how: LAUNCH_LINE_BUSINESS,
     head: 'Locked on your phone. *Opened only by your team.*',
     line: 'Each vault has its own key, and only your team has it. Nobody at AskLocker can open your records.',
   });

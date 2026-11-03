@@ -156,3 +156,37 @@
 .portrait .lk-sees-head b { font-size: 17px; }
 .portrait .lk-sees-what b { font-size: 21px; }
 .portrait .lk-sees-row .can, .portrait .lk-sees-row .cant { font-size: 19px; }
+
+/* ─── The business version (?film=locked-business, src/locked.js): the same
+   cards and screens in a business's teal and gold (src/lib/vault-theme.ts),
+   and a night in its teal. ──────────────────────────────────────────── */
+.locked-biz :is(.pv-dg, .pv-docs, #scr-recovery, #scr-newphone, #scr-invite) {
+  --navy: #0F5C57; --navy-2: #1A7A72; --coral: #B7791F; --blue-50: #E7F4F2;
+}
+.locked-biz #bg-night {
+  background:
+    radial-gradient(90% 70% at 50% 0%, #0d302c 0%, rgba(13, 48, 44, 0) 70%),
+    radial-gradient(60% 50% at 85% 100%, rgba(183, 121, 31, 0.10) 0%, rgba(183, 121, 31, 0) 70%),
+    linear-gradient(180deg, #061513 0%, #040a09 100%);
+}
+.locked-biz .wh-tag.why { background: #FBF1DF; color: #8A5A12; }
+/* Headings in the cards stay teal, so small capitals keep their contrast; gold is for marks. */
+.locked-biz :is(.pv-card-h, .lk-col-h) { color: var(--teal-2); }
+.locked-biz :is(.pv-card, .lk-col, .lk-flow) { border-color: rgba(15, 92, 87, 0.08); box-shadow: 0 30px 70px -30px rgba(11, 43, 40, 0.32); }
+.locked-biz :is(.pv-who, .lk-sees-row) { border-top-color: #E6EFED; }
+.locked-biz .pv-card-foot { background: #EEF6F4; }
+.locked-biz :is(.lk-doc, .lk-node) { background: #F4F8F7; border-color: #DCEBE8; }
+.locked-biz .lk-node.ai { background: #0B2B28; border-color: #0B2B28; }
+.locked-biz .lk-padlock { box-shadow: 0 8px 18px -6px rgba(183, 121, 31, 0.8); }
+.locked-biz .lk-wire-line { border-color: #A9CFC9; }
+.locked-biz .lk-bytes { background: #0B1F1D; }
+.locked-biz .lk-bytes code { color: #8FE3D6; }
+.locked-biz .lk-flow-foot { background: #FBF1DF; }
+.locked-biz .pv-doc i { background: #E3EEEC; }
+.locked-biz .lk-av { background: linear-gradient(135deg, #0F5C57, #1A7A72); }
+.locked-biz .lk-inv { border-color: #BFE3DE; }
+/* The italic line in gold: deeper on daylight, brighter at night. */
+.locked-biz .big-em { color: #B7791F; }
+.locked-biz .on-dark .big-em { color: #D9A04A; }
+/* A reel's question, balanced over its lines in 9:16 ("What happens when / I add a bill?"). */
+.portrait.locked-biz .pv-qa .why-t { text-wrap: balance; }

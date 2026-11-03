@@ -10,7 +10,8 @@
 # and the launch set, everything rendered with --launch (src/claims.js), which
 # is never posted before end-to-end encryption ships, into its own folder:
 #   marketing/launch/<family|nri|business>/<films|shorts|posters>/  the same names, ending -launch
-#   marketing/launch/locked/<films|reels|covers>/                   the launch's own film (tools/locked.sh)
+#   marketing/launch/<family|business>/locked/<films|reels|covers>/ the launch's own film (tools/locked.sh),
+#                                                                   a family's and a business's
 # A business feature's key starts biz- in src/features.js; its files drop it.
 # The films go with music only (tools/mux.sh also writes -sfx-only ones);
 # the shorts and reels go both ways, for posting with a platform's own music.
@@ -22,11 +23,12 @@ DEST=..
 L=$DEST/launch
 
 for a in family business; do
-  rm -rf "$DEST/$a/films" "$DEST/$a/shorts" "$DEST/$a/posters" "$L/$a/films" "$L/$a/shorts" "$L/$a/posters"
+  rm -rf "$DEST/$a/films" "$DEST/$a/shorts" "$DEST/$a/posters" "$L/$a/films" "$L/$a/shorts" "$L/$a/posters" "$L/$a/locked"
   mkdir -p "$DEST/$a/films" "$DEST/$a/shorts" "$DEST/$a/posters"
 done
+# ($L/locked is where the family's launch film was kept before the business's.)
 rm -rf "$DEST/nri/films" "$DEST/privacy/films" "$DEST/privacy/reels" "$DEST/privacy/covers" \
-  "$L/nri/films" "$L/locked/films" "$L/locked/reels" "$L/locked/covers"
+  "$L/nri/films" "$L/locked"
 mkdir -p "$DEST/nri/films" "$DEST/privacy/films" "$DEST/privacy/reels" "$DEST/privacy/covers"
 
 audience() { # a file's name, from asklocker-feature- or asklocker- on -> "<audience> <name>"
@@ -70,22 +72,31 @@ done
 for f in out/posters/asklocker-privacy-*-cover.png; do
   [ -e "$f" ] && cp "$f" "$DEST/privacy/covers/"
 done
-# The launch's own film (tools/locked.sh), the same way.
-for f in out/asklocker-locked-16x9-launch.mp4 out/asklocker-locked-9x16-launch.mp4; do
-  [ -e "$f" ] && mkdir -p "$L/locked/films" && cp "$f" "$L/locked/films/"
-done
-for f in out/asklocker-locked-*-9x16-launch.mp4 out/asklocker-locked-*-9x16-launch-sfx-only.mp4; do
-  [ -e "$f" ] && mkdir -p "$L/locked/reels" && cp "$f" "$L/locked/reels/"
-done
-for f in out/posters/asklocker-locked-*-cover-launch.png; do
-  [ -e "$f" ] && mkdir -p "$L/locked/covers" && cp "$f" "$L/locked/covers/"
+# The launch's own film (tools/locked.sh), a family's (asklocker-locked-*) and
+# a business's (asklocker-locked-business-*), the same way: the film with
+# music, the reels both ways, and every cover.
+for f in out/asklocker-locked-*-launch.mp4 out/asklocker-locked-*-launch-sfx-only.mp4 out/posters/asklocker-locked-*-cover-launch.png; do
+  [ -e "$f" ] || continue
+  name=$(basename "$f")
+  a=family
+  rest=${name#asklocker-locked-}
+  if [[ $rest == business-* ]]; then a=business; rest=${rest#business-}; fi
+  case $rest in
+    *-cover-launch.png) kind=covers ;;
+    16x9-launch.mp4 | 9x16-launch.mp4) kind=films ;;
+    16x9-* | 9x16-*) continue ;; # a film's -sfx-only: the films go with music only
+    *) kind=reels ;;
+  esac
+  mkdir -p "$L/$a/locked/$kind"
+  cp "$f" "$L/$a/locked/$kind/"
 done
 
 for d in family/films family/shorts family/posters nri/films business/films business/shorts business/posters \
   privacy/films privacy/reels privacy/covers \
   launch/family/films launch/family/shorts launch/family/posters launch/nri/films \
   launch/business/films launch/business/shorts launch/business/posters \
-  launch/locked/films launch/locked/reels launch/locked/covers; do
+  launch/family/locked/films launch/family/locked/reels launch/family/locked/covers \
+  launch/business/locked/films launch/business/locked/reels launch/business/locked/covers; do
   [ -d "$DEST/$d" ] && echo "$d: $(find "$DEST/$d" -type f | wc -l) files, $(du -sh "$DEST/$d" | cut -f1)"
 done
 true

@@ -11,6 +11,10 @@
 //       locker (adding a document), who (who can open it), asking (asking
 //       without handing it over), key (your way back), family (adding
 //       family), emergency (the emergency card)
+//   ?film=locked-business&claims=launch                     the same film for a
+//       business (Arora Electric, its team, teal and gold), with the same
+//       &orientation= and &reel=, its reels locker, who, asking, key, share
+//       (sending one record) and team (adding your team)
 //
 // Every scene asks what people ask (Question), then answers it plainly
 // (Answer), while a diagram or the phone shows it.
@@ -21,19 +25,23 @@ import {
 import { phoneShell } from './parts.js';
 import * as FAM from './family-screens.js';
 import { documentScreen, DOCS } from './feature-screens.js';
+import * as BUS from './business-screens.js';
 import { askSetup, askTurn, pulse, glow, shareSetup, sharePlay } from './kit.js';
-import { qa, openCards, AI_Q } from './privacy-screens.js';
+import { qa } from './privacy-screens.js';
 import * as LK from './locked-screens.js';
 import { LAUNCH } from './claims.js';
 
 if (!LAUNCH) throw new Error('The launch film is only rendered with ?claims=launch (render.mjs --launch): it says what is true once end-to-end encryption ships');
 
-const NAVY = '#2A3D66';
+const BUSINESS = LK.BUSINESS;
+// The vault's colour, and its accent as r,g,b for a pulse.
+const NAVY = BUSINESS ? '#0F5C57' : '#2A3D66';
+const ACCENT_RGB = BUSINESS ? '183,121,31' : '212,128,123';
 const REEL = new URLSearchParams(location.search).get('reel') || '';
 const FULL = !REEL;
 
 // ─── The scenes: words, and what shows them ──────────────────────────────
-const SCENES = {
+const FAMILY_SCENES = {
   locker: {
     kicker: 'Adding a document', icon: 'lock', visual: '#dg-lock',
     q: 'What happens when I *add a document?*', a: "It's locked on your phone before it leaves.",
@@ -75,9 +83,27 @@ const SCENES = {
     sub: 'Not even AskLocker.',
   },
 };
-const FILM_ORDER = ['locker', 'who', 'asking', 'sees', 'key', 'share', 'family', 'emergency'];
-// The brief's six ideas, one reel each.
-const REELS = { locker: ['locker'], who: ['who'], asking: ['asking'], key: ['key'], family: ['family'], emergency: ['emergency'] };
+// A business: the same answers for its team, a bill instead of a passport,
+// and nothing a business vault doesn't have (no emergency cards).
+const BUSINESS_SCENES = {
+  ...FAMILY_SCENES,
+  locker: { ...FAMILY_SCENES.locker, kicker: 'Adding a record', q: 'What happens when I *add a bill?*' },
+  who: { ...FAMILY_SCENES.who, a: "Your team holds the key. We don't." },
+  key: { ...FAMILY_SCENES.key, sub: "Or someone in your team you chose. We can't do it for you, and that's the point." },
+  share: { ...FAMILY_SCENES.share, kicker: 'Sending one record', q: 'Your CA needs *one bill?*' },
+  team: {
+    kicker: 'Adding your team', icon: 'user-plus', screen: 'scr-invite', callout: 'co-team',
+    q: 'Adding someone *to your business?*', a: "They tap Accept. They're in.",
+    sub: "The app hands them the vault's key.",
+  },
+};
+const SCENES = BUSINESS ? BUSINESS_SCENES : FAMILY_SCENES;
+const FILM_ORDER = BUSINESS ? ['locker', 'who', 'asking', 'sees', 'key', 'share', 'team']
+  : ['locker', 'who', 'asking', 'sees', 'key', 'share', 'family', 'emergency'];
+// The brief's six ideas, one reel each (a business sends one record instead
+// of showing an emergency card).
+const REELS = Object.fromEntries((BUSINESS ? ['locker', 'who', 'asking', 'key', 'share', 'team']
+  : ['locker', 'who', 'asking', 'key', 'family', 'emergency']).map((k) => [k, [k]]));
 if (REEL && !REELS[REEL]) throw new Error(`No reel "${REEL}": one of ${Object.keys(REELS).join(', ')}`);
 const ORDER = FULL ? FILM_ORDER : REELS[REEL];
 const uses = (k) => ORDER.includes(k);
@@ -87,22 +113,27 @@ const kicker = (k) => (FULL ? `${String(FILM_ORDER.indexOf(k) + 1).padStart(2, '
 const texts = (FULL ? LK.openLines() + LK.titleCard() : '')
   + ORDER.map((k) => qa(`t-${k}`, kicker(k), SCENES[k].icon, SCENES[k].q, SCENES[k].a, SCENES[k].sub)).join('')
   + (FULL ? LK.closeBlock() : '') + LK.endCard();
-const cards = (FULL ? openCards() : '') + (uses('locker') ? LK.lockDiagram() : '') + (uses('who') ? LK.whoDiagram() : '')
+const cards = (FULL ? LK.openCards() : '') + (uses('locker') ? LK.lockDiagram() : '') + (uses('who') ? LK.whoDiagram() : '')
   + (uses('asking') ? LK.askFlow() : '') + (uses('sees') ? LK.seesTable() : '');
+// The paper a share link is made for: Papa's policy, or the supplier's bill.
+const SHARED = BUSINESS ? 'bill' : 'policy';
 const screens = [
-  uses('asking') && FAM.askScreen(), uses('key') && `${LK.recoveryScreen()}${LK.newPhoneScreen()}`,
-  uses('share') && documentScreen({ share: true }), uses('family') && LK.inviteScreen(), uses('emergency') && FAM.emergencyScreen(),
+  uses('asking') && (BUSINESS ? BUS.askScreen() : FAM.askScreen()), uses('key') && `${LK.recoveryScreen()}${LK.newPhoneScreen()}`,
+  uses('share') && documentScreen({ doc: SHARED, share: true }), (uses('family') || uses('team')) && LK.inviteScreen(),
+  uses('emergency') && FAM.emergencyScreen(),
 ].filter(Boolean).join('');
-const callouts = ['key', 'share', 'family', 'emergency'].filter(uses).map((k) => LK.LK_CALLOUTS[k]()).join('');
+const callouts = ['key', 'share', 'family', 'team', 'emergency'].filter(uses).map((k) => LK.LK_CALLOUTS[k]()).join('');
 
-await build({ cards, texts, phone: phoneShell(screens, '9:41'), callouts, subs: '', look: 'privacy' });
+// A business wears the business film's daylight and colours (styles.css
+// .formal, features.css .biz-look) and its own night (launch.css .locked-biz).
+await build({ cards, texts, phone: phoneShell(screens, '9:41'), callouts, subs: '', look: BUSINESS ? 'privacy formal biz-look locked-biz' : 'privacy' });
 
 // ─── Layout passes, and the taps, measured before anything moves ────────
 const C = {};
-if (uses('asking')) C.ask = askSetup('ask', 'scr-ask', AI_Q);
+if (uses('asking')) C.ask = askSetup('ask', 'scr-ask', LK.ASK_Q);
 if (uses('share')) C.share = shareSetup();
 if (uses('key')) C.key = { save: at('#lk-save'), opt: at('#lk-o1') };
-if (uses('family')) C.family = { accept: at('#lk-accept') };
+if (uses('family') || uses('team')) C.join = { accept: at('#lk-accept') };
 
 // ─── Initial state ───────────────────────────────────────────────────────
 initialState();
@@ -218,7 +249,7 @@ const PLAY = {
     tl.fromTo('#lk-line', { [GROW]: 0 }, { [GROW]: 1, duration: 0.9, ease: 'power2.inOut', ...SHOWN }, t + 0.9);
     // Read on the phone, then locked with its own key.
     light('#lk-s1', how + 0.3);
-    tl.fromTo('#lk-doc', { borderColor: '#E8ECF4' }, { borderColor: '#D4807B', duration: 0.4, ...IR }, how + 0.3);
+    tl.fromTo('#lk-doc', { borderColor: BUSINESS ? '#DCEBE8' : '#E8ECF4' }, { borderColor: BUSINESS ? '#B7791F' : '#D4807B', duration: 0.4, ...IR }, how + 0.3);
     cue(how + 0.35, 'pop-soft');
     light('#lk-s2', how + 1.5);
     pop('#lk-padlock', how + 1.8, 0.4);
@@ -308,14 +339,14 @@ const PLAY = {
   },
   share(t) {
     phoneShow(t + 0.3, 'scr-doc');
-    const r = sharePlay(t + 2.2, C.share, DOCS.policy.share.note, NAVY);
+    const r = sharePlay(t + 2.2, C.share, DOCS[SHARED].share.note, NAVY);
     return { how: t + 2.6, callout: Math.max(r.callout, t + 5.4), end: r.end + 2.6 };
   },
   family(t) {
     phoneShow(t + 0.3, 'scr-invite');
     const how = t + 2.6;
-    pulse('#lk-inv', t + 1.4);
-    tap(how + 0.8, C.family.accept, { press: '#lk-accept' });
+    pulse('#lk-inv', t + 1.4, ACCENT_RGB);
+    tap(how + 0.8, C.join.accept, { press: '#lk-accept' });
     const inv = $('#lk-inv');
     tl.to(inv, { autoAlpha: 0, height: 0, marginBottom: -12, paddingTop: 0, paddingBottom: 0, duration: 0.4, ease: 'power2.inOut' }, how + 1.1);
     fadeIn('#lk-news', how + 1.4, { from: 8 });
@@ -323,6 +354,7 @@ const PLAY = {
     tl.fromTo('#lk-recent', { autoAlpha: 0, y: 12 }, { autoAlpha: 1, y: 0, duration: 0.5, ...SHOWN }, how + 2.0);
     return { how, callout: how + 3.2, end: how + 8.4 };
   },
+  team(t) { return PLAY.family(t); },
   emergency(t) {
     phoneShow(t + 0.3, 'scr-emerg');
     const how = t + 2.6;
@@ -334,7 +366,11 @@ const PLAY = {
 // ─── The film ────────────────────────────────────────────────────────────
 const S = {};
 let t = 0;
-cue(0, 'section', FULL ? { name: 'privacy' } : { name: 'feature', look: 'family' });
+// The score (audio/score.py): the privacy film's music for a family, the
+// business film's formal piece for a business (calm, then its groove from the
+// first question, calm again for the close); a reel scores as its feature shorts.
+if (FULL) cue(0, 'section', { name: BUSINESS ? 'formal' : 'privacy' });
+else cue(0, 'section', { name: 'feature', look: BUSINESS ? 'business' : 'family' });
 
 if (FULL) {
   // The cold open: three papers, at night, and what happens before they leave the phone.
@@ -367,7 +403,8 @@ if (FULL) {
   cue(r + 0.7, 'pop');
   bubblePop('#logo', r + 1.2);
   tl.fromTo('#wordmark', { clipPath: 'inset(0% 100% 0% 0%)', y: 12 }, { clipPath: 'inset(0% 0% 0% 0%)', y: 0, duration: 0.8, ...IR }, r + 1.1);
-  fadeIn('#tagline', r + 1.8, { from: 16, duration: 0.7 });
+  if (BUSINESS) tl.fromTo('#badge', { autoAlpha: 0, scale: 0.9, y: 8 }, { autoAlpha: 1, scale: 1, y: 0, duration: 0.55, ease: 'back.out(1.6)', ...IR }, r + 1.45);
+  fadeIn('#tagline', r + (BUSINESS ? 1.9 : 1.8), { from: 16, duration: 0.7 });
   hide('#lk-title', r + 4.8);
   t = r + 5.3;
   S.title = r;
@@ -378,6 +415,7 @@ for (const k of ORDER) {
   const sc = SCENES[k];
   S[k] = t;
   cue(t, 'section', { name: k });
+  if (FULL && BUSINESS && k === ORDER[0]) cue(t, 'section', { name: 'solution' });
   showWhy(`t-${k}`, t);
   const r = PLAY[k](t);
   showHow(`t-${k}`, r.how);
@@ -399,6 +437,7 @@ if (FULL) {
   const c = t;
   S.close = c;
   cue(c, 'section', { name: 'close' });
+  if (BUSINESS) cue(c, 'section', { name: 'trust' });
   tl.set('#t-close', { autoAlpha: 1 }, c);
   tl.fromTo('#t-close .big .wi', { yPercent: 118 }, { yPercent: 0, duration: 0.9, ease: 'power4.out', stagger: 0.06, ...IR }, c + 0.1);
   tl.fromTo('#t-close .big-em .wi', { yPercent: 118 }, { yPercent: 0, duration: 0.9, ease: 'power4.out', stagger: 0.06, ...IR }, c + 0.9);
@@ -417,6 +456,7 @@ tl.fromTo('#end-logo', { scale: 0.4, rotation: -14, autoAlpha: 0 }, { scale: 1, 
 cue(t0 + 0.1, 'pop');
 bubblePop('#end-logo', t0 + 0.6);
 tl.fromTo('#end-word', { clipPath: 'inset(0% 100% 0% 0%)', y: 12 }, { clipPath: 'inset(0% 0% 0% 0%)', y: 0, duration: 0.8, ...IR }, t0 + 0.55);
+if (BUSINESS) tl.fromTo('#end-badge', { autoAlpha: 0, scale: 0.9, y: 8 }, { autoAlpha: 1, scale: 1, y: 0, duration: 0.55, ease: 'back.out(1.6)', ...IR }, t0 + 0.95);
 fadeIn('#end-tag', t0 + 1.15, { from: 16, duration: 0.7 });
 tl.fromTo('#end-cta', { autoAlpha: 0, scale: 0.9, y: 16 }, { autoAlpha: 1, scale: 1, y: 0, duration: 0.7, ease: 'back.out(1.6)', ...IR }, t0 + 1.75);
 cue(t0 + 1.8, 'pop-soft');
@@ -426,7 +466,7 @@ S.end = t0;
 // The cover (tools/render.mjs --stills hero): the moment that says the most,
 // counted from its scene's start. A reel's cover leads with its headline.
 const COVER = { locker: ['locker', 10.4], who: ['who', 11.6], asking: ['asking', 10.6], key: ['key', 4.4],
-  family: ['family', 5.0], emergency: ['emergency', 4.0] };
+  share: ['share', 4.3], family: ['family', 5.0], team: ['team', 5.0], emergency: ['emergency', 4.0] };
 const [coverScene, coverAt] = REEL ? COVER[REEL] : COVER.locker;
 S.hero = S[coverScene] + coverAt;
 S.total = t0 + 5.0;

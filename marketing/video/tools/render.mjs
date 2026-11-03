@@ -20,7 +20,7 @@
 //   --launch   what the films say once end-to-end encryption ships (src/claims.js);
 //   the tag ends -launch. Nothing rendered with it is posted before the launch.
 //   --film locked --launch   the launch's own film (src/locked.js), and --reel
-//   one of its reels
+//   one of its reels; --film locked-business the same film for a business
 //   tools/mux.sh <tag> then adds sound -> out/asklocker-<tag>.mp4
 //   node tools/render.mjs --stills 3,12.5   PNGs of single frames -> out/stills/
 //   (--stills hero: the frame the film names for its poster or cover)
@@ -55,13 +55,13 @@ const stills = opt('stills', null);
 const size = orientation === 'portrait' ? { width: 1080, height: 1920 } : { width: 1920, height: 1080 };
 const short = flag('short');
 const film = opt('film', 'family');
-if (!['family', 'nri', 'business', 'features', 'privacy', 'locked'].includes(film)) throw new Error(`--film is family, nri, business, features, privacy or locked, not ${film}`);
+if (!['family', 'nri', 'business', 'features', 'privacy', 'locked', 'locked-business'].includes(film)) throw new Error(`--film is family, nri, business, features, privacy, locked or locked-business, not ${film}`);
 const lang = opt('lang', '');
 if (lang && !['family', 'nri'].includes(film)) throw new Error('--lang is for the family and NRI films, whose voice scene it changes');
 const feature = opt('feature', '');
 if ((film === 'features') !== Boolean(feature)) throw new Error('--feature names one feature of --film features (src/features.js)');
 const reel = opt('reel', '');
-if (reel && !['privacy', 'locked'].includes(film)) throw new Error('--reel is for --film privacy or locked');
+if (reel && !['privacy', 'locked', 'locked-business'].includes(film)) throw new Error('--reel is for --film privacy, locked or locked-business');
 // --launch: what the films say once end-to-end encryption ships (src/claims.js).
 // Never posted before the launch; its files end -launch.
 const launch = flag('launch');

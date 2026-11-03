@@ -11,7 +11,7 @@ import {
   icon, spinner, sbFill, plusTag, plusStar, header, tabBar, words, categoryChips, ocrSlot, uploadedDialog,
   lockScreen, pushNotif, cameraScreen, phoneShell, askMessages, askHeader, saveBar, askInput, brand, THEME,
 } from './parts.js';
-import { LAUNCH, END_LINE } from './claims.js';
+import { LAUNCH, END_LINE, LAUNCH_LINE_BUSINESS } from './claims.js';
 
 const TEAL = THEME.business.primary;
 
@@ -464,7 +464,7 @@ export function textBlocks(short) {
     'Admin and viewer roles',
     'Records stay when people leave',
   ])}
-  ${block('f-trust', 'Access and control', LAUNCH ? 'Locked on your phone. Opened only by your team.' : 'In AskLocker, only your team can open your records.',
+  ${block('f-trust', 'Access and control', LAUNCH ? LAUNCH_LINE_BUSINESS : 'In AskLocker, only your team can open your records.',
     `<div class="fm-cards">${(LAUNCH ? [
       // The launch set: the encryption brief's lines, for a business (src/claims.js).
       ['smartphone', 'Locked on your phone', "Your records are locked on your phone before they're uploaded."],
