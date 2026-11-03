@@ -18,8 +18,8 @@ for a in family business; do
   rm -rf "$DEST/$a/films" "$DEST/$a/shorts" "$DEST/$a/posters"
   mkdir -p "$DEST/$a/films" "$DEST/$a/shorts" "$DEST/$a/posters"
 done
-rm -rf "$DEST/nri/films"
-mkdir -p "$DEST/nri/films"
+rm -rf "$DEST/nri/films" "$DEST/privacy/films" "$DEST/privacy/reels" "$DEST/privacy/covers"
+mkdir -p "$DEST/nri/films" "$DEST/privacy/films" "$DEST/privacy/reels" "$DEST/privacy/covers"
 
 audience() { # a file's name, from asklocker-feature- or asklocker- on -> "<audience> <name>"
   if [[ $1 == biz-* ]]; then echo "business ${1#biz-}"; else echo "family $1"; fi
@@ -39,10 +39,22 @@ for f in out/asklocker-feature-*-9x16*.mp4; do
 done
 for f in out/posters/asklocker-*.png; do
   [ -e "$f" ] || continue
+  [[ $f == */asklocker-privacy-* ]] && continue
   read -r a name <<< "$(audience "${f#out/posters/asklocker-}")"
   cp "$f" "$DEST/$a/posters/asklocker-$a-$name"
 done
+# The privacy film (tools/privacy.sh): the film with music, the reels both
+# ways, and every cover.
+for f in out/asklocker-privacy-16x9.mp4 out/asklocker-privacy-9x16.mp4; do
+  [ -e "$f" ] && cp "$f" "$DEST/privacy/films/"
+done
+for f in out/asklocker-privacy-*-9x16.mp4 out/asklocker-privacy-*-9x16-sfx-only.mp4; do
+  [ -e "$f" ] && cp "$f" "$DEST/privacy/reels/"
+done
+for f in out/posters/asklocker-privacy-*-cover.png; do
+  [ -e "$f" ] && cp "$f" "$DEST/privacy/covers/"
+done
 
-for d in family/films family/shorts family/posters nri/films business/films business/shorts business/posters; do
+for d in family/films family/shorts family/posters nri/films business/films business/shorts business/posters privacy/films privacy/reels privacy/covers; do
   echo "$d: $(find "$DEST/$d" -type f | wc -l) files, $(du -sh "$DEST/$d" | cut -f1)"
 done

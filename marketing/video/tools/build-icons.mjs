@@ -20,6 +20,9 @@ const NEEDED = [
   // The feature posters and shorts: a document's page, its share sheet, the
   // lock, spreadsheets, who can open what
   'share-2', 'download', 'aperture', 'grid', 'user-check',
+  // The privacy film: where documents go, who can open them, every service
+  'database', 'cloud', 'eye', 'list', 'slash', 'user-x', 'log-in', 'book-open', 'truck', 'map', 'activity',
+  'sliders', 'server',
 ];
 const missing = NEEDED.filter(n => !icons[n]);
 if (missing.length) throw new Error(`Unknown Feather icons: ${missing.join(', ')}`);

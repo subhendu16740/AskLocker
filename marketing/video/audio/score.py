@@ -32,6 +32,10 @@ film's music in small: a family feature the day's F major from the first
 frame, its percussion from the moment the how comes in, resolving on F for
 the end card (short_music); a business feature the formal piece, calm until
 the how and the groove after it.
+
+The privacy film (src/privacy.js) opens on a quiet D minor pad, then takes
+the day's F major from its title, percussion from its first phone scene
+(privacy_music); its reels score as family feature shorts.
 """
 import json
 import pathlib
@@ -507,6 +511,18 @@ def short_music(bus, sec, total):
     end_card_music(bus, end, total)
 
 
+def privacy_music(bus, sec, total):
+    """The privacy film (src/privacy.js): a quiet D minor pad under the cold
+    open, the day's F major from the title, its percussion once the phone
+    scenes start (the diagrams before are heard calm), and the end card's
+    resolve. Its reels are feature shorts to the score."""
+    title, end = sec['title'], sec['end']
+    place(bus, 0.0, pad([midi(n) for n in [38, 50, 53, 57, 62]], title + 0.8, attack=1.6, release=1.0, cutoff=900), 0.3)
+    place(bus, 0.0, sine_bass(midi(26), title + 0.4, attack=1.4, release=0.8), 0.1)
+    day_music(bus, sec['day'], end + 0.4, title, build_at=sec.get('vault', sec['day'] + 20.0))
+    end_card_music(bus, end, total)
+
+
 # The business film's chords: bass, pad voicing, arpeggio (eighth notes).
 CHORDS = {
     'D': (38, [50, 54, 57, 62], [57, 62, 66, 69, 74, 69, 66, 62]),
@@ -611,6 +627,8 @@ def main():
             formal_music(music, {'solution': sec['how'], 'end': sec['end']}, total)
         else:
             short_music(music, sec, total)
+    elif not sfx_only and 'privacy' in sec:
+        privacy_music(music, sec, total)
     elif not sfx_only and story:
         night_music(music, 0.0, reveal, hit, ring_stop)
         pulse(music, scramble_a, scramble_b)
