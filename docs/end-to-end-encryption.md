@@ -1,6 +1,6 @@
 # End-to-end encryption — the plan
 
-**Status: planned. Phase 0 is in the code; nothing is encrypted yet.**
+**Status: planned. Phase 0 is done (it works on a real phone); nothing is encrypted yet.**
 Until Phase 5 is done, every screen, the privacy policy and the agreement
 keep saying documents are **not** end-to-end encrypted, and the marketing
 videos stay unpublished (CLAUDE.md, "Never promise more privacy than
@@ -200,7 +200,7 @@ About 12 to 14 weeks in all.
 
 | Phase | What | Weeks |
 |---|---|---|
-| **0** | The crypto core and its self-tests; the lab page that measures a real phone; this plan | 1 (done) |
+| **0** | The crypto core and its self-tests; the lab page that measures a real phone; this plan. Done 3 November 2026: it works on a phone (above) | 1 (done) |
 | **1** | Keys and devices: making an identity, the Recovery Key screen, keeping keys on the device, a new device by approval, by Recovery Key or by fingerprint; tables for public keys, backups and locked vault keys. Nothing encrypted yet | 3 |
 | **2** | New documents sealed, behind a per-vault switch on DEV: reading, splitting, vectors and details on the phone; the sealed index and search on the phone; Ask from the passages it sends; the viewer and share links | 3–4 |
 | **3** | Everything else sealed: vault names, tree, cards, chats, notes; reminders in the app; the business overview on the phone; joining and leaving with new vault keys | 2 |
@@ -226,7 +226,8 @@ deletes it from every build that does not name the DEV project, and gives
 DEV's a `vault-crypto.js` made from the real `.ts` by Node). It reads
 nothing of AskLocker's, sends nothing, and downloads only the search
 library (transformers.js 4.3.1, from jsDelivr) and model (from Hugging
-Face). Open it on DEV's address, run each section, tap Copy results.
+Face). Open `https://dev.asklocker.pages.dev/lab/e2e.html`, run each
+section, tap Copy results.
 
 1. **Locking and unlocking** with the real code: identities, a vault key
    locked for a member, a 5 MB file, 100 passages, the Recovery Key backup.
@@ -239,31 +240,60 @@ Face). Open it on DEV's address, run each section, tap Copy results.
 4. **A key from the fingerprint** (WebAuthn PRF): with the AskLocker
    passkey on DEV's address, or a test passkey to delete afterwards.
 
-**First numbers** (headless Chromium on a 4-core machine, 3 November 2026;
-a phone's replace them):
+**Results, 3 November 2026**, on the owner's Android phone (8 cores,
+8 GB, Qualcomm Adreno 7xx graphics, Chrome 155) at
+`dev.asklocker.pages.dev`, with a headless test computer (4 cores) beside
+it:
 
-| | |
-|---|---|
-| Locking a vault key for a member / opening it | 0.3 ms / 0.3 ms |
-| A 5 MB file locked / opened | 22 ms / 15 ms |
-| 100 passages locked / opened | 17 ms / 8 ms |
-| Recovery Key backup / restore | 2 ms / 1 ms |
-| Key kept in IndexedDB, unreadable, still works | yes |
-| Search model ready (from cache) | 2.2 s |
-| A full passage, one thread | about 0.65 s |
-| A question | about 20 ms |
-| Right document first | 4 of 4 |
-| Several threads | hung in the headless test: measure on phones |
-| WebGPU | no graphics chip in the headless test: measure on phones |
-| Passkey PRF | yes (Chrome's virtual authenticator) |
+| | Phone | Test computer |
+|---|---|---|
+| A member's keys made | 1.8 ms | 0.5 ms |
+| Locking a vault key for a member / opening it | 0.7 ms / 0.3 ms | 0.3 ms / 0.3 ms |
+| A 5 MB file locked / opened | 16 ms / 12 ms (320 MB/s) | 22 ms / 15 ms |
+| 100 passages locked / opened | 13 ms / 9 ms | 17 ms / 8 ms |
+| Recovery Key backup / restore | 0.9 ms / 0.9 ms | 2 ms / 1 ms |
+| Key kept in IndexedDB, unreadable, still works | yes | yes |
+| Storage kept for good without asking | no | no |
+| Search model, first time / from cache | 7.5 s (34.7 MB) / 1.2 s | 2.2 s from cache |
+| A full passage (320 tokens), one thread | 0.92 s | about 0.65 s |
+| A full passage, four threads | 0.47 s | hung |
+| A question | 25 ms (one thread), 18 ms (four) | about 20 ms |
+| Right document first | 4 of 4 | 4 of 4 |
+| Graphics chip (WebGPU, q4f16) | loaded in 12 s, 3.7 s for one short passage, then the chip was lost ("Device is lost") | no chip offered |
+| A key from a passkey (PRF) | yes, from a passkey made with PRF asked for | yes (virtual authenticator) |
+| The AskLocker passkey on this address | no passkey for it on the phone | not tried |
 
-**What they mean so far:** the encryption costs nothing a person would
-notice. Questions are fast on the device. Reading a long document is the
-slow part, about a minute for a 100-passage tax return on one thread, so
-it runs in the background with progress, and most papers (an ID card, a
-bill) take a few seconds. Moving an existing vault of 30 documents takes
-minutes, once. The phone's numbers decide whether Phase 2 needs threads or
-the graphics chip.
+**Concluded (the owner agreed, 3 November 2026): the plan goes ahead.**
+
+- **The encryption costs nothing a person would notice.** Every lock and
+  unlock is a few milliseconds, a 5 MB file included.
+- **Keys can stay on the phone.** The browser keeps them in a form it will
+  not hand out, and they still work after the page is opened again.
+- **Search on the phone works.** A question takes about 20 ms and found
+  the right document every time. Reading is the slow part: about 1 s a
+  passage on one thread, so a bill or an ID card (one to five passages)
+  takes seconds and a 100-passage tax return about a minute and a half,
+  read in the background with progress. Moving a vault of 30 documents
+  takes a few minutes, once. The model is 35 MB, fetched once, so the app
+  fetches it on Wi-Fi where it can, and says so on mobile data.
+- **Four threads halve the reading time**, but only on a cross-origin
+  isolated page, and isolating the app's pages may break Google's sign-in
+  window and Razorpay's checkout (why only `/lab/*` is isolated now).
+  Phase 2 tests a way to isolate without that (Chrome's
+  `Document-Isolation-Policy`, or isolating only the screens that read).
+  Without it, one thread is the speed, and that is acceptable.
+- **The graphics chip is not used.** It loaded, read one passage slowly,
+  then failed. Not worth a code path that breaks on a common phone.
+- **A fingerprint can give a key** (WebAuthn PRF), so a fingerprint can
+  unlock the identity on a new device and most people never type their
+  Recovery Key. Phase 1 checks whether the passkey Supabase makes for
+  fingerprint sign-in can be asked for PRF, or each person needs a second
+  passkey for unlocking.
+- **The browser does not keep storage for good by itself.** Phase 1 asks
+  for it (`navigator.storage.persist()`), and the Recovery Key or another
+  device covers a browser that clears it anyway.
+- **Not yet measured: an iPhone.** Safari can differ on threads, storage
+  and PRF. One run of the lab on any iPhone settles it, before Phase 2.
 
 ---
 

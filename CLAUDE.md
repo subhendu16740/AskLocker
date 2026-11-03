@@ -15,8 +15,9 @@ applied to both projects (an applied migration is never edited), and the
 it would sign everyone out and forget their settings). The GitHub
 repository was renamed `subhendu16740/AskLocker` on 27 October 2026, and
 GitHub redirects the old address; a checkout made before keeps its folder
-name, and the Vercel project its name, so DEV's address is still
-`family-vault-git-dev-…` until DEV moves to Cloudflare. Everything a person
+name, and the Vercel project its name (`family-vault`). DEV is served by
+Cloudflare Pages at `dev.asklocker.pages.dev` (confirmed 3 November 2026);
+the Vercel project still builds every branch until it is deleted. Everything a person
 sees says AskLocker: the app name, slug and scheme in `app.config.ts`, the
 Android package `com.asklocker.app`, the web manifest and service worker,
 the login and share pages, Help, About, the notifications and emails the
@@ -362,7 +363,7 @@ Settings › About carries the longer description.
 
 | | Supabase project ref |
 |---|---|
-| DEV — Vercel Preview, and Production while staging | `tkqsfoppwlyupentuixy` |
+| DEV — Cloudflare Pages `dev` (dev.asklocker.pages.dev) and Vercel Preview | `tkqsfoppwlyupentuixy` |
 | PROD | `yrcmdixqgvmhqxejvlor` |
 
 ### The commands
@@ -510,9 +511,11 @@ are taken in Razorpay's own window). The site is only `dist/`, so
 nothing else moves. Steps, in an order with no downtime, are in
 [`docs/move-to-cloudflare-pages.md`](docs/move-to-cloudflare-pages.md):
 PROD first (asklocker.com's DNS on Cloudflare, nothing else changes for
-PROD), DEV later (its address becomes `dev.asklocker.pages.dev`, so its
-passkey RP ID, Google origins, Supabase redirects and Gmail return
-origins change). The build is ready for both hosts: `app.config.ts`
+PROD; done 24 October 2026), then DEV (its address is
+`dev.asklocker.pages.dev`, so its passkey RP ID, Google origins, Supabase
+redirects and Gmail return origins name it; DEV's build there was
+confirmed on 3 November 2026). Vercel still builds every branch: delete
+the Vercel project (Part B7) once nothing points at its address. The build is ready for both hosts: `app.config.ts`
 takes the commit from `CF_PAGES_COMMIT_SHA` or `VERCEL_GIT_COMMIT_SHA`,
 and `.node-version` pins Node 22. 500 builds a month for the whole
 account; AskLocker makes about 70 with previews limited to `dev`. Once
@@ -706,8 +709,11 @@ copies, so DEV needs its own secrets and its own `documents` storage bucket.
   › Passkeys: Enable, Relying Party display name `AskLocker`, RP ID and
   origins. PROD: RP ID `asklocker.com`, origins `https://asklocker.com,
   https://www.asklocker.com`. DEV: RP ID and origin the dev branch's own
-  address, `family-vault-git-dev-subhendu16740.vercel.app` (a preview's fresh
-  address cannot be listed, so previews have Google and the test form only).
+  address, `dev.asklocker.pages.dev` since DEV moved to Cloudflare
+  (`family-vault-git-dev-subhendu16740.vercel.app` before; if DEV's
+  Passkeys page still names that, change it as in Part B of
+  `docs/move-to-cloudflare-pages.md`). A preview's fresh address cannot
+  be listed, so previews have Google and the test form only.
   Changing an RP ID later makes every passkey on it useless. Where passkeys
   are off, turning it on says "not switched on for AskLocker yet"
   (`passkey_disabled`); on an address that is not an origin, "not set up for
@@ -2897,8 +2903,15 @@ where it does not.
   chat with QA Vault A's answers, and B's chat with them goes when B leaves.
   Before 069 those checks are skipped.
 
-### End-to-end encryption — planned, Phase 0 only (3 November 2026)
+### End-to-end encryption — planned, Phase 0 done (3 November 2026)
 
+- **It works on a real phone.** The owner's Android phone (8 cores) ran
+  the lab: every lock and unlock in milliseconds, a key kept unreadable in
+  IndexedDB, search on the phone right 4 of 4 with a question in about
+  20 ms, reading about 1 s a passage on one thread (0.5 s on four, which
+  the app's pages cannot have yet), the graphics chip failing, and a
+  fingerprint giving a key (PRF). The numbers and what each decides are in
+  the plan. An iPhone is still to be measured.
 - **Nothing is encrypted end to end yet.** The plan, the owner's
   decisions and the phases are in
   [`docs/end-to-end-encryption.md`](docs/end-to-end-encryption.md):

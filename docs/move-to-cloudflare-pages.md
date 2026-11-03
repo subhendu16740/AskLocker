@@ -145,10 +145,12 @@ project at B7 instead.
 
 ## Part B: DEV on Cloudflare (can wait)
 
-Until this is done, DEV stays on Vercel at
-`family-vault-git-dev-subhendu16740.vercel.app`. Vercel's free plan is
-for non-commercial use, and a test copy of a product made to earn is
-still part of it, so move DEV too before long.
+**Done:** DEV builds on Cloudflare at `dev.asklocker.pages.dev`
+(confirmed 3 November 2026). Its old address on Vercel was
+`family-vault-git-dev-subhendu16740.vercel.app`; the Vercel project still
+builds every branch until B7 deletes it. Vercel's free plan is for
+non-commercial use, and a test copy of a product made to earn is still
+part of it.
 
 ### B1. Build `dev`
 
