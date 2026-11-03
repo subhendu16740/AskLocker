@@ -8,9 +8,10 @@
 //             investments, the nominee), the money left unclaimed in India,
 //             and parents who read Hindi and English but find writing hard:
 //             so they tap, speak in their own language, and hear the answer.
-//   business  a business owner's GST certificate, monthly returns and
-//             advance tax, the back-and-forth with the CA, and one vault the
-//             two of them share, where one question finds the filing.
+//   business  a business owner whom everyone asks for a paper (accounts,
+//             the godown, the CA), the GST certificate, monthly returns,
+//             advance tax, contracts and leases, and one vault the whole
+//             team shares, where anyone asks and one question finds it.
 //
 // They make no claim about encryption, so they can be posted today; the end
 // cards are today's. The numbers are sourced on screen: ₹1.84 lakh crore,
@@ -81,16 +82,18 @@ export function unclaimed(id) {
     </div>`;
 }
 
-/** The CA asking for papers, late, in a chat. */
+/** The team's group chat: everyone, all day, asking the owner for a paper
+ * (the business film's team: Ravi in accounts, Sunil at the godown, and
+ * Pooja, the CA). */
 export function chat(id) {
-  const msg = (i, who, text, time) => `<div class="wy-msg ${who}" id="${id}-${i}"><span>${text}</span><i>${time}</i></div>`;
+  const msg = (i, who, text, time, from = '', colour = '') => `<div class="wy-msg ${who}" id="${id}-${i}">${from ? `<b class="wy-from" style="color:${colour}">${from}</b>` : ''}<span>${text}</span><i>${time}</i></div>`;
   return `<div class="wy-chat" id="${id}">
-      <div class="wy-chat-h"><span class="wy-chat-av">P</span><div><b>${BIZ.caShown.replace(', our CA', '')}, CA</b><span>online</span></div></div>
+      <div class="wy-chat-h"><span class="wy-chat-av">${icon('users', 26, '#fff', 2.2)}</span><div><b>${BIZ.name} team</b><span>Ravi, Pooja, Sunil, You</span></div></div>
       <div class="wy-chat-b">
-        ${msg(0, 'them', "Please send September's purchase bills. GST is due on the 20th.", '10:41 PM')}
-        ${msg(1, 'me', 'I emailed them last week, I think?', '10:44 PM')}
-        ${msg(2, 'them', "Can't find them. And the GST certificate again, please.", '10:46 PM')}
-        ${msg(3, 'me', 'Which email was it…', '10:52 PM')}
+        ${msg(0, 'them', `Where's the ${BIZ.supplier} bill? Payment is due Friday.`, '10:12 AM', 'Ravi · Accounts', '#0F5C57')}
+        ${msg(1, 'them', "Need September's purchase bills for the GST return.", '1:40 PM', 'Pooja · CA', '#B7791F')}
+        ${msg(2, 'them', 'Is the godown lease renewed? The owner is asking.', '4:05 PM', 'Sunil · Godown', '#6D28D9')}
+        ${msg(3, 'me', 'Let me look… which email was it in?', '9:52 PM')}
       </div>
     </div>`;
 }
@@ -122,7 +125,7 @@ export function both(id) {
       <div class="wy-both-h" id="${id}-h">${words('Built for the people who count on you.')}</div>
       <div class="wy-fors">
         ${card(0, 'users', 'For your family', 'Your parents ask in their own language, and hear the answer.')}
-        ${card(1, 'briefcase', 'For your business', 'You and your CA share one vault. One question finds any paper.', true)}
+        ${card(1, 'briefcase', 'For your business', 'Partners, staff and your CA in one vault. One question finds any paper.', true)}
       </div>
     </div>`;
 }
@@ -170,4 +173,7 @@ export const WY_CALLOUTS = {
   // What else a parent might ask: the nominee first.
   family: () => `<div class="callout" id="co-asks" style="width:400px">${label('message-circle', 'Or ask')}
     ${ask('“Who is the nominee?”')}${ask('“When does the FD mature?”')}${ask('“Where is the house paper?”')}</div>`,
+  // What the rest of the team asks: accounts, the godown, anyone.
+  business: () => `<div class="callout" id="co-asks" style="width:400px">${label('users', 'Your team asks too')}
+    ${ask(`“When is the ${BIZ.supplier} bill due?”`)}${ask('“Is the godown lease renewed?”')}${ask('“Where is the GST certificate?”')}</div>`,
 };

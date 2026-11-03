@@ -666,7 +666,7 @@ questions in the brief.
 Three films on why AskLocker was made, in the founder's own words (3
 November 2026), for the people who should see themselves in it: young
 people who look after their family's papers, the families who would need to
-find them, and business owners who chase papers with their CA. Each opens
+find them, and business owners whom everyone asks for papers. Each opens
 at night, on the feeling, turns to day on AskLocker's name (the privacy
 film's music, or for a business its formal piece), and shows the app doing
 what the story asked for. `?film=why&reel=` picks one, `tools/why.sh` renders
@@ -677,7 +677,7 @@ first in `marketing/launch/` (01 to 06).
 |---|---|---|
 | `founder` | Every family has one person who handles everything; his parents always said to keep a record of everything he does online; he kept copies everywhere; if he's not there, how will they find it? | The papers falling into email, folders, chats and the cupboard; Ask finding Papa's policy number; for your family, for your business |
 | `family` | If you weren't there, would your family know your insurance, investments, the nominee? ₹1.84 lakh crore lies unclaimed; his parents read Hindi and English but find writing hard | The number counted up, with where it is and the Government's own line; Maa asking in Hindi and hearing the answer, with English subtitles; "Who is the nominee?" among what else to ask |
-| `business` | A business owner's CA asking for papers at 10 PM; GST certificate, monthly returns, advance tax, bills, in some email or chat | The chat; inviting the CA into the vault; either of them asking for September's GSTR-3B |
+| `business` | Every day, someone needs a paper: accounts, the CA, the godown, and the owner still looking at night; GST certificate, monthly returns, advance tax, contracts and leases, in some email or chat | The team's group chat; the team in the vault and the CA invited; anyone asking for September's GSTR-3B, and what the rest of the team asks |
 
 They make no claim about encryption and end on today's lines, so they can
 be posted now. The numbers are on screen with their sources and were

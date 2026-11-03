@@ -46,7 +46,7 @@ Beside them:
 
 In the founder's own words, emotional first, then the reasons: young people
 who look after their family's papers, families who would need to find them,
-and business owners who chase papers with their CA. Each opens at night, on
+and business owners whom everyone asks for papers. Each opens at night, on
 the feeling, turns to day on AskLocker's name, and shows the app doing what
 the story asked for.
 
@@ -54,7 +54,7 @@ the story asked for.
 |---|---|---|
 | 01–02 | **Why we built AskLocker**: The founder's story. Every family has one person who handles everything; his parents always told him to keep a record of everything he does online; today everything is online, so he kept copies everywhere. Then: if I'm not there, how will they find it? So, one place where your family just asks. For your family, and for your business. [16:9](./01-why-we-built-asklocker-16x9.mp4) · [9:16](./02-why-we-built-asklocker-9x16.mp4) · covers [16:9](./covers/01-why-we-built-asklocker-16x9.png), [9:16](./covers/02-why-we-built-asklocker-9x16.png) | 1:00 |
 | 03–04 | **Why a family vault**: If you weren't there tomorrow, would your family know your insurance, your FDs and investments, the nominee, who to call? ₹1.84 lakh crore lies unclaimed in India, and "families are simply unaware that such assets exist". His parents read Hindi and English but find writing hard, so they tap, speak and hear the answer. [16:9](./03-why-a-family-vault-16x9.mp4) · [9:16](./04-why-a-family-vault-9x16.mp4) · covers [16:9](./covers/03-why-a-family-vault-16x9.png), [9:16](./covers/04-why-a-family-vault-9x16.png) | 1:04 |
-| 05–06 | **Why a business vault**: A business owner's CA asking for papers at 10 PM: the GST certificate, monthly returns, advance tax, bills, all in some email or chat. One vault for you and your CA: they add the filings, you add the bills, and either of you asks for September's GSTR-3B and gets it. [16:9](./05-why-a-business-vault-16x9.mp4) · [9:16](./06-why-a-business-vault-9x16.mp4) · covers [16:9](./covers/05-why-a-business-vault-16x9.png), [9:16](./covers/06-why-a-business-vault-9x16.png) | 0:56 |
+| 05–06 | **Why a business vault**: Every day, someone needs a paper: accounts wants a supplier's bill, the CA wants September's purchase bills, the godown asks if the lease is renewed, and the owner is still looking at 9:52 PM. GST certificate, monthly returns, advance tax, contracts and leases, all in some email or chat. One vault for the whole team, partners, staff, the accountant and the CA: anyone asks for September's GSTR-3B and gets it, and the rest of the team asks their own. [16:9](./05-why-a-business-vault-16x9.mp4) · [9:16](./06-why-a-business-vault-9x16.mp4) · covers [16:9](./covers/05-why-a-business-vault-16x9.png), [9:16](./covers/06-why-a-business-vault-9x16.png) | 0:57 |
 
 The numbers on screen, with their sources shown: ₹1.84 lakh crore lying
 unclaimed with banks and regulators (the Finance Minister, 4 October 2025,

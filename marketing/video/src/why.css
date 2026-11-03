@@ -80,6 +80,8 @@
 .wy-msg.them { align-self: flex-start; background: #fff; border-top-left-radius: 6px; }
 .wy-msg.me { align-self: flex-end; background: #D6EEEA; border-top-right-radius: 6px; }
 .wy-msg i { display: block; margin-top: 6px; text-align: right; font: 400 18px/1 var(--ui); font-style: normal; color: #6B7280; }
+.wy-from { display: block; margin-bottom: 4px; font: 600 22px/1.2 var(--ui); }
+.portrait .wy-from { font-size: 26px; }
 .portrait .wy-msg i { font-size: 21px; }
 
 /* The papers a business runs on: the business film's tiles, three across. */

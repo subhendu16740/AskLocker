@@ -64,17 +64,18 @@ if (KIND === 'founder') {
   const v = voiceSubtitles('hi', FAM.STORY.policyNo);
   subs = `<div class="subline on-light" id="sub-q">${v.q}</div><div class="subline on-light" id="sub-a">${v.a1}</div>`;
 } else {
-  texts = WY.lines('t-open', [['I run a business too.'], ['Every month, my CA needs papers.', true]])
+  texts = WY.lines('t-open', [['I run a business too.'], ['Every day, someone needs a paper.', true]])
     + WY.tiles('t-papers', 'And the papers never stop.', [['award', 'GST certificate'], ['calendar', 'GST returns, every month'],
-      ['percent', 'Advance tax, every quarter'], ['file-text', 'Invoices and bills'], ['credit-card', 'Bank statements'], ['clipboard', 'Licences']],
+      ['percent', 'Advance tax, every quarter'], ['file-text', 'Invoices and bills'], ['edit-3', 'Contracts and leases'], ['clipboard', 'Licences']],
     'Each one in some email, some chat, some folder.')
-    + WY.titleCard('So we built one vault for you and your CA.')
-    + WY.scene('t-team', 'Your CA', 'user-plus', 'Bring your CA *into the vault.*', 'They join when they accept. They add the filings, you add the bills.')
-    + WY.scene('t-ask', 'Just ask', 'message-circle', 'Then either of you *just asks.*', 'No folders. No email threads. The answer, with the document.')
+    + WY.titleCard('So we built one vault for your whole team.')
+    + WY.scene('t-team', 'Your team', 'users', 'Bring your team *into the vault.*', 'Partners, staff, your accountant and your CA. They join when they accept.')
+    + WY.scene('t-ask', 'Just ask', 'message-circle', 'Then anyone *just asks.*', 'No folders. No email threads. The answer, with the document.')
     + WY.lines('t-close', [['Less chasing.'], ['More time for the business.', true]], { day: true })
     + WY.endCard();
   cards = WY.chat('c-chat');
   screens = BUS.teamScreen() + WY.gstAskScreen();
+  callouts = WY.WY_CALLOUTS.business();
 }
 
 await build({
@@ -141,7 +142,8 @@ if (later.length) gsap.set(later, { autoAlpha: 0 });
 const PHONE = PORTRAIT ? [540, 1176, 0.94] : [1270, 548, 0.94];
 place('#phone', PHONE, { autoAlpha: 0 });
 // In 9:16 the callout fills the room between the heading and the phone.
-setLayout({ dayPhone: PHONE, coAsks: PORTRAIT ? 't-voice' : [1690, 640], coScale: 1.5 }, FAMILY ? { 'co-asks': 'coAsks' } : {});
+setLayout({ dayPhone: PHONE, coAsks: PORTRAIT ? (BUSINESS ? 't-ask' : 't-voice') : [1690, 640], coScale: 1.5 },
+  FAMILY || BUSINESS ? { 'co-asks': 'coAsks' } : {});
 
 // The papers, scattered around the words: above and below them.
 const CHIPS = PORTRAIT
@@ -364,10 +366,10 @@ if (FAMILY) {
 }
 
 if (BUSINESS) {
-  // I run a business too, and every month the CA needs papers.
+  // I run a business too, and every day someone needs a paper.
   say('t-open', 0.5, 1.6);
   hide('#t-open', 5.4);
-  // The chat, late in the evening.
+  // The team's chat, all day: accounts, the CA, the godown, and the owner at night.
   const ch = 6.0;
   tl.fromTo('#c-chat', { autoAlpha: 0, y: 40 }, { autoAlpha: 1, y: 0, duration: 0.7, ...IR }, ch);
   cue(ch, 'whoosh-soft');
@@ -385,9 +387,9 @@ if (BUSINESS) {
   cue(p + 0.8, 'pop-soft');
   fadeIn('#t-papers-foot', p + 2.4, { from: 12, duration: 0.6 });
   hide('#t-papers', p + 6.2);
-  // So we built one vault for you and your CA.
+  // So we built one vault for your whole team.
   const day = title(p + 6.8);
-  // Manage team: invite the CA by the email they sign in with.
+  // Manage team: the team already in it, and the CA invited by the email they sign in with.
   const t = day;
   sceneIn('t-team', t);
   phoneShow(t + 0.2, 'scr-team');
@@ -413,15 +415,17 @@ if (BUSINESS) {
   cue(t + 5.45, 'success');
   pulse('#tm-pending .tm-card', t + 6.1, ACCENT);
   hide('#t-team', t + 7.4);
-  // Then either of you just asks: the September return, and its document.
+  // Then anyone just asks: the September return, and its document; and what
+  // the rest of the team asks.
   const a = t + 7.9;
   sceneIn('t-ask', a);
   nav('scr-team', 'scr-ask', a, 'push');
   const ans = askTurn('ask', a + 1.0, C.ask, { type: 1.6, think: 1.5 });
-  hide('#t-ask', ans + 4.0);
-  phoneOut(ans + 4.0);
+  showCallout('#co-asks', ans + 0.8);
+  hide(['#t-ask', '#co-asks'], ans + 5.4);
+  phoneOut(ans + 5.4);
   // Less chasing. More time for the business.
-  const cl = ans + 4.7;
+  const cl = ans + 6.1;
   cue(cl, 'section', { name: 'trust' });
   say('t-close', cl, 1.3);
   hide('#t-close', cl + 4.8);
