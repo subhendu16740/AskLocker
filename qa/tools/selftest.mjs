@@ -52,6 +52,7 @@ import { EMBED_ALLOWANCE } from '../lib/results.mjs';
 import { vehicleInsurance } from '../lib/tiny-pdf.mjs';
 import { loadQuestions, selectQuestions, groupCount, rotationGroup, estimateFor } from '../lib/questions.mjs';
 import { documents, permanentDocuments } from '../fixtures/documents.mjs';
+import * as vc from '../../supabase/functions/_shared/vault-crypto.ts';
 
 let passed = 0;
 const failures = [];
@@ -1577,9 +1578,194 @@ await test('the privacy policy names who gets document text and promises nothing
   assert.ok(/Last updated \d{1,2} [A-Z][a-z]+ \d{4}/.test(page), 'carries the date it last changed');
 });
 
+// ─── End-to-end encryption, Phase 0 (docs/end-to-end-encryption.md) ──────
+// vault-crypto.ts runs only on members' devices. These pin what the design
+// rests on: a sealed item opens only with its key, in its own place, and
+// unchanged; a vault key opens only for the member it was locked for; a
+// Recovery Key survives a sloppy retype and catches a wrong character.
+
+const VAULT = '8c1e6f1a-2b3c-4d5e-8f90-a1b2c3d4e5f6';
+const OTHER_VAULT = '11111111-2222-4333-8444-555555555555';
+const DOC = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee';
+const OTHER_DOC = 'ffffffff-0000-4111-8222-333333333333';
+const ASHA = '0b7e9a3c-5d6f-4a1b-9c2d-3e4f5a6b7c8d';
+const RAVI = '9f8e7d6c-5b4a-4392-8170-6f5e4d3c2b1a';
+
+/** Change one byte in the middle of a sealed text item. */
+function flipSealed(sealed) {
+  const bytes = vc.fromBase64Url(sealed.slice(vc.SEAL_PREFIX.length));
+  bytes[Math.floor(bytes.length / 2)] ^= 0x01;
+  return vc.SEAL_PREFIX + vc.toBase64Url(bytes);
+}
+
+await test('e2e: a sealed item opens only with its key, in its own place, unchanged', async () => {
+  const key = await vc.newSecretKey();
+  const where = vc.context.document(VAULT, DOC, 'passages');
+  const text = 'SPECIMEN passport P1234567, expires 17/10/2031 — आशा वर्मा';
+  const sealed = await vc.sealText(key, text, where);
+  assert.ok(sealed.startsWith('e1.') && !sealed.includes('P1234567'), 'sealed, nothing readable');
+  assert.equal(await vc.openText(key, sealed, where), text, 'opens, Hindi and all');
+  assert.notEqual(await vc.sealText(key, text, where), sealed, 'a fresh nonce every time');
+  await assert.rejects(vc.openText(await vc.newSecretKey(), sealed, where), { code: 'cannot_open' }, 'another key');
+  await assert.rejects(vc.openText(key, sealed, vc.context.document(VAULT, OTHER_DOC, 'passages')), { code: 'cannot_open' },
+    'moved to another document');
+  await assert.rejects(vc.openText(key, sealed, vc.context.document(OTHER_VAULT, DOC, 'passages')), { code: 'cannot_open' },
+    'moved to another vault');
+  await assert.rejects(vc.openText(key, sealed, vc.context.document(VAULT, DOC, 'name')), { code: 'cannot_open' },
+    'passages passed off as a name');
+  await assert.rejects(vc.openText(key, flipSealed(sealed), where), { code: 'cannot_open' }, 'one byte changed');
+  await assert.rejects(vc.openText(key, sealed.slice(0, 23), where), { code: 'too_short' }, 'cut short');
+  await assert.rejects(vc.openText(key, sealed.replace('e1.', 'e9.'), where), { code: 'unknown_format' });
+  await assert.rejects(vc.openText(key, `${sealed}+`, where), { code: 'bad_encoding' });
+  await assert.rejects(vc.openText(key, sealed.slice(0, 24), where), { code: 'bad_encoding' }, 'a length base64 cannot have');
+  const card = { bloodGroup: 'B+', allergies: ['penicillin'] };
+  const cardWhere = vc.context.record(VAULT, 'emergency-card', ASHA);
+  assert.deepEqual(await vc.openJson(key, await vc.sealJson(key, card, cardWhere), cardWhere), card);
+  assert.throws(() => vc.context.document(VAULT, '../etc', 'file'), { code: 'bad_id' }, 'ids are ids, nothing else');
+  assert.throws(() => vc.context.fileKey(VAULT, DOC, 0), { code: 'bad_version' });
+});
+
+await test('e2e: a file is sealed as bytes and its key travels locked by the vault key', async () => {
+  const vaultKey = await vc.newSecretKey();
+  const fileKey = await vc.newSecretKey();
+  const pdf = new TextEncoder().encode('%PDF-1.4 SPECIMEN '.repeat(4000));
+  const where = vc.context.document(VAULT, DOC, 'file');
+  const sealed = await vc.sealFile(fileKey, pdf, where);
+  assert.deepEqual([...sealed.subarray(0, 3)], [...vc.BINARY_MAGIC], 'starts with the format marker');
+  assert.equal(sealed.length, pdf.length + 3 + 12 + 16, 'marker + nonce + tag, nothing more');
+  assert.deepEqual(await vc.openFile(fileKey, sealed, where), pdf);
+  const swapped = new Uint8Array(sealed);
+  swapped[100] ^= 0xff;
+  await assert.rejects(vc.openFile(fileKey, swapped, where), { code: 'cannot_open' });
+  await assert.rejects(vc.openFile(fileKey, pdf, where), { code: 'unknown_format' }, 'an unsealed file is not taken as sealed');
+
+  const lockedWhere = vc.context.fileKey(VAULT, DOC, 1);
+  const locked = await vc.wrapSecretKey(fileKey, vaultKey, lockedWhere);
+  const back = await vc.unwrapSecretKey(locked, vaultKey, lockedWhere);
+  assert.deepEqual(await vc.openFile(back, sealed, where), pdf, 'the unlocked file key opens the file');
+  assert.equal(back.extractable, false, 'comes back unreadable unless asked');
+  await assert.rejects(vc.unwrapSecretKey(locked, vaultKey, vc.context.fileKey(VAULT, OTHER_DOC, 1)), { code: 'cannot_open' },
+    "another document's key cannot be passed off as this one's");
+  await assert.rejects(vc.unwrapSecretKey(locked, vaultKey, vc.context.fileKey(VAULT, DOC, 2)), { code: 'cannot_open' },
+    'a key locked under vault key 1 is not one locked under 2');
+
+  // A share link carries the file key after "#", which no server sees.
+  const inLink = await vc.exportSecretKey(fileKey);
+  assert.match(inLink, /^[A-Za-z0-9_-]{43}$/);
+  assert.deepEqual(await vc.openFile(await vc.importSecretKey(inLink), sealed, where), pdf);
+  await assert.rejects(vc.importSecretKey('c2hvcnQ'), { code: 'bad_key' });
+});
+
+await test('e2e: a vault key opens only for the member it was locked for', async () => {
+  const asha = await vc.newIdentity();
+  const ravi = await vc.newIdentity();
+  const vaultKey = await vc.newSecretKey();
+  const forAsha = { vaultId: VAULT, userId: ASHA, keyVersion: 1 };
+  const grant = await vc.grantVaultKey(vaultKey, await vc.publicIdentity(asha), forAsha);
+  assert.ok(grant.startsWith('g1.') && grant.split('.').length === 5);
+  const opened = await vc.openVaultKeyGrant(grant, asha, forAsha);
+  const probe = await vc.sealText(vaultKey, 'Das family', vc.context.record(VAULT, 'vault-name', VAULT));
+  assert.equal(await vc.openText(opened, probe, vc.context.record(VAULT, 'vault-name', VAULT)), 'Das family');
+  await assert.rejects(vc.openVaultKeyGrant(grant, ravi, forAsha), { code: 'cannot_open' }, "Ravi's key does not open Asha's grant");
+  await assert.rejects(vc.openVaultKeyGrant(grant, asha, { ...forAsha, userId: RAVI }), { code: 'cannot_open' },
+    "Asha's grant cannot be served as Ravi's");
+  await assert.rejects(vc.openVaultKeyGrant(grant, asha, { ...forAsha, vaultId: OTHER_VAULT }), { code: 'cannot_open' },
+    "one vault's grant cannot be served as another's");
+  await assert.rejects(vc.openVaultKeyGrant(grant, asha, { ...forAsha, keyVersion: 2 }), { code: 'cannot_open' });
+  assert.notEqual(await vc.grantVaultKey(vaultKey, await vc.publicIdentity(asha), forAsha), grant, 'a fresh ephemeral key each time');
+  await assert.rejects(vc.openVaultKeyGrant('g1.abc', asha, forAsha), { code: 'unknown_format' });
+
+  // A device keeps a copy whose private halves cannot be read out.
+  const kept = await vc.deviceCopy(asha);
+  assert.equal(kept.encrypt.privateKey.extractable, false);
+  assert.equal(kept.sign.privateKey.extractable, false);
+  assert.ok(await vc.openVaultKeyGrant(grant, kept, forAsha), 'and it still opens her grants');
+  await assert.rejects(vc.sealIdentity(kept, await vc.newRecoveryKey(), ASHA), 'a device copy cannot be backed up again');
+});
+
+await test('e2e: invitations are signed, and a changed word or another signer fails', async () => {
+  const admin = await vc.newIdentity();
+  const pub = await vc.publicIdentity(admin);
+  const invite = JSON.stringify({ vault: VAULT, invitee: RAVI, role: 'viewer', at: '2026-11-03T09:00:00Z' });
+  const signature = await vc.signText(admin, invite);
+  assert.equal(await vc.verifyText(pub.sign, invite, signature), true);
+  assert.equal(await vc.verifyText(pub.sign, invite.replace('viewer', 'admin'), signature), false, 'a changed role');
+  const stranger = await vc.publicIdentity(await vc.newIdentity());
+  assert.equal(await vc.verifyText(stranger.sign, invite, signature), false, 'another signer');
+  assert.equal(await vc.verifyText('not-a-key', invite, signature), false, 'rubbish is false, never a throw');
+  const fp = await vc.identityFingerprint(pub);
+  assert.match(fp, /^[A-Za-z0-9_-]{20}$/);
+  assert.equal(fp, await vc.identityFingerprint(pub), 'the same key, the same fingerprint');
+  assert.notEqual(fp, await vc.identityFingerprint(stranger));
+});
+
+await test('e2e: a Recovery Key is 7 groups of 4, forgiving to type and strict about a wrong character', async () => {
+  const bytes = new Uint8Array(16).map((_, i) => i * 17);
+  const formatted = await vc.formatRecoveryKey(bytes);
+  assert.match(formatted, /^([0-9A-HJKMNP-TV-Z]{4}-){6}[0-9A-HJKMNP-TV-Z]{4}$/, 'Crockford base32, no I, L, O or U');
+  assert.deepEqual(await vc.parseRecoveryKey(formatted), bytes);
+  const sloppy = ` ${formatted.toLowerCase().replace(/-/g, ' ').replace(/0/g, 'o').replace(/1/g, 'l')} `;
+  assert.deepEqual(await vc.parseRecoveryKey(sloppy), bytes, 'any case, spaces, O for 0 and L for 1');
+  const fresh = await vc.newRecoveryKey();
+  assert.notEqual(fresh, await vc.newRecoveryKey());
+  assert.deepEqual(await vc.formatRecoveryKey(await vc.parseRecoveryKey(fresh)), fresh);
+  // Every single wrong character is caught (the checksum and the last
+  // character's spare bits), for every position and every other character.
+  const plain = formatted.replace(/-/g, '');
+  const CROCKFORD = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
+  let missed = 0;
+  for (let i = 0; i < plain.length; i++) {
+    for (const c of CROCKFORD) {
+      if (c === plain[i]) continue;
+      try {
+        await vc.parseRecoveryKey(plain.slice(0, i) + c + plain.slice(i + 1));
+        missed++;
+      } catch (err) {
+        assert.equal(err.code, 'recovery_key_typo');
+      }
+    }
+  }
+  // 10 checksum bits miss about 1 in 1,000 typos; this key's every one is pinned.
+  assert.ok(missed <= 2, `${missed} of ${28 * 31} single typos passed`);
+  await assert.rejects(vc.parseRecoveryKey(formatted.slice(0, -1)), { code: 'not_a_recovery_key' });
+  await assert.rejects(vc.parseRecoveryKey(formatted.replace(/^./, 'U')), { code: 'not_a_recovery_key' });
+  await assert.rejects(vc.formatRecoveryKey(new Uint8Array(15)), { code: 'bad_key' });
+});
+
+await test('e2e: no Edge Function imports the vault crypto (a server that can unlock is the middle it removes)', () => {
+  const root = new URL('../../supabase/functions/', import.meta.url);
+  const offenders = [];
+  for (const dir of readdirSync(root, { withFileTypes: true })) {
+    if (!dir.isDirectory()) continue;
+    for (const file of readdirSync(new URL(`${dir.name}/`, root))) {
+      if (!/\.(ts|js|mjs)$/.test(file) || file === 'vault-crypto.ts') continue;
+      const text = readFileSync(new URL(`${dir.name}/${file}`, root), 'utf8');
+      if (/vault-crypto/.test(text)) offenders.push(`${dir.name}/${file}`);
+    }
+  }
+  assert.deepEqual(offenders, []);
+});
+
+await test("e2e: an identity comes back from its backup with the Recovery Key, and only for its owner", async () => {
+  const asha = await vc.newIdentity();
+  const recoveryKey = await vc.newRecoveryKey();
+  const backup = await vc.sealIdentity(asha, recoveryKey, ASHA);
+  assert.ok(backup.startsWith('r1.'));
+  const restored = await vc.openIdentity(backup, recoveryKey.toLowerCase(), ASHA);
+  assert.deepEqual(await vc.publicIdentity(restored), await vc.publicIdentity(asha), 'the same keys');
+  assert.equal(restored.encrypt.privateKey.extractable, false);
+  const vaultKey = await vc.newSecretKey();
+  const where = { vaultId: VAULT, userId: ASHA, keyVersion: 1 };
+  const grant = await vc.grantVaultKey(vaultKey, await vc.publicIdentity(asha), where);
+  assert.ok(await vc.openVaultKeyGrant(grant, restored, where), 'a new phone opens her vaults again');
+  await assert.rejects(vc.openIdentity(backup, await vc.newRecoveryKey(), ASHA), { code: 'cannot_open' }, 'another Recovery Key');
+  await assert.rejects(vc.openIdentity(backup, recoveryKey, RAVI), { code: 'cannot_open' }, "Asha's backup served to Ravi");
+  await assert.rejects(vc.openIdentity(backup.replace('r1.', 'r2.'), recoveryKey, ASHA), { code: 'unknown_format' });
+});
+
 if (failures.length) {
   console.error(failures.map((f) => `✗ ${f}`).join('\n'));
   console.error(`\n${failures.length} self-test(s) failed, ${passed} passed.`);
   process.exit(1);
 }
-console.log(`✓ ${passed} self-tests passed — matchers, judge, run-time PDF, metadata, ticket codes, text cleaning, Gmail rules and token sealing, kinship and the family tree, emergency card checks, web push, plan limits, questions each month, limits against abuse, business papers, categories and plan words, Razorpay signatures, numbers in digits, sources the answer used, Claude's requests in Groq's shape, search-vector providers and budget, the agreement's words, the privacy policy, questions and budget.`);
+console.log(`✓ ${passed} self-tests passed — matchers, judge, run-time PDF, metadata, ticket codes, text cleaning, Gmail rules and token sealing, kinship and the family tree, emergency card checks, web push, plan limits, questions each month, limits against abuse, business papers, categories and plan words, Razorpay signatures, numbers in digits, sources the answer used, Claude's requests in Groq's shape, search-vector providers and budget, the agreement's words, the privacy policy, end-to-end encryption's core, questions and budget.`);

@@ -6,3 +6,11 @@
   Content-Security-Policy: frame-ancestors 'none'
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
+
+# The DEV-only test pages (dist/lab/, removed from every other build by
+# scripts/lab-pages.mjs) run the search model on several threads, which a
+# browser allows only on a cross-origin isolated page. Never the app's
+# pages: isolation would break Google's and Razorpay's windows.
+/lab/*
+  Cross-Origin-Opener-Policy: same-origin
+  Cross-Origin-Embedder-Policy: credentialless

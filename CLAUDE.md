@@ -522,7 +522,7 @@ Vercel mentions below.
 | | |
 |---|---|
 | Install | `npm ci` |
-| Build | `npm run build` (`expo export --platform web --clear`, then `scripts/move-node-modules-assets.mjs`) |
+| Build | `npm run build` (`expo export --platform web --clear`, then `scripts/move-node-modules-assets.mjs` and `scripts/lab-pages.mjs`) |
 | Output | `dist` |
 | Node | 22.x |
 
@@ -836,13 +836,15 @@ supabase/
   migrations/                # SQL — incomplete, see Database
   queries/                   # read-only queries to paste into the SQL editor (document-categories.sql)
 
-public/                      # copied to the web build's root: sw.js (shows notifications), manifest, icons, privacy.html (the privacy policy, asklocker.com/privacy)
+public/                      # copied to the web build's root: sw.js (shows notifications), manifest, icons, privacy.html (the privacy policy, asklocker.com/privacy), lab/ (test pages, DEV builds only)
 qa/                          # end-to-end QA against DEV (own package.json)
   run.mjs  questions.yaml    # the runner, and what it asks
   fixtures/documents.mjs     # the SPECIMEN documents and the facts they carry
   sql/                       # the 023 sweep and the 024 fingerprint
 
 scripts/setup.sh             # cloud bootstrap
+scripts/lab-pages.mjs        # after the export: keeps dist/lab/ only in a DEV build
+docs/                        # end-to-end-encryption.md (the plan), move-to-cloudflare-pages.md
 vercel.json                  # build + SPA rewrite
 ```
 
@@ -2894,6 +2896,38 @@ where it does not.
   vault at its number refuses a question by its own count, B cannot save a
   chat with QA Vault A's answers, and B's chat with them goes when B leaves.
   Before 069 those checks are skipped.
+
+### End-to-end encryption — planned, Phase 0 only (3 November 2026)
+
+- **Nothing is encrypted end to end yet.** The plan, the owner's
+  decisions and the phases are in
+  [`docs/end-to-end-encryption.md`](docs/end-to-end-encryption.md):
+  documents, vault names, the tree, cards, chats, notes and the search
+  index sealed on members' devices; only accounts, membership, sizes,
+  times, counts and each document's built-in category readable; joining
+  automatic with signed invitations; reminders worked out in the app;
+  recovery by another device, a Recovery Key or a recovery contact.
+  **No screen, policy, agreement or video says end-to-end until Phase 5**
+  (an outside review) is done; the privacy rule under Conventions stands.
+- **`supabase/functions/_shared/vault-crypto.ts` runs only on members'
+  devices.** It lives in `_shared/` so the app and the QA self-test share
+  one copy, like `kinship.ts`; no Edge Function may import it (the
+  self-test fails if one does), because a server that can unlock a vault
+  key is the middle the design removes. WebCrypto only: AES-256-GCM with
+  the place an item belongs to as associated data, ECDH P-256 + HKDF to
+  lock a vault key for a member, ECDSA P-256, a 28-character Recovery Key.
+  The self-test pins that an item opens only with its key, in its place,
+  unchanged; that a grant opens only for its member; that every wrong
+  character in a Recovery Key is caught. Nothing in the app calls it yet.
+- **`/lab/e2e.html` measures a real phone**, on DEV builds only:
+  `scripts/lab-pages.mjs` (part of `npm run build`) deletes `dist/lab/`
+  unless `EXPO_PUBLIC_SUPABASE_URL` names DEV, and in a DEV build writes
+  `dist/lab/vault-crypto.js` from the `.ts` with Node's own type
+  stripping. The page reads nothing of AskLocker's and sends nothing; it
+  downloads transformers.js 4.3.1 (jsDelivr) and gte-small (Hugging Face).
+  `/lab/*` alone is cross-origin isolated (`public/_headers`, `vercel.json`)
+  so the model may use several threads; never the app's pages, where
+  isolation would break Google's and Razorpay's windows.
 
 ### Edge Functions load supabase-js at one version
 

@@ -1,0 +1,451 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Encryption lab</title>
+<!--
+  DEV builds only: scripts/lab-pages.mjs deletes dist/lab/ from every other
+  build. Phase 0 of docs/end-to-end-encryption.md: how fast this device
+  locks and unlocks with the real vault-crypto code, whether it can keep a
+  key that cannot be read out, how fast it runs the search model, and
+  whether its passkeys give a key (WebAuthn PRF).
+
+  Nothing leaves the device. The page reads nothing of AskLocker's (no
+  session, no storage), sends nothing, and downloads only the search
+  library and model. Query parameters for testing without the internet:
+  ?lib= the transformers.js module, ?wasm= the folder of ONNX Runtime's
+  .wasm files, ?models= a local folder of models; ?threads= forces the
+  number of threads, ?gpu_dtype= another model file for the graphics chip.
+-->
+<style>
+  :root {
+    --bg: #F8F9FC; --card: #FFFFFF; --text: #1B2433; --muted: #5B6578; --line: #E3E7EF;
+    --primary: #2A3D66; --on-primary: #FFFFFF; --good: #1E7A46; --bad: #B4352E; --code: #F1F3F8;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0D1117; --card: #161B22; --text: #E6EAF2; --muted: #9AA4B5; --line: #2A313C;
+      --primary: #8FA8D9; --on-primary: #0D1117; --good: #5CC08A; --bad: #F08A80; --code: #1F252E;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0D1117; --card: #161B22; --text: #E6EAF2; --muted: #9AA4B5; --line: #2A313C;
+    --primary: #8FA8D9; --on-primary: #0D1117; --good: #5CC08A; --bad: #F08A80; --code: #1F252E;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  main { max-width: 720px; margin: 0 auto; padding: 16px; }
+  h1 { font-size: 17px; font-weight: 600; margin: 8px 0 4px; }
+  h2 { font-size: 16px; font-weight: 600; margin: 0 0 4px; }
+  p { margin: 0 0 8px; }
+  .muted { color: var(--muted); font-size: 13px; }
+  section {
+    background: var(--card); border: 1px solid var(--line); border-radius: 16px;
+    padding: 16px; margin: 12px 0;
+  }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+  button {
+    min-height: 44px; padding: 0 16px; border-radius: 12px; border: 1px solid var(--primary);
+    background: var(--primary); color: var(--on-primary); font: inherit; font-weight: 600; cursor: pointer;
+  }
+  button.secondary { background: transparent; color: var(--primary); }
+  button:disabled { opacity: 0.5; cursor: default; }
+  pre, textarea {
+    background: var(--code); color: var(--text); border-radius: 12px; padding: 12px; margin: 8px 0 0;
+    font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; word-break: break-word;
+  }
+  pre:empty { display: none; }
+  textarea { width: 100%; min-height: 220px; border: 0; resize: vertical; }
+  .ok { color: var(--good); }
+  .fail { color: var(--bad); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Encryption lab</h1>
+  <p class="muted">Test builds only. Checks how this device handles end-to-end encryption before AskLocker uses it.
+    Nothing is sent anywhere. Search downloads a library and a model once, about 35 MB.</p>
+
+  <section>
+    <h2>This device</h2>
+    <pre id="out-device"></pre>
+  </section>
+
+  <section>
+    <h2>1. Locking and unlocking</h2>
+    <p class="muted">Makes keys, locks a vault key for a member, locks a 5 MB file and 100 passages, and opens them again.</p>
+    <div class="row"><button id="run-crypto">Run</button></div>
+    <pre id="out-crypto"></pre>
+  </section>
+
+  <section>
+    <h2>2. Keeping a key on this device</h2>
+    <p class="muted">Saves a key the browser will not let anyone read out, opens the page's storage again, and uses it.</p>
+    <div class="row"><button id="run-store">Run</button></div>
+    <pre id="out-store"></pre>
+  </section>
+
+  <section>
+    <h2>3. Search on this device</h2>
+    <p class="muted">Loads the search model and times it. The first run downloads about 35 MB.</p>
+    <div class="row"><button id="run-search">Run</button><button id="threads" class="secondary" hidden>Try several threads</button></div>
+    <pre id="out-search"></pre>
+  </section>
+
+  <section>
+    <h2>3b. Search on the graphics chip</h2>
+    <p class="muted">The same, on the phone's graphics chip (WebGPU), where it is offered. Downloads another model, about 36 MB.</p>
+    <div class="row"><button id="run-gpu" class="secondary">Run</button></div>
+    <pre id="out-gpu"></pre>
+  </section>
+
+  <section>
+    <h2>4. A key from your fingerprint</h2>
+    <p class="muted">Checks whether a passkey can also give a key (WebAuthn PRF), so a fingerprint could unlock your vaults.
+      The first button uses your AskLocker passkey on this address. The second makes a test passkey called
+      "AskLocker lab test (delete me)"; delete it from your password manager afterwards.</p>
+    <div class="row">
+      <button id="run-prf">Use my passkey</button>
+      <button id="run-prf-new" class="secondary">Make a test passkey</button>
+    </div>
+    <pre id="out-prf"></pre>
+  </section>
+
+  <section>
+    <h2>Results</h2>
+    <p class="muted">Run the sections above, then copy this and paste it in the chat.</p>
+    <div class="row"><button id="copy">Copy results</button><button id="run-all" class="secondary">Run 1 to 3</button></div>
+    <textarea id="all" readonly></textarea>
+  </section>
+</main>
+
+<script type="module">
+const params = new URLSearchParams(location.search);
+const LIB = params.get('lib') || 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.3.1';
+const MODEL = 'Xenova/gte-small';
+const report = { device: [], crypto: [], store: [], search: [], gpu: [], prf: [] };
+
+const $ = (id) => document.getElementById(id);
+function line(section, text, cls) {
+  report[section].push(text);
+  const out = $(`out-${section}`);
+  const span = document.createElement('span');
+  if (cls) span.className = cls;
+  span.textContent = `${text}\n`;
+  out.appendChild(span);
+  renderAll();
+}
+function renderAll() {
+  const parts = [`AskLocker encryption lab · ${new Date().toISOString()} · ${location.host}`];
+  const names = { device: 'Device', crypto: '1. Locking', store: '2. Keeping a key', search: '3. Search', gpu: '3b. Search, graphics chip', prf: '4. Passkey PRF' };
+  for (const [key, title] of Object.entries(names)) {
+    if (report[key].length) parts.push(`[${title}]\n${report[key].join('\n')}`);
+  }
+  $('all').value = parts.join('\n\n');
+}
+function reset(section) { report[section] = []; $(`out-${section}`).textContent = ''; renderAll(); }
+const ms = (n) => (n >= 1000 ? `${(n / 1000).toFixed(2)} s` : `${n.toFixed(1)} ms`);
+async function timed(fn) { const t = performance.now(); const value = await fn(); return [performance.now() - t, value]; }
+async function average(n, fn) { const t = performance.now(); for (let i = 0; i < n; i++) await fn(i); return (performance.now() - t) / n; }
+function randomBytes(n) {
+  const out = new Uint8Array(n);
+  for (let i = 0; i < n; i += 65536) crypto.getRandomValues(out.subarray(i, Math.min(n, i + 65536)));
+  return out;
+}
+function guard(section, button, fn) {
+  return async () => {
+    button.disabled = true;
+    try { await fn(); } catch (err) { line(section, `FAILED: ${err?.name ?? 'Error'}: ${err?.message ?? err}`, 'fail'); }
+    finally { button.disabled = false; }
+  };
+}
+
+// ─── This device ────────────────────────────────────────────────
+(async () => {
+  line('device', navigator.userAgent);
+  line('device', `cores ${navigator.hardwareConcurrency ?? '?'} · memory ${navigator.deviceMemory ?? '?'} GB · screen ${screen.width}×${screen.height} @${devicePixelRatio}x`);
+  line('device', `secure context ${isSecureContext} · cross-origin isolated ${globalThis.crossOriginIsolated === true} · WebGPU ${'gpu' in navigator} · WebAssembly ${typeof WebAssembly === 'object'}`);
+  try {
+    const est = await navigator.storage?.estimate?.();
+    if (est) line('device', `storage: ${Math.round((est.usage ?? 0) / 1e6)} MB used of ${Math.round((est.quota ?? 0) / 1e6)} MB allowed`);
+    const persisted = await navigator.storage?.persisted?.();
+    line('device', `storage kept for good: ${persisted === true ? 'yes' : persisted === false ? 'no (the browser may clear it under pressure)' : 'unknown'}`);
+  } catch { /* not offered */ }
+})();
+
+// ─── 1. Locking and unlocking ───────────────────────────────────
+async function runCrypto() {
+  reset('crypto');
+  const vc = await import('./vault-crypto.js');
+  const VAULT = '8c1e6f1a-2b3c-4d5e-8f90-a1b2c3d4e5f6';
+  const DOC = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee';
+  const USER = '0b7e9a3c-5d6f-4a1b-9c2d-3e4f5a6b7c8d';
+  const where = { vaultId: VAULT, userId: USER, keyVersion: 1 };
+
+  const tIdentity = await average(5, () => vc.newIdentity());
+  line('crypto', `a member's keys: ${ms(tIdentity)} each`);
+  const me = await vc.newIdentity();
+  const pub = await vc.publicIdentity(me);
+  const vaultKey = await vc.newSecretKey();
+  const tGrant = await average(20, () => vc.grantVaultKey(vaultKey, pub, where));
+  const grant = await vc.grantVaultKey(vaultKey, pub, where);
+  const tOpenGrant = await average(20, () => vc.openVaultKeyGrant(grant, me, where));
+  line('crypto', `vault key locked for a member: ${ms(tGrant)} · opened: ${ms(tOpenGrant)}`);
+
+  const fileKey = await vc.newSecretKey();
+  const keyWhere = vc.context.fileKey(VAULT, DOC, 1);
+  const tWrap = await average(50, () => vc.wrapSecretKey(fileKey, vaultKey, keyWhere));
+  const locked = await vc.wrapSecretKey(fileKey, vaultKey, keyWhere);
+  const tUnwrap = await average(50, () => vc.unwrapSecretKey(locked, vaultKey, keyWhere));
+  line('crypto', `file key locked: ${ms(tWrap)} · opened: ${ms(tUnwrap)}`);
+
+  const file = randomBytes(5 * 1024 * 1024);
+  const fileWhere = vc.context.document(VAULT, DOC, 'file');
+  const [tSeal, sealed] = await timed(() => vc.sealFile(fileKey, file, fileWhere));
+  const [tOpen, opened] = await timed(() => vc.openFile(fileKey, sealed, fileWhere));
+  const same = opened.length === file.length && opened.every((b, i) => b === file[i]);
+  line('crypto', `5 MB file locked: ${ms(tSeal)} (${(5000 / tSeal).toFixed(0)} MB/s) · opened: ${ms(tOpen)} · same bytes: ${same}`, same ? 'ok' : 'fail');
+
+  const passage = 'SPECIMEN Policy 3001/1234 for MH-12-AB-1234, valid until 31 March 2027. Premium ₹14,250 paid on 02/04/2026. '.repeat(14).slice(0, 1500);
+  const passWhere = vc.context.document(VAULT, DOC, 'passages');
+  const [tSealPass, sealedPassages] = await timed(async () => {
+    const out = [];
+    for (let i = 0; i < 100; i++) out.push(await vc.sealText(fileKey, passage, passWhere));
+    return out;
+  });
+  const [tOpenPass] = await timed(async () => { for (const s of sealedPassages) await vc.openText(fileKey, s, passWhere); });
+  line('crypto', `100 passages of 1,500 characters locked: ${ms(tSealPass)} · opened: ${ms(tOpenPass)}`);
+
+  const [tRecovery, recoveryKey] = await timed(() => vc.newRecoveryKey());
+  const [tBackup, backup] = await timed(() => vc.sealIdentity(me, recoveryKey, USER));
+  const [tRestore, restored] = await timed(() => vc.openIdentity(backup, recoveryKey, USER));
+  const back = JSON.stringify(await vc.publicIdentity(restored)) === JSON.stringify(pub);
+  line('crypto', `Recovery Key made: ${ms(tRecovery)} · keys backed up: ${ms(tBackup)} · restored: ${ms(tRestore)} · same keys: ${back}`, back ? 'ok' : 'fail');
+
+  let refused = false;
+  try { await vc.openText(fileKey, sealedPassages[0], vc.context.document(VAULT, DOC, 'name')); } catch { refused = true; }
+  line('crypto', `an item moved to the wrong place is refused: ${refused}`, refused ? 'ok' : 'fail');
+}
+
+// ─── 2. Keeping a key on this device ────────────────────────────
+function idb(request) {
+  return new Promise((resolve, reject) => { request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error); });
+}
+async function openLabDb() {
+  const request = indexedDB.open('asklocker-lab', 1);
+  request.onupgradeneeded = () => request.result.createObjectStore('keys');
+  return idb(request);
+}
+async function runStore() {
+  reset('store');
+  const vc = await import('./vault-crypto.js');
+  const me = await vc.deviceCopy(await vc.newIdentity());
+  const where = { vaultId: '8c1e6f1a-2b3c-4d5e-8f90-a1b2c3d4e5f6', userId: '0b7e9a3c-5d6f-4a1b-9c2d-3e4f5a6b7c8d', keyVersion: 1 };
+  const grant = await vc.grantVaultKey(await vc.newSecretKey(), await vc.publicIdentity(me), where);
+  try {
+    let db = await openLabDb();
+    const [tPut] = await timed(() => idb(db.transaction('keys', 'readwrite').objectStore('keys').put(me, 'identity')));
+    db.close();
+    db = await openLabDb();
+    const [tGet, kept] = await timed(() => idb(db.transaction('keys').objectStore('keys').get('identity')));
+    db.close();
+    line('store', `saved: ${ms(tPut)} · read back: ${ms(tGet)}`);
+    line('store', `the private key can be read out: ${kept.encrypt.privateKey.extractable}`, kept.encrypt.privateKey.extractable ? 'fail' : 'ok');
+    let exported = true;
+    try { await crypto.subtle.exportKey('pkcs8', kept.encrypt.privateKey); } catch { exported = false; }
+    line('store', `the browser refuses to hand it out: ${!exported}`, exported ? 'fail' : 'ok');
+    const [tUse] = await timed(() => vc.openVaultKeyGrant(grant, kept, where));
+    line('store', `the kept key opens a vault key: yes (${ms(tUse)})`, 'ok');
+  } finally {
+    await idb(indexedDB.deleteDatabase('asklocker-lab')).catch(() => {});
+    line('store', 'test storage deleted');
+  }
+}
+
+// ─── 3. Search on this device ───────────────────────────────────
+const PASSAGES = [
+  ['passport', 'SPECIMEN Republic of India passport. Passport number P1234567. Name: Asha Verma. Date of expiry: 17/10/2031. Place of issue: Pune.'],
+  ['insurance', 'SPECIMEN motor insurance schedule. Policy 3001/1234 covers the car MH-12-AB-1234 from 01/04/2026 to 31/03/2027. Premium ₹14,250.'],
+  ['rent', 'SPECIMEN rental agreement for flat 4B, Sunrise Apartments. Monthly rent ₹22,000, due on the 5th. Deposit ₹66,000.'],
+  ['electricity', 'SPECIMEN electricity bill, consumer number 170012345678. Units used 312. Amount due ₹2,480 by 20 November 2026.'],
+  ['school', 'SPECIMEN school fee receipt for Riya Verma, class 6. Term fee ₹38,500 paid on 10 June 2026 by UPI.'],
+  ['bank', 'SPECIMEN savings account statement, account ending 4521. Closing balance ₹1,84,310 on 30 September 2026.'],
+];
+const QUESTIONS = [
+  ["When does Asha's passport expire?", 'passport'],
+  ['Which car does the insurance cover?', 'insurance'],
+  ['How much is the monthly rent?', 'rent'],
+  ['What was the school fee?', 'school'],
+];
+function dot(a, b) { let s = 0; for (let i = 0; i < a.length; i++) s += a[i] * b[i]; return s; }
+
+let transformers;
+async function loadLibrary(section) {
+  if (transformers) return transformers;
+  const [tLib, T] = await timed(() => import(LIB));
+  line(section, `library loaded: ${ms(tLib)} (${LIB.startsWith('http') ? 'transformers.js 4.3.1' : 'local copy'})`);
+  T.env.allowLocalModels = false;
+  if (params.get('wasm')) T.env.backends.onnx.wasm.wasmPaths = params.get('wasm');
+  // One thread unless asked: several need a cross-origin isolated page, and
+  // where loading them fails it can hang rather than say so.
+  T.env.backends.onnx.wasm.numThreads = Number(params.get('threads') || 1);
+  if (params.get('models')) {
+    T.env.allowLocalModels = true;
+    T.env.allowRemoteModels = false;
+    T.env.localModelPath = params.get('models');
+  }
+  transformers = T;
+  return T;
+}
+
+async function timeModel(section, device, dtype) {
+  const T = await loadLibrary(section);
+  const sizes = new Map();
+  const watchdog = setTimeout(() => line(section,
+    'still loading after 90 s: this may not work here (try again without ?threads, or on Wi-Fi)', 'fail'), 90000);
+  const [tModel, extractor] = await timed(() => T.pipeline('feature-extraction', MODEL, {
+    dtype,
+    device,
+    progress_callback: (p) => { if (p.file && p.total) sizes.set(p.file, p.total); },
+  }).finally(() => clearTimeout(watchdog)));
+  const mb = [...sizes.values()].reduce((a, b) => a + b, 0) / 1e6;
+  line(section, `model (${dtype}, ${device}) ready: ${ms(tModel)}${mb ? `, ${mb.toFixed(1)} MB of files` : ''}`);
+  if (device === 'wasm') {
+    const threads = T.env.backends.onnx.wasm.numThreads;
+    line(section, `threads: ${globalThis.crossOriginIsolated ? threads : '1 (the page is not cross-origin isolated)'}`);
+  }
+  const embed = async (texts) => (await extractor(texts, { pooling: 'mean', normalize: true })).tolist();
+
+  const [tFirst] = await timed(() => embed([PASSAGES[0][1]]));
+  line(section, `first short passage: ${ms(tFirst)}`);
+  const full = `${PASSAGES.map((p) => p[1]).join(' ')} `.repeat(3).slice(0, 1300);
+  const tOne = await average(10, () => embed([full]));
+  line(section, `a full passage (about 320 tokens), one at a time: ${ms(tOne)} each`);
+  const [tBatch] = await timed(() => embed(Array.from({ length: 10 }, () => full)));
+  const each = Math.min(tOne, tBatch / 10);
+  line(section, `ten at once: ${ms(tBatch / 10)} each`);
+  line(section, `so a 100-passage document takes about ${ms(each * 100)}, a vault of 1,000 passages about ${ms(each * 1000)}`);
+  const tQuestion = await average(10, () => embed(['When does my passport expire?']));
+  line(section, `a question: ${ms(tQuestion)}`);
+
+  const vectors = await embed(PASSAGES.map((p) => p[1]));
+  let right = 0;
+  for (const [question, expected] of QUESTIONS) {
+    const [q] = await embed([question]);
+    const best = PASSAGES.map((p, i) => [p[0], dot(q, vectors[i])]).sort((a, b) => b[1] - a[1])[0][0];
+    if (best === expected) right++;
+    else line(section, `"${question}" found ${best}, not ${expected}`, 'fail');
+  }
+  line(section, `right document first: ${right} of ${QUESTIONS.length}`, right === QUESTIONS.length ? 'ok' : 'fail');
+  if (performance.memory) line(section, `page memory now: ${Math.round(performance.memory.usedJSHeapSize / 1e6)} MB`);
+  await extractor.dispose?.();
+}
+
+async function runSearch() {
+  reset('search');
+  await timeModel('search', 'wasm', 'q8');
+}
+
+async function runGpu() {
+  reset('gpu');
+  if (!('gpu' in navigator)) { line('gpu', 'this browser has no WebGPU'); return; }
+  const adapter = await navigator.gpu.requestAdapter();
+  if (!adapter) { line('gpu', 'WebGPU is here, but no graphics chip was offered'); return; }
+  const info = adapter.info ?? {};
+  line('gpu', `graphics chip: ${[info.vendor, info.architecture, info.device].filter(Boolean).join(' ') || 'not named'}`);
+  await timeModel('gpu', 'webgpu', params.get('gpu_dtype') || 'q4f16');
+}
+
+// ─── 4. A key from your fingerprint (WebAuthn PRF) ──────────────
+async function prfSalt() {
+  return new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode('asklocker/lab/prf/v1')));
+}
+async function prfCapabilities() {
+  if (!window.PublicKeyCredential) { line('prf', 'this browser has no passkeys', 'fail'); return false; }
+  try {
+    const caps = await PublicKeyCredential.getClientCapabilities?.();
+    if (caps) line('prf', `the browser says PRF: ${caps['extension:prf'] === true ? 'yes' : caps['extension:prf'] === false ? 'no' : 'not stated'}`);
+  } catch { /* older browsers */ }
+  return true;
+}
+function prfResult(credential) {
+  const result = credential.getClientExtensionResults().prf;
+  const first = result?.results?.first;
+  return { enabled: result?.enabled, bytes: first ? new Uint8Array(first).length : 0, attachment: credential.authenticatorAttachment ?? 'unknown' };
+}
+async function runPrf() {
+  reset('prf');
+  if (!(await prfCapabilities())) return;
+  const credential = await navigator.credentials.get({ publicKey: {
+    challenge: crypto.getRandomValues(new Uint8Array(32)),
+    rpId: location.hostname,
+    userVerification: 'required',
+    timeout: 60000,
+    extensions: { prf: { eval: { first: await prfSalt() } } },
+  } });
+  const r = prfResult(credential);
+  line('prf', `your passkey (${r.attachment}): ${r.bytes === 32 ? 'gives a key (32 bytes)' : 'gives no key'}`, r.bytes === 32 ? 'ok' : 'fail');
+  line('prf', 'nothing was sent anywhere; the sign-in proof was thrown away');
+}
+async function runPrfNew() {
+  reset('prf');
+  if (!(await prfCapabilities())) return;
+  const salt = await prfSalt();
+  const created = await navigator.credentials.create({ publicKey: {
+    rp: { name: 'AskLocker lab', id: location.hostname },
+    user: { id: crypto.getRandomValues(new Uint8Array(16)), name: 'lab-test', displayName: 'AskLocker lab test (delete me)' },
+    challenge: crypto.getRandomValues(new Uint8Array(32)),
+    pubKeyCredParams: [{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }],
+    authenticatorSelection: { residentKey: 'required', userVerification: 'required' },
+    timeout: 60000,
+    extensions: { prf: { eval: { first: salt } } },
+  } });
+  const made = prfResult(created);
+  line('prf', `test passkey made (${made.attachment}) · PRF switched on: ${made.enabled === true ? 'yes' : made.enabled === false ? 'no' : 'not stated'}${made.bytes ? ' · key given at once' : ''}`);
+  const used = await navigator.credentials.get({ publicKey: {
+    challenge: crypto.getRandomValues(new Uint8Array(32)),
+    rpId: location.hostname,
+    allowCredentials: [{ type: 'public-key', id: created.rawId }],
+    userVerification: 'required',
+    timeout: 60000,
+    extensions: { prf: { eval: { first: salt } } },
+  } });
+  const r = prfResult(used);
+  line('prf', `test passkey gives a key: ${r.bytes === 32 ? 'yes (32 bytes)' : 'no'}`, r.bytes === 32 ? 'ok' : 'fail');
+  line('prf', 'delete "AskLocker lab test (delete me)" from your password manager');
+}
+
+// ─── Buttons ────────────────────────────────────────────────────
+$('run-crypto').onclick = guard('crypto', $('run-crypto'), runCrypto);
+$('run-store').onclick = guard('store', $('run-store'), runStore);
+$('run-search').onclick = guard('search', $('run-search'), runSearch);
+$('run-gpu').onclick = guard('gpu', $('run-gpu'), runGpu);
+if (globalThis.crossOriginIsolated && !params.get('threads')) {
+  $('threads').hidden = false;
+  $('threads').onclick = () => {
+    params.set('threads', String(Math.min(4, navigator.hardwareConcurrency || 2)));
+    location.search = params.toString();
+  };
+}
+$('run-prf').onclick = guard('prf', $('run-prf'), runPrf);
+$('run-prf-new').onclick = guard('prf', $('run-prf-new'), runPrfNew);
+$('run-all').onclick = guard('device', $('run-all'), async () => {
+  await guard('crypto', $('run-crypto'), runCrypto)();
+  await guard('store', $('run-store'), runStore)();
+  await guard('search', $('run-search'), runSearch)();
+});
+$('copy').onclick = async () => {
+  renderAll();
+  try { await navigator.clipboard.writeText($('all').value); $('copy').textContent = 'Copied'; }
+  catch { $('all').select(); document.execCommand('copy'); $('copy').textContent = 'Copied'; }
+  setTimeout(() => { $('copy').textContent = 'Copy results'; }, 2000);
+};
+renderAll();
+</script>
+</body>
+</html>
