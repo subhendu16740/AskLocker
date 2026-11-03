@@ -1644,14 +1644,15 @@ await test('the public site promises nothing AskLocker does not keep, and its nu
     }
   }
   const words = page.toLowerCase();
-  assert.ok(words.includes('not end-to-end'), 'says documents are not end-to-end encrypted');
-  assert.ok(words.includes('the people who run asklocker can open them'), 'says the people who run AskLocker can open documents');
-  assert.ok(words.includes('in asklocker, only people in your vault'), 'keeps "In AskLocker" on who can open them');
+  // Settings › Privacy's own three rows (src/app/settings/privacy.tsx).
+  assert.ok(words.includes('encrypted, not end-to-end'), 'says documents are not end-to-end encrypted');
+  assert.ok(words.includes('our team can open them'), 'says the people who run AskLocker can open documents');
+  assert.ok(words.includes('go to ai services'), 'says parts of documents go to AI services');
 
   for (const price of [plusAmount('inr', 'monthly'), plusAmount('inr', 'yearly'), plusAmount('inr', 'monthly', 'family_pro'), plusAmount('inr', 'yearly', 'family_pro'), businessAmount('business_plus')]) {
     assert.ok(page.includes(price), `shows ${price}, from plan-text.ts`);
   }
-  assert.ok(page.includes(`${DEFAULT_PLAN_LIMITS.questions.free} questions a month`), 'the free questions follow the plan limits');
+  assert.ok(page.includes(`${DEFAULT_PLAN_LIMITS.questions.free} per person`), 'the free questions follow the plan limits');
   assert.ok(page.includes(`up to ${MAX_FILE_BYTES / (1024 * 1024)} MB`), 'the file limit follows limits.ts');
 
   // Structured data: one graph, parseable, with the FAQ and the app's prices.

@@ -18,7 +18,7 @@ function audienceBadge(v) {
 /** The player itself, or the poster with a note while a draft has no file. */
 function player(v, { eager = false } = {}) {
   if (!v.videoUrl) {
-    return `<div class="film-missing" style="background-image:url('${esc(v.posterUrl)}');aspect-ratio:${v.width} / ${v.height}"><span>Draft: the film file isn't added yet</span></div>`;
+    return `<div class="film-missing" style="background-image:url('${esc(v.posterUrl)}');aspect-ratio:${v.width} / ${v.height}"><span>Film not added yet</span></div>`;
   }
   const captions = v.captionsUrl ? `<track kind="captions" src="${esc(v.captionsUrl)}" srclang="en" label="English">` : '';
   return `<video controls playsinline preload="${eager ? 'metadata' : 'none'}" poster="${esc(v.posterUrl)}" width="${v.width}" height="${v.height}" aria-label="${esc(v.title)}"><source src="${esc(v.videoUrl)}" type="${v.videoType}">${captions}<a href="${esc(v.videoUrl)}">Download the film</a></video>`;
@@ -29,8 +29,7 @@ export function filmFigure(v, { headingTag = 'h3' } = {}) {
 ${player(v)}
 <figcaption>
 <${headingTag}><a href="/videos/${v.slug}">${esc(v.title)}</a></${headingTag}>
-<p>${esc(v.description)}</p>
-<div class="film-meta">${v.draft ? '<span class="badge badge-draft">Draft</span>' : ''}${audienceBadge(v)}<span>${clock(v.durationSeconds)}</span><a href="/videos/${v.slug}">Transcript ${icon('arrow-right', 14)}</a></div>
+<div class="film-meta">${v.draft ? '<span class="badge badge-draft">Draft</span>' : ''}${audienceBadge(v)}<span>${clock(v.durationSeconds)}</span><a href="/videos/${v.slug}">Transcript</a></div>
 </figcaption>
 </figure>`;
 }
@@ -87,28 +86,28 @@ export function watchPage(v, { videos, indexable }) {
   const url = `/videos/${v.slug}`;
   const others = videos.filter((o) => o.slug !== v.slug).slice(0, 3);
   const chapters = v.chapters.length
-    ? `<section class="card"><h2>Chapters</h2><ol class="chapters">${v.chapters.map((c) => `<li><time datetime="${isoDuration(c.start)}">${clock(c.start)}</time><a href="${url}?t=${Math.round(c.start)}" data-t="${Math.round(c.start)}">${esc(c.title)}</a></li>`).join('')}</ol></section>`
+    ? `<section class="card"><h2 class="heading">Chapters</h2><ol class="chapters">${v.chapters.map((c) => `<li><time datetime="${isoDuration(c.start)}">${clock(c.start)}</time><a href="${url}?t=${Math.round(c.start)}" data-t="${Math.round(c.start)}">${esc(c.title)}</a></li>`).join('')}</ol></section>`
     : '';
   const more = others.length
-    ? `<section class="card"><h2>More films</h2><ul class="chapters">${others.map((o) => `<li><time>${clock(o.durationSeconds)}</time><a href="/videos/${o.slug}">${esc(o.title)}</a></li>`).join('')}</ul></section>`
+    ? `<section class="card"><h2 class="heading">More films</h2><ul class="chapters">${others.map((o) => `<li><time>${clock(o.durationSeconds)}</time><a href="/videos/${o.slug}">${esc(o.title)}</a></li>`).join('')}</ul></section>`
     : '';
   const body = `<div class="wrap watch">
 <nav class="crumbs" aria-label="Breadcrumb"><a href="/">AskLocker</a> › <a href="/videos">Films</a> › ${esc(v.title)}</nav>
-${v.draft ? '<p class="draft-note">Draft. Only builds that are not production show this film, and it is never indexed. Set "draft": false in its video.json to publish it.</p>' : ''}
+${v.draft ? '<p class="draft-note">Draft: shown on DEV only.</p>' : ''}
 <h1>${esc(v.title)}</h1>
-<p class="section-lead">${esc(v.description)}</p>
+<p class="lead">${esc(v.description)}</p>
 <figure class="film${v.portrait ? ' film-portrait' : ''}">${player(v, { eager: true })}
 <figcaption><div class="film-meta" style="margin-top:0">${audienceBadge(v)}<span>${clock(v.durationSeconds)}</span><span>Added <time datetime="${v.uploadDate}">${formatDate(v.uploadDate)}</time></span>${v.videoUrl ? `<a href="${esc(v.videoUrl)}" download>Download</a>` : ''}</div></figcaption>
 </figure>
 <div class="watch-grid">
-<section class="transcript" aria-labelledby="transcript-h">
+<section class="card transcript" aria-labelledby="transcript-h">
 <h2 id="transcript-h">Transcript</h2>
 ${v.transcript ? transcriptHtml(v.transcript, esc) : '<p>No transcript yet.</p>'}
 </section>
 <aside class="aside">
 ${chapters}
 ${more}
-<section class="card"><h2>Try AskLocker</h2><p>Free to start, in the browser on any phone or computer.</p><p style="margin-top:12px"><a class="btn btn-primary" href="/onboarding">Get started free</a></p></section>
+<section class="card"><h2 class="heading">Try AskLocker</h2><p class="caption">Free to start.</p><p style="margin-top:12px"><a class="btn btn-primary btn-block" href="/onboarding">Get started</a></p></section>
 </aside>
 </div>
 </div>`;
@@ -153,9 +152,8 @@ export function filmsIndexPage({ videos, indexable }) {
   const published = videos.filter((v) => !v.draft);
   const body = `<div class="wrap watch">
 <nav class="crumbs" aria-label="Breadcrumb"><a href="/">AskLocker</a> › Films</nav>
-<h1>AskLocker films</h1>
-<p class="section-lead">How AskLocker keeps a family's or a business's documents, and answers questions about them, shown on the app's own screens. Each film's page has everything said in it written out.</p>
-<div class="films" style="margin-top:32px">${videos.map((v) => filmFigure(v, { headingTag: 'h2' })).join('\n')}</div>
+<h1>Films</h1>
+<div class="films" style="margin-top:16px">${videos.map((v) => filmFigure(v, { headingTag: 'h2' })).join('\n')}</div>
 </div>`;
   const graph = [
     ...orgAndSite(),

@@ -26,7 +26,7 @@ export const STORY = {
   scanFile: 'scan_1793506263481.jpg',
   // The end card. Leave ctaNote or url empty to show nothing there.
   cta: 'Start your family vault',
-  ctaNote: 'Free to start · ★ Family Plus ₹100 a month',
+  ctaNote: 'Free to start · ★ Family Plus ₹99 a month',
   url: '',
 };
 

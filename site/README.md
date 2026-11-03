@@ -60,7 +60,21 @@ a build reaches, as `scripts/lab-pages.mjs` and `src/lib/environment.ts` do.
   `noindex`, `robots.txt` shuts everything, and **drafts are shown**, marked
   Draft, so a film can be watched on DEV before it goes out.
 
+## The look: the app's own
+
+`styles.css` uses only the app's design (`src/constants/design.ts`,
+`components/settings-ui.tsx`): the system font, the 17/16/15/13/12 type
+scale at weights 400 to 600, navy with coral for small marks, white cards
+(16 radius, a faint shadow), 32px icon boxes, 44px buttons, and the
+onboarding's navy gradient at the top. Light only, like the app's screens.
+Add nothing the app doesn't have: no new colours, sizes or fonts.
+
 ## Changing the words
+
+Short, as the app's screens are: a title and one line. Where the app
+already says something (the onboarding slides, Settings › Privacy), the
+page uses its words.
+
 
 Everything the landing page says is in `content.mjs`, as data: the page, its
 FAQ structured data and `llms-full.txt` are drawn from it, so they agree.

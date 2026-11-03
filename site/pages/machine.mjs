@@ -3,7 +3,7 @@
 // Markdown, per llmstxt.org) and llms-full.txt (the whole landing page and
 // every transcript, in Markdown).
 
-import { business, faq, features, hero, meta, planRows, pricingNotes, privacy, steps, what } from '../content.mjs';
+import { about, business, faq, features, hero, meta, planRows, pricingNote, privacy, steps } from '../content.mjs';
 import { SITE_URL, SUPPORT_EMAIL, businessPlans, familyPlans, rupees } from '../lib/facts.mjs';
 import { abs, clock } from '../lib/html.mjs';
 import { transcriptText } from './films.mjs';
@@ -70,7 +70,7 @@ export function llmsTxt({ videos }) {
   return [
     '# AskLocker',
     '',
-    `> ${what.paragraphs[0]}`,
+    `> ${about}`,
     '',
     `- Website and app: ${SITE_URL} (works in the browser on any phone or computer; no store apps yet)`,
     `- Price: free to start. Family Plus ${rupees(familyPlans[1].price.inr)} a month, Family Pro ${rupees(familyPlans[2].price.inr)} a month; business plans from ${rupees(businessPlans[0].price)} a month + GST`,
@@ -117,9 +117,10 @@ export function llmsFullTxt({ videos }) {
     '',
     `> ${hero.title} ${hero.lead}`,
     '',
-    `## ${what.heading}`,
+    '## What is AskLocker?',
     '',
-    ...what.paragraphs.flatMap((p) => [p, '']),
+    about,
+    '',
     '## How it works',
     '',
     ...steps.map((s, i) => `${i + 1}. **${s.title}.** ${s.text}`),
@@ -128,13 +129,9 @@ export function llmsFullTxt({ videos }) {
     '',
     ...features.map((f) => `- **${f.title}.** ${f.text}`),
     '',
-    `## ${business.heading}`,
+    `## ${business.title}`,
     '',
     business.text,
-    '',
-    ...business.points.map((p) => `- ${p}`),
-    '',
-    business.price,
     '',
     ...bizTable,
     '',
@@ -142,10 +139,11 @@ export function llmsFullTxt({ videos }) {
     '',
     ...table,
     '',
-    ...pricingNotes.flatMap((n) => [n, '']),
-    `## ${privacy.heading}`,
+    pricingNote,
     '',
-    ...privacy.points.map((p) => `- ${p}`),
+    '## Privacy',
+    '',
+    ...privacy.map((r) => `- **${r.title}.** ${r.text}`),
     '',
     `Privacy policy: ${abs('/privacy')}`,
     '',
