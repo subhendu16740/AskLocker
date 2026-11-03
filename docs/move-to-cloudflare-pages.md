@@ -1,5 +1,11 @@
 # Moving the website from Vercel to Cloudflare Pages
 
+**Done.** PROD (asklocker.com) moved on 24 October 2026, DEV
+(`dev.asklocker.pages.dev`) by 3 November 2026, and the Vercel project
+was deleted on 3 November 2026; `vercel.json` went with it. This page is
+kept for what each address needs (Google origins, Supabase redirects,
+passkey RP IDs, Gmail return origins) and how it was done.
+
 The website is only a folder of files (`npm run build` makes it in `dist/`).
 Cloudflare Pages builds and serves it for free, business use included.
 Supabase, Groq, Razorpay and the Edge Functions do not change.
@@ -146,11 +152,9 @@ project at B7 instead.
 ## Part B: DEV on Cloudflare (can wait)
 
 **Done:** DEV builds on Cloudflare at `dev.asklocker.pages.dev`
-(confirmed 3 November 2026). Its old address on Vercel was
-`family-vault-git-dev-subhendu16740.vercel.app`; the Vercel project still
-builds every branch until B7 deletes it. Vercel's free plan is for
-non-commercial use, and a test copy of a product made to earn is still
-part of it.
+(confirmed 3 November 2026), and the Vercel project was deleted the same
+day. Its old address was `family-vault-git-dev-subhendu16740.vercel.app`:
+remove it wherever B3, B4 and B6 left it listed.
 
 ### B1. Build `dev`
 
