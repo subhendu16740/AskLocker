@@ -9,11 +9,13 @@ Metro only bundles from `src/app`, and none of these files are TypeScript.
   words: the full film, and four Instagram reels to post one a week
   ([below](#privacy-a-month-of-reels)). **Held back**: the encryption brief
   of 3 November 2026 keeps it unpublished.
-- `launch/`: **embargoed until end-to-end encryption ships.** The launch
-  set: every film, short and reel saying "Locked on your phone. Opened only
-  by your family." ("by your team" for a business), and the launch's own
-  film, for a family and for a business. Nothing in it is posted before the
-  owner confirms the launch; see [`launch/README.md`](launch/README.md).
+- `launch/`: **every updated video, in one folder, embargoed until
+  end-to-end encryption ships.** All 45, numbered in the order to watch
+  them: the long films (01–16, the launch film "Locked on your phone"
+  among them, for a family and for a business), a short for each feature
+  (17–33) and the encryption reels (34–45), with `no-music/`, `covers/` and
+  `posters/` beside them. Nothing in it is posted before the owner confirms
+  the launch; [`launch/README.md`](launch/README.md) lists every video.
 - `video/`: the code that makes them: both films and every feature's short and
   poster, in 16:9, 9:16 and 1:1. See [`video/README.md`](video/README.md) to
   render them.
