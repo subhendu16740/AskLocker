@@ -72,8 +72,8 @@
 .portrait .wy-chat { left: 80px; right: 80px; top: 470px; }
 .wy-chat-h { display: flex; align-items: center; gap: 16px; padding: 20px 26px; background: #0F5C57; color: #fff; }
 .wy-chat-av { width: 58px; height: 58px; flex-shrink: 0; border-radius: 50%; display: grid; place-items: center; background: #B7791F; font: 600 26px/1 var(--ui); }
-.wy-chat-h b { display: block; font: 600 28px/1.2 var(--ui); }
-.wy-chat-h span { display: block; margin-top: 2px; font: 400 20px/1.2 var(--ui); opacity: 0.8; }
+.wy-chat-h > div > b { display: block; font: 600 28px/1.2 var(--ui); }
+.wy-chat-h > div > span { display: block; margin-top: 2px; font: 400 20px/1.2 var(--ui); opacity: 0.8; }
 .wy-chat-b { display: flex; flex-direction: column; gap: 16px; padding: 28px 26px 30px; }
 .wy-msg { max-width: 80%; padding: 16px 20px 10px; border-radius: 22px; font: 400 29px/1.35 var(--ui); color: #111827; box-shadow: 0 2px 5px rgba(0, 0, 0, 0.07); }
 .portrait .wy-msg { font-size: 34px; }

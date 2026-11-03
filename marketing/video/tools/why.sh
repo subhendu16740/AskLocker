@@ -17,7 +17,8 @@ for story in "${STORIES[@]}"; do
     [ "$shape" = 9x16 ] && args+=(--portrait)
     tag="why-$story-$shape"
     node tools/render.mjs "${args[@]}"
-    tools/mux.sh "$tag"
+    # Their nights are a quiet pad under words: brought up to the other videos' loudness.
+    TARGET_LUFS=-14.5 tools/mux.sh "$tag"
     still=$(node tools/render.mjs "${args[@]}" --stills hero | tail -1)
     cp "$still" "out/posters/asklocker-why-$story-$shape-cover.png"
   done
