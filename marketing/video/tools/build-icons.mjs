@@ -23,6 +23,9 @@ const NEEDED = [
   // The privacy film: where documents go, who can open them, every service
   'database', 'cloud', 'eye', 'list', 'slash', 'user-x', 'log-in', 'book-open', 'truck', 'map', 'activity',
   'sliders', 'server',
+  // The launch set (end-to-end encryption): the Recovery Key, a new phone,
+  // the locks, what AskLocker can and cannot see
+  'rotate-ccw', 'unlock', 'printer', 'x-circle', 'hash', 'life-buoy', 'save', 'file', 'package',
 ];
 const missing = NEEDED.filter(n => !icons[n]);
 if (missing.length) throw new Error(`Unknown Feather icons: ${missing.join(', ')}`);

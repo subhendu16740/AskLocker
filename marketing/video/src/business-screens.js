@@ -11,6 +11,7 @@ import {
   icon, spinner, sbFill, plusTag, plusStar, header, tabBar, words, categoryChips, ocrSlot, uploadedDialog,
   lockScreen, pushNotif, cameraScreen, phoneShell, askMessages, askHeader, saveBar, askInput, brand, THEME,
 } from './parts.js';
+import { LAUNCH, END_LINE } from './claims.js';
 
 const TEAL = THEME.business.primary;
 
@@ -326,6 +327,26 @@ export function teamScreen() {
   </section>`;
 }
 
+/** The launch set's reminders (src/claims.js): in the app, worked out on the
+ * phone, as the encryption brief describes it. Drawn from src/app/reminders.tsx
+ * for a business; check it against the app before release. */
+export function remindersScreen() {
+  const row = ([file, kind, days, date, urgent], i) => `<div class="rm-row" id="rm-r${i}">
+      <div class="rm-t"><b>${file}</b><span>${kind}</span><em class="${urgent ? 'urgent' : ''}">${days} · ${date}</em></div>
+      ${icon('chevron-right', 16, '#9CA3AF')}</div>`;
+  return `<section class="scr biz" id="scr-reminders">${sbFill}
+    ${header('Reminders', { theme: 'business', right: plusTag('Plus') })}
+    <div class="rm-body" id="rm-body">
+      <div class="rm-plus biz"><div class="rm-plus-tag">★ Plus</div>
+        <div class="rm-plus-t">Your team gets a reminder 90, 30 and 7 days before a document expires, and on the day.</div>
+        <div class="rm-plus-n">They show on Home and here.</div></div>
+      <div class="overline">Expiry dates in ${BIZ.name}</div>
+      ${[['Shop Insurance 2025-26.pdf', 'Business Insurance', 'Runs out in 30 days', '18 November 2026', true],
+    ['Godown Leave &amp; Licence.pdf', 'Lease &amp; Property', 'Runs out in about 2 months', '31 December 2026', false]].map(row).join('')}
+    </div>
+  </section>`;
+}
+
 /** The next morning: an expiry reminder and a note's reminder, as web pushes. */
 export function lockDayScreen() {
   return lockScreen('scr-lockday', '9:05', 'Monday, 19 October', `<div class="lstack">
@@ -341,7 +362,7 @@ export function phone() {
     ${askScreen()}
     ${homeScreen()}
     ${overviewScreen()}
-    ${lockDayScreen()}
+    ${lockDayScreen()}${LAUNCH ? remindersScreen() : ''}
     ${notesScreen()}
     ${teamScreen()}`, '10:14');
 }
@@ -435,7 +456,7 @@ export function textBlocks(short) {
   ], 'Renewals and bills due from Plus. Money in and out from Pro.')}
   ${chapter(3, 'Reminders before anything lapses.', [
     '90, 30 and 7 days before expiry',
-    'Sent to everyone in the business',
+    LAUNCH ? 'In the app, for everyone in the business' : 'Sent to everyone in the business',
     'Your own notes, with a reminder',
   ], 'Expiry and note reminders from Plus.')}
   ${chapter(4, 'Your team and your CA, by invitation.', [
@@ -443,14 +464,21 @@ export function textBlocks(short) {
     'Admin and viewer roles',
     'Records stay when people leave',
   ])}
-  ${block('f-trust', 'Access and control', 'In AskLocker, only your team can open your records.',
-    `<div class="fm-cards">${[
+  ${block('f-trust', 'Access and control', LAUNCH ? 'Locked on your phone. Opened only by your team.' : 'In AskLocker, only your team can open your records.',
+    `<div class="fm-cards">${(LAUNCH ? [
+      // The launch set: the encryption brief's lines, for a business (src/claims.js).
+      ['smartphone', 'Locked on your phone', "Your records are locked on your phone before they're uploaded."],
+      ['key', 'Your team holds the key', 'Each vault has its own key. Only the people in your business have it.'],
+      ['eye-off', 'Not even AskLocker', 'Nobody at AskLocker can open your records.'],
+      ['rotate-ccw', 'Your way back', 'Lost your phone? Your Recovery Key, or someone in your team you chose, gets you back in.'],
+    ] : [
       ['lock', 'Access by invitation', 'Nobody joins unless an admin asks and they accept.'],
       ['shield', 'Admins in charge', 'Admins manage the team and can remove any record. A business always keeps one.'],
       ['archive', 'Records that stay', 'When someone leaves, what they added stays with the business.'],
       ['link', 'Sharing with limits', 'Share one document by link for 1 or 7 days, or 30 on a paid plan. Turn it off any time.'],
-    ].map(([ic, t, b], i) => `<div class="fm-card" id="fc-${i + 1}"><div class="fm-ci">${icon(ic, 26, THEME.business.primary)}</div><b>${t}</b><span>${b}</span></div>`).join('')}</div>`,
-    'To answer questions, AskLocker sends passages of your documents to outside AI services. Settings › Privacy names them.')}
+    ]).map(([ic, t, b], i) => `<div class="fm-card" id="fc-${i + 1}"><div class="fm-ci">${icon(ic, 26, THEME.business.primary)}</div><b>${t}</b><span>${b}</span></div>`).join('')}</div>`,
+    LAUNCH ? "To answer a question, only the parts it needs go to an AI service. We don't keep them."
+      : 'To answer questions, AskLocker sends passages of your documents to outside AI services. Settings › Privacy names them.')}
   ${block('f-plans', 'Plans', 'Start free. Move up as you grow.',
     `<table class="fm-table" id="fm-table"><thead><tr><th></th><th>Free</th><th>Plus</th><th>Pro</th><th>Enterprise</th></tr></thead><tbody>
       ${row('Price a month', ['Free', '₹499', '₹999', '₹3,999'], 'price')}
@@ -462,7 +490,7 @@ export function textBlocks(short) {
       ${row('Money in and out', [false, false, true, true])}
     </tbody></table>`,
     'Prices before GST. A year costs about ten months. Paid plans are set up on request.')}
-  ${brand('endcard', BIZ.tagline, { badge: 'for Business', cta: BIZ.cta, ctaNote: BIZ.ctaNote, url: BIZ.url, end: true })}`;
+  ${brand('endcard', END_LINE.business ?? BIZ.tagline, { badge: 'for Business', cta: BIZ.cta, ctaNote: BIZ.ctaNote, url: BIZ.url, end: true })}`;
 }
 
 export function callouts() {
@@ -488,6 +516,6 @@ export function callouts() {
     <div class="co-label">${icon('bell', 14, T, 2.6)}<span>Before it expires</span></div>
     <div class="co-steps"><i class="track"></i>
       ${[['90', 'days'], ['30', 'days'], ['7', 'days'], ['On the', 'day']].map(([a, b]) => `<div class="co-step"><i class="dot"></i><b>${a}</b><span>${b}</span></div>`).join('')}</div>
-    <div class="co-foot">${icon('edit-3', 14, '#16A34A', 2.6)}<span>Notes remind you on the day you pick</span></div>
+    <div class="co-foot">${icon(LAUNCH ? 'smartphone' : 'edit-3', 14, '#16A34A', 2.6)}<span>${LAUNCH ? 'Worked out on your phone, notes too' : 'Notes remind you on the day you pick'}</span></div>
   </div>`;
 }

@@ -17,6 +17,10 @@
 //   --film privacy                    what AskLocker does with documents -> out/video-privacy-16x9.mp4
 //   --film privacy --reel ai --portrait   one of its reels (ai, who, where,
 //   control) -> out/video-privacy-ai-9x16.mp4
+//   --launch   what the films say once end-to-end encryption ships (src/claims.js);
+//   the tag ends -launch. Nothing rendered with it is posted before the launch.
+//   --film locked --launch   the launch's own film (src/locked.js), and --reel
+//   one of its reels
 //   tools/mux.sh <tag> then adds sound -> out/asklocker-<tag>.mp4
 //   node tools/render.mjs --stills 3,12.5   PNGs of single frames -> out/stills/
 //   (--stills hero: the frame the film names for its poster or cover)
@@ -51,16 +55,19 @@ const stills = opt('stills', null);
 const size = orientation === 'portrait' ? { width: 1080, height: 1920 } : { width: 1920, height: 1080 };
 const short = flag('short');
 const film = opt('film', 'family');
-if (!['family', 'nri', 'business', 'features', 'privacy'].includes(film)) throw new Error(`--film is family, nri, business, features or privacy, not ${film}`);
+if (!['family', 'nri', 'business', 'features', 'privacy', 'locked'].includes(film)) throw new Error(`--film is family, nri, business, features, privacy or locked, not ${film}`);
 const lang = opt('lang', '');
 if (lang && !['family', 'nri'].includes(film)) throw new Error('--lang is for the family and NRI films, whose voice scene it changes');
 const feature = opt('feature', '');
 if ((film === 'features') !== Boolean(feature)) throw new Error('--feature names one feature of --film features (src/features.js)');
 const reel = opt('reel', '');
-if (reel && film !== 'privacy') throw new Error('--reel is for --film privacy (src/privacy.js)');
+if (reel && !['privacy', 'locked'].includes(film)) throw new Error('--reel is for --film privacy or locked');
+// --launch: what the films say once end-to-end encryption ships (src/claims.js).
+// Never posted before the launch; its files end -launch.
+const launch = flag('launch');
 const shape = orientation === 'portrait' ? '9x16' : '16x9';
-const tag = feature ? `feature-${feature}-${shape}`
-  : `${film}${reel ? `-${reel}` : ''}-${shape}${short ? '-short' : ''}${lang ? `-${lang}` : ''}`;
+const tag = (feature ? `feature-${feature}-${shape}`
+  : `${film}${reel ? `-${reel}` : ''}-${shape}${short ? '-short' : ''}${lang ? `-${lang}` : ''}`) + (launch ? '-launch' : '');
 
 // ─── Static server: module scripts do not load from file:// ───────────────
 const TYPES = {
@@ -80,7 +87,7 @@ const server = createServer(async (req, res) => {
   }
 });
 await new Promise((ok) => server.listen(0, '127.0.0.1', ok));
-const base = `http://127.0.0.1:${server.address().port}/src/intro.html?film=${film}&orientation=${orientation}${short ? '&cut=short' : ''}${lang ? `&lang=${lang}` : ''}${feature ? `&feature=${feature}` : ''}${reel ? `&reel=${reel}` : ''}`;
+const base = `http://127.0.0.1:${server.address().port}/src/intro.html?film=${film}&orientation=${orientation}${short ? '&cut=short' : ''}${lang ? `&lang=${lang}` : ''}${feature ? `&feature=${feature}` : ''}${reel ? `&reel=${reel}` : ''}${launch ? '&claims=launch' : ''}`;
 
 // CHROMIUM=/path/to/chrome uses that browser instead of the one this
 // Playwright version downloads (a machine with Chromium pre-installed).

@@ -7,7 +7,9 @@
 //   node tools/posters.mjs --sizes 1080x1080       one size
 //   options: --scale 2 (pixels per point: a 2x PNG for print or retina)
 //            --at 4.5 (seconds, instead of each feature's own moment)
-// -> out/posters/asklocker-<feature>-<width>x<height>.png
+//            --launch (what they say once end-to-end encryption ships,
+//            src/claims.js; the files end -launch and are never posted before it)
+// -> out/posters/asklocker-<feature>-<width>x<height>[-launch].png
 //
 // Needs Chromium (Playwright); CHROMIUM=/path/to/chrome uses that browser.
 
@@ -35,6 +37,7 @@ const sizes = opt('sizes', '1920x1080,1080x1080').split(',').map((s) => {
 });
 const scale = Number(opt('scale', 1));
 const at = opt('at', null);
+const launch = args.includes('--launch');
 for (const f of features) if (!ALL.includes(f)) throw new Error(`No feature "${f}": one of ${ALL.join(', ')}`);
 
 // ─── Static server: module scripts do not load from file:// ───────────────
@@ -70,12 +73,12 @@ for (const size of sizes) {
   page.on('response', (res) => { if (res.status() === 404 && !res.url().endsWith('/favicon.ico')) console.error('[404]', res.url()); });
   const cdp = await page.context().newCDPSession(page);
   for (const feature of features) {
-    await page.goto(`${origin}/src/intro.html?film=features&feature=${feature}&size=${size.name}`);
+    await page.goto(`${origin}/src/intro.html?film=features&feature=${feature}&size=${size.name}${launch ? '&claims=launch' : ''}`);
     await page.waitForFunction(() => window.__ready === true, null, { timeout: 60_000 });
     const t = at !== null ? Number(at) : await page.evaluate(() => window.__hero);
     await page.evaluate((time) => window.__seek(time), t);
     const { data } = await cdp.send('Page.captureScreenshot', { format: 'png' });
-    const file = join(OUT, `asklocker-${feature}-${size.name}${scale !== 1 ? `@${scale}x` : ''}.png`);
+    const file = join(OUT, `asklocker-${feature}-${size.name}${scale !== 1 ? `@${scale}x` : ''}${launch ? '-launch' : ''}.png`);
     await writeFile(file, Buffer.from(data, 'base64'));
     console.log(`${file}  (${t.toFixed(2)}s)`);
   }

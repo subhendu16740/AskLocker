@@ -1,0 +1,21 @@
+/* The launch set (src/claims.js): what changes once end-to-end encryption ships. */
+
+/* Reminders (src/app/reminders.tsx), as the brief describes it at launch:
+   in the app, worked out on the phone. */
+.rm-body { padding: 16px 16px 40px; display: flex; flex-direction: column; gap: 12px; }
+.rm-body > .overline { margin-top: 4px; }
+.rm-plus { display: flex; flex-direction: column; gap: 4px; padding: 16px; border-radius: 16px; background: #fff; border: 1px solid #F3D3CF; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06); }
+.rm-plus-tag { font: 600 13px/18px var(--ui); color: var(--coral); }
+.rm-plus-t { font: 400 15px/21px var(--ui); color: var(--ink); }
+.rm-plus-n { font: 400 13px/18px var(--ui); color: var(--gray); }
+.rm-row { display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 10px 16px; border-radius: 12px; background: #fff; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06); }
+.rm-row > svg { flex-shrink: 0; }
+.rm-t { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.rm-t b { font: 500 15px/20px var(--ui); color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rm-t span { font: 400 13px/18px var(--ui); color: var(--gray); }
+.rm-t em { font: 500 13px/18px var(--ui); font-style: normal; color: var(--ink-2); }
+.rm-t em.urgent { color: #DC2626; }
+.rm-t em.bday { color: #DB2777; }
+.rm-ic { width: 32px; height: 32px; border-radius: 8px; flex-shrink: 0; display: grid; place-items: center; background: #FDF2F8; }
+.rm-plus.biz { border-color: #EAD9B8; }
+.rm-plus.biz .rm-plus-tag { color: #B7791F; }

@@ -10,6 +10,7 @@ import {
 } from './parts.js';
 import { VOICE_LINES, APP_PHRASES, voiceSubtitles } from './voice-lines.js';
 import { FILM } from './engine.js';
+import { LAUNCH, END_LINE, LAUNCH_LINE } from './claims.js';
 
 // ─── Story data (edit here to re-cast the film) ──────────────────────────
 // Two stories share these scenes: the family film (Rohan in Bengaluru) and
@@ -65,6 +66,13 @@ const FAMILY_STORY = {
   // 064's set_family_plan).
   expiry: ['Car Insurance expires in 7 days', 'Expires on 9 Nov 2026 · Rohan Sharma. Renew it soon.'],
   planNote: 'Room for 5 GB of documents, until 1 Nov 2027.',
+  // The launch set's Reminders page (src/claims.js), worked out on the phone
+  // on its own date, Monday 2 November: [file, whose, days left, date].
+  reminders: { birthday: 'Today', rows: [
+    ['Car Insurance.pdf', 'Rohan Sharma', 7, '9 November 2026'],
+    ['Papa Passport.pdf', 'Ramesh Sharma', 30, '2 December 2026'],
+    ['scan_1793506263481.jpg', 'Ramesh Sharma', 132, '14 March 2027'],
+  ] },
 };
 
 const NRI_STORY = {
@@ -107,6 +115,13 @@ const NRI_STORY = {
   sonPhone: '+1 416 555 0142',
   // The passport's 30-day stage is due on 2 November in India: it expires on 2 December.
   expiry: ['Papa Passport expires in 30 days', 'Expires on 2 Dec 2026 · Ramesh Sharma. A good time to renew it.'],
+  // On his phone the launch set's reminders are worked out on Toronto's date,
+  // Sunday 1 November: a day more on each, and Dadi's birthday tomorrow.
+  reminders: { birthday: 'Tomorrow', rows: [
+    ['Car Insurance.pdf', 'Rohan Sharma', 8, '9 November 2026'],
+    ['Papa Passport.pdf', 'Ramesh Sharma', 31, '2 December 2026'],
+    ['scan_1793506263481.jpg', 'Ramesh Sharma', 133, '14 March 2027'],
+  ] },
 };
 
 export const STORY = FILM === 'nri' ? NRI_STORY : FAMILY_STORY;
@@ -174,7 +189,7 @@ export function uploadScreen() {
       </div>
       <div class="up-secondary">
         <div class="up-sbtn">${icon('image', 22, '#2A3D66')}<span>Gallery</span></div>
-        <div class="up-sbtn" id="up-gmail">${icon('mail', 22, '#2A3D66')}<span>From Gmail</span>${plusTag()}</div>
+        <div class="up-sbtn" id="up-gmail"${LAUNCH ? ' style="display:none"' : ''}>${icon('mail', 22, '#2A3D66')}<span>From Gmail</span>${plusTag()}</div>
       </div>
       <div class="up-hint">${icon('info', 16, '#6B7280')}<span>PDF, PNG or JPG</span></div>
     </div>
@@ -535,6 +550,30 @@ export function notificationsScreen() {
 }
 
 /** The next morning: a reminder and a birthday, as web pushes. */
+/** The launch set's reminders: in the app, worked out on the phone (src/claims.js).
+ * Drawn from src/app/reminders.tsx as the encryption brief describes it at launch:
+ * expiry dates and birthdays on Home and here, no web notifications, so no
+ * "Get them on this device". Check it against the app before release. */
+export function remindersScreen({ vault = STORY.familyName, plus = 'Family Plus', who = 'Your family', rows = STORY.reminders.rows, birthday = STORY.reminders.birthday } = {}) {
+  const when = (days) => (days <= 60 ? `Runs out in ${days} days` : `Runs out in about ${Math.round(days / 30)} months`);
+  const row = ([file, whose, days, date], i) => `<div class="rm-row" id="rm-r${i}">
+      <div class="rm-t"><b>${file}</b>${whose ? `<span>${whose}</span>` : ''}<em class="${days <= 30 ? 'urgent' : ''}">${when(days)} · ${date}</em></div>
+      ${icon('chevron-right', 16, '#9CA3AF')}</div>`;
+  return `<section class="scr" id="scr-reminders">${sbFill}
+    ${header('Reminders', { right: plusTag(plus) })}
+    <div class="rm-body" id="rm-body">
+      <div class="rm-plus"><div class="rm-plus-tag">★ ${plus}</div>
+        <div class="rm-plus-t">${who} gets a reminder 90, 30 and 7 days before a document expires, and on the day.</div>
+        <div class="rm-plus-n">They show on Home and here.</div></div>
+      ${birthday ? `<div class="overline">Birthdays</div>
+      <div class="rm-row" id="rm-bday"><span class="rm-ic">${icon('gift', 16, '#DB2777')}</span>
+        <div class="rm-t"><b>${STORY.dadi}'s 78th birthday</b><em class="bday">${birthday}</em></div></div>` : ''}
+      <div class="overline">Expiry dates in ${vault}</div>
+      ${rows.map(row).join('')}
+    </div>
+  </section>`;
+}
+
 export function lockDayScreen() {
   return lockScreen('scr-lockday', STORY.t.day, STORY.t.dayDate, `<div class="lstack">
       ${pushNotif('pn1', STORY.expiry[0], STORY.expiry[1])}
@@ -556,7 +595,7 @@ export function phone(lang = '') {
     ${personScreen()}
     ${emergencyScreen()}
     ${lockDayScreen()}
-    ${notificationsScreen()}
+    ${notificationsScreen()}${LAUNCH ? remindersScreen() : ''}
     ${lockScreen('scr-lock2', STORY.t.lock2, STORY.t.lockDate, lockNotif('ln2', 'Maa', [STORY.maaThanks]))}`, STORY.t.lock);
 }
 
@@ -632,12 +671,20 @@ export function textBlocks() {
     'One emergency card for each person.', 'With the policy number too. Anyone in the family can open it, and every number is one tap from the dialler.')}
   ${whyHow('t-alerts', 'Reminders', 'bell', STORY.why.alerts[0],
     'Everyone is reminded in time.', STORY.why.alerts[1], { plus: '★ Family Plus' })}
-  ${trustBlock('Policies, IDs, medical records: *the most private papers* a family has.', 'In AskLocker, only your family can open them.', [
-    ['lock', 'Invite-only', 'Nobody joins unless an admin asks and they say yes.'],
-    ['users', 'Nobody else', "Nobody else using AskLocker can open your family's documents."],
-    ['link', 'Links that expire', 'Share one document for 1 or 7 days, or 30 with Family Plus. Turn it off any time.'],
-    ['eye-off', 'Yours alone', "Your personal vault is yours alone. Your family won't see it."],
-  ], 'Search sends passages of your documents to outside AI services. Settings › Privacy names them.')}
+  ${LAUNCH
+    // The launch set: the encryption brief's own lines (src/claims.js).
+    ? trustBlock('Policies, IDs, medical records: *the most private papers* a family has.', LAUNCH_LINE, [
+      ['smartphone', 'Locked on your phone', "Your documents are locked on your phone before they're uploaded."],
+      ['key', 'Your family holds the key', 'Each vault has its own key. Only the people in your vault have it.'],
+      ['eye-off', 'Not even AskLocker', 'Nobody at AskLocker can open your documents or emergency cards.'],
+      ['rotate-ccw', 'Your way back', 'Lost your phone? Your Recovery Key, or a family member you chose, gets you back in.'],
+    ], "To answer a question, only the parts it needs go to an AI service. We don't keep them.")
+    : trustBlock('Policies, IDs, medical records: *the most private papers* a family has.', 'In AskLocker, only your family can open them.', [
+      ['lock', 'Invite-only', 'Nobody joins unless an admin asks and they say yes.'],
+      ['users', 'Nobody else', "Nobody else using AskLocker can open your family's documents."],
+      ['link', 'Links that expire', 'Share one document for 1 or 7 days, or 30 with Family Plus. Turn it off any time.'],
+      ['eye-off', 'Yours alone', "Your personal vault is yours alone. Your family won't see it."],
+    ], 'Search sends passages of your documents to outside AI services. Settings › Privacy names them.')}
   <div class="tblock on-dark res-block" id="t-res">
     <div class="kicker">${icon('heart', 22, 'currentColor', 2.4)}<span>${STORY.res.kicker}</span></div>
     <div class="clock-big"><span class="t" id="res-time">2:14</span><span class="ampm">AM</span></div>
@@ -645,7 +692,7 @@ export function textBlocks() {
       <div class="h1" id="res-h1b">${words(STORY.res.h1b)}</div></div>
     <div class="sub" id="res-sub">${STORY.res.sub}</div>
   </div>
-  ${brand('endcard', 'Every family document. One question away.', { cta: STORY.cta, ctaNote: STORY.ctaNote, url: STORY.url, end: true })}`;
+  ${brand('endcard', END_LINE.family, { cta: STORY.cta, ctaNote: STORY.ctaNote, url: STORY.url, end: true })}`;
 }
 
 export function callouts() {
@@ -676,7 +723,8 @@ export function callouts() {
     <div class="co-label">${icon('bell', 14, '#D4807B', 2.6)}<span>Before it expires</span></div>
     <div class="co-steps"><i class="track"></i>
       ${[['90', 'days'], ['30', 'days'], ['7', 'days'], ['On the', 'day']].map(([a, b]) => `<div class="co-step"><i class="dot"></i><b>${a}</b><span>${b}</span></div>`).join('')}</div>
-    <div class="co-foot">${icon('gift', 14, '#16A34A', 2.6)}<span>Birthdays too, on the morning</span></div>
+    <div class="co-foot">${LAUNCH ? `${icon('smartphone', 14, '#16A34A', 2.6)}<span>Birthdays too, worked out on your phone</span>`
+      : `${icon('gift', 14, '#16A34A', 2.6)}<span>Birthdays too, on the morning</span>`}</div>
   </div>
   <div class="wave" id="wave">${Array.from({ length: 26 }, () => '<i></i>').join('')}</div>`;
 }

@@ -20,6 +20,9 @@ import {
 } from './engine.js';
 import { phone, scrambleCards, textBlocks, callouts, subtitles, HEALTH, STORY } from './family-screens.js';
 import { VOICE_LINES } from './voice-lines.js';
+// The launch set (?claims=launch): no Gmail import, reminders in the app, and
+// the privacy scene and end card in the encryption brief's words.
+import { LAUNCH } from './claims.js';
 // How long Maa's question and the spoken answer run: the Hindi of
 // tools/voices.py, or a language's from tools/voices_indic.py.
 import { VOICES as HINDI } from './voices.js';
@@ -280,7 +283,20 @@ S.scramble = 6.9;
 // ─── 5. Import from Gmail ────────────────────────────────────────────────
 // Each feature scene opens on its why while the phone gets into place, and
 // shows its how as the app does the work.
-{
+//
+// The launch set has no Gmail import: it is off for encrypted vaults until it
+// is rebuilt to run in the browser (src/claims.js). The day starts here all
+// the same, and the next scene (Scan, or Ask in the short cut) brings the
+// phone in on its own screen.
+if (LAUNCH) {
+  const t0 = S.gmail;
+  cue(t0, 'section', { name: 'day' });
+  tl.set(SHORT ? '#scr-ask' : '#scr-upload', { autoAlpha: 1, zIndex: nextZ() }, t0);
+  tl.set(['#scr-call', '#scr-lock'], { autoAlpha: 0 }, t0);
+  chrome(t0, 'app', '9:41');
+  phoneIn(t0 + 0.05);
+  S.scan = t0;
+} else {
   const t0 = S.gmail;
   // The short cut runs the same steps a little faster.
   const k = SHORT ? { open: 1.2, find: 2.15, scan: 1.1, scroll: 0.45, imp: 1.35, row: 0.22, out: 0.95 }
@@ -334,7 +350,7 @@ if (!SHORT) {
   const t0 = S.scan;
   const d = t0 + 1.0;
   showWhy('t-scan', t0);
-  nav('scr-gmail', 'scr-upload', t0, 'back', 0.4);
+  if (!LAUNCH) nav('scr-gmail', 'scr-upload', t0, 'back', 0.4);
   tap(d + 1.0, P.scan, { press: '#up-scan' });
   nav('scr-upload', 'scr-camera', d + 1.15, 'zoom', 0.4);
   showHow('t-scan', d + 1.1);
@@ -410,7 +426,7 @@ if (!SHORT) {
   const sent = d + 0.9 + k.type + 0.3;
   const ans = sent + 0.25 + k.think;
   showWhy('t-ask', t0);
-  nav(SHORT ? 'scr-gmail' : 'scr-tag', 'scr-ask', t0, 'fade', 0.4);
+  if (!(LAUNCH && SHORT)) nav(SHORT ? 'scr-gmail' : 'scr-tag', 'scr-ask', t0, 'fade', 0.4);
   showHow('t-ask', d + 0.6);
   tap(d + 0.75, P.askInput);
   tl.set('#ask-ph', { autoAlpha: 0 }, d + 0.9);
@@ -592,6 +608,22 @@ if (!SHORT) {
 if (!SHORT) {
   const t0 = S.alerts;
   showWhy('t-alerts', t0);
+  if (LAUNCH) {
+    // The launch set: the next morning's reminders are in the app, worked out
+    // on the phone; the web app sends no notifications for them (src/claims.js).
+    const parts = $$('#rm-body > *');
+    tl.set(parts, { autoAlpha: 0 }, t0);
+    nav('scr-emerg', 'scr-reminders', t0, 'fade', 0.45);
+    chrome(t0, 'app', STORY.t.day);
+    tl.fromTo(parts, { autoAlpha: 0, y: 14 }, { autoAlpha: 1, y: 0, duration: 0.4, stagger: 0.1, ...IR }, t0 + 0.5);
+    cue(t0 + 1.4, 'pop-soft');
+    showHow('t-alerts', t0 + 1.9);
+    tl.fromTo('#rm-r0', { boxShadow: '0 0 0 0 rgba(220,38,38,0)' }, { boxShadow: '0 0 0 3px rgba(220,38,38,0.25)', duration: 0.5, yoyo: true, repeat: 1, ease: 'sine.inOut', ...IR }, t0 + 2.6);
+    showCallout('#co-alerts', t0 + 3.6);
+    tl.fromTo('#co-alerts .track', { scaleX: 0 }, { scaleX: 1, duration: 0.8, ease: 'power2.inOut', ...IR }, t0 + 3.8);
+    tl.fromTo($$('#co-alerts .co-step'), { autoAlpha: 0, y: 10 }, { autoAlpha: 1, y: 0, duration: 0.4, stagger: 0.16, ...IR }, t0 + 3.8);
+    tl.fromTo('#co-alerts .co-foot', { autoAlpha: 0, y: 8 }, { autoAlpha: 1, y: 0, duration: 0.4, ...IR }, t0 + 4.5);
+  } else {
   // The next morning: a reminder reaches the phone, as a web push.
   nav('scr-emerg', 'scr-lockday', t0, 'fade', 0.45);
   chrome(t0, 'os', STORY.t.day);
@@ -609,6 +641,7 @@ if (!SHORT) {
   nav('scr-lockday', 'scr-notifs', t0 + 5.35, 'zoom', 0.4);
   chrome(t0 + 5.35, 'app');
   tl.fromTo($$('#nt-list .nt-card'), { autoAlpha: 0, y: 16 }, { autoAlpha: 1, y: 0, duration: 0.4, stagger: 0.08, ...IR }, t0 + 5.5);
+  }
   hide('#t-alerts', t0 + 7.6);
   hide('#co-alerts', t0 + 7.5, { y: '-=20' });
   tl.to('#phone', { autoAlpha: 0, y: `+=60`, duration: 0.55, ease: 'power2.in' }, t0 + 7.6);

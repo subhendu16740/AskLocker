@@ -13,6 +13,9 @@ import {
   notify, bubblePop, drawer, finish,
 } from './engine.js';
 import { phone, textBlocks, callouts, BIZ, PURCHASE, CHAPTERS } from './business-screens.js';
+// The launch set (?claims=launch): reminders in the app, and access and
+// control in the encryption brief's words (src/claims.js).
+import { LAUNCH } from './claims.js';
 
 // ─── Layout: every position that differs between 16:9 and 9:16 ───────────
 // The phone sits right of the chapter in 16:9 and under it in 9:16, where a
@@ -313,21 +316,39 @@ if (SHORT) S.plans = S.alerts;
 if (!SHORT) {
   const t0 = S.alerts;
   showChapter(3, t0);
-  // The next morning: an expiry reminder and a note's reminder, as web pushes.
-  nav('scr-overview', 'scr-lockday', t0, 'fade', 0.45);
-  chrome(t0, 'os', '9:05');
-  vibrate(t0 + 1.0);
-  notify('#pn1', t0 + 1.05);
-  vibrate(t0 + 1.7);
-  notify('#pn2', t0 + 1.75);
+  if (LAUNCH) {
+    // The launch set: the morning's reminders are in the app, worked out on
+    // the phone; the web app sends no notifications for them (src/claims.js).
+    const parts = $$('#rm-body > *');
+    tl.set(parts, { autoAlpha: 0 }, t0);
+    nav('scr-overview', 'scr-reminders', t0, 'fade', 0.45);
+    chrome(t0, 'app', '9:05');
+    tl.fromTo(parts, { autoAlpha: 0, y: 14 }, { autoAlpha: 1, y: 0, duration: 0.4, stagger: 0.12, ...IR }, t0 + 0.5);
+    cue(t0 + 1.0, 'pop-soft');
+    tl.fromTo('#rm-r0', { boxShadow: '0 0 0 0 rgba(220,38,38,0)' }, { boxShadow: '0 0 0 3px rgba(220,38,38,0.25)', duration: 0.5, yoyo: true, repeat: 1, ease: 'sine.inOut', ...IR }, t0 + 1.8);
+  } else {
+    // The next morning: an expiry reminder and a note's reminder, as web pushes.
+    nav('scr-overview', 'scr-lockday', t0, 'fade', 0.45);
+    chrome(t0, 'os', '9:05');
+    vibrate(t0 + 1.0);
+    notify('#pn1', t0 + 1.05);
+    vibrate(t0 + 1.7);
+    notify('#pn2', t0 + 1.75);
+  }
   showCallout('#co-alerts', t0 + 3.0);
   tl.fromTo('#co-alerts .track', { scaleX: 0 }, { scaleX: 1, duration: 0.8, ease: 'power2.inOut', ...IR }, t0 + 3.2);
   tl.fromTo($$('#co-alerts .co-step'), { autoAlpha: 0, y: 10 }, { autoAlpha: 1, y: 0, duration: 0.4, stagger: 0.16, ...IR }, t0 + 3.2);
   tl.fromTo('#co-alerts .co-foot', { autoAlpha: 0, y: 8 }, { autoAlpha: 1, y: 0, duration: 0.4, ...IR }, t0 + 3.9);
-  // The note's reminder opens My notes; the call made, it is ticked off.
-  tap(t0 + 4.3, P.pn2, { press: '#pn2' });
-  nav('scr-lockday', 'scr-notes', t0 + 4.45, 'zoom', 0.4);
-  chrome(t0 + 4.45, 'app', '10:14');
+  if (LAUNCH) {
+    // My notes, where the note's reminder is due today; the call made, it is ticked off.
+    nav('scr-reminders', 'scr-notes', t0 + 4.45, 'push', 0.4);
+    chrome(t0 + 4.45, 'app', '10:14');
+  } else {
+    // The note's reminder opens My notes; the call made, it is ticked off.
+    tap(t0 + 4.3, P.pn2, { press: '#pn2' });
+    nav('scr-lockday', 'scr-notes', t0 + 4.45, 'zoom', 0.4);
+    chrome(t0 + 4.45, 'app', '10:14');
+  }
   tap(t0 + 5.6, P.nn1);
   swap('#nn-1 .nn-off', '#nn-1 .nn-on', t0 + 5.62, 0.15);
   tl.to('#nn-1 .nn-t', { color: '#6B7280', duration: 0.15, ease: 'none' }, t0 + 5.62);
