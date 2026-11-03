@@ -95,11 +95,15 @@ jobs:
           echo "Deploying to ${{ steps.target.outputs.name }} (${{ steps.target.outputs.ref }})"
 
           # --use-api bundles server-side, so the runner needs no Docker.
+          # --yes: the CLI asks before deploying, and a run has nobody to
+          # answer ("Confirmation required … Re-run with --yes"), since the
+          # release the workflow first met on 3 November 2026.
           for fn in ingest-document rag-search add-member link-account reembed-index gmail-connect gmail-scan gmail-import delete-account push share plans payments; do
             echo "::group::$fn"
             supabase functions deploy "$fn" \
               --project-ref "${{ steps.target.outputs.ref }}" \
-              --use-api
+              --use-api \
+              --yes
             echo "::endgroup::"
           done
 
@@ -116,7 +120,8 @@ jobs:
             supabase functions deploy "$fn" \
               --project-ref "${{ steps.target.outputs.ref }}" \
               --use-api \
-              --no-verify-jwt
+              --no-verify-jwt \
+              --yes
             echo "::endgroup::"
           done
 
