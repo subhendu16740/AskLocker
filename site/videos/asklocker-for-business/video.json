@@ -62,7 +62,7 @@
   "reviewNotes": [
     "Chapter times were measured from marketing/video's timeline (16:9 full cut, 91.35 s) on 3 November 2026. A changed film needs them measured again.",
     "Rendered on 3 November 2026 with the plans table and end card corrected to 067's numbers (plan-text.ts) and chapter 01's file types to include Excel.",
-    "Before publishing: business vaults are a pilot with a few businesses, and paid plans are set up by hand. Check that is still what the app offers (marketing/video/README.md)."
+    "Published on 3 November 2026 at the owner's decision, with business vaults still a pilot set up by hand."
   ],
-  "draft": true
+  "draft": false
 }
