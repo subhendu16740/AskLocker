@@ -116,3 +116,25 @@ export const facts = {
 export function listOf(items) {
   return items.length <= 1 ? items.join('') : `${items.slice(0, -1).join(', ')} and ${items.at(-1)}`;
 }
+
+/**
+ * A business's plans as the app's Plans page shows them (src/app/plus.tsx,
+ * businessRows()): Free beside Plus, Pro and Enterprise. Prices before GST.
+ */
+const shared = (b) => (b.questions == null ? 'No limit' : `${grouped(b.questions, false)} ${b.questionsShared ? 'shared' : 'per person'}`);
+export const businessColumns = [
+  {
+    id: 'free', name: 'Free', price: 0, yearly: null,
+    people: L.freeBusinessMembers,
+    space: `${formatBytes(L.freePerson)} per person`,
+    questions: `${L.questions.free} per person`,
+    overview: false, money: false, reminders: false, languages: false,
+  },
+  ...businessPlans.map((b) => ({
+    id: b.id, name: b.name, price: b.price, yearly: b.yearly,
+    people: b.members,
+    space: `${formatBytes(b.storage)} shared`,
+    questions: shared(b),
+    overview: true, money: b.id !== 'business_plus', reminders: true, languages: true,
+  })),
+];

@@ -69,6 +69,18 @@ scale at weights 400 to 600, navy with coral for small marks, white cards
 onboarding's navy gradient at the top. Light only, like the app's screens.
 Add nothing the app doesn't have: no new colours, sizes or fonts.
 
+## Family and Business
+
+The top of the page is a carousel of the app's two modes, Family and
+Business: swipe, the arrows or the dots. Every section below that differs
+between them (the film, how it works, features, plans) follows it, and a
+business wears the app's teal and gold, as Business mode does in the app.
+Both are in the HTML (`data-for="family"` / `"business"`), so search engines
+and AI assistants read both; `<body data-mode>` picks which shows.
+`/#business` opens on the business side, and the header's Business link uses
+it. Without JavaScript the top still swipes, and the rest shows the family's.
+The words for each are `modes.family` and `modes.business` in `content.mjs`.
+
 ## Changing the words
 
 Short, as the app's screens are: a title and one line. Where the app

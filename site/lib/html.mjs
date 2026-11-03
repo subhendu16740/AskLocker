@@ -58,6 +58,10 @@ const ICONS = {
   'arrow-right': '<line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>',
   'chevron-down': '<polyline points="6 9 12 15 18 9"/>',
   'chevron-right': '<polyline points="9 18 15 12 9 6"/>',
+  'chevron-left': '<polyline points="15 18 9 12 15 6"/>',
+  'refresh-cw': '<polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>',
+  'bar-chart-2': '<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>',
+  'edit-3': '<path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>',
 };
 
 export function icon(name, size = 24) {
@@ -94,11 +98,12 @@ if(/[?&#](code|error|error_description|token_hash|access_token|refresh_token)=/.
 var s=false;for(var i=0;i<localStorage.length;i++){var k=localStorage.key(i);if(/^sb-[a-z0-9]+-auth-token$/.test(k)&&localStorage.getItem(k)){s=true;break}}
 var app=(window.matchMedia&&matchMedia('(display-mode: standalone)').matches)||navigator.standalone===true;
 var r=document.referrer,own=false;try{own=!!r&&new URL(r).origin===l.origin}catch(e){}
-if(app)l.replace(s?'/home':'/onboarding');else if(s&&!own)l.replace('/home');}catch(e){}})();`;
+if(app)l.replace(s?'/home':'/onboarding');else if(s&&!own&&!/^#(family|business)$/.test(h))l.replace('/home');}catch(e){}})();`;
 
 const NAV = [
   { href: '/#films', label: 'Films', when: 'films' },
   { href: '/#pricing', label: 'Pricing' },
+  { href: '/#business', label: 'Business' },
   { href: '/#faq', label: 'FAQ' },
 ];
 
@@ -133,7 +138,7 @@ function footer({ hasFilms }) {
  *             for drafts: they may be reviewed but never indexed
  *  forward    the landing page's hand-on to the app (above)
  */
-export function page({ path, title, description, body, jsonLdGraph, og = {}, indexable, forward = false, hasFilms = false, headExtra = '' }) {
+export function page({ path, title, description, body, jsonLdGraph, og = {}, indexable, forward = false, hasFilms = false, headExtra = '', bodyAttrs = '' }) {
   const url = abs(path);
   const image = og.image ?? abs('/media/site/og-card.jpg');
   const robots = indexable
@@ -169,7 +174,7 @@ ${ogExtra}
 <script type="application/ld+json">${jsonLd({ '@context': 'https://schema.org', '@graph': jsonLdGraph })}</script>
 <style>${CSS}</style>
 ${headExtra}</head>
-<body>
+<body${bodyAttrs ? ` ${bodyAttrs}` : ''}>
 <a class="skip" href="#main">Skip to content</a>
 ${header({ hasFilms })}
 <main id="main">
