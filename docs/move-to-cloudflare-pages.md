@@ -186,8 +186,16 @@ OAuth client › **Authorized JavaScript origins** › add
 ### B4. Supabase DEV › Authentication › URL Configuration
 
 - **Site URL**: `https://dev.asklocker.pages.dev`
-- **Redirect URLs**: add `https://*.asklocker.pages.dev/**`. Leave the
-  Vercel ones until B7.
+- **Redirect URLs**: add `https://*.asklocker.pages.dev` and
+  `https://*.asklocker.pages.dev/**`. The redirect sign-in sends the
+  page's origin with no path, which the `/**` pattern alone does not
+  match. Leave the Vercel ones until B7.
+
+This step was missed in the move and found on 3 November 2026: DEV's Site
+URL was still `familyvault://` and no Cloudflare address was listed.
+Nothing showed it, because the test form and Google's own button do not
+use this list; only the fallback "Continue with Google" does, and it would
+have sent people to `familyvault://`.
 
 ### B5. Supabase DEV › Authentication › Passkeys
 
