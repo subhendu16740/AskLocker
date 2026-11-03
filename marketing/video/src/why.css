@@ -1,0 +1,125 @@
+/* The why films (src/why.js): words at night, the papers around them, the
+ * money left unclaimed, the CA's chat, and the scenes beside the phone.
+ * GSAP owns every transform and opacity. */
+
+/* ─── Words at night, centred, read line by line ─────────────────────── */
+.wy-lines { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 0 150px; text-align: center; }
+.portrait .wy-lines { padding: 0 70px; }
+.wy-lines.top { justify-content: flex-start; padding-top: 220px; }
+.portrait .wy-lines.top { padding-top: 420px; }
+.wy-lines .big { font-size: 88px; }
+.portrait .wy-lines .big { font-size: 80px; padding: 0; }
+.wy-lines .big-em { font-size: 112px; margin-top: 4px; }
+.wy-lines .big-em, .wy-check .big-em { text-wrap: balance; }
+.portrait .wy-lines .big-em { font-size: 104px; padding: 0; }
+
+/* The papers, scattered around the words. */
+.wy-chips { position: absolute; inset: 0; }
+.wy-chip { position: absolute; left: 0; top: 0; display: inline-flex; align-items: center; gap: 12px; padding: 16px 26px 16px 20px; border-radius: 999px;
+  background: #fff; box-shadow: 0 24px 50px -20px rgba(0, 0, 0, 0.65); font: 600 28px/1 var(--display); letter-spacing: -0.01em; color: var(--film-ink); white-space: nowrap; }
+.portrait .wy-chip { font-size: 30px; }
+
+/* Where the copies went. */
+.wy-places { position: absolute; left: 0; right: 0; top: 470px; display: flex; justify-content: center; gap: 30px; }
+.portrait .wy-places { left: 90px; right: 90px; top: 760px; display: grid; grid-template-columns: 1fr 1fr; gap: 28px; }
+.wy-place { width: 300px; display: flex; flex-direction: column; align-items: flex-start; gap: 10px; padding: 28px; border-radius: 26px; text-align: left;
+  background: rgba(255, 255, 255, 0.07); border: 1px solid rgba(255, 255, 255, 0.14); }
+.portrait .wy-place { width: auto; padding: 32px; }
+.wy-place-ic { width: 64px; height: 64px; margin-bottom: 8px; border-radius: 18px; display: grid; place-items: center; background: var(--coral); }
+.wy-place b { font: 700 36px/1.1 var(--display); letter-spacing: -0.015em; color: #fff; }
+.wy-place span:not(.wy-place-ic) { font: 400 23px/1.3 var(--display); color: rgba(226, 232, 245, 0.72); }
+.portrait .wy-place b { font-size: 42px; }
+.portrait .wy-place span:not(.wy-place-ic) { font-size: 28px; }
+
+/* What a family would need to know. */
+.wy-check { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 0 150px; text-align: center; }
+.portrait .wy-check { padding: 0 70px; }
+.wy-check .big { font-size: 80px; }
+.wy-check .big-em { font-size: 104px; margin-top: 4px; }
+.portrait .wy-check .big { font-size: 76px; padding: 0; }
+.portrait .wy-check .big-em { font-size: 96px; padding: 0; }
+.wy-items { margin-top: 48px; display: grid; grid-template-columns: 1fr 1fr; gap: 18px 26px; text-align: left; }
+.portrait .wy-items { width: 100%; margin-top: 60px; grid-template-columns: 1fr; gap: 20px; }
+.wy-item { display: flex; align-items: center; gap: 18px; padding: 20px 26px; border-radius: 22px; background: rgba(255, 255, 255, 0.07); border: 1px solid rgba(255, 255, 255, 0.14);
+  font: 500 32px/1.2 var(--display); letter-spacing: -0.01em; color: #fff; }
+.portrait .wy-item { font-size: 38px; padding: 24px 28px; }
+.wy-item-ic { width: 54px; height: 54px; flex-shrink: 0; border-radius: 16px; display: grid; place-items: center; background: var(--coral); }
+.wy-item b { margin-left: auto; padding-left: 12px; font: italic 400 52px/1 var(--serif); color: var(--coral); }
+
+/* The money left unclaimed: how much, where it is, and the Government's words. */
+.wy-stat { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 0 150px; text-align: center; }
+.portrait .wy-stat { padding: 0 70px; }
+.wy-stat-k { font: 600 24px/1 var(--display); letter-spacing: 0.18em; text-transform: uppercase; color: var(--coral); }
+.wy-num { margin-top: 20px; font: 750 150px/1 var(--display); letter-spacing: -0.04em; color: #fff; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.portrait .wy-num { font-size: 116px; }
+.wy-stat-line { margin-top: 16px; font: 450 40px/1.25 var(--display); color: #fff; text-wrap: balance; }
+.portrait .wy-stat-line { font-size: 46px; }
+.wy-src { margin-top: 12px; font: 400 20px/1.3 var(--ui); color: rgba(226, 232, 245, 0.6); }
+.portrait .wy-src { font-size: 25px; }
+.wy-parts { margin-top: 40px; display: grid; grid-template-columns: repeat(4, 270px); gap: 16px; text-align: left; }
+.portrait .wy-parts { width: 100%; grid-template-columns: 1fr 1fr; }
+.wy-part { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding: 18px 20px; border-radius: 20px;
+  background: rgba(255, 255, 255, 0.07); border: 1px solid rgba(255, 255, 255, 0.14); font: 500 24px/1.2 var(--display); color: rgba(226, 232, 245, 0.85); }
+.wy-part b { font: 700 28px/1.1 var(--display); color: #fff; }
+.portrait .wy-part { font-size: 28px; }
+.portrait .wy-part b { font-size: 32px; }
+.wy-quote { margin-top: 44px; max-width: 1300px; font: italic 400 54px/1.2 var(--serif); color: #fff; text-wrap: balance; }
+.portrait .wy-quote { margin-top: 52px; font-size: 60px; }
+
+/* The CA, late, in a chat (a plain chat, in AskLocker's colours). */
+.wy-chat { position: absolute; overflow: hidden; border-radius: 30px; background: #F3F4F6; box-shadow: 0 40px 90px -30px rgba(0, 0, 0, 0.75); }
+.landscape .wy-chat { left: 560px; width: 800px; top: 190px; }
+.portrait .wy-chat { left: 80px; right: 80px; top: 470px; }
+.wy-chat-h { display: flex; align-items: center; gap: 16px; padding: 20px 26px; background: #0F5C57; color: #fff; }
+.wy-chat-av { width: 58px; height: 58px; flex-shrink: 0; border-radius: 50%; display: grid; place-items: center; background: #B7791F; font: 600 26px/1 var(--ui); }
+.wy-chat-h b { display: block; font: 600 28px/1.2 var(--ui); }
+.wy-chat-h span { display: block; margin-top: 2px; font: 400 20px/1.2 var(--ui); opacity: 0.8; }
+.wy-chat-b { display: flex; flex-direction: column; gap: 16px; padding: 28px 26px 30px; }
+.wy-msg { max-width: 80%; padding: 16px 20px 10px; border-radius: 22px; font: 400 29px/1.35 var(--ui); color: #111827; box-shadow: 0 2px 5px rgba(0, 0, 0, 0.07); }
+.portrait .wy-msg { font-size: 34px; }
+.wy-msg.them { align-self: flex-start; background: #fff; border-top-left-radius: 6px; }
+.wy-msg.me { align-self: flex-end; background: #D6EEEA; border-top-right-radius: 6px; }
+.wy-msg i { display: block; margin-top: 6px; text-align: right; font: 400 18px/1 var(--ui); font-style: normal; color: #6B7280; }
+.portrait .wy-msg i { font-size: 21px; }
+
+/* The papers a business runs on: the business film's tiles, three across. */
+.wy-tiles { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 0 150px; text-align: center; }
+.portrait .wy-tiles { padding: 0 70px; }
+.wy-tiles .big { font-size: 80px; }
+.portrait .wy-tiles .big { font-size: 76px; padding: 0; }
+.landscape .wy-grid { grid-template-columns: repeat(3, 380px); }
+.portrait .wy-grid { margin-top: 56px; }
+.wy-foot { margin-top: 38px; font: 450 34px/1.3 var(--display); color: rgba(226, 232, 245, 0.8); text-wrap: balance; }
+.portrait .wy-foot { font-size: 40px; }
+
+/* Beside the phone. */
+.wy-scene .h1 { font-size: 78px; }
+.portrait .wy-scene .h1 { font-size: 92px; }
+
+/* For your family, and for your business. */
+.wy-both { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 0 150px; }
+.portrait .wy-both { padding: 0 70px; }
+.wy-both-h { font: 650 72px/1.1 var(--display); letter-spacing: -0.025em; color: var(--film-ink); text-align: center; text-wrap: balance; font-variation-settings: 'opsz' 96; }
+.portrait .wy-both-h { font-size: 78px; }
+.wy-fors { margin-top: 56px; display: flex; gap: 36px; }
+.portrait .wy-fors { width: 100%; flex-direction: column; gap: 28px; }
+.wy-for { width: 560px; display: flex; flex-direction: column; gap: 12px; padding: 36px; border-radius: 28px; background: #fff;
+  box-shadow: 0 30px 70px -30px rgba(21, 32, 54, 0.32); border: 1px solid rgba(42, 61, 102, 0.07); }
+.portrait .wy-for { width: auto; }
+.wy-for-ic { width: 70px; height: 70px; margin-bottom: 6px; border-radius: 20px; display: grid; place-items: center; background: linear-gradient(135deg, #2A3D66, #4A6491); }
+.wy-for.biz .wy-for-ic { background: linear-gradient(135deg, #0F5C57, #1A7A72); }
+.wy-for b { font: 700 42px/1.1 var(--display); letter-spacing: -0.015em; color: var(--navy); }
+.wy-for.biz b { color: var(--teal); }
+.wy-for span:not(.wy-for-ic) { font: 400 28px/1.35 var(--display); color: var(--film-sub); }
+.portrait .wy-for b { font-size: 48px; }
+.portrait .wy-for span:not(.wy-for-ic) { font-size: 34px; }
+
+/* ─── A business: its teal night, and its gold ───────────────────────── */
+.why-biz #bg-night {
+  background:
+    radial-gradient(90% 70% at 50% 0%, #0d302c 0%, rgba(13, 48, 44, 0) 70%),
+    radial-gradient(60% 50% at 85% 100%, rgba(183, 121, 31, 0.10) 0%, rgba(183, 121, 31, 0) 70%),
+    linear-gradient(180deg, #061513 0%, #040a09 100%);
+}
+.why-biz .big-em { color: #B7791F; }
+.why-biz .on-dark .big-em { color: #D9A04A; }

@@ -3,11 +3,12 @@
 Three launch films, as code: two for families (one told from abroad) and one
 for business, a poster and a short for each feature, and a film that says what
 AskLocker does with a family's documents, with four reels cut from it (below);
+three films on why AskLocker was made ([Why we built it](#why-we-built-it));
 and, behind a switch, the launch set for end-to-end encryption, never posted
 before it ships ([The launch set](#the-launch-set)).
 `src/intro.html` builds any of them as a GSAP timeline (`?film=family`,
-`?film=nri`, `?film=business`, `?film=features`, `?film=privacy` or, for the
-launch set only, `?film=locked` and `?film=locked-business`) that
+`?film=nri`, `?film=business`, `?film=features`, `?film=privacy`, `?film=why`
+or, for the launch set only, `?film=locked` and `?film=locked-business`) that
 recreates the app's real screens (same layouts, copy, colours and Feather icons
 as `src/app/**`, sized by `src/constants/design.ts`; a business's screens in the
 app's teal, as Business mode has them). `tools/render.mjs` seeks the paused
@@ -659,6 +660,31 @@ from the brief in the app's style, because the app does not have them yet:
 check each against the app before release. The films name no AI company
 ("an AI service") and never say "end-to-end encrypted"; both are open
 questions in the brief.
+
+## Why we built it
+
+Three films on why AskLocker was made, in the founder's own words (3
+November 2026), for the people who should see themselves in it: young
+people who look after their family's papers, the families who would need to
+find them, and business owners who chase papers with their CA. Each opens
+at night, on the feeling, turns to day on AskLocker's name (the privacy
+film's music, or for a business its formal piece), and shows the app doing
+what the story asked for. `?film=why&reel=` picks one, `tools/why.sh` renders
+all three in 16:9 and 9:16 with their covers, and `publish.sh` puts them
+first in `marketing/launch/` (01 to 06).
+
+| `&reel=` | Says | Shows |
+|---|---|---|
+| `founder` | Every family has one person who handles everything; his parents always said to keep a record of everything he does online; he kept copies everywhere; if he's not there, how will they find it? | The papers falling into email, folders, chats and the cupboard; Ask finding Papa's policy number; for your family, for your business |
+| `family` | If you weren't there, would your family know your insurance, investments, the nominee? ₹1.84 lakh crore lies unclaimed; his parents read Hindi and English but find writing hard | The number counted up, with where it is and the Government's own line; Maa asking in Hindi and hearing the answer, with English subtitles; "Who is the nominee?" among what else to ask |
+| `business` | A business owner's CA asking for papers at 10 PM; GST certificate, monthly returns, advance tax, bills, in some email or chat | The chat; inviting the CA into the vault; either of them asking for September's GSTR-3B |
+
+They make no claim about encryption and end on today's lines, so they can
+be posted now. The numbers are on screen with their sources and were
+checked against them on 3 November 2026: ₹1.84 lakh crore (the Finance
+Minister, 4 October 2025, via The Hindu and PTI), and the breakdown and the
+quote from the Press Information Bureau's "Your Money, Your Right" release
+of 26 December 2025. `src/why-screens.js` holds every word.
 
 ## Licences
 

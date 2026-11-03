@@ -7,12 +7,15 @@
 #   marketing/<family|business>/posters/  asklocker-<family|business>-<feature>-<size>.png
 #   marketing/nri/films/                  asklocker-nri-<16x9|9x16>[-short].mp4 (the family film told from abroad)
 #   marketing/privacy/<films|reels|covers>/  the privacy film (tools/privacy.sh)
-# and the launch set, everything rendered with --launch (src/claims.js), which
-# is never posted before end-to-end encryption ships, all in one folder,
-# numbered in the order to watch them (marketing/launch/README.md lists them):
+# and every updated video in one folder, numbered in the order to watch them
+# (marketing/launch/README.md lists them): first why AskLocker was made
+# (tools/why.sh), which makes no claim about encryption and can be posted
+# today, then the launch set, everything rendered with --launch
+# (src/claims.js), never posted before end-to-end encryption ships:
+#   marketing/launch/NN-why-<name>-<shape>.mp4   01-06 the why films
 #   marketing/launch/NN-<film|feature|reel>-<name>-launch.mp4
-#                                01-16 the long films, 17-33 the feature shorts,
-#                                34-45 the launch film's reels
+#                                07-22 the long films, 23-39 the feature shorts,
+#                                40-51 the launch film's reels
 #   marketing/launch/no-music/   the shorts and reels without music, named the same
 #   marketing/launch/covers/     each launch film's and reel's cover, named as its video
 #   marketing/launch/posters/    every feature's posters, numbered as its short: the
@@ -59,7 +62,7 @@ for f in out/asklocker-feature-*-9x16*.mp4; do
 done
 for f in out/posters/asklocker-*.png; do
   [ -e "$f" ] || continue
-  [[ $f == */asklocker-privacy-* || $f == */asklocker-locked-* ]] && continue
+  [[ $f == */asklocker-privacy-* || $f == */asklocker-locked-* || $f == */asklocker-why-* ]] && continue
   launched "$f" && continue
   read -r a name <<< "$(audience "${f#out/posters/asklocker-}")"
   cp "$f" "$DEST/$a/posters/asklocker-$a-$name"
@@ -90,7 +93,19 @@ put() { # <file in out/> <path under launch/>
     missing=$((missing + 1))
   fi
 }
-# 01-12: the family, NRI and business films, in full and short, 16:9 and 9:16.
+# 01-06: why AskLocker was made (tools/why.sh): the founder's story, a family
+# vault, a business vault. No claim about encryption, so they can be posted
+# today, and their names don't end -launch.
+for story in founder:we-built-asklocker family:a-family-vault business:a-business-vault; do
+  key=${story%%:*}
+  name=${story#*:}
+  for shape in 16x9 9x16; do
+    step
+    put "out/asklocker-why-$key-$shape.mp4" "$N-why-$name-$shape.mp4"
+    put "out/posters/asklocker-why-$key-$shape-cover.png" "covers/$N-why-$name-$shape.png"
+  done
+done
+# 07-18: the family, NRI and business films, in full and short, 16:9 and 9:16.
 for film in family nri business; do
   for cut in 16x9 9x16 16x9-short 9x16-short; do
     shape=${cut%-short}
@@ -99,7 +114,7 @@ for film in family nri business; do
     put "out/asklocker-$film-$cut-launch.mp4" "$N-film-$film$short-$shape-launch.mp4"
   done
 done
-# 13-16: the launch film "Locked on your phone", a family's and a business's.
+# 19-22: the launch film "Locked on your phone", a family's and a business's.
 for b in '' -business; do
   for shape in 16x9 9x16; do
     step
@@ -107,7 +122,7 @@ for b in '' -business; do
     put "out/posters/asklocker-locked$b-$shape-cover-launch.png" "covers/$N-film-locked-on-your-phone$b-$shape-launch.png"
   done
 done
-# 17-33: the feature shorts, with and without music, and their posters
+# 23-39: the feature shorts, with and without music, and their posters
 # (features.sh's order; a business feature's key starts biz-).
 for f in ask:ask read:instant-insights voice:voice reminders:reminders tree:family-tree \
   emergency:emergency-card share:share-by-link vaults:privacy fingerprint:fingerprint-sign-in \
@@ -127,7 +142,7 @@ for f in ask:ask read:instant-insights voice:voice reminders:reminders tree:fami
     put "$p" "posters/$N-feature-$name-$size-launch.png"
   done
 done
-# 34-45: the launch film's reels, a family's and a business's, both ways.
+# 40-51: the launch film's reels, a family's and a business's, both ways.
 for r in locker:the-locker-on-your-phone who:who-can-open-it asking:asking-without-handing-it-over \
   key:your-key-your-way-back family:adding-family emergency:the-emergency-card \
   business-locker:business-the-locker-on-your-phone business-who:business-who-can-open-it \

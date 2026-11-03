@@ -8,8 +8,9 @@
 // one of its reels. ?film=locked is the launch's own film, what AskLocker
 // does once end-to-end encryption ships (src/locked.js): it needs
 // &claims=launch and is never posted before the launch; ?film=locked-business
-// is the same film for a business (src/locked-screens.js).
+// is the same film for a business (src/locked-screens.js). ?film=why is why
+// AskLocker was made, with &reel=founder, family or business (src/why.js).
 const asked = new URLSearchParams(location.search).get('film');
-const film = ['business', 'nri', 'features', 'privacy', 'locked', 'locked-business'].includes(asked) ? asked : 'family';
-document.title = { business: 'AskLocker for Business', nri: 'AskLocker for families abroad', features: 'AskLocker features', privacy: 'What happens to your documents', locked: 'Locked on your phone', 'locked-business': 'Locked on your phone, for Business' }[film] ?? 'AskLocker for families';
+const film = ['business', 'nri', 'features', 'privacy', 'locked', 'locked-business', 'why'].includes(asked) ? asked : 'family';
+document.title = { business: 'AskLocker for Business', nri: 'AskLocker for families abroad', features: 'AskLocker features', privacy: 'What happens to your documents', locked: 'Locked on your phone', 'locked-business': 'Locked on your phone, for Business', why: 'Why we built AskLocker' }[film] ?? 'AskLocker for families';
 await import(`./${{ nri: 'family', 'locked-business': 'locked' }[film] ?? film}.js`);
