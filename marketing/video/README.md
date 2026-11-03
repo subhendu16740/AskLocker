@@ -79,7 +79,8 @@ title, the challenge, the five parts, chapters 01 to 03 (Capture, Ask and
 Overview), the plans and the closing card; it drops Reminders, Team, and access
 and control.
 
-Rendered files go to `out/`, which is not committed.
+Rendered files go to `out/`, which is not committed. To put one on
+asklocker.com, see `site/README.md` (`node site/tools/add-video.mjs`).
 
 ## Render
 
