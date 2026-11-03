@@ -580,7 +580,7 @@ them, and outside services read parts of them.
 | Your fingerprint never leaves the phone | Fingerprint sign-in is a passkey (`app-lock.tsx`) |
 | Card and UPI details go only to Razorpay | `privacy.html`; 044 |
 | Every service, and what it gets | `privacy.html`, Services we use, row by row; the analytics service described, not named, as the policy does |
-| We don't sell your data; AskLocker has no ads | `privacy.html` |
+| We don't sell your data (the policy also says AskLocker has no ads; the films leave that out, the owner's call of 3 November 2026) | `privacy.html` |
 | Delete account: the screen, and that it goes at once; copies in backups and logs expire on their own | `src/app/settings/delete-account.tsx`, its own words; `privacy.html`, How long we keep it |
 | What you added to a family stays with it, so delete it first | `privacy.html`, How long we keep it |
 

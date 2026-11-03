@@ -65,7 +65,7 @@ const FAMILY_SCENES = {
   key: {
     kicker: 'A new phone', icon: 'rotate-ccw', screen: 'scr-recovery', callout: 'co-key',
     q: 'What if I *lose my phone?*', a: 'Your Recovery Key gets you back in.',
-    sub: "Or a family member you chose. We can't do it for you, and that's the point.",
+    sub: 'Keep it safe. A family member you chose can let you back in too.',
   },
   share: {
     kicker: 'Sending one document', icon: 'link', screen: 'scr-doc', callout: 'co-share',
@@ -89,7 +89,7 @@ const BUSINESS_SCENES = {
   ...FAMILY_SCENES,
   locker: { ...FAMILY_SCENES.locker, kicker: 'Adding a record', q: 'What happens when I *add a bill?*' },
   who: { ...FAMILY_SCENES.who, a: "Your team holds the key. We don't." },
-  key: { ...FAMILY_SCENES.key, sub: "Or someone in your team you chose. We can't do it for you, and that's the point." },
+  key: { ...FAMILY_SCENES.key, sub: 'Keep it safe. Someone in your team you chose can let you back in too.' },
   share: { ...FAMILY_SCENES.share, kicker: 'Sending one record', q: 'Your CA needs *one bill?*' },
   team: {
     kicker: 'Adding your team', icon: 'user-plus', screen: 'scr-invite', callout: 'co-team',

@@ -101,7 +101,7 @@ All from the brief. The launch film's sources are also listed in
 | The phone searches its own copy and picks the passages; the server passes the question and those parts on and keeps nothing; never the key | How it works, asking a question |
 | To answer a question, only the parts it needs go to an AI service. We don't keep them. | Say, word for word |
 | What AskLocker can and cannot see (the table) | The brief's table, rows shortened |
-| Your Recovery Key, your other phone, or a family member you chose gets you back in; we can't recover your documents for you; support can help you sign in, never open your vault | A new phone; What changes for users |
+| Your Recovery Key, your other phone, or a family member you chose gets you back in; keep your Recovery Key safe | A new phone; What changes for users |
 | The link carries that one file's key; the rest of the vault stays locked | Sharing one document |
 | They tap Accept and they're in; the app hands them the vault's key; no codes to check | Adding a family member |
 | Reminders in the app, worked out on the phone | What changes for users |
@@ -111,7 +111,10 @@ All from the brief. The launch film's sources are also listed in
 encrypted" (an open question below), "100% private", "military-grade",
 "bank-level", "unhackable", "secure", "safe", "only you can see it",
 "nothing is kept", "zero-knowledge", "AI never sees your documents", or
-anything that says it is live.
+anything that says it is live. And, the owner's rule of 3 November 2026:
+nothing negative for the person watching, so never what AskLocker can't do
+for them ("we can't recover it for you"; say what gets them back in, and to
+keep the Recovery Key safe), and not that AskLocker has no ads.
 
 ## Check before release
 

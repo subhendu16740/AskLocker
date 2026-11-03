@@ -182,7 +182,7 @@ export function ledgerDiagram() {
   return `<div class="pv-dg pv-card pv-ledger" id="dg-ledger">
       <div class="pv-card-h">${icon('list', 20, CORAL, 2.4)}<span>Who else gets what</span></div>
       ${rows}
-      <div class="pv-card-foot" id="dg-ledger-foot">${icon('slash', 18, NAVY, 2.4)}<span>We don't sell your data. <b>AskLocker has no ads.</b></span></div>
+      <div class="pv-card-foot" id="dg-ledger-foot">${icon('slash', 18, NAVY, 2.4)}<span><b>We don't sell your data.</b></span></div>
     </div>`;
 }
 

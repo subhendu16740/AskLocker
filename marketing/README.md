@@ -129,6 +129,10 @@ bottom 350 px stay clear).
   "secure", "safe" or "100% private". "Sent and stored encrypted" and "In
   AskLocker, only your family can open them" are the words to use, as the
   posters do; documents are not end-to-end encrypted.
+- **Nothing negative for the person reading** (the owner, 3 November 2026):
+  never what AskLocker can't do for them ("we can't recover it for you").
+  Say what gets them back in: keep the Recovery Key safe. And don't say
+  AskLocker has no ads, in captions either.
 
 ## Making them again
 

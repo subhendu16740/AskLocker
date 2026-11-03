@@ -72,7 +72,7 @@ export function closeBlock() {
   return `<div class="center-block lk-close" id="t-close">
       <div class="big">${words(BUSINESS ? 'Your team holds the key.' : 'Your family holds the key.')}</div>
       <div class="big-em">${words("We don't.")}</div>
-      <div class="pv-close-sub" id="lk-close-sub">Keep your Recovery Key safe. We can't open your vault, and we can't recover it for you.</div>
+      <div class="pv-close-sub" id="lk-close-sub">Keep your Recovery Key safe. It's your way back into your vault.</div>
     </div>`;
 }
 export const endCard = () => (BUSINESS
@@ -178,7 +178,7 @@ export function seesTable() {
       <div class="lk-sees-head"><span></span><b class="can">${icon('eye', 16, AMBER, 2.4)}AskLocker can see</b><b class="cant">${icon('eye-off', 16, GREEN, 2.4)}It cannot see</b></div>
       ${SEES.map(([ic, what, can, cant], i) => `<div class="lk-sees-row" id="ls-${i}">
         <span class="lk-sees-what">${icon(ic, 18, NAVY, 2.2)}<b>${what}</b></span><span class="can">${can}</span><span class="cant">${cant}</span></div>`).join('')}
-      <div class="pv-card-foot" id="ls-foot">${icon('slash', 18, NAVY, 2.4)}<span>We don't sell your data. <b>AskLocker has no ads.</b></span></div>
+      <div class="pv-card-foot" id="ls-foot">${icon('slash', 18, NAVY, 2.4)}<span><b>We don't sell your data.</b></span></div>
     </div>`;
 }
 
@@ -201,7 +201,7 @@ export function recoveryScreen() {
     <div class="lk-body">
       <div class="lk-card">
         <div class="lk-card-t">${icon('key', 18, NAVY)}<span>Your Recovery Key</span></div>
-        <div class="lk-card-b">If you lose every phone, this gets you back in. We can't recover it for you.</div>
+        <div class="lk-card-b">Keep it safe. It gets you back into your vaults on a new phone.</div>
         <div class="lk-key" id="lk-key">${RECOVERY_KEY.map((g, i) => `<span id="lk-k${i}">${g}</span>`).join('')}</div>
         <div class="lk-btn" id="lk-save">${icon('save', 16, '#fff')}<span>Save to password manager</span></div>
         <div class="lk-btn ghost">${icon('printer', 16, NAVY)}<span>Print it</span></div>
@@ -224,7 +224,7 @@ export function newPhoneScreen() {
     <div class="lk-body">
       <div class="lk-note">${icon('smartphone', 16, NAVY)}<span>Signed in as ${BUSINESS ? BIZ.owner : STORY.youFull}. Your vaults are still locked on this phone.</span></div>
       ${opt('lk-o1', 'key', 'Use your Recovery Key', 'The key you saved when you set up')}
-      ${opt('lk-o2', 'smartphone', 'Approve from your other phone', 'If you still have it')}
+      ${opt('lk-o2', 'smartphone', 'Approve from your other phone', 'A phone that already has your vaults')}
       ${opt('lk-o3', 'life-buoy', `Ask ${CONTACT.short}`, 'Your recovery contact')}
       <div class="lk-field" id="lk-field"><span id="lk-typed"></span><span class="caret" id="lk-caret" style="opacity:0"></span></div>
       <div class="lk-open" id="lk-open">${icon('unlock', 18, '#fff', 2.4)}<span>Your vaults are open on this phone</span></div>
@@ -277,9 +277,9 @@ const join = (id) => `<div class="callout" id="${id}" style="width:410px">${labe
 
 export const LK_CALLOUTS = {
   key: () => `<div class="callout" id="co-key" style="width:420px">${label('rotate-ccw', 'Your way back')}
-    ${check('Your Recovery Key, shown once', 'key')}${check('Your other phone, if you still have it', 'smartphone')}
+    ${check('Your Recovery Key', 'key')}${check('Your other phone', 'smartphone')}
     ${check(BUSINESS ? 'Someone in your team you chose' : 'A family member you chose', 'life-buoy')}
-    <div class="co-quiet">We can't recover your ${BUSINESS ? 'records' : 'documents'} for you. Support can help you sign in, never open your vault.</div></div>`,
+    <div class="co-quiet">Save your Recovery Key somewhere safe, like your password manager.</div></div>`,
   share: () => `<div class="callout" id="co-share" style="width:400px">${label('link', BUSINESS ? 'One record, one link' : 'One document, one link')}
     ${check('Opens without an account')}${check(BUSINESS ? 'Lasts 1 or 7 days, or 30 on a paid plan' : 'Lasts 1 or 7 days, or 30 with Family Plus')}${check('Turn it off any time')}
     <div class="co-quiet">The link carries that one file's key. The rest of your vault stays locked.</div></div>`,
