@@ -15,8 +15,9 @@ applied to both projects (an applied migration is never edited), and the
 it would sign everyone out and forget their settings). The GitHub
 repository was renamed `subhendu16740/AskLocker` on 27 October 2026, and
 GitHub redirects the old address; a checkout made before keeps its folder
-name, and the Vercel project its name, so DEV's address is still
-`family-vault-git-dev-…` until DEV moves to Cloudflare. Everything a person
+name. Both sites are on Cloudflare Pages (project `asklocker`): PROD at
+asklocker.com, DEV at `dev.asklocker.pages.dev`. Vercel, where they were
+until October 2026, was deleted on 3 November 2026. Everything a person
 sees says AskLocker: the app name, slug and scheme in `app.config.ts`, the
 Android package `com.asklocker.app`, the web manifest and service worker,
 the login and share pages, Help, About, the notifications and emails the
@@ -163,7 +164,7 @@ Four things will mislead you if you assume otherwise:
    accepting (037), and clients cannot insert a membership row at all. See
    [Membership](#membership--an-admin-invites-only-a-yes-joins-025-037).
 4. **This app targets both native and web from one codebase.** Day-to-day
-   review happens on the web build (deployed to Vercel), but native
+   review happens on the web build (DEV's, on Cloudflare Pages), but native
    Android/iOS is a real target with platform-specific code paths. A change
    that works on web can break native. See [Platform splits](#platform-splits).
 
@@ -278,7 +279,7 @@ photos OCR'd the way the web app does it, with Tesseract — which is about
 - **Everything in `qa/fixtures/` is fictional and says so.** This repo is
   public: never commit a real document there, or anywhere.
 - `qa/` has its own `package.json` and lockfile (like `marketing/video`), so
-  the app's `npm ci` and the Vercel build never install it.
+  the app's `npm ci` and the Cloudflare Pages build never install it.
 - **Known issues** (🐞) are real defects the suite already understands: listed
   in every run's summary without turning it red, and they pass by themselves
   once fixed. Currently two open, both about reading Indian scripts, plus
@@ -304,13 +305,13 @@ this is the part that is easy to get silently wrong:
 
 | Layer | How the branch maps to a project |
 |---|---|
-| Web bundle | Vercel: `main` is the Production branch → PROD env vars; every other branch builds as a Preview → DEV env vars |
+| Web bundle | Cloudflare Pages: `main` is the Production branch → PROD variables; `dev` is the one preview branch → DEV variables; no other branch is built |
 | Edge Functions | `.github/workflows/deploy-edge-functions.yml`: push to `main` → PROD, push to `dev` → DEV |
 | Migrations | Neither. Always by hand, in the SQL editor |
 
 **`EXPO_PUBLIC_*` values are compiled into the bundle at build time**, so a
 build is permanently bound to whichever project it was built against. That is
-what makes the Vercel environment split a real boundary rather than a
+what makes the Cloudflare Pages environment split a real boundary rather than a
 convention: a preview physically cannot reach PROD data.
 
 **Before `dev` existed, `main` WAS the integration branch and deployed
@@ -328,12 +329,12 @@ changed *nothing* until someone pastes it into the SQL editor.
 
 | Changed | Deployed by | How |
 |---|---|---|
-| `src/**`, `app.config.ts`, `vercel.json` | **Vercel**, automatically | `main` → PROD, any other branch → DEV |
+| `src/**`, `app.config.ts`, `public/**`, `site/**` | **Cloudflare Pages**, automatically | `main` → PROD, `dev` → DEV; other branches are not built |
 | `supabase/functions/**` | **GitHub Actions**, automatically | `main` → PROD, `dev` → DEV; `workflow_dispatch` for either by hand |
 | `supabase/migrations/**` | **you** | paste into the SQL editor |
 | Edge Function secrets | **you** | `secrets set`, per project |
 | Storage buckets | **you** | dashboard only — no CLI, no migration (050 sets the file limit by SQL where it may, and says so where it may not) |
-| Vercel env vars | **you** | dashboard, then **redeploy** |
+| Cloudflare Pages variables | **you** | dashboard, then **Retry deployment** |
 
 **Order still matters within a release:** the migration goes first, the Edge
 Function second, per [Order of operations](#order-of-operations). Merging to
@@ -362,7 +363,7 @@ Settings › About carries the longer description.
 
 | | Supabase project ref |
 |---|---|
-| DEV — Vercel Preview, and Production while staging | `tkqsfoppwlyupentuixy` |
+| DEV — Cloudflare Pages `dev` (dev.asklocker.pages.dev) | `tkqsfoppwlyupentuixy` |
 | PROD | `yrcmdixqgvmhqxejvlor` |
 
 ### The commands
@@ -430,9 +431,9 @@ captured separately.
    shape that has always existed (`retrieveChunks`, `loadState`, `saveState`,
    `preferences.tsx`). Assume the migration has NOT been applied.
 2. DEV first, always. Verify in the app, then repeat against PROD.
-3. Changing a Vercel env var requires a **redeploy**. `EXPO_PUBLIC_*` values
-   are compiled into the bundle at build time; a running deployment cannot
-   pick them up.
+3. Changing a Cloudflare Pages variable requires a **new build**
+   (Deployments › Retry deployment). `EXPO_PUBLIC_*` values are compiled
+   into the bundle at build time; a running deployment cannot pick them up.
 
 ---
 
@@ -499,40 +500,41 @@ keys a project takes no payments and Family Plus says "Coming soon"
 
 ## Deployment
 
-Web build is hosted on **Vercel** as a static SPA. Config lives in
-`vercel.json`; the dashboard needs no build settings beyond env vars.
+The web build is a static SPA on **Cloudflare Pages** (project
+`asklocker`): PROD at asklocker.com since 24 October 2026, DEV at
+`dev.asklocker.pages.dev`. It moved from Vercel, whose free plan is for
+non-commercial use only; Cloudflare Pages is free for a business, and its
+one card rule, that a free site must not collect card details itself, is
+kept: AskLocker's are taken in Razorpay's own window. The Vercel project
+was deleted on 3 November 2026. How the move was done, and what each
+address needs (Google origins, Supabase redirects, passkey RP IDs, Gmail
+return origins), is in
+[`docs/move-to-cloudflare-pages.md`](docs/move-to-cloudflare-pages.md).
 
-**Moving to Cloudflare Pages** (decided 21 October 2026): Vercel's free
-plan is for non-commercial use only, and Cloudflare Pages is free for a
-business (its terms have no such rule; the free plan's one card rule is
-that a free site must not collect card details itself, and AskLocker's
-are taken in Razorpay's own window). The site is only `dist/`, so
-nothing else moves. Steps, in an order with no downtime, are in
-[`docs/move-to-cloudflare-pages.md`](docs/move-to-cloudflare-pages.md):
-PROD first (asklocker.com's DNS on Cloudflare, nothing else changes for
-PROD), DEV later (its address becomes `dev.asklocker.pages.dev`, so its
-passkey RP ID, Google origins, Supabase redirects and Gmail return
-origins change). The build is ready for both hosts: `app.config.ts`
-takes the commit from `CF_PAGES_COMMIT_SHA` or `VERCEL_GIT_COMMIT_SHA`,
-and `.node-version` pins Node 22. 500 builds a month for the whole
-account; AskLocker makes about 70 with previews limited to `dev`. Once
-Vercel is deleted, remove `vercel.json` and rewrite this section and the
-Vercel mentions below.
+The build settings live in the Cloudflare dashboard (Settings › Builds &
+deployments), not in the repo:
 
 | | |
 |---|---|
-| Install | `npm ci` |
-| Build | `npm run build` (`expo export --platform web --clear`, then `scripts/move-node-modules-assets.mjs`) |
+| Install | `npm ci` (Cloudflare runs it before the build) |
+| Build | `npm run build` (`expo export --platform web --clear`, then `scripts/move-node-modules-assets.mjs`, `scripts/lab-pages.mjs` and `site/build.mjs`) |
 | Output | `dist` |
-| Node | 22.x |
+| Node | 22.x (`.node-version`) |
+| Production branch | `main` |
+| Preview branches | `dev` only |
+
+500 builds a month for the whole Cloudflare account; AskLocker makes
+about 70. Only `main` and `dev` are built, so a feature branch has no
+preview of its own: test on DEV after merging into `dev`. `app.config.ts`
+stamps the commit from `CF_PAGES_COMMIT_SHA` for Settings › About.
 
 **Every build clears the bundler cache (`--clear`), on purpose.** Expo writes
 each `EXPO_PUBLIC_*` value into the code when Metro transforms a file, and
 Metro keeps transformed files in its cache (`/tmp/metro-cache`) — keyed on the
 file, not on the value. A build after changing a value could therefore ship
 the old one: measured here, a build made with no Google settings still
-carried the client id of the build before it. `vercel.json` and
-`npm run build` both pass `--clear`; do the same for any build by hand.
+carried the client id of the build before it. `npm run build` passes
+`--clear`; do the same for any build by hand.
 
 **No published folder may be called `node_modules`.** Expo writes the
 assets that come from packages, the icon fonts among them, under
@@ -546,30 +548,58 @@ run by `npm run build` after the export, moves the folder to
 fails the build if anything still points at the old folder. Build with
 `npm run build`, never `expo export` alone, on any host.
 
-**The SPA rewrite in `vercel.json` is mandatory.** expo-router's web output
-defaults to `single`, so the export emits exactly one `index.html` and no
-per-route HTML. Without the catch-all rewrite, `/home` and every other deep
-link 404s on refresh.
+**Deep links need no rewrite, and `public/` must never hold a top-level
+`404.html`.** expo-router's web output defaults to `single`, so the export
+emits exactly one `index.html` and no per-route HTML. Cloudflare Pages
+serves that `index.html` for any address with no file of its own (its
+single-page fallback, used while the site has no top-level `404.html`), so
+`/home` and every other deep link opens on refresh. A `404.html` would
+turn the fallback off and every deep link would 404. (Vercel needed a
+catch-all rewrite in `vercel.json` for the same thing.)
 
-**No page may be framed.** `public/_headers` (Cloudflare Pages; copied to
-`dist/` by the export) and the `headers` in `vercel.json` send
-`X-Frame-Options: DENY` and `frame-ancestors 'none'`, with `nosniff` and a
-referrer policy, on every path: a framed AskLocker could be clickjacked into
-a tap on Accept or Delete. Change both together, and check the live headers
-after a release (`curl -sI https://asklocker.com/home`).
+**asklocker.com/ is the landing page, and every other address the app's**
+(since 3 November 2026; [`site/README.md`](site/README.md)). The app's single
+`index.html` is an empty page to search engines and AI assistants, so
+`site/build.mjs`, the last step of `npm run build`, writes plain HTML beside
+it: `landing.html`, the films (`/videos`, `/videos/<slug>`, from
+`site/videos/<slug>/`), `robots.txt`, `sitemap.xml`, `llms.txt` and
+`llms-full.txt`, from `site/content.mjs` and the app's own constants (prices
+from `plan-text.ts`, never typed in). One rule in `dist/_redirects`,
+`/ /landing 200`, serves the landing page at `/`; a `_redirects` rule is
+followed even where a file matches and applies only to its own path, so the
+single-page fallback answers every other address with the app as before.
+**The landing page's first script hands the app's visitors on**
+(`APP_FORWARD` in `site/lib/html.mjs`): a sign-in coming back to `/` with
+`?code=` (the redirect sign-in, below) or an email link's tokens go to
+`/home` with the query and hash whole; the installed app goes to `/home` or
+`/onboarding`; someone signed in on that browser (`sb-<ref>-auth-token`) who
+typed the address goes to `/home`. The QA self-test runs it in each case.
+Production builds are indexable and carry published films only; every other
+build is `noindex`, its `robots.txt` shuts everything, and it shows draft
+films for review on DEV. **No app route may be called `landing`, `videos`
+or `media`, and `public/` must not hold `robots.txt`, `sitemap.xml` or
+`llms*.txt`**: the site writes them, and its build stops on either.
 
-**Environment split — this is what keeps previews away from real data:**
+**No page may be framed.** `public/_headers` (copied to `dist/` by the
+export, read by Cloudflare Pages) sends `X-Frame-Options: DENY` and
+`frame-ancestors 'none'`, with `nosniff` and a referrer policy, on every
+path: a framed AskLocker could be clickjacked into a tap on Accept or
+Delete. Check the live headers after a release
+(`curl -sI https://asklocker.com/home`).
 
-| Vercel environment | Supabase project |
-|---|---|
-| Production | PROD |
-| Preview + Development | DEV |
+**Environment split — this is what keeps DEV away from real data:**
 
-Set `EXPO_PUBLIC_SUPABASE_URL` / `EXPO_PUBLIC_SUPABASE_ANON_KEY` separately
-per environment. A PR preview then physically cannot reach production data,
-because the bundle was built against a different project URL.
+| Cloudflare Pages environment | Branch | Supabase project |
+|---|---|---|
+| Production | `main` | PROD |
+| Preview | `dev` | DEV |
 
-**Edge Functions do not deploy from Vercel.** They ship per Supabase project
+Set `EXPO_PUBLIC_SUPABASE_URL` / `EXPO_PUBLIC_SUPABASE_ANON_KEY` (and the
+Google ones) separately per environment. A DEV build then physically
+cannot reach production data, because the bundle was built against a
+different project URL.
+
+**Edge Functions do not deploy from Cloudflare Pages.** They ship per Supabase project
 via `supabase functions deploy <name>`. A preview pointed at DEV runs DEV's
 copies, so DEV needs its own secrets and its own `documents` storage bucket.
 
@@ -633,7 +663,7 @@ copies, so DEV needs its own secrets and its own `documents` storage bucket.
   missing from the client's Authorized JavaScript origins, so the button is
   used only when `EXPO_PUBLIC_GOOGLE_CLIENT_ID` is set **and** the page's
   origin is in `EXPO_PUBLIC_GOOGLE_WEB_ORIGINS`. Everywhere else — a
-  preview's fresh subdomain, a build without the settings, the phone app
+  deployment's own address (`<hash>.asklocker.pages.dev`), a build without the settings, the phone app
   (`google-button.ts` is a stand-in) — it is the redirect sign-in, as before.
   The Supabase Google provider must list the same client id (Authentication
   › Providers › Google › Client IDs), or Supabase refuses the token.
@@ -645,7 +675,7 @@ copies, so DEV needs its own secrets and its own `documents` storage bucket.
 - **The login page says which sign-in it uses, and why**, once in the
   browser's console: `[Google sign-in] Google's own button, for
   https://asklocker.com`, or the redirect and the reason — no client id in
-  this build (set it for that Vercel environment, then redeploy), or this
+  this build (set it for that Cloudflare Pages environment, then Retry deployment), or this
   address missing from the list, with the list the build has
   (`googleButtonReason()`).
 - **The redirect sign-in is PKCE** (`flowType: 'pkce'` in `supabase.ts`):
@@ -656,10 +686,16 @@ copies, so DEV needs its own secrets and its own `documents` storage bucket.
   (until 31 October 2026) put the tokens in the address, so a link carrying
   someone's tokens signed whoever opened it into that account.
 - **The redirect still needs its wildcard.** It sends
-  `redirectTo: window.location.origin`, and every preview gets a fresh
-  subdomain, so Supabase → Authentication → URL Configuration must contain
-  a wildcard redirect URL, or Google sign-in fails on previews while working
-  in production.
+  `redirectTo: window.location.origin`, and every Cloudflare deployment
+  also answers at its own address (`<hash>.asklocker.pages.dev`), so
+  Supabase → Authentication → URL Configuration must contain a wildcard
+  redirect URL (`https://*.asklocker.pages.dev/**` on DEV), or Google
+  sign-in fails there while working on the fixed address.
+- **It comes back to `/`, which is the landing page** (`site/`, since 3
+  November 2026). The page's first script sends `?code=` (and `error`,
+  `access_token`, `token_hash`) on to `/home` unchanged, where supabase-js
+  exchanges it as it did at `/`. Changing `redirectTo`, or the landing
+  page's head, means checking this still happens: the QA self-test does.
 - **To show "AskLocker" instead of an address**: Google's brand
   verification, free — a public home page and privacy policy on a domain
   verified in Search Console, both linked from the OAuth consent screen.
@@ -706,8 +742,11 @@ copies, so DEV needs its own secrets and its own `documents` storage bucket.
   › Passkeys: Enable, Relying Party display name `AskLocker`, RP ID and
   origins. PROD: RP ID `asklocker.com`, origins `https://asklocker.com,
   https://www.asklocker.com`. DEV: RP ID and origin the dev branch's own
-  address, `family-vault-git-dev-subhendu16740.vercel.app` (a preview's fresh
-  address cannot be listed, so previews have Google and the test form only).
+  address, `dev.asklocker.pages.dev` since DEV moved to Cloudflare
+  (`family-vault-git-dev-subhendu16740.vercel.app` before; if DEV's
+  Passkeys page still names that, change it as in Part B of
+  `docs/move-to-cloudflare-pages.md`). A deployment's own address cannot
+  be listed, so it has Google and the test form only.
   Changing an RP ID later makes every passkey on it useless. Where passkeys
   are off, turning it on says "not switched on for AskLocker yet"
   (`passkey_disabled`); on an address that is not an origin, "not set up for
@@ -780,7 +819,7 @@ those keys.
 `app.config.ts` exists to set `extra.router.origin` from `process.env.WEB_HOST`,
 which allows Firebase Studio's proxied preview origin (`https://9000-$WEB_HOST`)
 through Expo's dev-server CORS middleware. It is guarded by `if (webHost)`, so
-it no-ops anywhere `WEB_HOST` is unset — including Vercel. Harmless to keep.
+it no-ops anywhere `WEB_HOST` is unset — including Cloudflare Pages. Harmless to keep.
 
 ---
 
@@ -836,14 +875,20 @@ supabase/
   migrations/                # SQL — incomplete, see Database
   queries/                   # read-only queries to paste into the SQL editor (document-categories.sql)
 
-public/                      # copied to the web build's root: sw.js (shows notifications), manifest, icons, privacy.html (the privacy policy, asklocker.com/privacy)
+public/                      # copied to the web build's root: sw.js (shows notifications), manifest, icons, privacy.html (the privacy policy, asklocker.com/privacy), lab/ (test pages, DEV builds only)
 qa/                          # end-to-end QA against DEV (own package.json)
   run.mjs  questions.yaml    # the runner, and what it asks
   fixtures/documents.mjs     # the SPECIMEN documents and the facts they carry
   sql/                       # the 023 sweep and the 024 fingerprint
 
+site/                        # the public site, web only: the landing page at /, films, robots.txt, sitemap.xml, llms.txt (site/README.md)
+  build.mjs  content.mjs     # the generator (last step of npm run build), and every word on the landing page
+  videos/<slug>/             # one film each: video.json, poster.jpg, transcript.md, video.mp4 (drafts until "draft": false)
+  tools/add-video.mjs        # a rendered film into videos/<slug>/, as a draft
+
 scripts/setup.sh             # cloud bootstrap
-vercel.json                  # build + SPA rewrite
+scripts/lab-pages.mjs        # after the export: keeps dist/lab/ only in a DEV build
+docs/                        # end-to-end-encryption.md (the plan), move-to-cloudflare-pages.md
 ```
 
 **There are only three tabs** — `home`, `search`, `upload`. `family.tsx` and
@@ -1003,7 +1048,7 @@ DEV's test files and QA traffic use the same allowance as PROD's families
   organisation of its own (DEV's Project Settings › General › Transfer
   project; no GitHub integration or log drain may be connected) gives PROD
   the whole 1 GB and 5 GB, still free. A transfer keeps the project's address
-  and keys, so nothing in the app, Vercel or the workflows changes.
+  and keys, so nothing in the app, Cloudflare Pages or the workflows changes.
 - **A free project with too little use over 7 days is paused**, after a
   warning email a week before; Resume project in the dashboard brings it
   back, within 90 days.
@@ -1043,9 +1088,9 @@ Over Supabase's allowance the whole organisation can be restricted (see
 above); over Groq's, an answer says the AI service is rate limited. Not
 about size, but true already:
 
-- **Vercel's free Hobby plan is for non-commercial use only**, and taking
-  payments counts as commercial: Vercel Pro (about $20 a month a member) or
-  a host whose free plan allows it.
+- **The website is on Cloudflare Pages, free for a business.** Vercel's
+  free plan, where it was until October 2026, is for non-commercial use
+  only, and taking payments counts as commercial.
 - **Google sign-in must be "In production"** in the sign-in project's
   Google Cloud console: an app in Testing signs in only its test users, at
   most 100.
@@ -2493,7 +2538,9 @@ where it does not.
   total. Cost follows people × questions, so those are the numbers to
   watch; storage is cheap. The fixed bills — Supabase Pro $25, Vercel Pro
   $20, HuggingFace PRO $9, about ₹5,200 a month — are covered by 13
-  businesses on Plus, 6 on Pro or 2 on Enterprise at normal use.
+  businesses on Plus, 6 on Pro or 2 on Enterprise at normal use (worked
+  out on 17 October 2026; since then the site is on Cloudflare Pages, free,
+  so Vercel Pro is no longer one of them).
 - **Given by hand only**, from the SQL editor, by name:
   `select set_family_plan('<vault id>', now() + interval '1 month', 'manual', null, 'business_plus');`
   (or `'business_pro'`, `'business_enterprise'`), or a demo, back to Free if they don't pay:
@@ -2895,6 +2942,45 @@ where it does not.
   chat with QA Vault A's answers, and B's chat with them goes when B leaves.
   Before 069 those checks are skipped.
 
+### End-to-end encryption — planned, Phase 0 done (3 November 2026)
+
+- **It works on a real phone.** The owner's Android phone (8 cores) ran
+  the lab: every lock and unlock in milliseconds, a key kept unreadable in
+  IndexedDB, search on the phone right 4 of 4 with a question in about
+  20 ms, reading about 1 s a passage on one thread (0.5 s on four, which
+  the app's pages cannot have yet), the graphics chip failing, and a
+  fingerprint giving a key (PRF). The numbers and what each decides are in
+  the plan. An iPhone is still to be measured.
+- **Nothing is encrypted end to end yet.** The plan, the owner's
+  decisions and the phases are in
+  [`docs/end-to-end-encryption.md`](docs/end-to-end-encryption.md):
+  documents, vault names, the tree, cards, chats, notes and the search
+  index sealed on members' devices; only accounts, membership, sizes,
+  times, counts and each document's built-in category readable; joining
+  automatic with signed invitations; reminders worked out in the app;
+  recovery by another device, a Recovery Key or a recovery contact.
+  **No screen, policy, agreement or video says end-to-end until Phase 5**
+  (an outside review) is done; the privacy rule under Conventions stands.
+- **`supabase/functions/_shared/vault-crypto.ts` runs only on members'
+  devices.** It lives in `_shared/` so the app and the QA self-test share
+  one copy, like `kinship.ts`; no Edge Function may import it (the
+  self-test fails if one does), because a server that can unlock a vault
+  key is the middle the design removes. WebCrypto only: AES-256-GCM with
+  the place an item belongs to as associated data, ECDH P-256 + HKDF to
+  lock a vault key for a member, ECDSA P-256, a 28-character Recovery Key.
+  The self-test pins that an item opens only with its key, in its place,
+  unchanged; that a grant opens only for its member; that every wrong
+  character in a Recovery Key is caught. Nothing in the app calls it yet.
+- **`/lab/e2e.html` measures a real phone**, on DEV builds only:
+  `scripts/lab-pages.mjs` (part of `npm run build`) deletes `dist/lab/`
+  unless `EXPO_PUBLIC_SUPABASE_URL` names DEV, and in a DEV build writes
+  `dist/lab/vault-crypto.js` from the `.ts` with Node's own type
+  stripping. The page reads nothing of AskLocker's and sends nothing; it
+  downloads transformers.js 4.3.1 (jsDelivr) and gte-small (Hugging Face).
+  `/lab/*` alone is cross-origin isolated (`public/_headers`)
+  so the model may use several threads; never the app's pages, where
+  isolation would break Google's and Razorpay's windows.
+
 ### Edge Functions load supabase-js at one version
 
 - Every function imports `https://esm.sh/@supabase/supabase-js@2.117.2`, the
@@ -3108,7 +3194,13 @@ where it does not.
   `voice: true`. A non-English question is condensed *into English* before
   retrieval (the index is English) and the answer is written in the person's
   language; `voice` asks for short spoken sentences with no markdown. The
-  response echoes `answer_language`.
+  response echoes `answer_language`. An answer in another language is
+  written in that language's own script, everyday words included, a name as
+  the question writes it, and names no file (the source chips do): told to
+  keep names "exactly as written" and to cite file names, a Hindi answer
+  came back mostly in English letters, which QA's `hindi-question` failed
+  on 30 and 31 October 2026. Numbers, dates, codes and ID numbers stay as
+  the document writes them.
 - **`add-member`** — a family admin invites a person who already has an
   account, by email: checks the caller is an admin, then calls
   `invite_family_member()` (037) as the service role. Answers 200 `invited`,
@@ -3725,7 +3817,9 @@ rule again once pinned chunks are mixed in.
     otherwise) and OCR.space (scanned PDFs, photos imported from Gmail).
     PostHog gets usage counts, and never any of it.
 
-  So no screen, notification, README or store listing says "secure",
+  So no screen, notification, README, store listing or page of the public
+  site (`site/`, checked by the QA self-test with its films' transcripts)
+  says "secure",
   "safe", "private and isolated", "100% private", "only you can see it" or
   "nothing is kept". Say what the app does instead: "in AskLocker, only your
   family can open…", "nobody else using AskLocker can open it", "just for

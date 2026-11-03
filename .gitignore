@@ -69,3 +69,9 @@ app-example
 
 # QA run output (qa/run.mjs writes summaries and transcripts here)
 qa/out/
+
+# The public site's local preview (npm run site writes it)
+site/out/
+
+# Wrangler's local state (npx wrangler pages dev dist)
+.wrangler/

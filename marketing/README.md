@@ -12,3 +12,8 @@ Metro only bundles from `src/app`, and none of these files are TypeScript.
   `video/README.md` to render it.
 
 Rendered video files are not committed; `video/out/` is gitignored.
+
+To put a rendered film on asklocker.com (the landing page's Films section and
+`/videos/<slug>`), see `site/README.md`: `node site/tools/add-video.mjs` makes it
+a draft there, and `site/videos/` already holds the two 16:9 films' drafts, with
+posters, chapters, transcripts and what to fix before they go out (`reviewNotes`).

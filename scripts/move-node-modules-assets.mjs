@@ -10,7 +10,7 @@
 // from Vercel showed the icons, so it looked fine on a computer and broke
 // on a phone.
 //
-// The rename is safe anywhere: Vercel serves the folder under either name.
+// The rename is harmless on any host.
 //
 //   node scripts/move-node-modules-assets.mjs [dist]
 

@@ -31,7 +31,7 @@ export const BIZ = {
   // The closing card. Leave url empty to show no address.
   tagline: 'Every bill, licence and contract. One question away.',
   cta: 'Start your business vault',
-  ctaNote: 'Free to start · Plans from ₹500 a month + GST',
+  ctaNote: 'Free to start · Plans from ₹499 a month + GST',
   url: 'asklocker.com',
 };
 
@@ -416,7 +416,7 @@ export function textBlocks(short) {
   ${chapter(0, 'Scan or upload. AskLocker files it.', [
     'Category suggested from the text',
     'Reads the GSTIN, dates and total',
-    'PDF, JPG or PNG, up to 10 MB',
+    'PDF, photo or Excel, up to 10 MB',
   ])}
   ${chapter(1, 'Ask anything. Get the answer and its source.', [
     'Plain words, no folders to search',
@@ -448,15 +448,15 @@ export function textBlocks(short) {
     'To answer questions, AskLocker sends passages of your documents to outside AI services. Settings › Privacy names them.')}
   ${block('f-plans', 'Plans', 'Start free. Move up as you grow.',
     `<table class="fm-table" id="fm-table"><thead><tr><th></th><th>Free</th><th>Plus</th><th>Pro</th><th>Enterprise</th></tr></thead><tbody>
-      ${row('Price a month', ['Free', '₹500', '₹1,000', '₹4,000'], 'price')}
-      ${row('People', ['4', '10', '15', '50'])}
-      ${row('Space', ['200 MB', '10 GB', '25 GB', '100 GB'])}
-      ${row('Questions each a month', ['20', '100', '100', '100'])}
+      ${row('Price a month', ['Free', '₹499', '₹999', '₹3,999'], 'price')}
+      ${row('People', ['2', '5', '10', '50'])}
+      ${row('Space', ['100 MB each', '20 GB', '50 GB', '200 GB'])}
+      ${row('Questions a month', ['20 each', '1,000', '2,000', '8,000'])}
       ${row('Expiry reminders', [false, true, true, true])}
       ${row('Renewals and bills due', [false, true, true, true])}
       ${row('Money in and out', [false, false, true, true])}
     </tbody></table>`,
-    'Prices before GST. Pay for a year and get one month free. Paid plans are set up on request.')}
+    'Prices before GST. A year costs about ten months. Paid plans are set up on request.')}
   ${brand('endcard', BIZ.tagline, { badge: 'for Business', cta: BIZ.cta, ctaNote: BIZ.ctaNote, url: BIZ.url, end: true })}`;
 }
 

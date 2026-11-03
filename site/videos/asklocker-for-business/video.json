@@ -1,0 +1,68 @@
+{
+  "title": "AskLocker for business",
+  "description": "How a small business keeps its invoices, bills, licences and contracts in AskLocker: a supplier's bill photographed and read, a question answered with its source, renewals and bills due at a glance, reminders, and the team and CA by invitation.",
+  "audience": "business",
+  "uploadDate": "2026-11-03",
+  "durationSeconds": 91.37,
+  "width": 1920,
+  "height": 1080,
+  "video": "video.mp4",
+  "poster": "poster.jpg",
+  "chapters": [
+    {
+      "start": 0,
+      "title": "AskLocker for Business"
+    },
+    {
+      "start": 5,
+      "title": "A business runs on documents"
+    },
+    {
+      "start": 11,
+      "title": "The next 90 days"
+    },
+    {
+      "start": 18,
+      "title": "One place for every business document"
+    },
+    {
+      "start": 24,
+      "title": "01 Capture"
+    },
+    {
+      "start": 34,
+      "title": "02 Ask"
+    },
+    {
+      "start": 43,
+      "title": "03 Overview"
+    },
+    {
+      "start": 53,
+      "title": "04 Reminders"
+    },
+    {
+      "start": 60,
+      "title": "05 Team"
+    },
+    {
+      "start": 70,
+      "title": "Access and control"
+    },
+    {
+      "start": 77,
+      "title": "Plans"
+    },
+    {
+      "start": 85,
+      "title": "Start your business vault"
+    }
+  ],
+  "order": 2,
+  "reviewNotes": [
+    "Chapter times were measured from marketing/video's timeline (16:9 full cut, 91.35 s) on 3 November 2026. A changed film needs them measured again.",
+    "Rendered on 3 November 2026 with the plans table and end card corrected to 067's numbers (plan-text.ts) and chapter 01's file types to include Excel.",
+    "Published on 3 November 2026 at the owner's decision, with business vaults still a pilot set up by hand."
+  ],
+  "draft": false
+}

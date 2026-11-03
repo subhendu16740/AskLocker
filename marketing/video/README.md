@@ -79,7 +79,8 @@ title, the challenge, the five parts, chapters 01 to 03 (Capture, Ask and
 Overview), the plans and the closing card; it drops Reminders, Team, and access
 and control.
 
-Rendered files go to `out/`, which is not committed.
+Rendered files go to `out/`, which is not committed. To put one on
+asklocker.com, see `site/README.md` (`node site/tools/add-video.mjs`).
 
 ## Render
 
@@ -248,11 +249,11 @@ deliberately:
   that Overview lists later. It shows no GST filing dates or other deadlines
   from the tax calendar: AskLocker does not track them, and the film must not
   suggest it does.
-- **The plans table is `plan_limits`** as 051, 052, 054 and 058 left it:
-  people 4, 10, 15 and 50; space 200 MB, 10 GB, 25 GB and 100 GB (058 lowered
-  the paid plans' space); questions 20 a person a month on Free and 100 on
-  every paid plan. The prices are `BUSINESS_PRICE`, before GST, and a year
-  costs eleven months. Paid business plans are given by hand, so the film says
+- **The plans table is `plan_limits`** as 067 left it (`DEFAULT_PLAN_LIMITS`
+  in `supabase/functions/_shared/plan-text.ts`): people 2, 5, 10 and 50; space
+  100 MB each on Free, then 20, 50 and 200 GB; questions 20 each on Free, then
+  1,000, 2,000 and 8,000 a month shared. The prices are `BUSINESS_PRICE`,
+  before GST, and a year costs about ten months. Paid business plans are given by hand, so the film says
   they are set up on request. The limits are rows that change without a
   release: check the table against the app before publishing.
 - **Gmail import's rows are what the app would show.** Each file name, sender
@@ -313,8 +314,8 @@ deliberately:
 - **The family has 4 members** (Family Plus allows 8); Dadi, Neha and Aarav
   are in the tree without accounts, which the tree allows. **Arora Electric
   has 3 of Pro's 15**, and the CA's invitation holds a place until she answers.
-- **The end cards' prices** are `PLUS_PRICE` (Family Plus, ₹100 a month) and
-  `BUSINESS_PRICE` (from ₹500 a month, plus GST) in
+- **The end cards' prices** are `PLUS_PRICE` (Family Plus, ₹99 a month) and
+  `BUSINESS_PRICE` (from ₹499 a month, plus GST) in
   `supabase/functions/_shared/plan-text.ts`. A business plan is set up by hand
   ("Ask us"), and business vaults are a pilot for a few businesses, so check
   what the app offers before publishing either film.
