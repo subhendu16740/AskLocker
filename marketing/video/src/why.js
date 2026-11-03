@@ -142,7 +142,7 @@ if (later.length) gsap.set(later, { autoAlpha: 0 });
 const PHONE = PORTRAIT ? [540, 1176, 0.94] : [1270, 548, 0.94];
 place('#phone', PHONE, { autoAlpha: 0 });
 // In 9:16 the callout fills the room between the heading and the phone.
-setLayout({ dayPhone: PHONE, coAsks: PORTRAIT ? (BUSINESS ? 't-ask' : 't-voice') : [1690, 640], coScale: 1.5 },
+setLayout({ dayPhone: PHONE, coAsks: PORTRAIT ? (BUSINESS ? 't-ask' : 't-voice') : [1640, 650], coScale: 1.5 },
   FAMILY || BUSINESS ? { 'co-asks': 'coAsks' } : {});
 
 // The papers, scattered around the words: above and below them.
