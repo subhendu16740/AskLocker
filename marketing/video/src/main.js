@@ -5,8 +5,10 @@
 // timeline with src/engine.js; the NRI film is the family film's scenes with
 // its own story (NRI_STORY in family-screens.js). ?film=privacy is what
 // AskLocker does with a family's documents (src/privacy.js), with &reel= for
-// one of its reels.
+// one of its reels. ?film=locked is the launch's own film, what AskLocker
+// does once end-to-end encryption ships (src/locked.js): it needs
+// &claims=launch and is never posted before the launch.
 const asked = new URLSearchParams(location.search).get('film');
-const film = ['business', 'nri', 'features', 'privacy'].includes(asked) ? asked : 'family';
-document.title = { business: 'AskLocker for Business', nri: 'AskLocker for families abroad', features: 'AskLocker features', privacy: 'What happens to your documents' }[film] ?? 'AskLocker for families';
+const film = ['business', 'nri', 'features', 'privacy', 'locked'].includes(asked) ? asked : 'family';
+document.title = { business: 'AskLocker for Business', nri: 'AskLocker for families abroad', features: 'AskLocker features', privacy: 'What happens to your documents', locked: 'Locked on your phone' }[film] ?? 'AskLocker for families';
 await import(`./${film === 'nri' ? 'family' : film}.js`);
