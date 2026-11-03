@@ -12,6 +12,7 @@ import {
 } from './parts.js';
 import { STORY, policyPaper } from './family-screens.js';
 import { BIZ, MONEY, billPaper } from './business-screens.js';
+import { LAUNCH } from './claims.js';
 
 const NAVY = THEME.family.primary;
 const TEAL = THEME.business.primary;
@@ -323,5 +324,46 @@ export const CALLOUTS = {
     <div class="co-row"><span class="co-k">Files</span><span class="co-v">.xlsx and .csv</span></div>
     <div class="co-foot">${icon('check', 14, '#16A34A', 2.6)}<span>Read the moment you add it</span></div></div>`,
 };
+
+// The launch set (?claims=launch, src/claims.js): the encryption brief's lines.
+// Only what changes; every other callout stays as it is.
+const AI_LINE = "Only the parts it needs go to an AI service. We don't keep them.";
+const quiet = (t) => `<div class="co-quiet">${t}</div>`;
+if (LAUNCH) {
+  Object.assign(CALLOUTS, {
+    ask: () => `<div class="callout" id="co-f" style="width:360px">${label('file-text', 'Where the answer came from')}
+      <div class="co-row"><span class="co-k">Document</span><span class="co-v sm">${STORY.scanFile}</span></div>
+      <div class="co-row"><span class="co-k">Vault</span><span class="co-v sm">${STORY.familyName}</span></div>
+      <div class="co-foot">${icon('check', 14, '#16A34A', 2.6)}<span>Tap it to open the document</span></div>${quiet(AI_LINE)}</div>`,
+    'biz-ask': () => `<div class="callout" id="co-f" style="width:370px">${label('file-text', 'Where the answer came from')}
+      <div class="co-row"><span class="co-k">Document</span><span class="co-v sm">${BIZ.scanFile}</span></div>
+      <div class="co-row"><span class="co-k">Category</span><span class="co-v sm">Purchase Bills</span></div>
+      <div class="co-foot">${icon('check', 14, '#16A34A', 2.6)}<span>Tap it to open the bill</span></div>${quiet(AI_LINE)}</div>`,
+    reminders: () => `<div class="callout" id="co-f" style="width:410px">${label('bell', 'Before it expires')}
+      <div class="co-steps"><i class="track"></i>
+        ${[['90', 'days'], ['30', 'days'], ['7', 'days'], ['On the', 'day']].map(([a, b]) => `<div class="co-step"><i class="dot"></i><b>${a}</b><span>${b}</span></div>`).join('')}</div>
+      ${quiet('In the app, worked out on your phone. For everyone in the family, with Family Plus.')}</div>`,
+    'biz-reminders': () => `<div class="callout" id="co-f" style="width:410px">${label('bell', 'Before it lapses')}
+      <div class="co-steps"><i class="track"></i>
+        ${[['90', 'days'], ['30', 'days'], ['7', 'days'], ['On the', 'day']].map(([a, b]) => `<div class="co-step"><i class="dot"></i><b>${a}</b><span>${b}</span></div>`).join('')}</div>
+      <div class="co-foot">${icon('smartphone', 14, '#16A34A', 2.6)}<span>Worked out on your phone, notes too</span></div>
+      ${quiet('For everyone in the business, on Plus and up.')}</div>`,
+    emergency: () => `<div class="callout" id="co-f" style="width:360px">${label('plus-square', 'On every card')}
+      ${check('Blood group, and allergies in red')}${check('Medicines and health conditions')}${check('Doctor and family, one tap to call')}${check('Health insurance policy number')}
+      ${quiet('Only your family can open it. Nobody at AskLocker can.')}</div>`,
+    share: () => `<div class="callout" id="co-f" style="width:400px">${label('link', 'One document, one link')}
+      ${check('Opens without an account')}${check('Lasts 1 or 7 days, or 30 with Family Plus')}${check('Turn it off any time')}${check('See how often it was opened')}
+      ${quiet("The link carries that one file's key. The rest of your vault stays locked.")}</div>`,
+    'biz-share': () => `<div class="callout" id="co-f" style="width:400px">${label('link', 'One record, one link')}
+      ${tick('Opens without an account')}${tick('Lasts 1 or 7 days, or 30 on a paid plan')}${tick('Turn it off any time')}${tick('See how often it was opened')}
+      ${quiet("The link carries that one file's key. The rest of your vault stays locked.")}</div>`,
+    vaults: () => `<div class="callout" id="co-f" style="width:400px">${label('key', 'Your family holds the key')}
+      ${check('Locked on your phone before upload', 'smartphone')}${check('Only people in the vault have its key', 'users')}
+      ${check('Nobody at AskLocker can open it', 'eye-off')}${quiet(AI_LINE)}</div>`,
+    'biz-access': () => `<div class="callout" id="co-f" style="width:410px">${label('key', 'Your team holds the key')}
+      ${tick('Locked on your phone before upload', 'smartphone')}${tick('Only your team has the key', 'users')}
+      ${tick('My notes: nobody else in the team', 'edit-3')}${tick('Nobody at AskLocker can open them', 'eye-off')}${quiet(AI_LINE)}</div>`,
+  });
+}
 
 export { NAVY, TEAL };

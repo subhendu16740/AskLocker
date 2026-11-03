@@ -27,6 +27,7 @@ import {
 import { VOICE_LINES, voiceSubtitles } from './voice-lines.js';
 import { VOICES } from './voices.js';
 import { askSetup, askTurn, fitScroll, pulse, glow, snapPhoto, saveAndView, shareSetup, sharePlay } from './kit.js';
+import { LAUNCH, END_LINE } from './claims.js';
 
 const STORY = FAM.STORY;
 const SQUARE = W === H;
@@ -700,6 +701,66 @@ const FEATURES = {
   },
 };
 
+// ─── The launch set (?claims=launch, src/claims.js) ─────────────────────
+// What changes once end-to-end encryption ships, in the encryption brief's
+// words. Every short also ends on END_LINE; the callouts change in
+// src/feature-screens.js. Reminders are in the app, worked out on the phone,
+// and never a web notification on the lock screen.
+if (LAUNCH) {
+  // The rows of the launch Reminders page come in one by one.
+  const reminderRows = (t) => {
+    tl.fromTo($$('#rm-body > *'), { autoAlpha: 0, y: 14 }, { autoAlpha: 1, y: 0, duration: 0.4, stagger: 0.12, ...IR }, t);
+    cue(t + 0.3, 'pop-soft');
+    tl.fromTo('#rm-r0', { boxShadow: '0 0 0 0 rgba(220,38,38,0)' }, { boxShadow: '0 0 0 3px rgba(220,38,38,0.25)', duration: 0.5, yoyo: true, repeat: 1, ease: 'sine.inOut', ...IR }, t + 1.3);
+  };
+  Object.assign(FEATURES.vaults, {
+    how: 'Locked on your phone. Opened only by your family.',
+    head: 'Locked on your phone. *Opened only by your family.*',
+    line: 'Each vault has its own key, and only the people in it have it. Nobody at AskLocker can open your documents.',
+  });
+  Object.assign(FEATURES['biz-access'], {
+    how: 'Locked on your phone. Opened only by your team.',
+    head: 'Locked on your phone. *Opened only by your team.*',
+    line: 'Each vault has its own key, and only your team has it. Nobody at AskLocker can open your records.',
+  });
+  Object.assign(FEATURES.reminders, {
+    line: 'Everyone in the family sees them in the app, 90, 30 and 7 days before a policy or passport runs out. Birthdays too.',
+    first: 'scr-reminders', os: false,
+    screens: () => FAM.remindersScreen(),
+    setup() {
+      gsap.set($$('#rm-body > *'), { autoAlpha: 0 });
+      return {};
+    },
+    play(t) {
+      reminderRows(t);
+      return { how: t + 0.1, callout: t + 1.8, hero: t + 3.7, end: t + 6.6 };
+    },
+  });
+  Object.assign(FEATURES['biz-reminders'], {
+    line: 'Everyone in the business sees them in the app before a licence or policy runs out. Your own notes remind you too.',
+    first: 'scr-reminders', os: false,
+    screens: () => `${BUS.remindersScreen()}${BUS.notesScreen()}`,
+    setup() {
+      gsap.set($$('#rm-body > *'), { autoAlpha: 0 });
+      return { P: { nn1: at('#nn-1 .nn-check') } };
+    },
+    play(t, { P }) {
+      reminderRows(t);
+      // My notes, where the note's reminder is due today; the call made, it is ticked off.
+      const s = t + 4.3;
+      nav('scr-reminders', 'scr-notes', s + 0.15, 'push', 0.4);
+      chrome(s + 0.15, 'app', '9:06');
+      const d = s + 1.5;
+      tap(d, P.nn1);
+      swap('#nn-1 .nn-off', '#nn-1 .nn-on', d + 0.02, 0.15);
+      tl.to('#nn-1 .nn-t', { color: '#6B7280', duration: 0.15, ease: 'none' }, d + 0.02);
+      tl.set('#nn-1 .nn-t', { textDecoration: 'line-through' }, d + 0.02);
+      cue(d + 0.05, 'ding');
+      return { how: t + 0.1, callout: t + 1.8, hero: t + 3.7, end: d + 1.5 };
+    },
+  });
+}
+
 // ═════════════════════════════════════════════════════════════════════════
 // THE COMPOSITION
 // ═════════════════════════════════════════════════════════════════════════
@@ -723,8 +784,8 @@ function posterText() {
 
 function shortText() {
   const end = BIZ
-    ? brand('endcard', BUS.BIZ.tagline, { badge: 'For business', cta: BUS.BIZ.cta, ctaNote: 'Free to start', url: 'asklocker.com', end: true })
-    : brand('endcard', 'Every family document. One question away.', { cta: STORY.cta, ctaNote: 'Free to start', url: 'asklocker.com', end: true });
+    ? brand('endcard', END_LINE.business ?? BUS.BIZ.tagline, { badge: 'For business', cta: BUS.BIZ.cta, ctaNote: 'Free to start', url: 'asklocker.com', end: true })
+    : brand('endcard', END_LINE.family, { cta: STORY.cta, ctaNote: 'Free to start', url: 'asklocker.com', end: true });
   // No paragraph under the how: the callout takes its place.
   return `${whyHow('t-f', F.kicker, F.icon, F.why, F.how, '', { plus: F.plus || '' })}${end}`;
 }
