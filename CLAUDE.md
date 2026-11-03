@@ -155,7 +155,14 @@ Four things will mislead you if you assume otherwise:
    server's alone — written only by `claim_question` and
    `release_question` — and a saved chat may hold answers only from vaults
    its owner is in, and goes when they leave any of them (triggers): see
-   [Questions counted by the vault, chats by their sources](#questions-counted-by-the-vault-chats-by-their-sources-069)).
+   [Questions counted by the vault, chats by their sources](#questions-counted-by-the-vault-chats-by-their-sources-069);
+   070's encryption keys, `user_keys`, are their owner's — written only
+   through `register_my_identity`, `update_my_identity_backup` and
+   `delete_my_identity` (from `auth.uid()`), the public keys read by the
+   owner and their vault-mates, and the Recovery-Key-locked backup by its
+   owner alone, through `my_identity()`, never by a SELECT (the column grant
+   leaves it out): see
+   [End-to-end encryption](#end-to-end-encryption--planned-phase-0-done-phase-1-started-3-november-2026)).
    **A new writable
    column needs its own `GRANT` in a migration.** Nobody joins a family
    without saying yes: only an admin asks a person in, through the
@@ -853,6 +860,7 @@ src/
       profile.tsx  security.tsx  notifications.tsx  privacy.tsx   # notifications: the switch, and this device (034); privacy: three lines, the privacy policy, Share app usage
       storage.tsx  help.tsx  feedback.tsx  about.tsx   # storage: one table, a row per vault: used, space, its plan, ★ for a paid one (038, 039), and first what you added on Free (060); help: a business's answers in Business mode
       vaults.tsx             # Your vaults: Family vaults and Business vaults, open, create, Make it a business, Delete (057)
+      encryption.tsx         # Security › Encryption keys, test builds and the web only: set up keys, the Recovery Key once, unlock this device with it (070)
       delete-account.tsx     # Security › Delete account: shows what goes, asks for DELETE (029)
     document/[id].tsx        # document viewer; Share opens the share sheet (036, web only)
     documents.tsx            # All documents (Home's three counts, See all): tabs Documents, Family (Team) and Categories; a vault filter, a person's or a category's documents, Delete one or several (Select)
@@ -921,6 +929,7 @@ tabs. `(tabs)` is a layout group, so routes are `/home`, `/search`, `/upload`.
 | `app-info.ts` | Version, release date and commit (stamped into `extra` by `app.config.ts` at build time), and the support contact Help and the privacy policy show (`support@asklocker.com`, Cloudflare Email Routing) |
 | `ocr.ts` | Platform-split OCR with progress callback; reads the person's chosen languages |
 | `ocr-languages.ts` | The document-language picker list, and `resolveOcrLanguages()` which always appends English |
+| `vault-keys.ts` / `vault-keys.web.ts` | Encryption keys on this device (070, end-to-end encryption Phase 1, test builds only): on the web, made by `_shared/vault-crypto.ts`, kept in IndexedDB (`asklocker-keys`) in a form the browser will not hand out, the account holding only the public parts and a copy locked with the Recovery Key; `loadKeysState()` (and the background check that this device's keys are the account's), `prepareKeys()`, `unlockWithRecoveryKey()`, `checkRecoveryKey()`, `prepareNewRecoveryKey()`, `forgetKeysOnThisDevice()` (also on deleting the account), `keysErrorText()`. The phone app's file is a stand-in until EAS builds exist. Types in `vault-keys-types.ts` |
 | `analytics.ts` | Usage counts with PostHog (production builds only): `track(event, props)`, typed by `AnalyticsEvents` so only named events and properties can be sent; a random id per device (`deviceKey.analyticsId`), the Privacy switch (`analyticsOn`, `setAnalyticsOn`), `categoryForAnalytics()` (built-in names only), `screenName()` (the route, never an id). Screen views come from `components/analytics-tracker.tsx` in the root layout. Off in every build but production |
 | `razorpay.ts` / `razorpay.web.ts` | Paying for Family Plus (044): on the web, Razorpay's own checkout window (`openCheckout`; checkout.js is loaded the first time someone pays, and card and UPI details go to Razorpay, never to us); the phone app's file is a stand-in until EAS builds exist. Types in `razorpay-types.ts` |
 | `google-button.ts` / `google-button.web.ts` | Google's own sign-in button on the web (Google Identity Services): `googleButtonAvailable()` (a client id is set and this origin is in `EXPO_PUBLIC_GOOGLE_WEB_ORIGINS`), `renderGoogleButton()` (loads Google's script once, a fresh nonce each time). The phone app's file says no, so it keeps the redirect sign-in. Types in `google-button-types.ts`; see [Signing in](#signing-in--google-only-with-googles-own-button-where-it-is-set-up) |
@@ -930,7 +939,7 @@ tabs. `(tabs)` is a layout group, so routes are `/home`, `/search`, `/upload`.
 | `speech-text.ts` | `toSpeech()`: strips markdown and spells out ID numbers before they are read aloud — and a number named as one ("train number 16782", "PNR: 4512", "PIN 751001", "नंबर 16782") digit by digit, from its digits; the screen keeps the digits |
 | `voice-languages.ts` | The language picker list and the few phrases the app itself says, per language |
 | `storage.ts` | Key-value cache: localStorage on web, AsyncStorage on native |
-| `database.types.ts` | Generated Supabase types, current to 069 (030, 052, 055, 058, 059, 061 and 063 changed nothing in them, nor did 065, whose one function only the Edge Functions call, nor 066 and 067, numbers and function bodies; 049's, 050's, 051's, 053's, 054's, 056's, 057's, 060's, 062's, 064's, 068's and 069's added by hand). Regenerate after every migration and re-append the hand-written block at the bottom (see the typecheck note) |
+| `database.types.ts` | Generated Supabase types, current to 070 (070's added by hand) (030, 052, 055, 058, 059, 061 and 063 changed nothing in them, nor did 065, whose one function only the Edge Functions call, nor 066 and 067, numbers and function bodies; 049's, 050's, 051's, 053's, 054's, 056's, 057's, 060's, 062's, 064's, 068's and 069's added by hand). Regenerate after every migration and re-append the hand-written block at the bottom (see the typecheck note) |
 
 ---
 
@@ -948,6 +957,7 @@ src/lib/push.ts                    /  push.web.ts
 src/lib/razorpay.ts                /  razorpay.web.ts
 src/lib/google-button.ts           /  google-button.web.ts
 src/lib/app-lock-device.ts         /  app-lock-device.web.ts
+src/lib/vault-keys.ts              /  vault-keys.web.ts
 src/app/+html.tsx                     (web only — HTML shell, @font-face; NOT used by the single-page export)
 public/sw.js                          (web only — the service worker that shows notifications)
 src/global.css                        (web only)
@@ -1000,7 +1010,7 @@ Supabase, cloud-hosted. Three layers:
   push_subscriptions, reminders_sent, push_config, document_shares,
   family_invites, plan_limits, family_plans, member_usage, plan_payments,
   question_usage, daily_usage, scratch_notes, agreement_versions,
-  user_agreements.
+  user_agreements, vault_question_usage, user_keys.
   RLS enabled.
 - **Layer 2 (private)** — one isolated schema per family (`family_<short_uuid>`)
   holding documents, document_metadata, document_chunks, expiry_alerts,
@@ -2942,7 +2952,7 @@ where it does not.
   chat with QA Vault A's answers, and B's chat with them goes when B leaves.
   Before 069 those checks are skipped.
 
-### End-to-end encryption — planned, Phase 0 done (3 November 2026)
+### End-to-end encryption — planned, Phase 0 done, Phase 1 started (3 November 2026)
 
 - **It works on a real phone.** The owner's Android phone (8 cores) ran
   the lab: every lock and unlock in milliseconds, a key kept unreadable in
@@ -2951,6 +2961,23 @@ where it does not.
   the app's pages cannot have yet), the graphics chip failing, and a
   fingerprint giving a key (PRF). The numbers and what each decides are in
   the plan. An iPhone is still to be measured.
+- **Phase 1 has begun: each person's keys (070), test builds only.**
+  Settings › Security › Encryption keys (`settings/encryption.tsx`, on the
+  web where `isProduction` is false) makes a person's keys on the device,
+  shows their Recovery Key once (saved only after its last four
+  characters are typed back), and unlocks another device with it
+  (`src/lib/vault-keys.web.ts`). The account keeps only the public keys,
+  their fingerprint (which 070 recomputes, so a row cannot carry another
+  key's) and the keys locked with the Recovery Key, which the server
+  cannot open and nobody but the owner can read. A device keeps its keys
+  in IndexedDB, unreadable, and asks the browser not to clear them; each
+  time the screen opens it checks those keys are the account's. A new
+  Recovery Key needs the old one; with the old one lost but a device still
+  working, a later phase replaces the keys instead. Signing out keeps the
+  keys on the device; deleting the account forgets them there and the row
+  goes with the account. Still to come in Phase 1: approving a new device
+  from one already signed in, a fingerprint unlocking the keys (PRF), and
+  vault keys locked for each member.
 - **Nothing is encrypted end to end yet.** The plan, the owner's
   decisions and the phases are in
   [`docs/end-to-end-encryption.md`](docs/end-to-end-encryption.md):

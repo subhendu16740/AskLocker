@@ -1319,6 +1319,39 @@ export type Database = {
           },
         ]
       }
+      user_keys: {
+        Row: {
+          backup: string
+          created_at: string
+          encrypt_public: string
+          fingerprint: string
+          key_version: number
+          sign_public: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          backup: string
+          created_at?: string
+          encrypt_public: string
+          fingerprint: string
+          key_version?: number
+          sign_public: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          backup?: string
+          created_at?: string
+          encrypt_public?: string
+          fingerprint?: string
+          key_version?: number
+          sign_public?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       users: {
         Row: {
           auth_provider: string
@@ -1761,6 +1794,25 @@ export type Database = {
         Args: never
         Returns: { family_id: string; owner_id: string | null }[]
       }
+      my_identity: {
+        Args: never
+        Returns: {
+          backup: string
+          created_at: string
+          encrypt_public: string
+          fingerprint: string
+          key_version: number
+          sign_public: string
+          updated_at: string
+        }[]
+      }
+      register_my_identity: {
+        Args: { p_backup: string; p_encrypt_public: string; p_fingerprint: string; p_sign_public: string }
+        Returns: number
+      }
+      update_my_identity_backup: { Args: { p_backup: string }; Returns: undefined }
+      delete_my_identity: { Args: never; Returns: undefined }
+      identity_fingerprint: { Args: { p_encrypt_public: string; p_sign_public: string }; Returns: string }
       invite_lookup_guard: { Args: { p_family_id: string; p_invited_by: string }; Returns: undefined }
       purge_business: {
         Args: { p_confirm_name: string; p_family_id: string; p_user_id: string }
