@@ -26,25 +26,42 @@ wording is made in one place and every video follows.
 
 ## What's here
 
+Each audience has a folder with everything for it: `family/`, `nri/` and
+`business/`. A business's launch film is in `business/locked/`, beside its
+film, shorts and posters.
+
 | Folder | What | Shapes |
 |---|---|---|
-| `locked/films/` | **The launch film**: eight questions, each answered while a diagram or the phone shows it (adding a document, who can open it, asking a question, what AskLocker can see, a new phone, sending one paper, adding family, the emergency card) | 2:13 in [16:9](./locked/films/asklocker-locked-16x9-launch.mp4) and [9:16](./locked/films/asklocker-locked-9x16-launch.mp4) |
-| `locked/reels/` | Six reels from it, the brief's six ideas (below) | 9:16, 15 to 22 seconds, with music, and `-sfx-only` without it |
-| `locked/covers/` | Each one's cover: its headline, and what shows it | the reels' 1080x1920, the film's in both shapes |
+| `family/locked/films/` | **The launch film**: eight questions, each answered while a diagram or the phone shows it (adding a document, who can open it, asking a question, what AskLocker can see, a new phone, sending one paper, adding family, the emergency card) | 2:13 in [16:9](./family/locked/films/asklocker-locked-16x9-launch.mp4) and [9:16](./family/locked/films/asklocker-locked-9x16-launch.mp4) |
+| `business/locked/films/` | **The launch film for a business**: the same for Arora Electric and its team, in seven questions (adding a bill, who can open it, asking a question, what AskLocker can see, a new phone, sending one bill to the CA, adding your team); a business vault has no emergency card | 2:01 in [16:9](./business/locked/films/asklocker-locked-business-16x9-launch.mp4) and [9:16](./business/locked/films/asklocker-locked-business-9x16-launch.mp4) |
+| `family/locked/reels/`, `business/locked/reels/` | Six reels from each, the brief's six ideas (below) | 9:16, 15 to 22 seconds, with music, and `-sfx-only` without it |
+| `family/locked/covers/`, `business/locked/covers/` | Each one's cover: its headline, and what shows it | the reels' 1080x1920, the films' in both shapes |
 | `family/films/`, `nri/films/`, `business/films/` | The three launch films of today's set, every cut | the same shapes as today's; the family and NRI films 8 to 10 seconds shorter without Gmail import (2:06 and 1:03), the business film the same length |
 | `family/shorts/`, `business/shorts/` | Every feature short (17), ending on the launch line | 9:16, with and without music |
 | `family/posters/`, `business/posters/` | The posters that change at launch: privacy and access, reminders, ask, share, the emergency card | 1:1 and 16:9; the other posters stay as they are in `../family/posters` and `../business/posters` |
 
-**The six reels** (the brief's video ideas):
+**The six reels** (the brief's video ideas), for a family:
 
 | Reel | Says | Shows |
 |---|---|---|
-| [The locker on your phone](./locked/reels/asklocker-locked-locker-9x16-launch.mp4) | It's locked on your phone before it leaves. | Maa's passport read and locked on the phone, scrambled on the way and on AskLocker's servers |
-| [Who can open it?](./locked/reels/asklocker-locked-who-9x16-launch.mp4) | Your family holds the key. We don't. | Your vault and a link can; AskLocker's team and someone who breaks into our servers see scrambled copies; an AI service gets only the parts a question needs |
-| [Asking without handing it over](./locked/reels/asklocker-locked-asking-9x16-launch.mp4) | Your phone finds the page. Only that part goes to the AI. | The question asked; phone, server (keeps nothing), an AI service; the answer |
-| [Your key, your way back](./locked/reels/asklocker-locked-key-9x16-launch.mp4) | Your Recovery Key gets you back in. | The Recovery Key saved, Papa picked as recovery contact; a new phone unlocked with the key |
-| [Adding family](./locked/reels/asklocker-locked-family-9x16-launch.mp4) | They tap Accept. They're in. | Priya accepts Rohan's invitation, and Sharma Family's documents are on her Home |
-| [The emergency card](./locked/reels/asklocker-locked-emergency-9x16-launch.mp4) | Your family has it. Nobody else does. | Papa's emergency card, allergies first |
+| [The locker on your phone](./family/locked/reels/asklocker-locked-locker-9x16-launch.mp4) | It's locked on your phone before it leaves. | Maa's passport read and locked on the phone, scrambled on the way and on AskLocker's servers |
+| [Who can open it?](./family/locked/reels/asklocker-locked-who-9x16-launch.mp4) | Your family holds the key. We don't. | Your vault and a link can; AskLocker's team and someone who breaks into our servers see scrambled copies; an AI service gets only the parts a question needs |
+| [Asking without handing it over](./family/locked/reels/asklocker-locked-asking-9x16-launch.mp4) | Your phone finds the page. Only that part goes to the AI. | The question asked; phone, server (keeps nothing), an AI service; the answer |
+| [Your key, your way back](./family/locked/reels/asklocker-locked-key-9x16-launch.mp4) | Your Recovery Key gets you back in. | The Recovery Key saved, Papa picked as recovery contact; a new phone unlocked with the key |
+| [Adding family](./family/locked/reels/asklocker-locked-family-9x16-launch.mp4) | They tap Accept. They're in. | Priya accepts Rohan's invitation, and Sharma Family's documents are on her Home |
+| [The emergency card](./family/locked/reels/asklocker-locked-emergency-9x16-launch.mp4) | Your family has it. Nobody else does. | Papa's emergency card, allergies first |
+
+and for a business, Arora Electric (the business film's sample business),
+sending one record where the family's has the emergency card:
+
+| Reel | Says | Shows |
+|---|---|---|
+| [The locker on your phone](./business/locked/reels/asklocker-locked-business-locker-9x16-launch.mp4) | It's locked on your phone before it leaves. | Mehta Cables' bill read and locked on the phone, scrambled on the way and on AskLocker's servers |
+| [Who can open it?](./business/locked/reels/asklocker-locked-business-who-9x16-launch.mp4) | Your team holds the key. We don't. | Your team and a link can; AskLocker's team and someone who breaks into our servers see scrambled copies; an AI service gets only the parts a question needs |
+| [Asking without handing it over](./business/locked/reels/asklocker-locked-business-asking-9x16-launch.mp4) | Your phone finds the page. Only that part goes to the AI. | "When is the Mehta Cables bill due, and how much is it?"; phone, server (keeps nothing), an AI service; the answer |
+| [Your key, your way back](./business/locked/reels/asklocker-locked-business-key-9x16-launch.mp4) | Your Recovery Key gets you back in. | The Recovery Key saved, Ravi from accounts picked as recovery contact; a new phone unlocked with the key |
+| [Sending one record](./business/locked/reels/asklocker-locked-business-share-9x16-launch.mp4) | Send that one file. The vault stays locked. | A 7-day link to the bill for the CA, which carries that one file's key |
+| [Adding your team](./business/locked/reels/asklocker-locked-business-team-9x16-launch.mp4) | They tap Accept. They're in. | Pooja, the CA, accepts Arora Electric's invitation, and its records are on her Home |
 
 Every video ends on **"AskLocker. Ask your documents anything. Only your
 family can open them."** (a business's: "Ask your records anything. Only
@@ -88,6 +105,7 @@ All from the brief. The launch film's sources are also listed in
 | The link carries that one file's key; the rest of the vault stays locked | Sharing one document |
 | They tap Accept and they're in; the app hands them the vault's key; no codes to check | Adding a family member |
 | Reminders in the app, worked out on the phone | What changes for users |
+| A business's version: "Your team holds the key", someone in your team as recovery contact, records, the table without the family tree and emergency cards | A business vault has the same protection; the brief's lines, said of a team |
 
 **Never in these videos**, as the brief and CLAUDE.md say: "end-to-end
 encrypted" (an open question below), "100% private", "military-grade",
@@ -110,6 +128,10 @@ anything that says it is live.
   few messages; if it still does, say so); that the server keeps nothing of
   a question; that birthdays show in Reminders; that note reminders are
   worked out on the phone too.
+- **The business version's words**: the brief is written for a family, and
+  the business films say the same of a team ("Your team holds the key",
+  "someone in your team you chose" as recovery contact, "records"). Check
+  them with the owner with the rest.
 - **The brief's open questions**: may the videos say "end-to-end
   encrypted" (the brief recommends yes, only after an outside security
   review, and always with the AI line beside it)? Should they name the AI
@@ -128,5 +150,6 @@ From `../video/`, after any change to the words or the app:
 LAUNCH=1 ./tools/films.sh      # the twelve film cuts, launch set
 LAUNCH=1 ./tools/features.sh   # every feature short, and the posters that change
 ./tools/locked.sh              # the launch film, its six reels and their covers
+./tools/locked.sh business     # the same for a business
 ./tools/publish.sh             # copies them here (and today's set to its folders)
 ```

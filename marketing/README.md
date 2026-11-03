@@ -11,8 +11,9 @@ Metro only bundles from `src/app`, and none of these files are TypeScript.
   of 3 November 2026 keeps it unpublished.
 - `launch/`: **embargoed until end-to-end encryption ships.** The launch
   set: every film, short and reel saying "Locked on your phone. Opened only
-  by your family.", and the launch's own film. Nothing in it is posted
-  before the owner confirms the launch; see [`launch/README.md`](launch/README.md).
+  by your family." ("by your team" for a business), and the launch's own
+  film, for a family and for a business. Nothing in it is posted before the
+  owner confirms the launch; see [`launch/README.md`](launch/README.md).
 - `video/`: the code that makes them: both films and every feature's short and
   poster, in 16:9, 9:16 and 1:1. See [`video/README.md`](video/README.md) to
   render them.
@@ -137,7 +138,8 @@ After a change to the app or the words, from `video/`:
 ./tools/films.sh       # the twelve film cuts, with sound
 ./tools/privacy.sh     # the privacy film, its four reels and their covers
 ./tools/features.sh    # every feature short and poster
-LAUNCH=1 ./tools/films.sh && LAUNCH=1 ./tools/features.sh && ./tools/locked.sh   # the launch set
+LAUNCH=1 ./tools/films.sh && LAUNCH=1 ./tools/features.sh   # the launch set,
+./tools/locked.sh && ./tools/locked.sh business             # and its own film, both versions
 ./tools/publish.sh     # copy them here (the launch set into launch/)
 ```
 

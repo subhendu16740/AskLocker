@@ -7,7 +7,7 @@ and, behind a switch, the launch set for end-to-end encryption, never posted
 before it ships ([The launch set](#the-launch-set)).
 `src/intro.html` builds any of them as a GSAP timeline (`?film=family`,
 `?film=nri`, `?film=business`, `?film=features`, `?film=privacy` or, for the
-launch set only, `?film=locked`) that
+launch set only, `?film=locked` and `?film=locked-business`) that
 recreates the app's real screens (same layouts, copy, colours and Feather icons
 as `src/app/**`, sized by `src/constants/design.ts`; a business's screens in the
 app's teal, as Business mode has them). `tools/render.mjs` seeks the paused
@@ -638,6 +638,21 @@ contact), sending one paper, adding family, and the emergency card. 2:13 in
 readable. `&reel=` cuts the brief's six video ideas (`locker`, `who`,
 `asking`, `key`, `family`, `emergency`), 15 to 22 seconds each, and
 `tools/locked.sh` renders the film, the reels and their covers.
+
+**Its business version** (`?film=locked-business&claims=launch`,
+`tools/locked.sh business`) is the same film for Arora Electric, the
+business film's sample business, since the brief gives a business vault
+the same protection: a supplier's bill instead of a passport, "Your team
+holds the key", Ravi from accounts as the recovery contact, the brief's
+table without the family tree and emergency cards, sending one bill to the
+CA, and Pooja, the CA, accepting the business's invitation (the app's own
+card for a business). No emergency card, which a business vault doesn't
+have: seven questions, 2:01, and six reels (`locker`, `who`, `asking`,
+`key`, `share`, `team`). It wears the business film's teal daylight and
+gold (`.formal`, `.biz-look`), a night in teal, and the business film's
+music (`formal_music`: calm, its groove from the first question, calm for
+the close). `BUSINESS` in `src/locked-screens.js` picks every word; the
+family film's frames do not change.
 
 The Recovery Key, new-phone, Reminders and invitation screens are drawn
 from the brief in the app's style, because the app does not have them yet:
