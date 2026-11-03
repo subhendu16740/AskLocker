@@ -1,0 +1,33 @@
+{
+  "title": "AskLocker for Business: every bill, licence and contract, one question away",
+  "description": "How a small business keeps its invoices, bills, licences and contracts in AskLocker: a supplier's bill photographed and read, a question answered with its source, renewals and bills due at a glance, reminders, and the team and CA by invitation.",
+  "audience": "business",
+  "uploadDate": "2026-11-03",
+  "durationSeconds": 91.35,
+  "width": 1920,
+  "height": 1080,
+  "poster": "poster.jpg",
+  "chapters": [
+    { "start": 0, "title": "AskLocker for Business" },
+    { "start": 5, "title": "A business runs on documents" },
+    { "start": 11, "title": "The next 90 days" },
+    { "start": 18, "title": "One place for every business document" },
+    { "start": 24, "title": "01 Capture" },
+    { "start": 34, "title": "02 Ask" },
+    { "start": 43, "title": "03 Overview" },
+    { "start": 53, "title": "04 Reminders" },
+    { "start": 60, "title": "05 Team" },
+    { "start": 70, "title": "Access and control" },
+    { "start": 77, "title": "Plans" },
+    { "start": 85, "title": "Start your business vault" }
+  ],
+  "order": 2,
+  "reviewNotes": [
+    "Chapter times were measured from marketing/video's timeline (16:9 full cut, 91.35 s) on 3 November 2026. A changed film needs them measured again.",
+    "Re-render before publishing: the plans table (1:17) shows the numbers of 051 to 058 (₹500, ₹1,000 and ₹4,000; 4, 10, 15 and 50 people; 200 MB, 10, 25 and 100 GB; 100 questions each; a year 'one month free'). Since 066 and 067 they are ₹499, ₹999 and ₹3,999 + GST; 2, 5, 10 and 50 people; 100 MB per person, 20, 50 and 200 GB; 20 questions per person, then 1,000, 2,000 and 8,000 shared; a year about ten months. The end card says 'from ₹500'. Both are in marketing/video/src/business-screens.js (textBlocks() and BIZ.ctaNote): read the numbers from supabase/functions/_shared/plan-text.ts.",
+    "Chapter 01 says 'PDF, JPG or PNG, up to 10 MB': Excel (.xlsx) and CSV files are taken too since 061.",
+    "Business vaults are a pilot with a few businesses: check what the app offers before publishing (marketing/video/README.md).",
+    "To add the film: in marketing/video, node tools/render.mjs --film business && ./tools/mux.sh business-16x9, then node site/tools/add-video.mjs marketing/video/out/asklocker-business-16x9.mp4 --slug asklocker-for-business --poster-at 49."
+  ],
+  "draft": true
+}

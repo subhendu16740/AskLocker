@@ -329,7 +329,7 @@ changed *nothing* until someone pastes it into the SQL editor.
 
 | Changed | Deployed by | How |
 |---|---|---|
-| `src/**`, `app.config.ts`, `public/**` | **Cloudflare Pages**, automatically | `main` → PROD, `dev` → DEV; other branches are not built |
+| `src/**`, `app.config.ts`, `public/**`, `site/**` | **Cloudflare Pages**, automatically | `main` → PROD, `dev` → DEV; other branches are not built |
 | `supabase/functions/**` | **GitHub Actions**, automatically | `main` → PROD, `dev` → DEV; `workflow_dispatch` for either by hand |
 | `supabase/migrations/**` | **you** | paste into the SQL editor |
 | Edge Function secrets | **you** | `secrets set`, per project |
@@ -517,7 +517,7 @@ deployments), not in the repo:
 | | |
 |---|---|
 | Install | `npm ci` (Cloudflare runs it before the build) |
-| Build | `npm run build` (`expo export --platform web --clear`, then `scripts/move-node-modules-assets.mjs` and `scripts/lab-pages.mjs`) |
+| Build | `npm run build` (`expo export --platform web --clear`, then `scripts/move-node-modules-assets.mjs`, `scripts/lab-pages.mjs` and `site/build.mjs`) |
 | Output | `dist` |
 | Node | 22.x (`.node-version`) |
 | Production branch | `main` |
@@ -556,6 +556,29 @@ single-page fallback, used while the site has no top-level `404.html`), so
 `/home` and every other deep link opens on refresh. A `404.html` would
 turn the fallback off and every deep link would 404. (Vercel needed a
 catch-all rewrite in `vercel.json` for the same thing.)
+
+**asklocker.com/ is the landing page, and every other address the app's**
+(since 3 November 2026; [`site/README.md`](site/README.md)). The app's single
+`index.html` is an empty page to search engines and AI assistants, so
+`site/build.mjs`, the last step of `npm run build`, writes plain HTML beside
+it: `landing.html`, the films (`/videos`, `/videos/<slug>`, from
+`site/videos/<slug>/`), `robots.txt`, `sitemap.xml`, `llms.txt` and
+`llms-full.txt`, from `site/content.mjs` and the app's own constants (prices
+from `plan-text.ts`, never typed in). One rule in `dist/_redirects`,
+`/ /landing 200`, serves the landing page at `/`; a `_redirects` rule is
+followed even where a file matches and applies only to its own path, so the
+single-page fallback answers every other address with the app as before.
+**The landing page's first script hands the app's visitors on**
+(`APP_FORWARD` in `site/lib/html.mjs`): a sign-in coming back to `/` with
+`?code=` (the redirect sign-in, below) or an email link's tokens go to
+`/home` with the query and hash whole; the installed app goes to `/home` or
+`/onboarding`; someone signed in on that browser (`sb-<ref>-auth-token`) who
+typed the address goes to `/home`. The QA self-test runs it in each case.
+Production builds are indexable and carry published films only; every other
+build is `noindex`, its `robots.txt` shuts everything, and it shows draft
+films for review on DEV. **No app route may be called `landing`, `videos`
+or `media`, and `public/` must not hold `robots.txt`, `sitemap.xml` or
+`llms*.txt`**: the site writes them, and its build stops on either.
 
 **No page may be framed.** `public/_headers` (copied to `dist/` by the
 export, read by Cloudflare Pages) sends `X-Frame-Options: DENY` and
@@ -668,6 +691,11 @@ copies, so DEV needs its own secrets and its own `documents` storage bucket.
   Supabase → Authentication → URL Configuration must contain a wildcard
   redirect URL (`https://*.asklocker.pages.dev/**` on DEV), or Google
   sign-in fails there while working on the fixed address.
+- **It comes back to `/`, which is the landing page** (`site/`, since 3
+  November 2026). The page's first script sends `?code=` (and `error`,
+  `access_token`, `token_hash`) on to `/home` unchanged, where supabase-js
+  exchanges it as it did at `/`. Changing `redirectTo`, or the landing
+  page's head, means checking this still happens: the QA self-test does.
 - **To show "AskLocker" instead of an address**: Google's brand
   verification, free — a public home page and privacy policy on a domain
   verified in Search Console, both linked from the OAuth consent screen.
@@ -852,6 +880,11 @@ qa/                          # end-to-end QA against DEV (own package.json)
   run.mjs  questions.yaml    # the runner, and what it asks
   fixtures/documents.mjs     # the SPECIMEN documents and the facts they carry
   sql/                       # the 023 sweep and the 024 fingerprint
+
+site/                        # the public site, web only: the landing page at /, films, robots.txt, sitemap.xml, llms.txt (site/README.md)
+  build.mjs  content.mjs     # the generator (last step of npm run build), and every word on the landing page
+  videos/<slug>/             # one film each: video.json, poster.jpg, transcript.md, video.mp4 (drafts until "draft": false)
+  tools/add-video.mjs        # a rendered film into videos/<slug>/, as a draft
 
 scripts/setup.sh             # cloud bootstrap
 scripts/lab-pages.mjs        # after the export: keeps dist/lab/ only in a DEV build
@@ -3784,7 +3817,9 @@ rule again once pinned chunks are mixed in.
     otherwise) and OCR.space (scanned PDFs, photos imported from Gmail).
     PostHog gets usage counts, and never any of it.
 
-  So no screen, notification, README or store listing says "secure",
+  So no screen, notification, README, store listing or page of the public
+  site (`site/`, checked by the QA self-test with its films' transcripts)
+  says "secure",
   "safe", "private and isolated", "100% private", "only you can see it" or
   "nothing is kept". Say what the app does instead: "in AskLocker, only your
   family can open…", "nobody else using AskLocker can open it", "just for

@@ -1578,6 +1578,108 @@ await test('the privacy policy names who gets document text and promises nothing
   assert.ok(/Last updated \d{1,2} [A-Z][a-z]+ \d{4}/.test(page), 'carries the date it last changed');
 });
 
+// ─── The public site (site/): asklocker.com's landing page and films ──────
+// The landing page took over asklocker.com/, where Google's redirect sign-in
+// comes back with ?code=. Its forwarder must hand that, and the app's own
+// visitors, to the app, and leave everyone else (search engines, AI
+// assistants, a link from WhatsApp) on the page.
+
+await test('the public site hands a sign-in, the installed app and a signed-in visitor to the app, and nobody else', async () => {
+  const { APP_FORWARD } = await import('../../site/lib/html.mjs');
+  const { runInNewContext } = await import('node:vm');
+  const visit = ({ search = '', hash = '', keys = [], standalone = false, referrer = '' } = {}) => {
+    let went = null;
+    const media = () => ({ matches: standalone });
+    runInNewContext(APP_FORWARD, {
+      location: { search, hash, origin: 'https://asklocker.com', replace: (to) => { went = to; } },
+      localStorage: { length: keys.length, key: (i) => keys[i], getItem: (k) => (keys.includes(k) ? '{"access_token":"x"}' : null) },
+      window: { matchMedia: media },
+      matchMedia: media,
+      navigator: {},
+      document: { referrer },
+      URL,
+    });
+    return went;
+  };
+  const session = ['sb-yrcmdixqgvmhqxejvlor-auth-token'];
+  assert.equal(visit({ search: '?code=4f1c' }), '/home?code=4f1c', "Google's redirect sign-in returns to / with ?code=");
+  assert.equal(visit({ search: '?utm_source=whatsapp&code=4f1c' }), '/home?utm_source=whatsapp&code=4f1c');
+  assert.equal(visit({ search: '?error=access_denied&error_description=No' }), '/home?error=access_denied&error_description=No');
+  assert.equal(visit({ hash: '#access_token=a&refresh_token=b' }), '/home#access_token=a&refresh_token=b', 'an email link with tokens');
+  assert.equal(visit(), null, 'a visitor, a search engine or an agent reads the page');
+  assert.equal(visit({ search: '?utm_source=whatsapp' }), null, 'a campaign link is not a sign-in');
+  assert.equal(visit({ keys: ['sb-yrcmdixqgvmhqxejvlor-auth-token-code-verifier'] }), null, 'a sign-in under way is not a session');
+  assert.equal(visit({ keys: session }), '/home', 'signed in, typed the address: their vault, as before');
+  assert.equal(visit({ keys: session, referrer: 'https://www.google.com/' }), '/home');
+  assert.equal(visit({ keys: session, referrer: 'https://asklocker.com/videos/asklocker-for-families' }), null, "from the site's own pages, the logo leads here");
+  assert.equal(visit({ standalone: true }), '/onboarding', 'the installed app opens the app, as / did');
+  assert.equal(visit({ standalone: true, keys: session }), '/home');
+});
+
+await test('the public site promises nothing AskLocker does not keep, and its numbers are the app\'s', async () => {
+  const { landingPage } = await import('../../site/pages/landing.mjs');
+  const { llmsFullTxt, robotsTxt } = await import('../../site/pages/machine.mjs');
+  const { loadVideos } = await import('../../site/lib/videos.mjs');
+  const { faq } = await import('../../site/content.mjs');
+  const { PUBLIC_PATHS, SITE_NAMES, appRoutes } = await import('../../site/lib/routes.mjs');
+
+  const all = loadVideos({ showDrafts: true });
+  assert.deepEqual(all.errors, [], 'every film folder in site/videos is valid');
+  const published = loadVideos({ showDrafts: false });
+  assert.deepEqual(published.errors, []);
+  assert.ok(published.videos.every((v) => !v.draft), 'a production build carries no draft');
+
+  const html = landingPage({ videos: published.videos, indexable: true });
+  const plain = (s) => s.replace(/<(script|style)[\s\S]*?<\/\1>/g, ' ').replace(/<[^>]+>/g, ' ').replace(/&amp;/g, '&').replace(/&[a-z]+;/g, ' ').replace(/\s+/g, ' ');
+  const page = plain(html);
+  const texts = { 'the landing page': page, 'llms-full.txt': llmsFullTxt({ videos: all.videos }) };
+  for (const v of all.videos) texts[`site/videos/${v.slug}/transcript.md`] = v.transcript;
+  for (const [name, body] of Object.entries(texts)) {
+    const words = body.toLowerCase();
+    for (const claim of ['100% private', 'only you can see', 'nothing is kept', 'secure', 'safe', 'private and isolated', 'bank-level', 'military-grade']) {
+      assert.ok(!words.includes(claim), `${name} promises "${claim}"`);
+    }
+    for (const m of words.matchAll(/end-to-end/g)) {
+      assert.equal(words.slice(Math.max(0, m.index - 4), m.index), 'not ', `${name} says end-to-end without "not"`);
+    }
+  }
+  const words = page.toLowerCase();
+  assert.ok(words.includes('not end-to-end'), 'says documents are not end-to-end encrypted');
+  assert.ok(words.includes('the people who run asklocker can open them'), 'says the people who run AskLocker can open documents');
+  assert.ok(words.includes('in asklocker, only people in your vault'), 'keeps "In AskLocker" on who can open them');
+
+  for (const price of [plusAmount('inr', 'monthly'), plusAmount('inr', 'yearly'), plusAmount('inr', 'monthly', 'family_pro'), plusAmount('inr', 'yearly', 'family_pro'), businessAmount('business_plus')]) {
+    assert.ok(page.includes(price), `shows ${price}, from plan-text.ts`);
+  }
+  assert.ok(page.includes(`${DEFAULT_PLAN_LIMITS.questions.free} questions a month`), 'the free questions follow the plan limits');
+  assert.ok(page.includes(`up to ${MAX_FILE_BYTES / (1024 * 1024)} MB`), 'the file limit follows limits.ts');
+
+  // Structured data: one graph, parseable, with the FAQ and the app's prices.
+  const ld = [...html.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)];
+  assert.equal(ld.length, 1);
+  const graph = JSON.parse(ld[0][1])['@graph'];
+  const of = (type) => graph.find((n) => n['@type'] === type);
+  for (const type of ['Organization', 'WebSite', 'WebPage', 'WebApplication', 'FAQPage']) assert.ok(of(type), `has ${type}`);
+  assert.equal(of('FAQPage').mainEntity.length, faq.length);
+  assert.ok(of('WebApplication').offers.some((o) => o.price === String(PLUS_PRICE.monthly.inr) && o.priceCurrency === 'INR'));
+
+  // The forwarder runs first, before anything is drawn; the page is indexable only when asked.
+  const head = html.slice(0, html.indexOf('</head>'));
+  assert.ok(head.indexOf('<script>') > 0 && head.indexOf('<script>') < head.indexOf('<title>'), 'the forwarder is the first thing in <head>');
+  assert.ok(head.includes('<link rel="canonical" href="https://asklocker.com/">'));
+  assert.ok(landingPage({ videos: [], indexable: false }).includes('content="noindex, nofollow"'), 'a build that is not production is never indexed');
+
+  // The site and the app never claim the same address, and robots.txt leaves the app's screens out.
+  const routes = appRoutes();
+  for (const r of ['home', 's', 'login', 'onboarding', 'settings']) assert.ok(routes.has(r), `finds the app's /${r}`);
+  assert.deepEqual(SITE_NAMES.filter((n) => routes.has(n)), [], 'no site page hides an app screen');
+  const robots = robotsTxt({ production: true, appRoutes: routes, publicPaths: PUBLIC_PATHS });
+  for (const r of routes) assert.ok(robots.includes(`\nDisallow: /${r}\n`), `robots.txt leaves out /${r}`);
+  assert.ok(robots.includes('\nAllow: /sitemap.xml\n'), '"Disallow: /s" would cover /sitemap.xml without it');
+  assert.ok(!/\nDisallow: \/\n/.test(robots), 'production lets the public pages be read');
+  assert.match(robotsTxt({ production: false, appRoutes: routes, publicPaths: PUBLIC_PATHS }), /\nDisallow: \/\n/, 'DEV and previews are not for search');
+});
+
 // ─── End-to-end encryption, Phase 0 (docs/end-to-end-encryption.md) ──────
 // vault-crypto.ts runs only on members' devices. These pin what the design
 // rests on: a sealed item opens only with its key, in its own place, and
@@ -1768,4 +1870,4 @@ if (failures.length) {
   console.error(`\n${failures.length} self-test(s) failed, ${passed} passed.`);
   process.exit(1);
 }
-console.log(`✓ ${passed} self-tests passed — matchers, judge, run-time PDF, metadata, ticket codes, text cleaning, Gmail rules and token sealing, kinship and the family tree, emergency card checks, web push, plan limits, questions each month, limits against abuse, business papers, categories and plan words, Razorpay signatures, numbers in digits, sources the answer used, Claude's requests in Groq's shape, search-vector providers and budget, the agreement's words, the privacy policy, end-to-end encryption's core, questions and budget.`);
+console.log(`✓ ${passed} self-tests passed — matchers, judge, run-time PDF, metadata, ticket codes, text cleaning, Gmail rules and token sealing, kinship and the family tree, emergency card checks, web push, plan limits, questions each month, limits against abuse, business papers, categories and plan words, Razorpay signatures, numbers in digits, sources the answer used, Claude's requests in Groq's shape, search-vector providers and budget, the agreement's words, the privacy policy, the public site, end-to-end encryption's core, questions and budget.`);

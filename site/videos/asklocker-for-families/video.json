@@ -1,0 +1,33 @@
+{
+  "title": "AskLocker for families: the night the policy number couldn't be found",
+  "description": "At 2:14 AM Papa is in hospital and nobody can find his health policy number. Then the same night with AskLocker: documents brought in, a paper policy scanned, the question asked aloud in Hindi, and the answer read back.",
+  "audience": "family",
+  "uploadDate": "2026-11-03",
+  "durationSeconds": 135,
+  "width": 1920,
+  "height": 1080,
+  "poster": "poster.jpg",
+  "chapters": [
+    { "start": 0, "title": "2:14 AM, and nobody can find the policy number" },
+    { "start": 30, "title": "AskLocker" },
+    { "start": 33, "title": "Import from Gmail" },
+    { "start": 43, "title": "Scan a paper policy" },
+    { "start": 56, "title": "Ask a question" },
+    { "start": 65, "title": "Ask aloud, in Hindi" },
+    { "start": 87, "title": "The family tree" },
+    { "start": 95, "title": "Emergency card" },
+    { "start": 103, "title": "Reminders" },
+    { "start": 111, "title": "Who can open your documents" },
+    { "start": 119, "title": "The same night, with AskLocker" },
+    { "start": 129, "title": "Start your family vault" }
+  ],
+  "order": 1,
+  "reviewNotes": [
+    "Chapter times were measured from marketing/video's timeline (16:9 full cut, 135 s) on 3 November 2026. A changed film needs them measured again.",
+    "Re-render before publishing: the end card says 'Family Plus ₹100 a month'; PLUS_PRICE is ₹99 a month since 066 (STORY.ctaNote in marketing/video/src/family-screens.js).",
+    "marketing/video/README.md: don't show the family film to the public until Google has verified the Gmail scope, or cut the Gmail scene (0:33).",
+    "The statistic at 0:20 (₹1.84 lakh crore unclaimed, Ministry of Finance, 2025) is stated as fact on the site once published: check the source first.",
+    "To add the film: in marketing/video, node tools/render.mjs && ./tools/mux.sh family-16x9, then node site/tools/add-video.mjs marketing/video/out/asklocker-family-16x9.mp4 --slug asklocker-for-families --poster-at 76."
+  ],
+  "draft": true
+}
