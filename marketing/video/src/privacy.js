@@ -424,7 +424,8 @@ fadeIn('#end-url', t0 + 2.35, { from: 8 });
 S.end = t0;
 // The cover (tools/render.mjs --stills hero): the moment that says the most,
 // counted from its scene's start.
-const COVER = { ai: ['ai', 15.0], who: ['who', 11.6], where: ['kept', 6.5], control: ['control', 8.6] };
+// A reel's cover leads with its headline: Instagram's grid shows its middle.
+const COVER = { ai: ['ai', 15.0], who: ['who', 11.6], where: ['kept', 6.5], control: ['control', 4.55] };
 const [coverScene, coverAt] = REEL ? COVER[REEL] : COVER.ai;
 S.hero = S[coverScene] + coverAt;
 S.total = t0 + 5.0;
