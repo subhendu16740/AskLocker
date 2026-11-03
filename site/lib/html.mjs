@@ -57,6 +57,7 @@ const ICONS = {
   play: '<polygon points="5 3 19 12 5 21 5 3"/>',
   'arrow-right': '<line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>',
   'chevron-down': '<polyline points="6 9 12 15 18 9"/>',
+  'chevron-right': '<polyline points="9 18 15 12 9 6"/>',
 };
 
 export function icon(name, size = 24) {
@@ -96,22 +97,21 @@ var r=document.referrer,own=false;try{own=!!r&&new URL(r).origin===l.origin}catc
 if(app)l.replace(s?'/home':'/onboarding');else if(s&&!own)l.replace('/home');}catch(e){}})();`;
 
 const NAV = [
-  { href: '/#how', label: 'How it works' },
   { href: '/#films', label: 'Films', when: 'films' },
   { href: '/#pricing', label: 'Pricing' },
-  { href: '/#business', label: 'Business' },
   { href: '/#faq', label: 'FAQ' },
 ];
 
+// The app's top bar: 56 tall, the name in its title style.
 function header({ hasFilms }) {
   const links = NAV.filter((n) => n.when !== 'films' || hasFilms)
     .map((n) => `<a href="${n.href}">${n.label}</a>`)
     .join('');
   return `<header class="top">
 <div class="wrap top-in">
-<a class="brand" href="/" aria-label="AskLocker home">${logo(34)}<span>AskLocker</span></a>
+<a class="brand" href="/" aria-label="AskLocker home">${logo(32)}<span>AskLocker</span></a>
 <nav class="nav" aria-label="Main">${links}</nav>
-<div class="top-cta"><a class="btn btn-ghost" href="/login">Sign in</a><a class="btn btn-primary" href="/onboarding">Get started</a></div>
+<div class="top-cta"><a class="btn btn-text" href="/login">Sign in</a><a class="btn btn-primary" href="/onboarding">Get started</a></div>
 </div>
 </header>`;
 }
@@ -120,11 +120,7 @@ function footer({ hasFilms }) {
   const year = new Date().getUTCFullYear();
   return `<footer class="foot">
 <div class="wrap foot-in">
-<div class="foot-brand"><a class="brand" href="/">${logo(28)}<span>AskLocker</span></a><p>Every family document, one question away.</p></div>
-<nav class="foot-links" aria-label="Footer">
-<a href="/#how">How it works</a>${hasFilms ? '<a href="/videos">Films</a>' : ''}<a href="/#pricing">Pricing</a><a href="/#business">For business</a><a href="/#faq">FAQ</a>
-<a href="/privacy">Privacy policy</a><a href="mailto:${SUPPORT_EMAIL}">${SUPPORT_EMAIL}</a><a href="/llms.txt">For AI assistants</a>
-</nav>
+<nav class="foot-links" aria-label="Footer">${hasFilms ? '<a href="/videos">Films</a>' : ''}<a href="/privacy">Privacy policy</a><a href="mailto:${SUPPORT_EMAIL}">${SUPPORT_EMAIL}</a><a href="/llms.txt">For AI assistants</a></nav>
 <p class="foot-note">© ${year} AskLocker</p>
 </div>
 </footer>`;
