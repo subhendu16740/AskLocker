@@ -574,6 +574,8 @@ single-page fallback answers every other address with the app as before.
 `/home` with the query and hash whole; the installed app goes to `/home` or
 `/onboarding`; someone signed in on that browser (`sb-<ref>-auth-token`) who
 typed the address goes to `/home`. The QA self-test runs it in each case.
+The top of the page is a carousel of Family and Business, and the sections
+below follow it, both in the HTML (`/#business` opens the business side).
 Production builds are indexable and carry published films only; every other
 build is `noindex`, its `robots.txt` shuts everything, and it shows draft
 films for review on DEV. **No app route may be called `landing`, `videos`

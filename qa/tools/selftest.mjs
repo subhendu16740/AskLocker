@@ -1612,6 +1612,7 @@ await test('the public site hands a sign-in, the installed app and a signed-in v
   assert.equal(visit({ keys: session }), '/home', 'signed in, typed the address: their vault, as before');
   assert.equal(visit({ keys: session, referrer: 'https://www.google.com/' }), '/home');
   assert.equal(visit({ keys: session, referrer: 'https://asklocker.com/videos/asklocker-for-families' }), null, "from the site's own pages, the logo leads here");
+  assert.equal(visit({ keys: session, hash: '#business' }), null, 'a link to the business side is read, signed in or not');
   assert.equal(visit({ standalone: true }), '/onboarding', 'the installed app opens the app, as / did');
   assert.equal(visit({ standalone: true, keys: session }), '/home');
 });
@@ -1653,6 +1654,13 @@ await test('the public site promises nothing AskLocker does not keep, and its nu
     assert.ok(page.includes(price), `shows ${price}, from plan-text.ts`);
   }
   assert.ok(page.includes(`${DEFAULT_PLAN_LIMITS.questions.free} per person`), 'the free questions follow the plan limits');
+  // Family and Business, both in the HTML (the carousel shows one at a time).
+  for (const plan of BUSINESS_PLANS) {
+    assert.ok(page.includes(businessAmount(plan)) && page.includes(businessAmount(plan, 'yearly')), `shows ${plan}'s prices, from plan-text.ts`);
+  }
+  assert.ok(html.includes('data-for="family"') && html.includes('data-for="business"'), 'carries both modes');
+  assert.ok(html.includes('<body data-mode="family">'), 'opens on the family side, script or not');
+  assert.equal((html.match(/<h1[ >]/g) ?? []).length, 1, 'one h1');
   assert.ok(page.includes(`up to ${MAX_FILE_BYTES / (1024 * 1024)} MB`), 'the file limit follows limits.ts');
 
   // Structured data: one graph, parseable, with the FAQ and the app's prices.
