@@ -5,9 +5,14 @@ Metro only bundles from `src/app`, and none of these files are TypeScript.
 
 - `family/`, `nri/` and `business/`: the finished films, feature shorts and
   posters, ready to post (below).
-- `privacy/`: what AskLocker does with a family's documents, in plain words:
-  the full film, and four Instagram reels to post one a week
-  ([below](#privacy-a-month-of-reels)).
+- `privacy/`: what AskLocker does with a family's documents today, in plain
+  words: the full film, and four Instagram reels to post one a week
+  ([below](#privacy-a-month-of-reels)). **Held back**: the encryption brief
+  of 3 November 2026 keeps it unpublished.
+- `launch/`: **embargoed until end-to-end encryption ships.** The launch
+  set: every film, short and reel saying "Locked on your phone. Opened only
+  by your family.", and the launch's own film. Nothing in it is posted
+  before the owner confirms the launch; see [`launch/README.md`](launch/README.md).
 - `video/`: the code that makes them: both films and every feature's short and
   poster, in 16:9, 9:16 and 1:1. See [`video/README.md`](video/README.md) to
   render them.
@@ -62,6 +67,11 @@ and slides.
 ★ Reminders need a paid plan (Plus and up).
 
 ## Privacy: a month of reels
+
+> **On hold.** The encryption brief of 3 November 2026 keeps this film and
+> its reels unpublished: AskLocker is building end-to-end encryption, and
+> the launch set (`launch/`) will replace them once it ships. The plan
+> below stays for reference.
 
 The privacy film says what AskLocker does with a family's documents, the
 honest parts included: encrypted on the way and where they're kept (in
@@ -127,7 +137,8 @@ After a change to the app or the words, from `video/`:
 ./tools/films.sh       # the twelve film cuts, with sound
 ./tools/privacy.sh     # the privacy film, its four reels and their covers
 ./tools/features.sh    # every feature short and poster
-./tools/publish.sh     # copy them here
+LAUNCH=1 ./tools/films.sh && LAUNCH=1 ./tools/features.sh && ./tools/locked.sh   # the launch set
+./tools/publish.sh     # copy them here (the launch set into launch/)
 ```
 
 The language versions of the family short (its voice scene in each of the

@@ -2,9 +2,12 @@
 
 Three launch films, as code: two for families (one told from abroad) and one
 for business, a poster and a short for each feature, and a film that says what
-AskLocker does with a family's documents, with four reels cut from it (below).
+AskLocker does with a family's documents, with four reels cut from it (below);
+and, behind a switch, the launch set for end-to-end encryption, never posted
+before it ships ([The launch set](#the-launch-set)).
 `src/intro.html` builds any of them as a GSAP timeline (`?film=family`,
-`?film=nri`, `?film=business`, `?film=features` or `?film=privacy`) that
+`?film=nri`, `?film=business`, `?film=features`, `?film=privacy` or, for the
+launch set only, `?film=locked`) that
 recreates the app's real screens (same layouts, copy, colours and Feather icons
 as `src/app/**`, sized by `src/constants/design.ts`; a business's screens in the
 app's teal, as Business mode has them). `tools/render.mjs` seeks the paused
@@ -593,6 +596,54 @@ photos are never read by an outside service (OCR.space reads one the phone
 couldn't), and that "anyone can leave, any time" (a vault's last admin can't).
 Check the claims again after any change to rag-search, ingest, sharing,
 membership or the policy.
+
+## The launch set
+
+AskLocker is building end-to-end encryption (the encryption brief of 3
+November 2026): documents locked on members' phones with their vault's own
+key, AskLocker storing only scrambled copies, nobody at AskLocker able to
+open them, and only the passages a question needs going to an AI service.
+It is planned, not live, so the films say it only behind one switch:
+`?claims=launch`, `render.mjs --launch`, `LAUNCH=1` for `films.sh` and
+`features.sh`, `posters.mjs --launch`. Every file it makes ends `-launch`,
+and `publish.sh` puts them in `marketing/launch/`, never in today's
+folders. **Nothing from it is posted before the owner confirms the
+launch** (`marketing/launch/README.md`).
+
+`src/claims.js` holds the switch and the words every film shares (the end
+line, the launch line). With it on:
+
+- every film and short ends on "Ask your documents anything. Only your
+  family can open them." ("your records", "your team" for a business);
+- the family and NRI films' privacy scene, the business film's access and
+  control, and the privacy and access shorts say the brief's lines;
+- Gmail import is gone (off for encrypted vaults): `family.js` skips its
+  scene and the next one brings the phone in;
+- reminders are the app's Reminders page, worked out on the phone
+  (`remindersScreen()` in `family-screens.js` and `business-screens.js`),
+  never a web notification on the lock screen;
+- the Ask, Share and emergency callouts say what reaches an AI service,
+  what a link carries, and who can open a card.
+
+**The launch film** (`?film=locked&claims=launch`, `src/locked.js`, its
+pieces in `src/locked-screens.js` and `src/launch.css`) explains it in
+eight questions, in the privacy film's way (Question, Answer, a diagram or
+the phone): adding a document (read and locked on the phone, scrambled on
+the way and on the server), who can open it, asking a question (the phone
+searches its own copy; the server passes the parts on and keeps nothing; an
+AI service writes the answer), what AskLocker can and cannot see (the
+brief's table), a new phone (the Recovery Key, another phone, a recovery
+contact), sending one paper, adding family, and the emergency card. 2:13 in
+16:9 and 9:16; in 9:16 the wide diagrams stand up so their words stay
+readable. `&reel=` cuts the brief's six video ideas (`locker`, `who`,
+`asking`, `key`, `family`, `emergency`), 15 to 22 seconds each, and
+`tools/locked.sh` renders the film, the reels and their covers.
+
+The Recovery Key, new-phone, Reminders and invitation screens are drawn
+from the brief in the app's style, because the app does not have them yet:
+check each against the app before release. The films name no AI company
+("an AI service") and never say "end-to-end encrypted"; both are open
+questions in the brief.
 
 ## Licences
 

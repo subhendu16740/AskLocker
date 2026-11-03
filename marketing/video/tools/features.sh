@@ -18,4 +18,14 @@ for f in "${FEATURES[@]}"; do
   node tools/render.mjs --film features --feature "$f" --portrait "${launch[@]}"
   tools/mux.sh "feature-$f-9x16$suffix"
 done
-node tools/posters.mjs --features "$(IFS=,; echo "${FEATURES[*]}")" "${launch[@]}"
+# The launch set keeps only the posters that change at launch (a poster has
+# no end card); the others are today's.
+POSTERS=("${FEATURES[@]}")
+if [ "${LAUNCH:-}" = 1 ]; then
+  CHANGED=" vaults biz-access reminders biz-reminders emergency share biz-share ask biz-ask "
+  POSTERS=()
+  for f in "${FEATURES[@]}"; do [[ $CHANGED == *" $f "* ]] && POSTERS+=("$f"); done
+fi
+if [ ${#POSTERS[@]} -gt 0 ]; then
+  node tools/posters.mjs --features "$(IFS=,; echo "${POSTERS[*]}")" "${launch[@]}"
+fi
