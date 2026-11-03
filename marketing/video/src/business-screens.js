@@ -90,7 +90,7 @@ export function uploadScreen() {
       </div>
       <div class="up-secondary">
         <div class="up-sbtn">${icon('image', 22, '#2A3D66')}<span>Gallery</span></div>
-        <div class="up-sbtn">${icon('mail', 22, '#2A3D66')}<span>From Gmail</span>${plusTag('Plus')}</div>
+        <div class="up-sbtn"${LAUNCH ? ' style="display:none"' : ''}>${icon('mail', 22, '#2A3D66')}<span>From Gmail</span>${plusTag('Plus')}</div>
       </div>
       <div class="up-hint">${icon('info', 16, '#6B7280')}<span>PDF, PNG or JPG</span></div>
     </div>
