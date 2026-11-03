@@ -101,6 +101,7 @@ export function whoDiagram() {
       ${row('pw-vault', 'yes', 'users', 'People in your vault', 'Your personal vault is yours alone')}
       ${row('pw-link', 'yes', 'link', 'Anyone you send a link to', 'That one document, until the link ends')}
       ${row('pw-team', 'team', 'server', 'Our servers, and our team', 'Servers read them to search and answer you. The people who run AskLocker can open them.')}
+      ${row('pw-svc', 'team', 'cloud', 'Services we use', 'They read parts of them, or a scan, for us. Each one is named in our privacy policy.')}
       ${row('pw-else', 'no', 'user-x', 'Anyone else on AskLocker', 'Nobody else using AskLocker can open them')}
       <div class="pv-card-foot" id="dg-who-foot">${icon('lock', 18, NAVY, 2.4)}<span>Encrypted when sent and stored. <b>Not end-to-end.</b></span></div>
     </div>`;
@@ -110,8 +111,12 @@ export function whoDiagram() {
 
 export const AI_Q = "What is Papa's health insurance policy number?";
 
-// The Sharma family's vault: 24 documents. The first three are what search
-// finds for the question; nothing else is sent.
+// The Sharma family's vault: 24 documents. Search picks the passages for the
+// question from seven of them (FOUND): the three insurance papers, and,
+// because the question names Papa, documents marked as his, which join the
+// candidates (rag-search's ownerChunks). Up to 15 passages from these go to
+// the AI, which checks which ones answer (rerankChunks) and writes from the
+// best (buildContext); nothing else from the vault goes with the question.
 const VAULT = [
   ['shield', STORY.scanFile, 'Health Insurance'], ['umbrella', 'LIC_Premium_Receipt_Papa.pdf', 'Life Insurance'],
   ['truck', 'Car Insurance.pdf', 'Vehicle Insurance'], ['book-open', 'Papa Passport.pdf', 'Passport'],
@@ -126,13 +131,15 @@ const VAULT = [
   ['truck', 'Driving Licence Rohan.jpg', 'Driving License'], ['zap', 'Electricity Bill Oct.pdf', 'Bills'],
   ['file-text', 'Gas Connection.pdf', 'Other'], ['award', 'Birth Certificate Priya.pdf', 'Birth Certificate'],
 ];
-export const VAULT_FOUND = 3;
+const FOUND = new Set([0, 1, 2, 3, 4, 7, 16]);
 
 export function aiDiagram() {
-  const tiles = VAULT.map(([ic, name, kind], i) => `<div class="pv-tile${i < VAULT_FOUND ? ' found' : ''}" id="ai-t${i}">
+  const tiles = VAULT.map(([ic, name, kind], i) => `<div class="pv-tile${FOUND.has(i) ? ' found' : ''}" id="ai-t${i}">
       <span class="pv-tile-ic">${icon(ic, 18, NAVY, 2.2)}</span><b>${name}</b><span>${kind}</span></div>`).join('');
   // The passage as rag-search's buildContext() writes it, then its text.
-  const head = `[Passage 1 | Document: ${STORY.scanFile} | Type: Health Insurance | Marked as ${STORY.papa}'s]`;
+  // Rohan has a personal vault too, and Ask searches every vault by default,
+  // so each passage says which vault it is in.
+  const head = `[Passage 1 | Document: ${STORY.scanFile} | Type: Health Insurance | Marked as ${STORY.papa}'s | In: ${STORY.familyName}]`;
   const text = ['AROGYA SHIELD HEALTH INSURANCE CO. LTD.', 'SCHEDULE OF INSURANCE · FAMILY FLOATER HEALTH PLAN',
     `Policy Number ${STORY.policyNo}`, `Insured name ${STORY.papa} (Self)`, 'Members covered Ramesh Sharma, Sunita Sharma',
     'Sum insured ₹10,00,000', 'Policy period 15/03/2026 to 14/03/2027'];
@@ -140,16 +147,16 @@ export function aiDiagram() {
       <div class="pv-vault" id="ai-vault">
         <div class="pv-vault-h"><span>${icon('users', 18, NAVY, 2.4)}<b>${STORY.familyName}</b></span><span id="ai-count">24 documents</span></div>
         <div class="pv-grid" id="ai-grid">${tiles}</div>
-        <div class="pv-vault-f" id="ai-found">${icon('search', 18, CORAL, 2.6)}<span>Search finds the parts that match. <b>The other 21 documents are not sent.</b></span></div>
+        <div class="pv-vault-f" id="ai-found">${icon('search', 18, CORAL, 2.6)}<span>Search picks up to 15 passages that match, here from ${FOUND.size} documents. <b>Nothing else goes with your question.</b></span></div>
       </div>
       <div class="pv-env" id="ai-env">
         <div class="pv-env-h">${icon('send', 18, '#fff', 2.4)}<span>What the AI gets</span></div>
-        <div class="pv-env-sec" id="ai-s1"><i>Your question</i><p>${AI_Q}</p></div>
+        <div class="pv-env-sec" id="ai-s1"><i>Your question</i><p>${AI_Q}</p><em>On a follow-up, your last few messages too</em></div>
         <div class="pv-env-sec" id="ai-s2"><i>Who's who, when you name someone</i><p>The person asking is ${STORY.youFull}. In this question, "Papa" means ${STORY.papa}, their father.</p></div>
         <div class="pv-env-sec" id="ai-s3"><i>The passages search found</i>
           <div class="pv-pass"><code>${head}</code>${text.map((l) => `<span>${l}</span>`).join('')}</div>
-          <div class="pv-pass-more">${icon('plus', 14, NAVY, 2.6)}<span>2 more: a life insurance receipt, a car policy</span></div></div>
-        <div class="pv-env-foot" id="ai-foot">At most 15 passages are checked, and about a page and a half is used to answer. <b>Never the file. Never the rest of your vault.</b></div>
+          <div class="pv-pass-more">${icon('plus', 14, NAVY, 2.6)}<span>More like it, up to 15 in all</span></div></div>
+        <div class="pv-env-foot" id="ai-foot">The AI checks which passages answer you, and writes from the best: about a page and a half. <b>Never the files. Never your whole vault.</b></div>
       </div>
       <div class="pv-ai-node" id="ai-node"><span class="pv-ai-ic">${icon('cpu', 30, '#fff', 2.2)}</span>
         <div><b>An AI service</b><span>Claude by Anthropic, or Groq if Claude can't answer</span></div></div>
@@ -162,7 +169,7 @@ const SERVICES = [
   ['database', 'Supabase', 'Stores your account, documents and files, in Mumbai'],
   ['cloud', 'Cloudflare', 'Runs the website. Turns parts of documents and questions into search data'],
   ['cpu', 'Anthropic, Groq', 'Your question and the best-matching parts, to write the answer'],
-  ['file-text', 'OCR.space', 'Reads scanned PDFs, and photos imported from Gmail'],
+  ['file-text', 'OCR.space', "Reads scanned PDFs, Gmail photos, and photos your phone couldn't read"],
   ['log-in', 'Google', 'Signs you in. Gmail, only if you connect it. Voice, in Chrome'],
   ['credit-card', 'Razorpay', 'Payments. Your card or UPI details go only to Razorpay'],
   ['bell', 'Push service', 'Your browser\'s. Carries notifications, encrypted so it can\'t read them'],
@@ -180,27 +187,34 @@ export function ledgerDiagram() {
 }
 
 // ─── Manage Family (src/app/family.tsx), with an invitation waiting ──────
+// As the screen is just after Rohan invites his wife, on 2 October, before
+// she accepted (the family film has her joining on 3 October) and before Papa
+// joined: two of Family Plus's four places taken, the invitation holding a
+// third. The notice, the tree link, the rows and the pending card are the
+// screen's own: an email invitation shows its address, and who sent it.
 
-export const INVITE = { name: 'Priya Sharma', email: 'priya.sharma@example.com', date: '1 November 2026' };
+export const INVITE = { email: 'priya.sharma@example.com', date: '2 October 2026' };
 
 export function membersScreen() {
   const member = (id, name, rel, { me = false, owner = false } = {}) => `<div class="tm-card" id="${id}">
-      <div class="tm-av fam${me ? ' me' : ''}">${name.split(' ').map((w) => w[0]).join('')}</div>
+      <div class="tm-av fam${me ? ' me' : ''}">${name.charAt(0).toUpperCase()}</div>
       <div class="tm-info"><div class="tm-n"><span>${name}</span><span class="tm-star">★</span>${me ? '<span class="tm-pill you">You</span>' : ''}${owner ? '<span class="tm-pill admin">Owner</span>' : ''}</div>
         <div class="tm-r">${rel}</div></div>
       ${me ? '' : `<span class="tm-act">${icon('shield', 16, NAVY)}</span><span class="tm-act red">${icon('user-minus', 16, '#EF4444')}</span>`}</div>`;
   return `<section class="scr" id="scr-members">${sbFill}
     ${header(STORY.familyName, { sub: '2 of 4 members', right: `<div class="v4-hbtn" id="mf-add">${icon('user-plus', 16, '#fff')}<span>Add</span></div>` })}
     <div class="tm-body" id="mf-body">
+      <div class="mf-notice" id="mf-notice">${icon('info', 16, NAVY)}<span>Invitation sent to ${INVITE.email}. They show as Pending approval until they accept.</span>${icon('x', 16, '#6B7280')}</div>
+      <div class="mf-tree"><span class="mf-tree-ic">${icon('git-branch', 16, NAVY)}</span>
+        <div class="tm-info"><b>Family tree</b><span>Everyone in the family, and their documents</span></div>${icon('chevron-right', 16, '#9CA3AF')}</div>
       <div class="overline">Members</div>
-      ${member('mf-me', STORY.youFull, 'admin', { me: true, owner: true })}
-      ${member('mf-maa', STORY.maa, 'Maa')}
+      ${member('mf-me', STORY.youFull, 'Admin', { me: true, owner: true })}
+      ${member('mf-maa', STORY.maa, 'Mother')}
       <div class="overline">Pending approval</div>
       <div class="tm-card" id="mf-pending"><div class="tm-clock">${icon('clock', 16, AMBER)}</div>
-        <div class="tm-info"><div class="tm-n"><span>${INVITE.name}</span></div><span class="tm-pill wait">Pending approval</span>
-          <div class="tm-r">${INVITE.email} · Invited ${INVITE.date}</div></div>
-        <span class="tm-x">${icon('x', 18, '#6B7280')}</span></div>
-      <div class="mf-note" id="mf-note">${icon('info', 16, NAVY)}<span>${INVITE.name.split(' ')[0]} sees nothing of ${STORY.familyName} until she says yes.</span></div>
+        <div class="tm-info"><div class="tm-n"><span class="mf-email">${INVITE.email}</span><span class="tm-pill wait">Pending approval</span></div>
+          <div class="tm-r">Invited ${INVITE.date} by you</div></div>
+        <span class="tm-act red">${icon('x', 16, '#EF4444')}</span></div>
     </div>
   </section>`;
 }
@@ -233,14 +247,15 @@ const label = (ic, text) => `<div class="co-label">${icon(ic, 14, CORAL, 2.6)}<s
 const check = (text, ic = 'check', c = GREEN) => `<div class="co-check">${icon(ic, 16, c, 2.6)}<span>${text}</span></div>`;
 
 export const PV_CALLOUTS = {
-  vault: () => `<div class="callout" id="co-vault" style="width:390px">${label('users', 'By invitation')}
-    ${check('Only an admin can invite')}${check('Nobody joins until they say yes')}${check('Anyone can leave, any time')}
+  vault: () => `<div class="callout" id="co-vault" style="width:420px">${label('users', 'By invitation')}
+    ${check('Only an admin can invite')}${check('Nobody joins until they say yes')}${check("Leaving needs nobody's permission")}
     ${check('Your personal vault: nobody else can join it', 'lock')}</div>`,
   share: () => `<div class="callout" id="co-share" style="width:400px">${label('link', 'One document, one link')}
     ${check('Opens without an account')}${check('Lasts 1 or 7 days, or 30 with Family Plus')}${check('Turn it off any time')}${check('See how often it was opened')}</div>`,
   device: () => `<div class="callout" id="co-device" style="width:420px">${label('smartphone', 'On your phone')}
-    ${check('Photos and spreadsheets are read here, not by an outside service')}${check('Your fingerprint never leaves it', 'aperture')}
-    ${check('Card and UPI details go only to Razorpay', 'credit-card')}</div>`,
+    ${check('Photos and spreadsheets are read here')}${check('Your fingerprint never leaves it', 'aperture')}
+    ${check('Card and UPI details go only to Razorpay', 'credit-card')}
+    <div class="co-quiet">A photo your phone can't read goes to OCR.space.</div></div>`,
   control: () => `<div class="callout" id="co-control" style="width:410px">${label('sliders', 'Yours to decide')}
     ${check('Delete any document you added')}${check('Turn off a share link')}${check('Switch off app usage counts')}
     ${check('Delete your account, right away', 'user-x')}

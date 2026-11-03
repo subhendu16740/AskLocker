@@ -5,6 +5,9 @@ Metro only bundles from `src/app`, and none of these files are TypeScript.
 
 - `family/`, `nri/` and `business/`: the finished films, feature shorts and
   posters, ready to post (below).
+- `privacy/`: what AskLocker does with a family's documents, in plain words:
+  the full film, and four Instagram reels to post one a week
+  ([below](#privacy-a-month-of-reels)).
 - `video/`: the code that makes them: both films and every feature's short and
   poster, in 16:9, 9:16 and 1:1. See [`video/README.md`](video/README.md) to
   render them.
@@ -15,7 +18,7 @@ Metro only bundles from `src/app`, and none of these files are TypeScript.
   files sit in `strategy/media/`, which is not committed.
 
 `video/out/`, where everything is rendered, is gitignored; `video/tools/publish.sh`
-copies the finished files into `family/`, `nri/` and `business/`, which are committed.
+copies the finished files into `family/`, `nri/`, `business/` and `privacy/`, which are committed.
 All of it shows a fictional family and business and SPECIMEN papers, so it can
 be shared publicly.
 
@@ -28,6 +31,9 @@ be shared publicly.
 | `business/films/` | The business film: a formal product film for shops, clinics and CAs | 1:31 in [16:9](./business/films/asklocker-business-16x9.mp4) and [9:16](./business/films/asklocker-business-9x16.mp4); 0:59 in [16:9](./business/films/asklocker-business-16x9-short.mp4) and [9:16](./business/films/asklocker-business-9x16-short.mp4) |
 | `family/shorts/`, `business/shorts/` | One feature each: why it exists, the app doing it, the end card | 9:16, 14 to 21 seconds, with music, and `-sfx-only` without it |
 | `family/posters/`, `business/posters/` | One feature each: its line, and the phone showing it | 1:1 (`1080x1080`) and 16:9 (`1920x1080`) |
+| `privacy/films/` | What happens to your documents: where they're kept, who can open them, what the AI gets, every service, and taking it back | 2:16 in [16:9](./privacy/films/asklocker-privacy-16x9.mp4) and [9:16](./privacy/films/asklocker-privacy-9x16.mp4) |
+| `privacy/reels/` | Four reels from it, one a week (below) | 9:16, 27 to 31 seconds, with music, and `-sfx-only` without it |
+| `privacy/covers/` | Each one's cover: the frame that says the most | the reels' 1080x1920, the film's in both shapes |
 
 Where each fits: 16:9 films for the website, YouTube, LinkedIn and pitches;
 9:16 films and shorts for Reels, YouTube Shorts and WhatsApp Status (the
@@ -55,6 +61,34 @@ and slides.
 
 ★ Reminders need a paid plan (Plus and up).
 
+## Privacy: a month of reels
+
+The privacy film says what AskLocker does with a family's documents, the
+honest parts included: encrypted on the way and where they're kept (in
+Mumbai), but not end-to-end, so our servers read them to answer you and the
+people who run AskLocker can open them. It shows exactly what the AI is sent
+for one question. Every line follows the privacy policy
+([asklocker.com/privacy](https://asklocker.com/privacy)) or the code; the
+claims and their sources are in [`video/README.md`](video/README.md#the-privacy-film).
+
+Post the full film first and pin it (as a reel, a 9:16 video of 2:16), then
+one reel a week, for example on Tuesdays:
+
+| Week | Reel | It answers | Caption |
+|---|---|---|---|
+| 1 | [What the AI sees](./privacy/reels/asklocker-privacy-ai-9x16.mp4) · [no music](./privacy/reels/asklocker-privacy-ai-9x16-sfx-only.mp4) · [cover](./privacy/covers/asklocker-privacy-ai-cover.png) | What does the AI actually see? | You ask a question. The AI gets your question, who "Papa" is, and the passages that match it, up to 15, and writes the answer from the best. Never your files. Never your whole vault. The whole policy: asklocker.com/privacy |
+| 2 | [Who can open them](./privacy/reels/asklocker-privacy-who-9x16.mp4) · [no music](./privacy/reels/asklocker-privacy-who-9x16-sfx-only.mp4) · [cover](./privacy/covers/asklocker-privacy-who-cover.png) | Who can open your documents? | People in your vault, and anyone you send a link to, for that one document. Encrypted, but not end-to-end: our servers read them to answer you, our team can open them, and the services we use read parts of them for us. We'd rather you hear it from us. asklocker.com/privacy |
+| 3 | [Where they go](./privacy/reels/asklocker-privacy-where-9x16.mp4) · [no music](./privacy/reels/asklocker-privacy-where-9x16-sfx-only.mp4) · [cover](./privacy/covers/asklocker-privacy-where-cover.png) | Where do your documents go? | Encrypted on the way, and where they're kept, in Mumbai. Photos you add are read on your own phone; one it can't read goes to OCR.space. asklocker.com/privacy |
+| 4 | [Taking it back](./privacy/reels/asklocker-privacy-control-9x16.mp4) · [no music](./privacy/reels/asklocker-privacy-control-9x16-sfx-only.mp4) · [cover](./privacy/covers/asklocker-privacy-control-cover.png) | Can you take it all back? | Send one document with a link that stops when you say. Delete your account and it goes at once; copies in backups and logs expire on their own. asklocker.com/privacy |
+
+Hashtags, if you use them: #AskLocker #FamilyDocuments #DataPrivacy
+#AIWithCare #PersonalFinanceIndia.
+
+The 16:9 film is for the website's privacy page, YouTube and LinkedIn.
+Instagram covers its own buttons and caption over the edges of a reel; the
+reels keep everything they say inside the space it leaves (the top 220 px and
+bottom 350 px stay clear).
+
 ## Before posting
 
 - **The plans and prices** are the ones of 27 October 2026 (Family Plus ₹99 a
@@ -71,6 +105,15 @@ and slides.
   paying from there is coming soon. Reminders arrive at 9 in the morning India
   time, which is the evening before in Toronto, and the film shows that.
 - **Business vaults are a pilot**: paid business plans are set up by hand.
+- **The privacy film says two things the privacy policy doesn't yet**, both
+  true of the code: a follow-up question sends the last few messages of the
+  chat to the AI with it (rag-search's history, up to six messages of 600
+  characters), and a photo the phone can't read is sent to OCR.space
+  (`_shared/ingest.ts` reads it on the server when the app sends no text).
+  The policy says Anthropic and Groq get "your question and the best matching
+  parts", and that photos you upload are read on your own device. Add both to
+  `public/privacy.html` (and its date) before posting the privacy film or its
+  reels, so the film never says more than the page it sends people to.
 - **Say what the app does, never more** (`CLAUDE.md`, Conventions): never
   "secure", "safe" or "100% private". "Sent and stored encrypted" and "In
   AskLocker, only your family can open them" are the words to use, as the
@@ -82,6 +125,7 @@ After a change to the app or the words, from `video/`:
 
 ```bash
 ./tools/films.sh       # the twelve film cuts, with sound
+./tools/privacy.sh     # the privacy film, its four reels and their covers
 ./tools/features.sh    # every feature short and poster
 ./tools/publish.sh     # copy them here
 ```

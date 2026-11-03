@@ -50,13 +50,13 @@ const SCENES = {
   },
   ai: {
     kicker: 'What the AI sees', icon: 'cpu', screen: 'scr-ask', visual: '#dg-ai',
-    q: 'What does the AI *actually see?*', a: 'Your question, and a few passages.',
+    q: 'What does the AI *actually see?*', a: 'Your question, and the passages that match.',
     sub: 'Never your files. Never your whole vault.',
   },
   device: {
     kicker: 'On your phone', icon: 'smartphone', screen: 'scr-camera', callout: 'co-device',
-    q: 'What stays *on my phone?*', a: 'Photos are read right here.',
-    sub: 'Not by an outside service.',
+    q: 'What happens *on my phone?*', a: 'Photos are read right here.',
+    sub: "If your phone can't read one, OCR.space tries.",
   },
   others: {
     kicker: 'Every service', icon: 'list', visual: '#dg-ledger',
@@ -111,7 +111,7 @@ if (uses('control')) C.control = { field: at('#del-field'), btn: at('#del-btn') 
 initialState();
 // Whatever fades in later on a card or a screen starts hidden; a reel sets
 // only what it has.
-const hidden = $$('.pv-dg, .pv-doc, #t-open, #t-before, #t-close, #pv-title, #pv-close-sub, #pv-url, #mf-note');
+const hidden = $$('.pv-dg, .pv-doc, #t-open, #t-before, #t-close, #pv-title, #pv-close-sub, #pv-url, #mf-notice');
 if (hidden.length) gsap.set(hidden, { autoAlpha: 0 });
 gsap.set('#hb-dark', { autoAlpha: 1 });
 gsap.set('#hb-light', { autoAlpha: 0 });
@@ -232,17 +232,20 @@ const PLAY = {
     const how = t + 2.6;
     tl.set('#dg-who', { autoAlpha: 1 }, t + 0.6);
     rise('#dg-who .pv-card-h', t + 0.6);
-    const rows = [['#pw-vault', t + 0.9], ['#pw-link', how + 1.0], ['#pw-team', how + 2.6], ['#pw-else', how + 4.6]];
+    const rows = [['#pw-vault', t + 0.9], ['#pw-link', how + 1.0], ['#pw-team', how + 2.6], ['#pw-svc', how + 4.6], ['#pw-else', how + 6.4]];
     for (const [sel, at] of rows) { rise(sel, at, { y: 18 }); cue(at, 'pop-soft'); }
-    tl.fromTo('#pw-team', { backgroundColor: 'rgba(254,243,199,0)' }, { backgroundColor: 'rgba(254,243,199,1)', duration: 0.6, ...IR }, how + 3.4);
-    rise('#dg-who-foot', how + 6.0, { y: 12 });
-    return { how, end: how + 9.6 };
+    for (const [sel, at] of [['#pw-team', how + 3.4], ['#pw-svc', how + 5.4]]) {
+      tl.fromTo(sel, { backgroundColor: 'rgba(254,243,199,0)' }, { backgroundColor: 'rgba(254,243,199,1)', duration: 0.6, ...IR }, at);
+    }
+    rise('#dg-who-foot', how + 7.8, { y: 12 });
+    return { how, end: how + 11.4 };
   },
   vault(t) {
     phoneShow(t + 0.3, 'scr-members');
     const how = t + 2.6;
-    pulse('#mf-pending', how + 0.8);
-    fadeIn('#mf-note', how + 1.4, { from: 6 });
+    // Just sent: the app's own notice, then the invitation waiting for a yes.
+    fadeIn('#mf-notice', how + 0.4, { from: 6 });
+    pulse('#mf-pending', how + 1.2);
     const c = how + 2.8;
     return { how, callout: c, end: c + 5.2 };
   },
@@ -264,7 +267,7 @@ const PLAY = {
     rise('#ai-vault', v, { y: 30 });
     cue(v, 'whoosh-soft');
     tl.fromTo('#ai-grid .pv-tile', { autoAlpha: 0, scale: 0.9 }, { autoAlpha: 1, scale: 1, duration: 0.3, stagger: 0.025, ...SHOWN }, v + 0.3);
-    // Search: three documents have passages that match.
+    // Search: passages from seven documents match; only they go to the AI.
     const s = v + 1.6;
     cue(s, 'process', { dur: 1.0 });
     tl.to('#ai-grid .pv-tile:not(.found)', { opacity: 0.32, duration: 0.5 }, s + 0.6);
@@ -415,7 +418,7 @@ fadeIn('#end-url', t0 + 2.35, { from: 8 });
 S.end = t0;
 // The cover (tools/render.mjs --stills hero): the moment that says the most,
 // counted from its scene's start.
-const COVER = { ai: ['ai', 15.0], who: ['who', 10.0], where: ['kept', 6.5], control: ['control', 8.6] };
+const COVER = { ai: ['ai', 15.0], who: ['who', 11.6], where: ['kept', 6.5], control: ['control', 8.6] };
 const [coverScene, coverAt] = REEL ? COVER[REEL] : COVER.ai;
 S.hero = S[coverScene] + coverAt;
 S.total = t0 + 5.0;

@@ -1,9 +1,10 @@
 # AskLocker films
 
 Three launch films, as code: two for families (one told from abroad) and one
-for business, and a poster and a short for each feature (below).
+for business, a poster and a short for each feature, and a film that says what
+AskLocker does with a family's documents, with four reels cut from it (below).
 `src/intro.html` builds any of them as a GSAP timeline (`?film=family`,
-`?film=nri`, `?film=business` or `?film=features`) that
+`?film=nri`, `?film=business`, `?film=features` or `?film=privacy`) that
 recreates the app's real screens (same layouts, copy, colours and Feather icons
 as `src/app/**`, sized by `src/constants/design.ts`; a business's screens in the
 app's teal, as Business mode has them). `tools/render.mjs` seeks the paused
@@ -76,6 +77,9 @@ app's theme colour, navy in both modes.
 | `asklocker-business-16x9-short.mp4` | 0:59 | LinkedIn and X feeds |
 | `…-sfx-only.mp4` | same | Posting with a platform's own music: effects and voices, no music |
 | `asklocker-family-9x16-short-ta.mp4` … | about 1:10 | The family short with its voice scene in one of the app's ten voice languages (below) |
+| `asklocker-privacy-16x9.mp4` | 2:16 | What happens to your documents: the website's privacy page, YouTube, LinkedIn |
+| `asklocker-privacy-9x16.mp4` | 2:16 | The same, pinned on Instagram |
+| `asklocker-privacy-<ai\|who\|where\|control>-9x16.mp4` | 0:27 to 0:31 | Its four reels, one a week (with `-sfx-only` too) |
 
 **The voice scene in every voice language.** The family film's two short
 cuts also come in each of the app's ten voice languages: English (`en`),
@@ -137,10 +141,18 @@ about. `tools/publish.sh` copies them, with the films, into the repository's
 | `biz-access` | Your records, sent and stored encrypted. | Sent and stored encrypted. |
 | `biz-sheets` | Ask your Excel sheets in plain words. | AskLocker reads it. You just ask. |
 
+**The privacy film** (`src/privacy.js`): what happens to a family's documents,
+in plain words, the parts people would rather not hear included. Eight
+questions people ask (where they go, who can open them, who can join, sending
+one paper, what the AI actually sees, what happens on the phone, every other
+service, taking it all back), each answered while a diagram or the phone shows
+it, then the privacy policy's address. Four Instagram reels are cut from it,
+one a week for a month. See [The privacy film](#the-privacy-film).
+
 Rendered files go to `out/`, which is not committed; `tools/publish.sh` copies
 the finished films, shorts and posters into `marketing/family/` and
-`marketing/business/`, and the NRI film into `marketing/nri/`, which are (see
-`marketing/README.md`).
+`marketing/business/`, the NRI film into `marketing/nri/` and the privacy film
+into `marketing/privacy/`, which are (see `marketing/README.md`).
 
 ## Render
 
@@ -177,15 +189,17 @@ node tools/posters.mjs --features ask --sizes 1080x1080 --scale 2   # one poster
 node tools/render.mjs --film features --feature ask --portrait      # one short, no sound yet
 ./tools/mux.sh feature-ask-9x16                                     # -> out/asklocker-feature-ask-9x16.mp4
 ./tools/films.sh                      # all twelve film cuts, with sound (or name some: nri-9x16)
-./tools/publish.sh                    # out/ -> marketing/<family|business>/<films|shorts|posters>/, marketing/nri/films/
+./tools/privacy.sh                    # the privacy film in both shapes, its four reels, and their covers
+./tools/publish.sh                    # out/ -> marketing/<family|business>/<films|shorts|posters>/, marketing/nri/films/, marketing/privacy/
 ```
 
 A poster is the frame the feature names (`window.__hero`), taken as a PNG at
 any size (`--sizes 1920x1080,1080x1080` by default). A short takes two to
 three minutes on four cores; all seventeen, about 45 minutes; all twelve film
-cuts, about three hours. `publish.sh` replaces the seven folders in `marketing/`
-with what `out/` holds, so render everything first. The films go there with
-music; the shorts with and without.
+cuts, about three hours; the privacy film and its reels, about 50 minutes,
+two `privacy.sh` runs side by side. `publish.sh` replaces the ten folders in
+`marketing/` with what `out/` holds, so render everything first. The films go
+there with music; the shorts and the privacy reels with and without.
 
 Single frames, for checking a change without a full render:
 
@@ -198,8 +212,9 @@ To watch it live, serve this folder (`npm run preview`) and open
 `src/intro.html?film=business` (or `?film=family`, `?film=nri`), adding
 `&orientation=portrait` or `&cut=short`; a feature is
 `?film=features&feature=share&orientation=portrait` (its short) or
-`&size=1080x1080` (its poster, playing). Space pauses, arrow keys scrub, number
-keys jump to tenths of the film.
+`&size=1080x1080` (its poster, playing); the privacy film is `?film=privacy`,
+and a reel `?film=privacy&reel=ai&orientation=portrait`. Space pauses, arrow
+keys scrub, number keys jump to tenths of the film.
 
 ## Change it
 
@@ -481,6 +496,103 @@ app's icon (`public/icon-512.png`): the locker and speech bubble of
 has them, so the two match pixel for pixel. The app was called FamilyVault
 until 6 October 2026; the films say AskLocker everywhere a person sees the
 name, as the app does.
+
+## The privacy film
+
+`?film=privacy` (`src/privacy.js`, its own pieces in `src/privacy-screens.js`
+and `src/privacy.css`) says what AskLocker does with a family's documents, in
+plain words, and what it doesn't. It opens at night on three papers a family
+keeps (a passport, Papa's health policy, a PAN card): "Before you upload them,
+know where they go." Then eight scenes. Each asks what people ask, labelled
+**Question**, and answers it plainly, labelled **Answer**, while a diagram or
+the phone shows it:
+
+| | Scene (`SCENES`) | Question | What shows it |
+|---|---|---|---|
+| 01 | `kept` | Where do my documents actually go? | The phone, the store in Mumbai, and a lock on the way and where it's kept |
+| 02 | `who` | Who can open them? | A card, row by row: your vault, a link, our servers and team, the services we use, and nobody else on AskLocker |
+| 03 | `vault` | Can anyone join my vault? | Manage Family just after an invitation is sent |
+| 04 | `share` | Your CA needs one paper? | A share link made on the policy's page |
+| 05 | `ai` | What does the AI actually see? | The question sent; the vault, and the seven documents search takes passages from; what the AI gets, line by line; the answer |
+| 06 | `device` | What happens on my phone? | A photo taken and read on the phone |
+| 07 | `others` | Who else gets anything? | Every service, and what it gets |
+| 08 | `control` | Can I take it all back? | Delete account, with DELETE typed |
+
+Then "No fine print." and the policy's address, and the end card, which shows
+`asklocker.com/privacy` where the other films show a price. 2:16 in 16:9 and
+9:16; in 16:9 each scene's kicker is numbered.
+
+**The reels** (`&reel=`, `REELS` in `src/privacy.js`) are cut from the same
+scenes, one a week for a month: `ai` (What the AI sees, 0:31), `who` (who can
+open them, and who can join: 0:30), `where` (where they go, and what happens on
+the phone: 0:27) and `control` (sending one paper, and taking it all back:
+0:28). A reel is daylight from its first frame, which Instagram shows before it
+plays, has no numbers, ends on the same end card, and keeps everything it says
+clear of the top 220 px and the bottom 350 px that Instagram draws over
+(`SAFE_BOTTOM`). Each cut has a cover, the frame `COVER` names (`--stills hero`).
+
+```bash
+./tools/privacy.sh                       # the film in both shapes, the four reels, and every cover
+./tools/privacy.sh ai who                # some of them: 16x9, 9x16, ai, who, where, control
+node tools/render.mjs --film privacy --reel ai --portrait               # one reel, no sound yet
+./tools/mux.sh privacy-ai-9x16                                           # -> out/asklocker-privacy-ai-9x16.mp4
+node tools/render.mjs --film privacy --reel ai --portrait --stills hero  # its cover
+```
+
+The film's music is `privacy_music()` in `audio/score.py`: a quiet D minor pad
+under the night opening, then the family film's daylight music from the title,
+its percussion from the first phone scene, and the end card's resolve. The reels
+take the feature shorts' music. The film borrows the family film's people and
+screens (Ask, the camera and Upload), the policy's page and share sheet from
+the feature shorts, and the shorts' steps (asking, taking a photo, making a
+link), which are in `src/kit.js` so both run the same code.
+
+### What it says, and where each claim comes from
+
+Every sentence is the privacy policy (`public/privacy.html`,
+asklocker.com/privacy) or what the code does, and CLAUDE.md's rule holds: never
+"secure", "safe", "private and isolated", "100% private", "only you can see
+it" or "nothing is kept". It says the uncomfortable parts out loud: not
+end-to-end, our servers read documents, the people who run AskLocker can open
+them, and outside services read parts of them.
+
+| The film says | From |
+|---|---|
+| Stored in Mumbai, India; encrypted on the way and where they're kept; not end-to-end | `privacy.html`: Supabase stores them in Mumbai; "encrypted when sent and when stored, but not end-to-end" |
+| People in your vault can open them; your personal vault is yours alone | `privacy.html`; personal vaults (046) |
+| Anyone you send a link to: that one document, until the link ends | `privacy.html`; share links (036) |
+| Our servers read them to search and answer you; the people who run AskLocker can open them | `privacy.html`, word for word in substance |
+| The services we use read parts of them, or a scan, for us; each is named in the policy | `privacy.html`, Services we use: Cloudflare (parts, for search data), Anthropic and Groq (parts, to answer), OCR.space (scans) |
+| Nobody else using AskLocker can open them | CLAUDE.md's approved words; RLS, and 019's storage policies |
+| Only an admin can invite; nobody joins until they say yes; leaving needs nobody's permission | Membership (025, 037) in CLAUDE.md. Not "anyone can leave": a vault's last admin can't |
+| Manage Family: "2 of 4 members", the notice, the tree link, the pending card | `src/app/family.tsx`: members count without invitations; after an invite, "Invitation sent to … They show as Pending approval until they accept."; an email invitation shows its address and "Invited 2 October 2026 by you" |
+| A link opens without an account, lasts 1 or 7 days (30 with Family Plus), can be turned off, and shows how often it was opened | 036, 049; `share-sheet.tsx` |
+| The AI gets your question, and on a follow-up your last few messages | rag-search: the chat (`MAX_HISTORY_TURNS` 6, `MAX_HISTORY_CHARS` 600) goes to the rewrite and to the answer |
+| Who's who, when you name someone: "The person asking is Rohan Sharma. In this question, "Papa" means Ramesh Sharma, their father." | rag-search's `familyNote`, word for word; sent only when a question names a relative |
+| `[Passage 1 \| Document: … \| Type: Health Insurance \| Marked as Ramesh Sharma's \| In: Sharma Family]` and the passage's text | rag-search's `buildContext()`; "In:" because Ask searches every vault and Rohan has a personal vault too |
+| Search picks up to 15 passages that match, here from 7 documents; nothing else goes with your question | `RERANK_CANDIDATES` 15 reach the judge, which is an AI call (`rerankChunks()`, within `RERANK_LISTING_TOKENS`). The seven are an example: the insurance papers match by their words, and documents marked as Papa's join when a question names him (`ownerChunks()`) |
+| The AI checks which passages answer you and writes from the best, about a page and a half; never the files, never your whole vault | `RERANK_KEEP` 5 into the answer, within `MAX_CONTEXT_CHARS` 6,000; only text is sent; `privacy.html`: "Never your whole vault" |
+| Claude by Anthropic, or Groq if Claude can't answer | `_shared/ai.ts`; Claude first in CLAUDE.md |
+| Photos and spreadsheets are read on the phone; a photo it can't read goes to OCR.space | `upload.tsx` reads a photo on the device and sends its text; with no text, `_shared/ingest.ts` sends the photo to OCR.space |
+| Your fingerprint never leaves the phone | Fingerprint sign-in is a passkey (`app-lock.tsx`) |
+| Card and UPI details go only to Razorpay | `privacy.html`; 044 |
+| Every service, and what it gets | `privacy.html`, Services we use, row by row; the analytics service described, not named, as the policy does |
+| We don't sell your data; AskLocker has no ads | `privacy.html` |
+| Delete account: the screen, and that it goes at once; copies in backups and logs expire on their own | `src/app/settings/delete-account.tsx`, its own words; `privacy.html`, How long we keep it |
+| What you added to a family stays with it, so delete it first | `privacy.html`, How long we keep it |
+
+Two of these say more than the privacy policy does today, both true of the
+code: the follow-up's messages, and the photo that goes to OCR.space.
+`marketing/README.md` asks for both to be added to the policy before the film
+is posted, so the film never says more than the page it points to.
+
+The first cut said three things the code does not bear out, and they were
+changed before anything was published: that the other documents in the vault
+are not sent (the judge sees up to 15 passages, from as many documents), that
+photos are never read by an outside service (OCR.space reads one the phone
+couldn't), and that "anyone can leave, any time" (a vault's last admin can't).
+Check the claims again after any change to rag-search, ingest, sharing,
+membership or the policy.
 
 ## Licences
 
