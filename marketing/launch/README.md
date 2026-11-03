@@ -31,7 +31,7 @@ wording is made in one place and every video follows.
 | `locked/films/` | **The launch film**: eight questions, each answered while a diagram or the phone shows it (adding a document, who can open it, asking a question, what AskLocker can see, a new phone, sending one paper, adding family, the emergency card) | 2:13 in [16:9](./locked/films/asklocker-locked-16x9-launch.mp4) and [9:16](./locked/films/asklocker-locked-9x16-launch.mp4) |
 | `locked/reels/` | Six reels from it, the brief's six ideas (below) | 9:16, 15 to 22 seconds, with music, and `-sfx-only` without it |
 | `locked/covers/` | Each one's cover: its headline, and what shows it | the reels' 1080x1920, the film's in both shapes |
-| `family/films/`, `nri/films/`, `business/films/` | The three launch films of today's set, every cut | the same shapes and lengths as today's, a few seconds shorter without Gmail import |
+| `family/films/`, `nri/films/`, `business/films/` | The three launch films of today's set, every cut | the same shapes as today's; the family and NRI films 8 to 10 seconds shorter without Gmail import (2:06 and 1:03), the business film the same length |
 | `family/shorts/`, `business/shorts/` | Every feature short (17), ending on the launch line | 9:16, with and without music |
 | `family/posters/`, `business/posters/` | The posters that change at launch: privacy and access, reminders, ask, share, the emergency card | 1:1 and 16:9; the other posters stay as they are in `../family/posters` and `../business/posters` |
 
