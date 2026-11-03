@@ -284,8 +284,9 @@ const PLAY = {
     tl.to('#ai-vault', { opacity: 0.18, scale: 0.97, duration: 0.6 }, e);
     rise('#ai-env', e, { y: 40, duration: 0.7 });
     cue(e, 'whoosh-soft');
-    $$('#ai-env .pv-env-sec').forEach((sec, i) => rise(sec, e + 0.5 + i * 1.3, { y: 14 }));
-    rise('#ai-foot', e + 4.6, { y: 10 });
+    // Everything that goes is there, faded, and lights up part by part.
+    $$('#ai-env .pv-env-sec').forEach((sec, i) => light(sec, e + 0.5 + i * 1.3));
+    light('#ai-foot', e + 4.6);
     // To the AI service, and back.
     const n = e + 8.6;
     rise('#ai-node', n, { y: 20 });
