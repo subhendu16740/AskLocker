@@ -1396,6 +1396,23 @@ export async function fetchPersonStorage(): Promise<PersonRoom | null> {
   return { usedBytes: Number(row.used_bytes), limitBytes: Number(row.limit_bytes) };
 }
 
+/**
+ * Who owns each vault the signed-in person is in (068): its creator while an
+ * admin, else its longest-standing admin. Only the owner may be removed or
+ * step down by their own hand, make a family a business, or delete the
+ * vault. Null before 068, when the screens fall back to the admin rule.
+ */
+export async function fetchVaultOwners(): Promise<Record<string, string> | null> {
+  const { data, error } = await supabase.rpc('my_vault_owners');
+  if (error) {
+    if (isMissingMigration(error)) return null;
+    throw error;
+  }
+  const owners: Record<string, string> = {};
+  for (const row of data ?? []) if (row.owner_id) owners[row.family_id] = row.owner_id;
+  return owners;
+}
+
 /** A family's plan, its limit and what its files (and, since 042, saved chats) add up to; null before 038. */
 export async function fetchStorageStatus(familyId: string): Promise<FamilyPlanStatus | null> {
   const { data, error } = await supabase.rpc('family_storage_status', { p_family_id: familyId });
@@ -2185,7 +2202,9 @@ export async function deleteFamilyVault(familyId: string, typedName: string): Pr
 // personal vault. Before 054 neither function exists, and the screen says
 // the move isn't switched on yet.
 
-export type BusinessVaultBlocker = 'personal_vault' | 'already_business' | 'plan_active' | 'storage_over' | 'missing';
+export type BusinessVaultBlocker = 'personal_vault' | 'already_business' | 'plan_active' | 'storage_over' | 'missing'
+  // 068: another admin than the owner; the creator's one free business taken.
+  | 'not_owner' | 'business_limit';
 
 export interface BusinessVaultPreview {
   allowed: boolean;

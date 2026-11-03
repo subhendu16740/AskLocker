@@ -95,6 +95,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (result.type === 'success') {
         const url = new URL(result.url);
+        // PKCE (supabase.ts): the code comes back in the query, and this
+        // device's verifier exchanges it.
+        const code = url.searchParams.get('code');
+        if (code) {
+          const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+          return { error: exchangeError?.message ?? null };
+        }
         const params = new URLSearchParams(
           url.hash ? url.hash.substring(1) : url.search.substring(1)
         );

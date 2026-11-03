@@ -36,7 +36,7 @@
 // | business_plan   502 razorpay (Razorpay said no)   503 not_configured | needs_migration
 // ────────────────────────────────────────────────────────────────
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.117.2';
 import { corsHeaders } from '../_shared/cors.ts';
 import { requireFamilyMember, selectVaultRows, vaultKind } from '../_shared/auth.ts';
 import { isFamilyPlan, type FamilyPlan } from '../_shared/plan-text.ts';

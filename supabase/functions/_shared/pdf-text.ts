@@ -25,6 +25,8 @@
 // for runtimes without Node's filesystem, which is what an Edge Function is.
 // ────────────────────────────────────────────────────────────────
 
+import { MAX_DOCUMENT_TEXT } from './limits.ts';
+
 /** One piece of text as PDF.js reports it: the string and where it sits. */
 export interface TextPiece {
   str: string;
@@ -149,8 +151,15 @@ export async function extractPdfLayoutText(
     isEvalSupported: false,
   }).promise;
 
+  // A document keeps at most MAX_DOCUMENT_TEXT characters (050), so reading
+  // stops there: a long file is not read page after page into memory for
+  // text that is thrown away. `pages` is then the pages read, so the
+  // characters per page (hasTextLayer) are counted over the same pages.
   const pages: string[] = [];
-  for (let n = 1; n <= doc.numPages; n++) {
+  let length = 0;
+  let read = 0;
+  for (let n = 1; n <= doc.numPages && length < MAX_DOCUMENT_TEXT; n++) {
+    read = n;
     const page = await doc.getPage(n);
     const content = await page.getTextContent();
 
@@ -171,9 +180,12 @@ export async function extractPdfLayoutText(
       });
 
     const text = reconstructLayout(pieces);
-    if (text) pages.push(text);
+    if (text) {
+      pages.push(text);
+      length += text.length + 2;
+    }
   }
 
   // Page breaks are paragraph breaks as far as chunking is concerned.
-  return { text: pages.join('\n\n'), pages: doc.numPages };
+  return { text: pages.join('\n\n'), pages: read };
 }

@@ -45,7 +45,7 @@
 //   503 { status: 'needs_migration' }  029 (for a business 051, for a family 057) is not applied
 // ────────────────────────────────────────────────────────────────
 
-import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.117.2";
 import { corsHeaders } from "../_shared/cors.ts";
 import { requireUser } from "../_shared/auth.ts";
 import { openRefreshToken, revokeToken } from "../_shared/gmail.ts";

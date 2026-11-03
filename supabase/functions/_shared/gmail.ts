@@ -17,7 +17,7 @@
 //                                          return to (gmail-rules.ts)
 // ────────────────────────────────────────────────────────────────
 
-import type { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import type { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.117.2';
 import { fromBase64, importTokenKey, openToken, sealToken } from './gmail-crypto.ts';
 import type { GmailPart } from './gmail-rules.ts';
 

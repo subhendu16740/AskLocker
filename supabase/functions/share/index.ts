@@ -16,7 +16,7 @@
 //   404 { status: 'gone' }   503 { status: 'needs_migration' } 036 is not applied
 // ────────────────────────────────────────────────────────────────
 
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.117.2";
 import { corsHeaders } from "../_shared/cors.ts";
 import { sha256Hex } from "../_shared/gmail-crypto.ts";
 

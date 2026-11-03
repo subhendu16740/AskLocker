@@ -112,9 +112,9 @@ export default function MakeBusinessScreen() {
           </>
         ) : preview && !preview.allowed ? (
           <Card>
-            <CardTitle icon="info">Not yet</CardTitle>
+            <CardTitle icon="info">{preview.reason === 'not_owner' ? 'Only its owner can' : 'Not yet'}</CardTitle>
             <Body>{preview.message ?? "This vault can't become a business vault."}</Body>
-            {(preview.reason === 'plan_active' || preview.reason === 'storage_over') && (
+            {(preview.reason === 'plan_active' || preview.reason === 'storage_over' || preview.reason === 'business_limit') && (
               <SecondaryButton label="Ask us" icon="message-circle" onPress={() => router.push('/settings/feedback' as any)} />
             )}
           </Card>

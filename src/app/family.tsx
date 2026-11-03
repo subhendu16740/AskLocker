@@ -10,7 +10,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../lib/auth';
 import { useFamily } from '../lib/family-context';
 import {
-  addFamilyMember, cancelInvitation, fetchFamilyInvites, fetchPlanLimits, leaveFamily, removeFamilyMember, updateMemberRole,
+  addFamilyMember, cancelInvitation, fetchFamilyInvites, fetchPlanLimits, fetchVaultOwners, leaveFamily, removeFamilyMember, updateMemberRole,
   type PendingInvite,
 } from '../lib/api';
 import { plusPage, useFamilyPlan, useModeOnPlus } from '../lib/family-plan';
@@ -59,6 +59,8 @@ export default function FamilyScreen() {
   const [notice, setNotice] = useState<string | null>(null);
   const [pending, setPending] = useState<PendingInvite[]>([]);
   const [limits, setLimits] = useState<PlanLimits>(DEFAULT_PLAN_LIMITS);
+  // Who owns each vault (068); null before 068 or while unknown.
+  const [owners, setOwners] = useState<Record<string, string> | null>(null);
   const { plan } = useFamilyPlan();
   const onPlus = useModeOnPlus();
   const [confirmDialog, setConfirmDialog] = useState<{
@@ -70,6 +72,9 @@ export default function FamilyScreen() {
   const theme = useVaultTheme();
   const word = vaultWord(currentFamily);
   const adminCount = members.filter((m) => m.role === 'admin').length;
+  // The owner (068): only they may remove themselves or step down, so
+  // another admin is offered neither on their row.
+  const ownerId = currentFamily ? owners?.[currentFamily.id] ?? null : null;
   // The last admin cannot leave: nobody would be left to manage the family.
   const canLeave = !!currentFamily && !(isAdmin && adminCount <= 1);
 
@@ -85,6 +90,7 @@ export default function FamilyScreen() {
       refreshMembers().catch(() => {});
       loadPending();
       fetchPlanLimits().then(setLimits).catch(() => {});
+      fetchVaultOwners().then(setOwners).catch(() => setOwners(null));
     }, [refreshFamilies, refreshMembers, loadPending])
   );
 
@@ -374,6 +380,7 @@ export default function FamilyScreen() {
                 const initial = name.charAt(0).toUpperCase();
                 const isCurrentUser = m.user_id === user?.id;
                 const isMemberAdmin = m.role === 'admin';
+                const isOwner = m.user_id === ownerId;
                 // Everyone in a vault on a paid plan is on Plus; you may be through another vault.
                 const starred = (!!plan && plan !== 'free') || (isCurrentUser && onPlus);
                 return (
@@ -398,7 +405,7 @@ export default function FamilyScreen() {
                         )}
                         {isMemberAdmin && (
                           <View style={styles.adminBadge}>
-                            <Text style={styles.adminBadgeText}>Admin</Text>
+                            <Text style={styles.adminBadgeText}>{isOwner ? 'Owner' : 'Admin'}</Text>
                           </View>
                         )}
                       </View>
@@ -406,7 +413,7 @@ export default function FamilyScreen() {
                         {m.relationship || m.role}
                       </Text>
                     </View>
-                    {isAdmin && !isCurrentUser && (
+                    {isAdmin && !isCurrentUser && !isOwner && (
                       <View style={styles.actionRow}>
                         {!isMemberAdmin && (
                           <TouchableOpacity

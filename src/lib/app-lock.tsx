@@ -342,9 +342,17 @@ export function AppLockProvider({ children }: { children: ReactNode }) {
       setLocked(false);
       return;
     }
+    const lockedFor = userId;
     await passkeySignIn('unlock');
+    // Another account's passkey signs that account in, not the locked one:
+    // start AskLocker afresh as it, so no screen of the locked account stays.
+    const { data } = await supabase.auth.getSession();
+    if (data.session?.user.id !== lockedFor && Platform.OS === 'web' && typeof window !== 'undefined') {
+      window.location.replace('/home');
+      return;
+    }
     setLocked(false);
-  }, [entry]);
+  }, [entry, userId]);
 
   const signIn = useCallback(async () => {
     try {

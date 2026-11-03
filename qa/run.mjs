@@ -104,7 +104,7 @@ async function main() {
         await runAccessChecks(cfg, { a, b, anon, vaultA, vaultB, docsA }, results);
         // After the stranger probes: this one makes B an insider, then removes it.
         section('Members');
-        await runMemberChecks(cfg, { a, b, vaultA }, results);
+        await runMemberChecks(cfg, { a, b, vaultA, vaultB }, results);
         // A business's rules, and a family's kept (051). B joins and leaves again.
         section('Business');
         try {

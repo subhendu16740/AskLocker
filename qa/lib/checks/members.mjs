@@ -46,7 +46,7 @@ import { refusedByAuth, short } from './access.mjs';
 
 const RECENT_MS = 10 * 60 * 1000;
 
-export async function runMemberChecks(cfg, { a, b, vaultA }, results) {
+export async function runMemberChecks(cfg, { a, b, vaultA, vaultB }, results) {
   const add = (actor, email, extra = {}) =>
     invokeFunction(cfg, actor, 'add-member', { family_id: vaultA.id, email, ...extra }, { timeoutMs: 30_000 });
   const http = (r) => `HTTP ${r.status}: ${JSON.stringify(r.data).slice(0, 140)}`;
@@ -436,12 +436,44 @@ export async function runMemberChecks(cfg, { a, b, vaultA }, results) {
       }
     }
 
+    // ── 069: a chat B saves in its own vault (QA Vault B; B has no personal
+    // vault, never having opened the app), with answers from QA Vault A,
+    // goes when B leaves. (Before 069 it stays, and is deleted here.)
+    let crossChat = null;
+    let crossWhy = vaultB?.id ? null : 'no vault of B\'s own to keep the chat in';
+    if (vaultB?.id) {
+      const { data, error } = await b.client.from('saved_chats').insert({
+        family_id: vaultB.id,
+        title: `QA cross-vault ${cfg.runId}`,
+        messages: [{ role: 'user', text: 'SPECIMEN question' },
+          { role: 'ai', text: 'SPECIMEN answer', sources: [{ id: randomUUID(), file_name: 'SPECIMEN.pdf', family_id: vaultA.id, family_name: 'QA Vault A' }] }],
+      }).select('id');
+      crossChat = data?.[0]?.id ?? null;
+      if (!crossChat) crossWhy = `B could not save the chat while a member: ${error ? short(error) : 'nothing came back'}`;
+    }
+
     // ── And anyone can leave.
     const { data: left, error: leaveErr } = await b.client.from('family_members').delete()
       .eq('family_id', vaultA.id).eq('user_id', b.user.id).select('id');
     const gone = !(await memberRow(b.user.id));
     check('member-can-leave', 'A member can leave the family', !leaveErr && (left?.length ?? 0) === 1 && gone,
       leaveErr ? leaveErr.message : gone ? 'left' : 'still a member');
+
+    if (!crossChat) {
+      results.add('members', 'leaver-chats-deleted', "Leaving takes the chats saved elsewhere with that vault's answers (069)", 'fail', { why: crossWhy });
+    } else {
+      const { data: still } = await b.client.from('saved_chats').select('id').eq('id', crossChat);
+      const probe = await b.client.from('vault_question_usage').select('family_id').limit(1);
+      const before069 = !!probe.error && /could not find the table|PGRST205|42P01/i.test(`${probe.error.code} ${probe.error.message}`);
+      if (still?.length) await b.client.from('saved_chats').delete().eq('id', crossChat);
+      if (before069) {
+        results.add('members', 'leaver-chats-deleted', "Leaving takes the chats saved elsewhere with that vault's answers (069)", 'skipped',
+          { why: 'migration 069 is not applied to DEV yet' });
+      } else if (gone) {
+        check('leaver-chats-deleted', "Leaving takes the chats saved elsewhere with that vault's answers (069)",
+          !still?.length, still?.length ? 'the chat is STILL there (deleted now)' : 'deleted');
+      }
+    }
 
     if (treePerson && gone) {
       const { data: after } = await a.client.from('family_people').select('user_id').eq('id', treePerson).maybeSingle();

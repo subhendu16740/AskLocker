@@ -18,7 +18,7 @@
 // Answers 503 { status: 'needs_migration' } where 040 is not applied.
 // ────────────────────────────────────────────────────────────────
 
-import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.117.2";
 import { corsHeaders } from "../_shared/cors.ts";
 
 const FAMILIES_A_RUN = 10;     // the next hour takes the rest

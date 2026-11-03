@@ -14,7 +14,7 @@
 // it finds unindexed.
 // ────────────────────────────────────────────────────────────────
 
-import type { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import type { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.117.2';
 import { embedPassages, EMBEDDING_MODEL, UNRECORDED_MODEL } from './embeddings.ts';
 import { chunkText } from './chunking.ts';
 import { extractPdfLayoutText } from './pdf-text.ts';
