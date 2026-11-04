@@ -5,8 +5,9 @@
 // invitations a day from a family to the same person — and one run invites B
 // to QA Vault A three times, while a day can hold several runs. So each run
 // starts these counts again, on DEV only, through the Management API: A's
-// and B's counts for the day, and the invitations QA Vault A and A's QA
-// Business A (051) have sent.
+// and B's counts for the day, the invitations QA Vault A and A's QA
+// Business A (051) have sent, and A's and B's address lookups (068: 40 in
+// any 24 hours an admin, which a few runs a day used up).
 // Nobody else's row is touched. (A's questions for the month are started
 // again by the ask suite, which counts them: ask.mjs.)
 // ────────────────────────────────────────────────────────────────
@@ -29,6 +30,7 @@ export async function startQaDay(cfg, { a, b, vaultA }) {
     delete from public.audit_logs where family_id = '${familyA}' and action = 'invite_sent';
     delete from public.audit_logs where action = 'invite_sent' and family_id in (
       select f.id from public.families f where f.created_by = '${userA}' and f.name = 'QA Business A');
+    delete from public.audit_logs where action = 'invite_lookup' and user_id in ('${userA}', '${userB}');
   end $$;`;
   try {
     const res = await fetch(`https://api.supabase.com/v1/projects/${DEV_REF}/database/query`, {
