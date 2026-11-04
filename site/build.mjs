@@ -8,6 +8,7 @@
 //   landing.html          served at / by dist/_redirects ("/ /landing 200")
 //   videos.html           /videos, every film
 //   videos/<slug>.html    /videos/<slug>, one film, its transcript and chapters
+//   privacy.html          /privacy, the privacy policy
 //   media/                the films' files and the share card
 //   robots.txt  sitemap.xml  llms.txt  llms-full.txt
 //
@@ -33,6 +34,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { landingPage } from './pages/landing.mjs';
 import { filmsIndexPage, watchPage } from './pages/films.mjs';
+import { privacyPage } from './pages/privacy.mjs';
 import { llmsFullTxt, llmsTxt, robotsTxt, sitemapXml } from './pages/machine.mjs';
 import { loadVideos } from './lib/videos.mjs';
 import { LANDING_RULE, PUBLIC_PATHS, SITE_NAMES, appRoutes } from './lib/routes.mjs';
@@ -42,7 +44,7 @@ const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const SITE = fileURLToPath(new URL('.', import.meta.url));
 
 /** Files this writes at the top; public/ must not hold them too. */
-const SITE_FILES = ['robots.txt', 'sitemap.xml', 'llms.txt', 'llms-full.txt', 'landing.html', 'videos.html'];
+const SITE_FILES = ['robots.txt', 'sitemap.xml', 'llms.txt', 'llms-full.txt', 'landing.html', 'videos.html', 'privacy.html'];
 
 const args = process.argv.slice(2);
 const preview = args.includes('--preview');
@@ -88,6 +90,7 @@ function main() {
   const indexable = production;
 
   write(join(out, 'landing.html'), landingPage({ videos, indexable }));
+  write(join(out, 'privacy.html'), privacyPage({ indexable, hasFilms: videos.length > 0 }));
   if (videos.length) {
     write(join(out, 'videos.html'), filmsIndexPage({ videos, indexable }));
     for (const v of videos) {
@@ -122,11 +125,11 @@ function main() {
     // A plain static server knows no _redirects: show the landing page at /,
     // and bring the pages and images it links to.
     copyFileSync(join(out, 'landing.html'), join(out, 'index.html'));
-    for (const f of ['privacy.html', 'icon-192.png', 'icon-512.png']) copyFileSync(join(ROOT, 'public', f), join(out, f));
+    for (const f of ['icon-192.png', 'icon-512.png']) copyFileSync(join(ROOT, 'public', f), join(out, f));
   }
 
   const drafts = videos.filter((v) => v.draft).length;
-  log(`${production ? 'Production' : 'Not production (noindex, drafts shown)'}: wrote the landing page, ${videos.length - drafts} published film(s)${drafts ? ` and ${drafts} draft(s)` : ''}, robots.txt, sitemap.xml, llms.txt and llms-full.txt into ${out}.`);
+  log(`${production ? 'Production' : 'Not production (noindex, drafts shown)'}: wrote the landing page, the privacy policy, ${videos.length - drafts} published film(s)${drafts ? ` and ${drafts} draft(s)` : ''}, robots.txt, sitemap.xml, llms.txt and llms-full.txt into ${out}.`);
 }
 
 main();

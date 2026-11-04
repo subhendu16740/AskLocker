@@ -10,10 +10,11 @@
 // on the business slide. Without JavaScript the top still swipes, and the
 // rest shows the family's.
 
-import { about, faq, meta, modes, privacy } from '../content.mjs';
+import { about, faq, meta, modes, policy, privacy } from '../content.mjs';
 import { businessColumns, familyPlans, facts, rupees } from '../lib/facts.mjs';
 import { abs, esc, icon, linkify, logo, orgAndSite, page } from '../lib/html.mjs';
 import { filmFigure, videoObject } from './films.mjs';
+import { policyDate } from './privacy.mjs';
 
 const MODES = [modes.family, modes.business];
 const label = (id, text) => `<h2 class="overline" id="${id}-h">${esc(text)}</h2>`;
@@ -113,10 +114,24 @@ ${perMode((m) => {
 </section>`;
 }
 
+// The privacy policy opens here, in place, as a line a section (the owner's
+// ask, 4 November 2026: not another page). Every word of it is also at
+// /privacy (pages/privacy.mjs), the address the app and Razorpay link to.
+function policyRow() {
+  const parts = policy.sections
+    .filter((s) => s.onLanding !== false)
+    .map((s) => `<div><p class="label">${esc(s.title)}</p><p class="caption">${esc(s.summary)}</p></div>`)
+    .join('');
+  return `<details class="policy-more">
+<summary class="row"><span class="icon-box">${icon('file-text', 18)}</span><div style="flex:1"><p class="label">Privacy policy</p><p class="caption">What we keep, and who else gets it.</p></div>${icon('chevron-down', 18)}</summary>
+<div class="policy-sum">${parts}<p class="caption">Updated ${policyDate()} · <a href="/privacy">Full policy</a></p></div>
+</details>`;
+}
+
 function privacySection() {
   return `<section class="section wrap" id="privacy" aria-labelledby="privacy-h">
 ${label('privacy', 'Privacy')}
-<div class="card">${privacy.map(row).join('')}<a class="row" href="/privacy" style="text-decoration:none"><span class="icon-box">${icon('file-text', 18)}</span><div style="flex:1"><p class="label">Privacy policy</p><p class="caption">What we keep, and who else gets it.</p></div><span style="color:var(--meta);align-self:center">${icon('chevron-right', 18)}</span></a></div>
+<div class="card">${privacy.map(row).join('')}${policyRow()}</div>
 </section>`;
 }
 

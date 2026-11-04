@@ -3,10 +3,11 @@
 // Markdown, per llmstxt.org) and llms-full.txt (the whole landing page and
 // every transcript, in Markdown).
 
-import { about, faq, hero, meta, modes, privacy } from '../content.mjs';
+import { about, faq, hero, meta, modes, policy, privacy } from '../content.mjs';
 import { SITE_URL, SUPPORT_EMAIL, businessPlans, familyPlans, rupees } from '../lib/facts.mjs';
 import { abs, clock } from '../lib/html.mjs';
 import { transcriptText } from './films.mjs';
+import { policyDate } from './privacy.mjs';
 
 /**
  * robots.txt. Production: everything public may be read, by search engines
@@ -44,7 +45,7 @@ export function sitemapXml({ videos }) {
   const published = videos.filter((v) => !v.draft);
   const urls = [
     `<url><loc>${abs('/')}</loc></url>`,
-    `<url><loc>${abs('/privacy')}</loc></url>`,
+    `<url><loc>${abs('/privacy')}</loc><lastmod>${policy.updated}</lastmod></url>`,
   ];
   if (published.length) urls.push(`<url><loc>${abs('/videos')}</loc><lastmod>${published.map((v) => v.uploadDate).sort().at(-1)}</lastmod></url>`);
   for (const v of published) {
@@ -144,8 +145,9 @@ export function llmsFullTxt({ videos }) {
     '',
     ...privacy.map((r) => `- **${r.title}.** ${r.text}`),
     '',
-    `Privacy policy: ${abs('/privacy')}`,
+    `### Privacy policy (last updated ${policyDate()}): ${abs('/privacy')}`,
     '',
+    ...policy.sections.flatMap((sec) => [`**${sec.title}**`, '', ...sec.rows.map(([t, x]) => `- ${t}: ${x}`), ...(sec.note ? ['', sec.note] : []), '']),
     '## Frequently asked questions',
     '',
     ...faq.flatMap((f) => [`### ${f.q}`, '', f.a, '']),
