@@ -17,6 +17,12 @@
 //   assets/images/logo-mark.png               256, the mark alone (the login box is navy behind it)
 //   public/icon-192.png, public/icon-512.png  the rounded icon (web app, Home Screen, notifications)
 //   public/badge-96.png                       96, the mark alone (Android's status bar badge)
+//   public/favicon.svg, public/favicon-32.png the browser tab's icon on the public site: drawn at
+//                                             its own size, not shrunk from 192, so it stays sharp
+//
+// The mark is drawn on a grid (see the SVG's comment), so the sizes that keep
+// it at scale 1 (favicon-32, and the site's logo at 32 and 64 px) put every
+// straight edge on a pixel.
 
 import { createRequire } from 'node:module';
 import { execSync } from 'node:child_process';
@@ -25,8 +31,8 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const NAVY = '#2A3D66';
-// The mark's own middle (the glyph spans x 272–752, y 176–856 on the 1024 grid).
-const MID = { x: 512, y: 516 };
+// The mark's own middle (the glyph spans x 256–768, y 192–832 on the 1024 grid).
+const MID = { x: 512, y: 512 };
 
 const source = readFileSync(`${ROOT}assets/expo.icon/Assets/asklocker-mark.svg`, 'utf8');
 const glyph = source
@@ -56,7 +62,12 @@ const OUTPUTS = [
   ['public/icon-192.png', svg(192, ROUNDED)],
   ['public/icon-512.png', svg(512, ROUNDED)],
   ['public/badge-96.png', svg(96, { scale: 1.24 })],
+  ['public/favicon-32.png', svg(32, ROUNDED)],
 ];
+
+// The SVG favicon is the drawing itself, so the browser draws it at the tab's size.
+writeFileSync(`${ROOT}public/favicon.svg`, `${svg(1024, ROUNDED).replace(' width="1024" height="1024"', '')}\n`);
+console.log('[icons] public/favicon.svg');
 
 async function loadChromium() {
   try {

@@ -26,10 +26,15 @@ is the question lock (since 4 November 2026; a locker with a speech bubble
 before): an open padlock whose shackle bends into a question mark, the
 keyhole its dot, white on navy. It is drawn once,
 `assets/expo.icon/Assets/asklocker-mark.svg` (the keyhole a real hole, so
-the one-colour icons keep it), and `node scripts/render-icons.mjs` renders
-it to every size in `assets/images/` (`icon.png`, the adaptive icon's three
-layers, `splash-icon.png`, `favicon.png`, `logo-mark.png` for the login
-box) and `public/` (`icon-192.png`, `icon-512.png`, `badge-96.png`);
+the one-colour icons keep it), on a grid: every straight edge on a multiple
+of 32 of its 1024, so at 16, 32, 48 and 64 px each lands on a pixel and it
+stays sharp on a 1x screen (the first drawing, with edges between pixels,
+looked blurred there; keep the grid when changing a shape). `node
+scripts/render-icons.mjs` renders it to every size in `assets/images/`
+(`icon.png`, the adaptive icon's three layers, `splash-icon.png`,
+`favicon.png`, `logo-mark.png` for the login box) and `public/`
+(`icon-192.png`, `icon-512.png`, `badge-96.png`, and the site's browser-tab
+icons `favicon.svg` and `favicon-32.png`, drawn at their own size);
 `assets/expo.icon/` uses the SVG itself (iOS). The site's logo
 (`logo()` in `site/lib/html.mjs`) and the films' (`logoMark()` in
 `marketing/video/src/parts.js`) draw the same shapes inline; change all

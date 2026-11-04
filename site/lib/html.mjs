@@ -72,7 +72,7 @@ export function icon(name, size = 24) {
 
 /** The app's mark, the question lock (assets/expo.icon/Assets/asklocker-mark.svg), on its navy square. */
 export function logo(size = 36) {
-  return `<svg class="logo" width="${size}" height="${size}" viewBox="0 0 1024 1024" aria-hidden="true"><rect width="1024" height="1024" rx="230" fill="#2A3D66"/><path d="M362 408V372c0-90 66-152 150-152s150 58 150 140c0 70-44 102-96 128-34 17-54 40-54 82" fill="none" stroke="#fff" stroke-width="88" stroke-linecap="round"/><path fill="#fff" fill-rule="evenodd" d="M348 556H676A76 76 0 0 1 752 632V780A76 76 0 0 1 676 856H348A76 76 0 0 1 272 780V632A76 76 0 0 1 348 556Z M489.1 716A46 46 0 1 1 534.9 716L544 766c2 11-6 20-17 20h-30c-11 0-19-9-17-20Z"/></svg>`;
+  return `<svg class="logo" width="${size}" height="${size}" viewBox="0 0 1024 1024" aria-hidden="true"><rect width="1024" height="1024" rx="230" fill="#2A3D66"/><path d="M368 416V384A144 144 0 0 1 656 384C656 448 612 474 572 492C532 510 512 512 512 520" fill="none" stroke="#fff" stroke-width="96" stroke-linecap="round"/><path fill="#fff" fill-rule="evenodd" d="M320 512H704A64 64 0 0 1 768 576V768A64 64 0 0 1 704 832H320A64 64 0 0 1 256 768V576A64 64 0 0 1 320 512Z M480 695.4A64 64 0 1 1 544 695.4V752A16 16 0 0 1 528 768H496A16 16 0 0 1 480 752Z"/></svg>`;
 }
 
 /**
@@ -155,7 +155,8 @@ ${forward ? `<script>${APP_FORWARD}</script>\n` : ''}<meta name="viewport" conte
 <link rel="canonical" href="${url}">
 <meta name="robots" content="${robots}">
 <meta name="theme-color" content="#2A3D66">
-<link rel="icon" href="/icon-192.png" type="image/png">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png">
 <link rel="apple-touch-icon" href="/icon-192.png">
 <link rel="alternate" type="text/markdown" href="/llms-full.txt" title="AskLocker as Markdown, for AI assistants">
 <meta property="og:site_name" content="AskLocker">
