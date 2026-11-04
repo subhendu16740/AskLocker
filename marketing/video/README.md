@@ -330,9 +330,10 @@ The Sharma family, Arogya Shield, Arora Electric, Mehta Cables, its bill and
 everyone in them are fictional; the papers carry a SPECIMEN watermark, the
 email addresses in the business film are at example.com, and the phone numbers
 on the emergency card are the app's own placeholder pattern. The logo is the
-app's icon (`public/icon-512.png`): the locker and speech bubble of
-`assets/expo.icon/Assets/asklocker-mark.svg`, placed and coloured as the icon
-has them, so the two match pixel for pixel. The app was called FamilyVault
+app's icon (`public/icon-512.png`): the question lock of
+`assets/expo.icon/Assets/asklocker-mark.svg` (since 4 November 2026; the
+films rendered before carry the old locker and speech bubble until they are
+rendered again). The app was called FamilyVault
 until 6 October 2026; the films say AskLocker everywhere a person sees the
 name, as the app does.
 

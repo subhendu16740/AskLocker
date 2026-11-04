@@ -70,9 +70,9 @@ export function icon(name, size = 24) {
   return `<svg class="i" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`;
 }
 
-/** The app's mark (assets/expo.icon/Assets/asklocker-mark.svg) on its navy square. */
+/** The app's mark, the question lock (assets/expo.icon/Assets/asklocker-mark.svg), on its navy square. */
 export function logo(size = 36) {
-  return `<svg class="logo" width="${size}" height="${size}" viewBox="0 0 1024 1024" aria-hidden="true"><rect width="1024" height="1024" rx="230" fill="#2A3D66"/><g fill="none" stroke="#fff" stroke-width="52" stroke-linecap="round" stroke-linejoin="round"><rect x="300" y="236" width="330" height="588" rx="54"/><line x1="382" y1="340" x2="548" y2="340"/><line x1="382" y1="412" x2="548" y2="412"/><line x1="568" y1="560" x2="568" y2="650"/></g><circle cx="465" cy="640" r="30" fill="#fff"/><path d="M708 150h118a86 86 0 0 1 86 86v96a86 86 0 0 1-86 86h-82l-74 64v-64a86 86 0 0 1-48-78v-104a86 86 0 0 1 86-86z" fill="#fff"/><text x="760" y="334" font-family="Helvetica, Arial, sans-serif" font-weight="700" font-size="200" text-anchor="middle" fill="#2A3D66">?</text></svg>`;
+  return `<svg class="logo" width="${size}" height="${size}" viewBox="0 0 1024 1024" aria-hidden="true"><rect width="1024" height="1024" rx="230" fill="#2A3D66"/><path d="M362 408V372c0-90 66-152 150-152s150 58 150 140c0 70-44 102-96 128-34 17-54 40-54 82" fill="none" stroke="#fff" stroke-width="88" stroke-linecap="round"/><path fill="#fff" fill-rule="evenodd" d="M348 556H676A76 76 0 0 1 752 632V780A76 76 0 0 1 676 856H348A76 76 0 0 1 272 780V632A76 76 0 0 1 348 556Z M489.1 716A46 46 0 1 1 534.9 716L544 766c2 11-6 20-17 20h-30c-11 0-19-9-17-20Z"/></svg>`;
 }
 
 /**
