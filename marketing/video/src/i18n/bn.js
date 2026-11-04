@@ -64,7 +64,7 @@ export default {
   "Invite-only": "শুধু আমন্ত্রণে",
   "Nobody joins unless an admin asks and they say yes.": "অ্যাডমিন ডাকলে আর তিনি হ্যাঁ বললে তবেই কেউ যোগ দেন।",
   "Nobody else": "আর কেউ নয়",
-  "Nobody else using AskLocker can open your family's documents.": "AskLocker-এর আর কেউ আপনার পরিবারের কাগজ খুলতে পারে না।",
+  "Nobody else using AskLocker can open your family's documents.": "AskLocker ব্যবহার করেন এমন আর কেউ আপনার পরিবারের কাগজ খুলতে পারেন না।",
   "Links that expire": "যে লিঙ্কের মেয়াদ ফুরোয়",
   "Share one document for 1 or 7 days, or 30 with Family Plus. Turn it off any time.": "একটা কাগজ 1 বা 7 দিনের জন্য শেয়ার করুন, Family Plus-এ 30 দিন। যখন খুশি বন্ধ করুন।",
   "Yours alone": "শুধু আপনার",

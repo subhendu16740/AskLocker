@@ -64,7 +64,7 @@ export default {
   "Invite-only": "फक्त आमंत्रणाने",
   "Nobody joins unless an admin asks and they say yes.": "ॲडमिनने बोलावलं आणि त्यांनी होकार दिला तरच कोणी सामील होतं.",
   "Nobody else": "दुसरं कोणी नाही",
-  "Nobody else using AskLocker can open your family's documents.": "AskLocker वरचं दुसरं कोणीही तुमच्या कुटुंबाची कागदपत्रं उघडू शकत नाही.",
+  "Nobody else using AskLocker can open your family's documents.": "AskLocker वापरणारं दुसरं कोणीही तुमच्या कुटुंबाची कागदपत्रं उघडू शकत नाही.",
   "Links that expire": "मुदत संपणाऱ्या लिंक",
   "Share one document for 1 or 7 days, or 30 with Family Plus. Turn it off any time.": "एक कागद 1 किंवा 7 दिवसांसाठी शेअर करा, Family Plus वर 30 दिवस. कधीही बंद करा.",
   "Yours alone": "फक्त तुमचं",
