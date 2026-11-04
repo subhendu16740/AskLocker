@@ -143,7 +143,7 @@ export function initialState() {
   // shows before its own entrance.
   set($$('#logo, #tagline, #badge, #end-logo, #end-tag, #end-badge, #end-cta, #end-note, #end-url'), { autoAlpha: 0 });
   set($$('#wordmark, #end-word'), { clipPath: 'inset(0% 100% 0% 0%)' });
-  set($$('.brand .lm-bubble'), { scale: 0, transformOrigin: '17% 100%' });
+  set($$('.brand .lm-bubble'), { scale: 0, transformOrigin: '50% 100%' });
   set($$('.cap-line, .subline, .callout, #wave'), { autoAlpha: 0 });
   set($$('.scr'), { autoAlpha: 0 });
   gsap.set(['#touch', '#shutter', '#hb-dark'], { autoAlpha: 0 });
