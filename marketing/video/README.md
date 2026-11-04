@@ -158,7 +158,8 @@ one a week for a month. See [The privacy film](#the-privacy-film).
 Rendered files go to `out/`, which is not committed; `tools/publish.sh` copies
 the finished films, shorts and posters into `marketing/family/` and
 `marketing/business/`, the NRI film into `marketing/nri/` and the privacy film
-into `marketing/privacy/`, which are (see `marketing/README.md`).
+into `marketing/privacy/`, which are (see `marketing/README.md`). To put one on
+asklocker.com, see `site/README.md` (`node site/tools/add-video.mjs`).
 
 ## Render
 
@@ -373,7 +374,8 @@ were chosen deliberately:
   that Overview lists later. It shows no GST filing dates or other deadlines
   from the tax calendar: AskLocker does not track them, and the film must not
   suggest it does.
-- **The plans table is `plan_limits`** as 067 left it: people 2, 5, 10 and
+- **The plans table is `plan_limits`** as 067 left it (`DEFAULT_PLAN_LIMITS`
+  in `supabase/functions/_shared/plan-text.ts`): people 2, 5, 10 and
   50; space 100 MB a person on Free, then 20 GB, 50 GB and 200 GB; questions
   20 a person a month on Free, and a month shared by the business on a paid
   plan (1,000, 2,000 and 8,000). The prices are `BUSINESS_PRICE`, before GST,

@@ -1,0 +1,69 @@
+{
+  "title": "AskLocker for families",
+  "description": "At 2:14 AM Papa is in hospital and nobody can find his health policy number. Then the same night with AskLocker: documents brought in, a paper policy scanned, the question asked aloud in Hindi, and the answer read back.",
+  "audience": "family",
+  "uploadDate": "2026-11-03",
+  "durationSeconds": 135,
+  "width": 1920,
+  "height": 1080,
+  "video": "video.mp4",
+  "poster": "poster.jpg",
+  "chapters": [
+    {
+      "start": 0,
+      "title": "2:14 AM, and nobody can find the policy number"
+    },
+    {
+      "start": 30,
+      "title": "AskLocker"
+    },
+    {
+      "start": 33,
+      "title": "Import from Gmail"
+    },
+    {
+      "start": 43,
+      "title": "Scan a paper policy"
+    },
+    {
+      "start": 56,
+      "title": "Ask a question"
+    },
+    {
+      "start": 65,
+      "title": "Ask aloud, in Hindi"
+    },
+    {
+      "start": 87,
+      "title": "The family tree"
+    },
+    {
+      "start": 95,
+      "title": "Emergency card"
+    },
+    {
+      "start": 103,
+      "title": "Reminders"
+    },
+    {
+      "start": 111,
+      "title": "Who can open your documents"
+    },
+    {
+      "start": 119,
+      "title": "The same night, with AskLocker"
+    },
+    {
+      "start": 129,
+      "title": "Start your family vault"
+    }
+  ],
+  "order": 1,
+  "reviewNotes": [
+    "Chapter times were measured from marketing/video's timeline (16:9 full cut, 135 s) on 3 November 2026. A changed film needs them measured again.",
+    "Rendered on 3 November 2026 with the end card's price corrected to ₹99 a month (PLUS_PRICE).",
+    "Checked on 3 November 2026: the statistic at 0:20 holds. ₹1.84 lakh crore is the Finance Minister's figure at the campaign's launch on 4 October 2025 (PTI; PIB release 2174806 itemises about ₹1.01 lakh crore of it), and the quote is word for word in PIB's 'Your Money, Your Right' release of 26 December 2025 (Ministry of Finance, https://www.pib.gov.in/PressReleasePage.aspx?PRID=2208730).",
+    "Published on 3 November 2026 at the owner's decision. The Gmail scene (0:33) shows a feature that, until Google verifies the Gmail scope, only listed test users can connect."
+  ],
+  "draft": false
+}

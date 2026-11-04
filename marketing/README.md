@@ -39,6 +39,11 @@ copies the finished files into `family/`, `nri/`, `business/` and `privacy/`, wh
 All of it shows a fictional family and business and SPECIMEN papers, so it can
 be shared publicly.
 
+To put a rendered film on asklocker.com (the landing page's Films section and
+`/videos/<slug>`), see `site/README.md`: `node site/tools/add-video.mjs` makes it
+a draft there, and `site/videos/` already holds the two 16:9 films' drafts, with
+posters, chapters, transcripts and what to fix before they go out (`reviewNotes`).
+
 ## What's where
 
 | Folder | What | Shapes |

@@ -7,7 +7,8 @@
   },
   "scripts": {
     "start": "expo start",
-    "build": "expo export --platform web --clear && node scripts/move-node-modules-assets.mjs",
+    "build": "expo export --platform web --clear && node scripts/move-node-modules-assets.mjs && node --disable-warning=ExperimentalWarning scripts/lab-pages.mjs && node --experimental-strip-types --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON site/build.mjs",
+    "site": "node --experimental-strip-types --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON site/build.mjs --preview",
     "typecheck": "tsc --noEmit",
     "reset-project": "node ./scripts/reset-project.js",
     "android": "expo run:android",

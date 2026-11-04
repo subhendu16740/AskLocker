@@ -1,5 +1,11 @@
 # Moving the website from Vercel to Cloudflare Pages
 
+**Done.** PROD (asklocker.com) moved on 24 October 2026, DEV
+(`dev.asklocker.pages.dev`) by 3 November 2026, and the Vercel project
+was deleted on 3 November 2026; `vercel.json` went with it. This page is
+kept for what each address needs (Google origins, Supabase redirects,
+passkey RP IDs, Gmail return origins) and how it was done.
+
 The website is only a folder of files (`npm run build` makes it in `dist/`).
 Cloudflare Pages builds and serves it for free, business use included.
 Supabase, Groq, Razorpay and the Edge Functions do not change.
@@ -145,10 +151,10 @@ project at B7 instead.
 
 ## Part B: DEV on Cloudflare (can wait)
 
-Until this is done, DEV stays on Vercel at
-`family-vault-git-dev-subhendu16740.vercel.app`. Vercel's free plan is
-for non-commercial use, and a test copy of a product made to earn is
-still part of it, so move DEV too before long.
+**Done:** DEV builds on Cloudflare at `dev.asklocker.pages.dev`
+(confirmed 3 November 2026), and the Vercel project was deleted the same
+day. Its old address was `family-vault-git-dev-subhendu16740.vercel.app`:
+remove it wherever B3, B4 and B6 left it listed.
 
 ### B1. Build `dev`
 
@@ -180,8 +186,16 @@ OAuth client › **Authorized JavaScript origins** › add
 ### B4. Supabase DEV › Authentication › URL Configuration
 
 - **Site URL**: `https://dev.asklocker.pages.dev`
-- **Redirect URLs**: add `https://*.asklocker.pages.dev/**`. Leave the
-  Vercel ones until B7.
+- **Redirect URLs**: add `https://*.asklocker.pages.dev` and
+  `https://*.asklocker.pages.dev/**`. The redirect sign-in sends the
+  page's origin with no path, which the `/**` pattern alone does not
+  match. Leave the Vercel ones until B7.
+
+This step was missed in the move and found on 3 November 2026: DEV's Site
+URL was still `familyvault://` and no Cloudflare address was listed.
+Nothing showed it, because the test form and Google's own button do not
+use this list; only the fallback "Continue with Google" does, and it would
+have sent people to `familyvault://`.
 
 ### B5. Supabase DEV › Authentication › Passkeys
 
