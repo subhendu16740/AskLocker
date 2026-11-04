@@ -23,8 +23,8 @@ export function logoMark() {
   // hole so the tile shows through. .lm-bubble is the question mark, which
   // the reveal pops up out of the lock (engine.js).
   return `<svg viewBox="0 0 1024 1024" aria-hidden="true">
-    <g class="lm-bubble"><path d="M362 408V372c0-90 66-152 150-152s150 58 150 140c0 70-44 102-96 128-34 17-54 40-54 82" fill="none" stroke="#fff" stroke-width="88" stroke-linecap="round"/></g>
-    <path fill="#fff" fill-rule="evenodd" d="M348 556H676A76 76 0 0 1 752 632V780A76 76 0 0 1 676 856H348A76 76 0 0 1 272 780V632A76 76 0 0 1 348 556Z M489.1 716A46 46 0 1 1 534.9 716L544 766c2 11-6 20-17 20h-30c-11 0-19-9-17-20Z"/>
+    <g class="lm-bubble"><path d="M368 416V384A144 144 0 0 1 656 384C656 448 612 474 572 492C532 510 512 512 512 520" fill="none" stroke="#fff" stroke-width="96" stroke-linecap="round"/></g>
+    <path fill="#fff" fill-rule="evenodd" d="M320 512H704A64 64 0 0 1 768 576V768A64 64 0 0 1 704 832H320A64 64 0 0 1 256 768V576A64 64 0 0 1 320 512Z M480 695.4A64 64 0 1 1 544 695.4V752A16 16 0 0 1 528 768H496A16 16 0 0 1 480 752Z"/>
   </svg>`;
 }
 

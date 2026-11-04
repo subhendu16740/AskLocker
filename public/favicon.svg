@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024"><rect width="1024" height="1024" rx="230" fill="#2A3D66"/><g transform="translate(512 512) scale(1) translate(-512 -512)"><path d="M368 416V384A144 144 0 0 1 656 384C656 448 612 474 572 492C532 510 512 512 512 520"
+        fill="none" stroke="#FFFFFF" stroke-width="96" stroke-linecap="round"/>
+  
+  <path fill="#FFFFFF" fill-rule="evenodd"
+        d="M320 512H704A64 64 0 0 1 768 576V768A64 64 0 0 1 704 832H320A64 64 0 0 1 256 768V576A64 64 0 0 1 320 512Z M480 695.4A64 64 0 1 1 544 695.4V752A16 16 0 0 1 528 768H496A16 16 0 0 1 480 752Z"/></g></svg>
