@@ -9,7 +9,7 @@
 // (071) and passes the few passages a question needs to the AI service.
 
 import {
-  context, grantVaultKey, importSecretKey, newSecretKey, openFile, openJson, openVaultKeyGrant, publicIdentity, sealFile,
+  context, grantVaultKey, importSecretKey, lockTextForPublicKey, newSecretKey, openFile, unlockTextWithPrivateKey, openJson, openVaultKeyGrant, publicIdentity, sealFile,
   sealJson, unwrapSecretKey, wrapSecretKey,
 } from '../../supabase/functions/_shared/vault-crypto';
 import { chunkText } from '../../supabase/functions/_shared/chunking';
@@ -571,4 +571,39 @@ export async function moveOlderDocuments(
   detailsCache.delete(familyId);
   forgetVaultIndex(familyId);
   return { moved, failed, left };
+}
+
+// ─── Saved chats that quote a locked vault ───────────────────────
+
+/** A saved chat as kept when it quotes a locked vault: sealed for its owner alone. */
+export interface SealedChatEnvelope {
+  role: 'sealed';
+  text: '';
+  /** Where it is bound (the context's record id). */
+  rid: string;
+  sealed: string;
+  /** The vaults its answers came from, readable, so 069's rule still holds. */
+  sources: { family_id: string }[];
+}
+
+export function isSealedChat(messages: unknown): messages is [SealedChatEnvelope] {
+  return Array.isArray(messages) && (messages[0] as SealedChatEnvelope | undefined)?.role === 'sealed';
+}
+
+/** Seal a chat for its owner: locked with their own public key, opened only on their devices. */
+export async function sealChat<M>(title: string, messages: M[], vaultIds: string[]): Promise<[SealedChatEnvelope]> {
+  const userId = await myId();
+  const identity = await myDeviceIdentity(userId);
+  if (!identity) throw new LockedVaultError('no_keys_here', 'Unlock your keys on this device to save a chat from a locked vault.');
+  const rid = crypto.randomUUID();
+  const mine = await publicIdentity(identity);
+  const sealed = await lockTextForPublicKey(mine.encrypt, JSON.stringify({ title, messages }), context.personal(userId, 'saved-chat', rid));
+  return [{ role: 'sealed', text: '', rid, sealed, sources: [...new Set(vaultIds)].map((family_id) => ({ family_id })) }];
+}
+
+export async function openChat<M>(envelope: SealedChatEnvelope): Promise<{ title: string; messages: M[] }> {
+  const userId = await myId();
+  const identity = await myDeviceIdentity(userId);
+  if (!identity) throw new LockedVaultError('no_keys_here', NO_KEYS_HERE);
+  return JSON.parse(await unlockTextWithPrivateKey(envelope.sealed, identity.encrypt.privateKey, context.personal(userId, 'saved-chat', envelope.rid)));
 }

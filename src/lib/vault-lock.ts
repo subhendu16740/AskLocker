@@ -126,3 +126,20 @@ export async function moveOlderDocuments(
 ): Promise<{ moved: number; failed: { name: string; reason: string }[]; left: number }> {
   throw new Error(NOT_HERE);
 }
+
+export interface SealedChatEnvelope {
+  role: 'sealed';
+  text: '';
+  rid: string;
+  sealed: string;
+  sources: { family_id: string }[];
+}
+export function isSealedChat(messages: unknown): messages is [SealedChatEnvelope] {
+  return Array.isArray(messages) && (messages[0] as SealedChatEnvelope | undefined)?.role === 'sealed';
+}
+export async function sealChat<M>(_title: string, _messages: M[], _vaultIds: string[]): Promise<[SealedChatEnvelope]> {
+  throw new Error(NOT_HERE);
+}
+export async function openChat<M>(_envelope: SealedChatEnvelope): Promise<{ title: string; messages: M[] }> {
+  throw new Error(NOT_HERE);
+}

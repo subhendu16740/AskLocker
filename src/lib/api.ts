@@ -1,7 +1,7 @@
 import { supabase } from './supabase';
 import {
-  documentDetails, documentFileKeyText, forgetLockedDocument, isLockedVault, knownLocked, lockedVaults, openSharedFile,
-  overlaySealed, readOnDevice,
+  documentDetails, documentFileKeyText, forgetLockedDocument, isLockedVault, isSealedChat, knownLocked, lockedVaults, openChat,
+  openSharedFile, overlaySealed, readOnDevice, sealChat,
   renameLockedDocument, sealDocument, searchLockedVaults, type LockProgress,
 } from './vault-lock';
 import { insertSealedDocument } from './e2e-api';
@@ -2072,6 +2072,11 @@ export async function getSavedChat(id: string): Promise<SavedChat | null> {
   const { data, error } = await savedChats().select('id, title, messages, updated_at').eq('id', id).maybeSingle();
   if (error) throw error;
   if (!data) return null;
+  // A chat that quotes a locked vault (071) is sealed for its owner: opened here.
+  if (isSealedChat(data.messages)) {
+    const opened = await openChat<SavedChatMessage>(data.messages[0]);
+    return { id: data.id, title: opened.title, updatedAt: data.updated_at, messages: opened.messages };
+  }
   return {
     id: data.id,
     title: data.title,
@@ -2114,8 +2119,17 @@ function chatBytes(messages: SavedChatMessage[]): number {
  * throw ChatStorageFullError.
  */
 export async function saveChat(familyId: string, messages: SavedChatMessage[], id?: string | null): Promise<string> {
-  const stored = chatForStorage(messages);
-  const title = savedChatTitle(stored);
+  const plain = chatForStorage(messages);
+  let stored: unknown[] = plain;
+  let title = savedChatTitle(plain);
+  // A chat that quotes a locked vault (071) is sealed for its owner, its
+  // title too; the vaults it quotes stay readable, for 069's rule.
+  const quoted = [familyId, ...plain.flatMap((m) => (m.sources ?? []).map((s) => s.family_id).filter((x): x is string => !!x))];
+  const locked = await lockedVaults().catch(() => new Set<string>());
+  if (quoted.some((v) => locked.has(v))) {
+    stored = await sealChat(title, plain, quoted);
+    title = 'Locked chat';
+  }
   const asJson = stored as unknown as Json;
   const refused = async (error: { hint?: string; message?: string }): Promise<never> => {
     if (error.hint !== 'storage_full') throw error;
@@ -2132,7 +2146,7 @@ export async function saveChat(familyId: string, messages: SavedChatMessage[], i
   }
   // Before 038 (no limits) or offline, the server alone decides.
   const room = await fetchStorageStatus(familyId).catch(() => null);
-  if (room && room.usedBytes + chatBytes(stored) > room.limitBytes) {
+  if (room && room.usedBytes + chatBytes(stored as SavedChatMessage[]) > room.limitBytes) {
     await fetchPaymentsStatus();
     throw new ChatStorageFullError(room);
   }
