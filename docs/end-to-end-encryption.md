@@ -201,7 +201,7 @@ About 12 to 14 weeks in all.
 | Phase | What | Weeks |
 |---|---|---|
 | **0** | The crypto core and its self-tests; the lab page that measures a real phone; this plan. Done 3 November 2026: it works on a phone (above) | 1 (done) |
-| **1** | Keys and devices: making an identity, the Recovery Key screen, keeping keys on the device, a new device by approval, by Recovery Key or by fingerprint; tables for public keys, backups and locked vault keys. Nothing encrypted yet | 3 |
+| **1** | Keys and devices: making an identity, the Recovery Key screen, keeping keys on the device, a new device by approval, by Recovery Key or by fingerprint; tables for public keys, backups and locked vault keys. Nothing encrypted yet. **Started 3 November 2026**: 070 and the Encryption keys screen (keys, Recovery Key, unlock with it), test builds only | 3 |
 | **2** | New documents sealed, behind a per-vault switch on DEV: reading, splitting, vectors and details on the phone; the sealed index and search on the phone; Ask from the passages it sends; the viewer and share links | 3–4 |
 | **3** | Everything else sealed: vault names, tree, cards, chats, notes; reminders in the app; the business overview on the phone; joining and leaving with new vault keys | 2 |
 | **4** | Moving existing vaults: the first admin's app to open locks each document and its index ("Locking your documents… 12 of 30"), then the server deletes what it had. Gmail import off; the content-reading functions removed; the privacy policy, a new agreement version, Help | 2 |

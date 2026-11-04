@@ -111,6 +111,15 @@ export default function SecurityScreen() {
           </Card>
         )}
 
+        {/* End-to-end encryption, Phase 1: test builds only, while nothing is encrypted. */}
+        {Platform.OS === 'web' && !isProduction && (
+          <Card>
+            <CardTitle icon="key">Encryption keys</CardTitle>
+            <Body>Test builds only. Set up the keys that will lock your documents.</Body>
+            <SecondaryButton label="Open" icon="chevron-right" onPress={() => router.push('/settings/encryption' as any)} />
+          </Card>
+        )}
+
         <Card>
           <CardTitle icon="smartphone">Sign out on every device</CardTitle>
           <Body>Lost a phone? This signs you out everywhere, here too.</Body>

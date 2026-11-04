@@ -3,10 +3,11 @@
 // Markdown, per llmstxt.org) and llms-full.txt (the whole landing page and
 // every transcript, in Markdown).
 
-import { about, business, faq, features, hero, meta, planRows, pricingNote, privacy, steps } from '../content.mjs';
+import { about, faq, hero, meta, modes, policy, privacy } from '../content.mjs';
 import { SITE_URL, SUPPORT_EMAIL, businessPlans, familyPlans, rupees } from '../lib/facts.mjs';
 import { abs, clock } from '../lib/html.mjs';
 import { transcriptText } from './films.mjs';
+import { policyDate } from './privacy.mjs';
 
 /**
  * robots.txt. Production: everything public may be read, by search engines
@@ -44,7 +45,7 @@ export function sitemapXml({ videos }) {
   const published = videos.filter((v) => !v.draft);
   const urls = [
     `<url><loc>${abs('/')}</loc></url>`,
-    `<url><loc>${abs('/privacy')}</loc></url>`,
+    `<url><loc>${abs('/privacy')}</loc><lastmod>${policy.updated}</lastmod></url>`,
   ];
   if (published.length) urls.push(`<url><loc>${abs('/videos')}</loc><lastmod>${published.map((v) => v.uploadDate).sort().at(-1)}</lastmod></url>`);
   for (const v of published) {
@@ -95,58 +96,58 @@ export function llmsTxt({ videos }) {
   ].join('\n');
 }
 
-/** llms-full.txt: the landing page, and every film's transcript, as Markdown. */
+/** llms-full.txt: the landing page, both modes, and every film's transcript, as Markdown. */
 export function llmsFullTxt({ videos }) {
   const published = videos.filter((v) => !v.draft);
   const yesNo = (value) => (value === true ? 'Yes' : value === false ? 'No' : String(value));
-  const table = [
-    `| | ${familyPlans.map((p) => p.name).join(' | ')} |`,
-    `|---|${familyPlans.map(() => '---').join('|')}|`,
-    `| Price | ${familyPlans.map((p) => (p.price.inr ? `${rupees(p.price.inr)} a month or ${rupees(p.yearly.inr)} a year` : 'Free')).join(' | ')} |`,
-    ...planRows.map((r) => `| ${r.label} | ${familyPlans.map((p) => yesNo(r.cell(p))).join(' | ')} |`),
-  ];
-  const bizTable = [
-    '| Business plan | People | Space | Questions a month | Price |',
-    '|---|---|---|---|---|',
-    ...businessPlans.map((b) => `| ${b.name} | ${b.members} | ${b.storage / 1024 ** 3} GB | ${b.questions.toLocaleString('en-IN')} shared | ${rupees(b.price)} a month + GST |`),
+  const table = (m) => {
+    const { columns, rows } = m.plans;
+    return [
+      `| | ${columns.map((c) => c.name).join(' | ')} |`,
+      `|---|${columns.map(() => '---').join('|')}|`,
+      `| Price a month | ${columns.map((c) => (c.price ? rupees(c.price) : 'Free')).join(' | ')} |`,
+      `| A year | ${columns.map((c) => (c.yearly ? rupees(c.yearly) : '–')).join(' | ')} |`,
+      ...rows.map((r) => `| ${r.label} | ${columns.map((c) => yesNo(r.cell(c.cells))).join(' | ')} |`),
+    ];
+  };
+  const mode = (m, title) => [
+    `## ${title}`,
+    '',
+    `> ${m.hero.title} ${m.hero.lead}`,
+    '',
+    '### How it works',
+    '',
+    ...m.steps.map((st, i) => `${i + 1}. **${st.title}.** ${st.text}`),
+    '',
+    `### ${m.featuresLabel}`,
+    '',
+    ...m.features.map((f) => `- **${f.title}.** ${f.text}`),
+    '',
+    '### Plans and prices',
+    '',
+    ...table(m),
+    '',
+    m.plans.note,
+    '',
   ];
   const parts = [
     `# ${meta.title}`,
     '',
     `Source: ${abs('/')}`,
     '',
-    `> ${hero.title} ${hero.lead}`,
-    '',
     '## What is AskLocker?',
     '',
     about,
     '',
-    '## How it works',
-    '',
-    ...steps.map((s, i) => `${i + 1}. **${s.title}.** ${s.text}`),
-    '',
-    '## Features',
-    '',
-    ...features.map((f) => `- **${f.title}.** ${f.text}`),
-    '',
-    `## ${business.title}`,
-    '',
-    business.text,
-    '',
-    ...bizTable,
-    '',
-    '## Plans and prices',
-    '',
-    ...table,
-    '',
-    pricingNote,
-    '',
+    ...mode(modes.family, 'For families'),
+    ...mode(modes.business, 'For business'),
     '## Privacy',
     '',
     ...privacy.map((r) => `- **${r.title}.** ${r.text}`),
     '',
-    `Privacy policy: ${abs('/privacy')}`,
+    `### Privacy policy (last updated ${policyDate()}): ${abs('/privacy')}`,
     '',
+    ...policy.sections.flatMap((sec) => [`**${sec.title}**`, '', ...sec.rows.map(([t, x]) => `- ${t}: ${x}`), ...(sec.note ? ['', sec.note] : []), '']),
     '## Frequently asked questions',
     '',
     ...faq.flatMap((f) => [`### ${f.q}`, '', f.a, '']),

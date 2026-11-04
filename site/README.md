@@ -13,7 +13,7 @@ nothing in `src/` changes, and every address but `/` is still the app's.
 | `/videos/<slug>` | One film, its chapters and transcript | `videos/<slug>/` |
 | `/robots.txt`, `/sitemap.xml` | For search engines | `pages/machine.mjs` |
 | `/llms.txt`, `/llms-full.txt` | For AI assistants ([llmstxt.org](https://llmstxt.org)) | `pages/machine.mjs` |
-| `/privacy` | The privacy policy (unchanged) | `public/privacy.html` |
+| `/privacy` | The privacy policy, every word of it | `content.mjs` (`policy`), `pages/privacy.mjs` |
 
 `npm run build` runs `node site/build.mjs` last, after `expo export` and the
 other two steps, and it writes into `dist/`.
@@ -68,6 +68,33 @@ scale at weights 400 to 600, navy with coral for small marks, white cards
 (16 radius, a faint shadow), 32px icon boxes, 44px buttons, and the
 onboarding's navy gradient at the top. Light only, like the app's screens.
 Add nothing the app doesn't have: no new colours, sizes or fonts.
+
+## Family and Business
+
+The top of the page is a carousel of the app's two modes, Family and
+Business: swipe, the arrows or the dots. Every section below that differs
+between them (the film, how it works, features, plans) follows it, and a
+business wears the app's teal and gold, as Business mode does in the app.
+Both are in the HTML (`data-for="family"` / `"business"`), so search engines
+and AI assistants read both; `<body data-mode>` picks which shows.
+`/#business` opens on the business side, and the header's Business link uses
+it. Without JavaScript the top still swipes, and the rest shows the family's.
+The words for each are `modes.family` and `modes.business` in `content.mjs`.
+
+## The privacy policy
+
+Its words are `policy` in `content.mjs`, written two ways:
+
+- **On the landing page**, the Privacy section's last row opens in place to
+  one line for each part of the policy (`summary`), not another page.
+- **At `/privacy`**, every word, in the same design (`pages/privacy.mjs`).
+  The app's Settings › Privacy, Razorpay, the Play Store and Google's brand
+  check link there. No script, so the installed app opens it as it is.
+
+It must stay true of the code and of the people who run AskLocker
+(CLAUDE.md), so change it, and `updated`, with any change to what is kept
+or who gets it. `npm run web` serves the app alone, without this page:
+preview it with `npm run site`.
 
 ## Changing the words
 

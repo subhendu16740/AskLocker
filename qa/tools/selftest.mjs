@@ -1556,12 +1556,15 @@ await test('search vectors: who makes them, at 384 numbers, inside the CPU budge
   assert.equal(r4.attempted, 3);
 });
 
-await test('the privacy policy names who gets document text and promises nothing AskLocker does not keep', () => {
-  // public/privacy.html is the policy Settings › Privacy links to, at
-  // asklocker.com/privacy. The screen names no service; the policy must name
+await test('the privacy policy names who gets document text and promises nothing AskLocker does not keep', async () => {
+  // The policy Settings › Privacy links to, at asklocker.com/privacy, written
+  // by the public site (site/pages/privacy.mjs, its words `policy` in
+  // site/content.mjs). The screen names no service; the policy must name
   // every one that gets document text or personal details (CLAUDE.md).
-  const html = readFileSync(new URL('../../public/privacy.html', import.meta.url), 'utf8');
-  const page = html.replace(/<!--[\s\S]*?-->/g, '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+  const { privacyPage } = await import('../../site/pages/privacy.mjs');
+  const html = privacyPage({ indexable: true, hasFilms: true });
+  assert.ok(!html.replace(/<script type="application\/ld\+json">[\s\S]*?<\/script>/g, '').includes('<script'), 'carries no script (no forwarder), so the installed app opens it as it is');
+  const page = html.replace(/<(script|style)[\s\S]*?<\/\1>/g, ' ').replace(/<!--[\s\S]*?-->/g, '').replace(/<[^>]+>/g, ' ').replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/\s+/g, ' ');
   const words = page.toLowerCase();
   for (const name of ['Supabase', 'Cloudflare', 'Anthropic', 'Groq', 'OCR.space', 'Google', 'Razorpay']) {
     assert.ok(page.includes(name), `names ${name}`);
@@ -1612,6 +1615,7 @@ await test('the public site hands a sign-in, the installed app and a signed-in v
   assert.equal(visit({ keys: session }), '/home', 'signed in, typed the address: their vault, as before');
   assert.equal(visit({ keys: session, referrer: 'https://www.google.com/' }), '/home');
   assert.equal(visit({ keys: session, referrer: 'https://asklocker.com/videos/asklocker-for-families' }), null, "from the site's own pages, the logo leads here");
+  assert.equal(visit({ keys: session, hash: '#business' }), null, 'a link to the business side is read, signed in or not');
   assert.equal(visit({ standalone: true }), '/onboarding', 'the installed app opens the app, as / did');
   assert.equal(visit({ standalone: true, keys: session }), '/home');
 });
@@ -1644,6 +1648,8 @@ await test('the public site promises nothing AskLocker does not keep, and its nu
     }
   }
   const words = page.toLowerCase();
+  // The privacy policy opens in place, a line a section, not on another page.
+  assert.ok(/<details class="policy-more">[\s\S]*?Privacy policy[\s\S]*?<\/details>/.test(html), 'the privacy policy row opens in place');
   // Settings › Privacy's own three rows (src/app/settings/privacy.tsx).
   assert.ok(words.includes('encrypted, not end-to-end'), 'says documents are not end-to-end encrypted');
   assert.ok(words.includes('our team can open them'), 'says the people who run AskLocker can open documents');
@@ -1653,6 +1659,13 @@ await test('the public site promises nothing AskLocker does not keep, and its nu
     assert.ok(page.includes(price), `shows ${price}, from plan-text.ts`);
   }
   assert.ok(page.includes(`${DEFAULT_PLAN_LIMITS.questions.free} per person`), 'the free questions follow the plan limits');
+  // Family and Business, both in the HTML (the carousel shows one at a time).
+  for (const plan of BUSINESS_PLANS) {
+    assert.ok(page.includes(businessAmount(plan)) && page.includes(businessAmount(plan, 'yearly')), `shows ${plan}'s prices, from plan-text.ts`);
+  }
+  assert.ok(html.includes('data-for="family"') && html.includes('data-for="business"'), 'carries both modes');
+  assert.ok(html.includes('<body data-mode="family">'), 'opens on the family side, script or not');
+  assert.equal((html.match(/<h1[ >]/g) ?? []).length, 1, 'one h1');
   assert.ok(page.includes(`up to ${MAX_FILE_BYTES / (1024 * 1024)} MB`), 'the file limit follows limits.ts');
 
   // Structured data: one graph, parseable, with the FAQ and the app's prices.
