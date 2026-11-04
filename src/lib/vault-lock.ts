@@ -90,6 +90,11 @@ export async function openDocumentFile(_familyId: string, _documentId: string, _
 export async function documentFileKeyText(_familyId: string, _documentId: string): Promise<string> {
   throw new Error(NOT_HERE);
 }
+export async function openSharedFile(
+  _signedUrl: string, _vaultId: string, _documentId: string, _keyText: string,
+): Promise<{ blob: Blob; name: string; mime: string; fileType: string }> {
+  throw new Error(NOT_HERE);
+}
 export async function renameLockedDocument(_familyId: string, _documentId: string, _name: string): Promise<void> {
   throw new Error(NOT_HERE);
 }

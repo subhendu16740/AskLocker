@@ -9,7 +9,7 @@
 // (071) and passes the few passages a question needs to the AI service.
 
 import {
-  context, grantVaultKey, newSecretKey, openFile, openJson, openVaultKeyGrant, publicIdentity, sealFile,
+  context, grantVaultKey, importSecretKey, newSecretKey, openFile, openJson, openVaultKeyGrant, publicIdentity, sealFile,
   sealJson, unwrapSecretKey, wrapSecretKey,
 } from '../../supabase/functions/_shared/vault-crypto';
 import { chunkText } from '../../supabase/functions/_shared/chunking';
@@ -299,6 +299,21 @@ export async function documentFileKeyText(familyId: string, documentId: string):
   let b = '';
   for (const x of raw) b += String.fromCharCode(x);
   return btoa(b).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+/**
+ * A shared locked document, opened in the browser of whoever has the link:
+ * the file comes sealed, and the key is in the link after "#".
+ */
+export async function openSharedFile(
+  signedUrl: string, vaultId: string, documentId: string, keyText: string,
+): Promise<{ blob: Blob; name: string; mime: string; fileType: string }> {
+  const res = await fetch(signedUrl);
+  if (!res.ok) throw new LockedVaultError('no_file', "Couldn't open this document. Try again.");
+  const key = await importSecretKey(keyText);
+  const opened = await openFile(key, new Uint8Array(await res.arrayBuffer()), context.document(vaultId, documentId, 'file'));
+  const { header, bytes } = unpackFile(opened);
+  return { blob: new Blob([bytes.slice()], { type: header.mime }), name: header.name, mime: header.mime, fileType: header.fileType };
 }
 
 /** Rename a locked document: its details sealed again, never its name in the clear. */
