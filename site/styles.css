@@ -44,6 +44,22 @@ h1, h2, h3, p { margin: 0; }
 .top-cta { margin-left: auto; display: flex; gap: 8px; align-items: center; }
 @media (min-width: 860px) { .nav { display: flex; } }
 @media (max-width: 479px) { .top-cta .btn-text { display: none; } }
+/* The links' menu below 860 px: a 44 px button at the bar's end, and the
+   links in rows under the bar, as Settings lists them */
+.menu { display: none; }
+@media (max-width: 859px) { .menu { display: block; } }
+.menu summary { list-style: none; display: grid; place-items: center; width: 44px; height: 44px; margin-right: -8px; border-radius: 12px; color: var(--primary); cursor: pointer; }
+.menu summary::-webkit-details-marker { display: none; }
+.menu summary:hover { background: var(--tint); }
+.menu .i-x, .menu[open] .i-menu { display: none; }
+.menu[open] .i-x { display: block; }
+.menu .i-menu, .menu .i-x { line-height: 0; }
+.menu-panel { position: absolute; left: 0; right: 0; top: 56px; background: var(--surface); border-bottom: 1px solid var(--border); box-shadow: 0 8px 16px rgba(0, 0, 0, .06); }
+.menu-panel .wrap { display: flex; flex-direction: column; padding-top: 4px; padding-bottom: 8px; }
+.menu-panel a { display: flex; align-items: center; min-height: 48px; color: var(--text); text-decoration: none; font-size: 15px; font-weight: 500; }
+.menu-panel a + a { border-top: 1px solid var(--divider); }
+.menu-panel a:hover { color: var(--primary); }
+@media (min-width: 480px) { .menu-panel .menu-signin { display: none; } }
 
 /* Buttons: 44 tall, 12 radius, 15/600 */
 .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 44px; padding: 0 16px; border-radius: 12px; font-size: 15px; font-weight: 600; text-decoration: none; white-space: nowrap; border: 1px solid transparent; }
