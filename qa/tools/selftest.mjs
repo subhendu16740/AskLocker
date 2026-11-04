@@ -53,6 +53,7 @@ import { vehicleInsurance } from '../lib/tiny-pdf.mjs';
 import { loadQuestions, selectQuestions, groupCount, rotationGroup, estimateFor } from '../lib/questions.mjs';
 import { documents, permanentDocuments } from '../fixtures/documents.mjs';
 import * as vc from '../../supabase/functions/_shared/vault-crypto.ts';
+import * as localSearch from '../../src/lib/local-search.ts';
 
 let passed = 0;
 const failures = [];
@@ -1923,6 +1924,30 @@ await test('e2e: a device keeps a copy only its own key opens, and the old backu
   const recoveryKey = await vc.newRecoveryKey();
   const backup = await vc.sealIdentity(back, recoveryKey, ASHA);
   assert.deepEqual(await vc.publicIdentity(await vc.openIdentity(backup, recoveryKey, ASHA)), await vc.publicIdentity(asha));
+});
+
+await test('e2e: search on the phone ranks by meaning and words, four passages a document at most, and its vectors survive packing', async () => {
+  const unit = (xs) => { const n = Math.hypot(...xs); return xs.map((x) => x / n); };
+  const v = unit(Array.from({ length: 384 }, (_, i) => Math.sin(i + 1)));
+  const back = localSearch.unpackVector(localSearch.packVector(v));
+  assert.equal(back.length, 384);
+  assert.ok(localSearch.similarity(back, v) > 0.99, 'an 8-bit vector ranks as the full one');
+  assert.equal(localSearch.packVector(v).length, 512, '384 bytes, base64url');
+  const q = unit(Array.from({ length: 384 }, (_, i) => (i === 7 ? 1 : 0.01)));
+  const near = unit(Array.from({ length: 384 }, (_, i) => (i === 7 ? 1 : 0.02)));
+  const far = unit(Array.from({ length: 384 }, (_, i) => (i === 200 ? 1 : 0.02)));
+  const P = (doc, text, vec, i = 0) => ({ familyId: VAULT, documentId: doc, documentName: doc, index: i, text, vector: localSearch.unpackVector(localSearch.packVector(vec)) });
+  const ranked = localSearch.rankPassages([
+    P('bill', 'SPECIMEN electricity bill due 05/12/2026', far),
+    P('passport', 'SPECIMEN passport number P1234567', near),
+  ], q, 'what is my passport number');
+  assert.equal(ranked[0].documentId, 'passport');
+  const many = Array.from({ length: 9 }, (_, i) => P('tax', `SPECIMEN tax return page ${i} mobile number`, near, i));
+  const capped = localSearch.rankPassages([...many, P('resume', 'SPECIMEN resume mobile number 98xxxxxx', far)], q, 'mobile number');
+  assert.equal(capped.filter((p) => p.documentId === 'tax').length, 4, 'one long document cannot take every place');
+  assert.ok(capped.some((p) => p.documentId === 'resume'));
+  const words = localSearch.rankPassages([P('a', 'SPECIMEN पासपोर्ट संख्या P1234567', far), P('b', 'SPECIMEN bill', far)], null, 'पासपोर्ट');
+  assert.equal(words[0].documentId, 'a', 'words alone, in any script, when the model is not there');
 });
 
 if (failures.length) {
