@@ -156,7 +156,10 @@ var timer;t.addEventListener('scroll',function(){clearTimeout(timer);timer=setTi
 window.addEventListener('resize',function(){go(cur,false)});
 function fromHash(top){var h=location.hash.slice(1);if(M.indexOf(h)>=0){go(h,false);if(top)window.scrollTo({top:0})}}
 window.addEventListener('hashchange',function(){fromHash(true)});fromHash(false);
-t.addEventListener('keydown',function(e){if(e.key==='ArrowRight'||e.key==='ArrowLeft'){e.preventDefault();go(M[(M.indexOf(cur)+1)%M.length],true)}});})();</script>`;
+t.addEventListener('keydown',function(e){if(e.key==='ArrowRight'||e.key==='ArrowLeft'){e.preventDefault();go(M[(M.indexOf(cur)+1)%M.length],true)}});})();
+(function(){var m=document.querySelector('details.menu');if(!m)return;
+document.addEventListener('click',function(e){if(m.open&&(e.target.closest('.menu-panel a')||!m.contains(e.target)))m.open=false});
+document.addEventListener('keydown',function(e){if(e.key==='Escape'&&m.open){m.open=false;m.querySelector('summary').focus()}});})();</script>`;
 
 /** The app as structured data: what it is, what it costs, what it does. */
 function appNode() {
