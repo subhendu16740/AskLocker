@@ -62,6 +62,8 @@ const ICONS = {
   'refresh-cw': '<polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>',
   'bar-chart-2': '<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>',
   'edit-3': '<path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>',
+  menu: '<line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/>',
+  x: '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
 };
 
 export function icon(name, size = 24) {
@@ -107,16 +109,21 @@ const NAV = [
   { href: '/#faq', label: 'FAQ' },
 ];
 
-// The app's top bar: 56 tall, the name in its title style.
+// The app's top bar: 56 tall, the name in its title style. Below 860 px the
+// links move into a menu (a <details>, so it opens without a script, as the
+// privacy page has none), with Sign in, which the bar drops below 480 px.
 function header({ hasFilms }) {
-  const links = NAV.filter((n) => n.when !== 'films' || hasFilms)
-    .map((n) => `<a href="${n.href}">${n.label}</a>`)
-    .join('');
+  const items = NAV.filter((n) => n.when !== 'films' || hasFilms);
+  const links = items.map((n) => `<a href="${n.href}">${n.label}</a>`).join('');
   return `<header class="top">
 <div class="wrap top-in">
 <a class="brand" href="/" aria-label="AskLocker home">${logo(32)}<span>AskLocker</span></a>
 <nav class="nav" aria-label="Main">${links}</nav>
 <div class="top-cta"><a class="btn btn-text" href="/login">Sign in</a><a class="btn btn-primary" href="/onboarding">Get started</a></div>
+<details class="menu">
+<summary aria-label="Menu"><span class="i-menu">${icon('menu', 22)}</span><span class="i-x">${icon('x', 22)}</span></summary>
+<nav class="menu-panel" aria-label="Menu"><div class="wrap">${links}<a class="menu-signin" href="/login">Sign in</a></div></nav>
+</details>
 </div>
 </header>`;
 }
