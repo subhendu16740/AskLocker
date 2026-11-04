@@ -24,7 +24,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState, ty
 import { AppState, Platform } from 'react-native';
 import { useAuth } from './auth';
 import { supabase } from './supabase';
-import { accountKey, passkeysHere, setPasskeyHere, storageGet, storageRemove, storageSet } from './storage';
+import { accountKey, deviceKey, passkeysHere, setPasskeyHere, storageGet, storageRemove, storageSet } from './storage';
 import { forgetLockKey, lockSupport, takeFreshSignIn } from './app-lock-device';
 import type { LockSupport } from './app-lock-types';
 
@@ -170,6 +170,13 @@ async function readEntry(userId: string): Promise<LockEntry | null> {
 async function passkeySignIn(step: 'signin' | 'unlock'): Promise<void> {
   const { data, error } = await supabase.auth.signInWithPasskey();
   if (!error && data?.session) return;
+  if (step === 'signin' && error?.code === 'webauthn_credential_not_found'
+      && (await storageGet(deviceKey.documentsKeyHere)) === '1') {
+    // This device also holds the AskLocker documents key (locked vaults),
+    // which Supabase does not know: most likely the one picked. Keep the
+    // button, and say which to choose.
+    throw new Error('That was your documents key. Try again and choose your sign-in passkey.');
+  }
   if (step === 'signin' && (error?.code === 'webauthn_credential_not_found' || error?.code === 'passkey_disabled')) {
     // The passkey offered is gone (turned off elsewhere, or its account
     // deleted), or the project's passkeys are off: the login screen stops

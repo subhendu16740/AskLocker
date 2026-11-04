@@ -2698,8 +2698,8 @@ export interface MyIdentity {
   encryptPublic: string;
   signPublic: string;
   fingerprint: string;
-  /** The keys locked with the Recovery Key ("r1.…"). Only its owner gets it. */
-  backup: string;
+  /** The keys locked with the backup (Recovery) Key ("r1.…"), or null when none was saved (071). Only its owner gets it. */
+  backup: string | null;
   keyVersion: number;
   createdAt: string;
   updatedAt: string;
@@ -2726,7 +2726,7 @@ export async function fetchMyIdentity(): Promise<MyIdentity | null | 'unavailabl
 }
 
 /** Saves new keys' public parts and their locked backup to the account. */
-export async function registerMyIdentity(encryptPublic: string, signPublic: string, fingerprint: string, backup: string): Promise<void> {
+export async function registerMyIdentity(encryptPublic: string, signPublic: string, fingerprint: string, backup: string | null): Promise<void> {
   const { error } = await supabase.rpc('register_my_identity', {
     p_encrypt_public: encryptPublic,
     p_sign_public: signPublic,

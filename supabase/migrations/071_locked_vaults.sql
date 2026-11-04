@@ -690,9 +690,11 @@ $fn$;
 
 -- A new locked document: every check insert_family_document makes (the
 -- folder, the file, whose it is, the day's limit), then its sealed parts.
--- The row's name says only "Locked document"; its status is 'sealed'.
+-- The row's name says only "Locked document"; its status is 'sealed'. Its
+-- id is the one the phone chose, since the sealed parts are bound to it.
 CREATE OR REPLACE FUNCTION public.insert_sealed_document(
   p_family_id         uuid,
+  p_document_id       uuid,
   p_file_type         character varying,
   p_file_size_bytes   bigint,
   p_storage_path      text,
@@ -713,6 +715,7 @@ DECLARE
   v_me     uuid := auth.uid();
   v_schema text;
   v_doc    uuid;
+  v_taken  boolean;
 BEGIN
   IF v_me IS NULL THEN
     RAISE EXCEPTION 'Sign in first.' USING ERRCODE = '42501';
@@ -726,14 +729,25 @@ BEGIN
     RAISE EXCEPTION 'You do not hold this vault''s key yet.' USING ERRCODE = '42501', HINT = 'no_key';
   END IF;
 
+  SELECT f.storage_namespace INTO v_schema FROM public.families f WHERE f.id = p_family_id;
+  IF p_document_id IS NULL THEN
+    RAISE EXCEPTION 'This document is not in the form AskLocker expects.' USING ERRCODE = 'P0001', HINT = 'bad_sealed';
+  END IF;
+  EXECUTE format('SELECT EXISTS (SELECT 1 FROM %I.documents d WHERE d.id = $1)', v_schema) INTO v_taken USING p_document_id;
+  IF v_taken OR EXISTS (SELECT 1 FROM public.sealed_documents s WHERE s.family_id = p_family_id AND s.document_id = p_document_id) THEN
+    RAISE EXCEPTION 'This document is there already.' USING ERRCODE = 'P0001', HINT = 'bad_sealed';
+  END IF;
+
   PERFORM set_config('asklocker.sealed_insert', 'on', true);
   v_doc := public.insert_family_document(p_family_id, v_me, 'Locked document', p_file_type, p_file_size_bytes,
                                          p_storage_path, p_category_id, p_belongs_to_member);
   PERFORM set_config('asklocker.sealed_insert', '', true);
 
-  SELECT f.storage_namespace INTO v_schema FROM public.families f WHERE f.id = p_family_id;
-  EXECUTE format('UPDATE %I.documents SET ingestion_status = ''sealed'', ocr_text = NULL WHERE id = $1', v_schema)
-    USING v_doc;
+  EXECUTE format('UPDATE %I.documents SET id = $2, ingestion_status = ''sealed'', ocr_text = NULL WHERE id = $1', v_schema)
+    USING v_doc, p_document_id;
+  UPDATE public.audit_logs SET resource_id = p_document_id
+   WHERE action = 'upload_document' AND resource_id = v_doc AND family_id = p_family_id;
+  v_doc := p_document_id;
 
   BEGIN
     INSERT INTO public.sealed_documents (family_id, document_id, key_version, file_key, details, passages, passage_count, added_by)
@@ -1136,7 +1150,7 @@ REVOKE ALL ON FUNCTION public.lock_vault(uuid, text) FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION public.add_vault_key_version(uuid, integer, text) FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION public.grant_vault_key(uuid, integer, uuid, integer, text) FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION public.vault_key_status(uuid) FROM PUBLIC, anon;
-REVOKE ALL ON FUNCTION public.insert_sealed_document(uuid, character varying, bigint, text, uuid, uuid, integer, text, text, text, integer) FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.insert_sealed_document(uuid, uuid, character varying, bigint, text, uuid, uuid, integer, text, text, text, integer) FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION public.seal_existing_document(uuid, uuid, text, integer, text, text, text, integer) FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION public.update_sealed_details(uuid, uuid, text) FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION public.finish_vault_move(uuid) FROM PUBLIC, anon;
@@ -1154,7 +1168,7 @@ GRANT EXECUTE ON FUNCTION public.lock_vault(uuid, text) TO authenticated, servic
 GRANT EXECUTE ON FUNCTION public.add_vault_key_version(uuid, integer, text) TO authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.grant_vault_key(uuid, integer, uuid, integer, text) TO authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.vault_key_status(uuid) TO authenticated, service_role;
-GRANT EXECUTE ON FUNCTION public.insert_sealed_document(uuid, character varying, bigint, text, uuid, uuid, integer, text, text, text, integer) TO authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.insert_sealed_document(uuid, uuid, character varying, bigint, text, uuid, uuid, integer, text, text, text, integer) TO authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.seal_existing_document(uuid, uuid, text, integer, text, text, text, integer) TO authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.update_sealed_details(uuid, uuid, text) TO authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.finish_vault_move(uuid) TO authenticated, service_role;

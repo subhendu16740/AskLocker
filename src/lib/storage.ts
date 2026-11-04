@@ -70,6 +70,11 @@ export const deviceKey = {
   // The accounts with fingerprint sign-in on this device: the login screen
   // offers "Sign in with fingerprint" while there is one (app-lock.tsx).
   passkeysHere: 'fv:passkeys-here',
+  // '1' once this device has made an AskLocker documents key (a passkey that
+  // unlocks encryption keys, vault-keys.web.ts): picked by mistake at
+  // fingerprint sign-in it is unknown to Supabase, which must not then stop
+  // the button for everyone (app-lock.tsx).
+  documentsKeyHere: 'fv:documents-key-here',
   // Usage counts (analytics.ts): this device's random id, never an account's,
   // and the Settings › Privacy switch, '1' when turned off.
   analyticsId: 'fv:analytics-id',
