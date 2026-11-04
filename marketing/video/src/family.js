@@ -1,6 +1,10 @@
 // The family film: 2:14 AM, Papa in hospital, a policy number nobody can find,
 // then what AskLocker does about it. Built on src/engine.js.
 //
+// ?film=nri tells the same scenes from abroad: Rohan is in Toronto, it is the
+// afternoon there, and his phone shows his own time (NRI_STORY in
+// src/family-screens.js); the big clock and Maa's phone keep India's.
+//
 // The short cut keeps the story and one pass through the product: hook,
 // scramble, insight, the missed call, Gmail import, Ask, Hindi voice,
 // resolution. It drops the statistic, Scan, the family tree, the emergency
@@ -14,7 +18,7 @@ import {
   setLayout, tl, cue, IR, showCallout, reveal, showWhy, showHow, hide, fadeIn, swap, nextZ, nav, chrome, tap, type,
   vibrate, phoneTo, phoneIn, popCard, notify, bubblePop, sub, count, drawer, motion, finish, LANG,
 } from './engine.js';
-import { phone, scrambleCards, textBlocks, callouts, subtitles, HEALTH } from './family-screens.js';
+import { phone, scrambleCards, textBlocks, callouts, subtitles, HEALTH, STORY } from './family-screens.js';
 import { VOICE_LINES } from './voice-lines.js';
 // How long Maa's question and the spoken answer run: the Hindi of
 // tools/voices.py, or a language's from tools/voices_indic.py.
@@ -152,7 +156,7 @@ cue(0, 'section', { name: 'night' });
 tl.to('#fade', { autoAlpha: 0, duration: 1.2, ease: 'power1.inOut' }, 0);
 tl.fromTo('#phone', { autoAlpha: 0, y: `+=70`, scale: L.hookPhone[2] * 0.94 },
   { autoAlpha: 1, y: L.hookPhone[1], scale: L.hookPhone[2], duration: 1.4, ...IR }, 0.25);
-chrome(0, 'os', '2:14');
+chrome(0, 'os', STORY.t.lock);
 tl.set('#t-hook', { autoAlpha: 1 }, 0.5);
 tl.fromTo('#t-hook .clock-big', { autoAlpha: 0, y: 30 }, { autoAlpha: 1, y: 0, duration: 1.1, ...IR }, 0.5);
 tl.fromTo('#t-hook .where', { autoAlpha: 0, y: 24 }, { autoAlpha: 1, y: 0, duration: 1.0, ...IR }, 1.0);
@@ -181,7 +185,7 @@ S.scramble = 6.9;
   beats.forEach(([cap, card, time], i) => {
     const t = t0 + 0.15 + i * step;
     if (i > 0) {
-      tl.set('#chip-time', { text: time }, t);
+      tl.set('#chip-time', { text: `${time}${STORY.chipWhere}` }, t);
       tl.fromTo('#time-chip', { scale: 1.12 }, { scale: 1, duration: 0.4, ...IR }, t);
       cue(t, 'tick');
       // Earlier cards fall back as the pile grows.
@@ -233,7 +237,7 @@ S.scramble = 6.9;
   S.call = c0;
   tl.set('#scr-call', { autoAlpha: 1, zIndex: nextZ() }, c0);
   tl.set('#scr-lock', { autoAlpha: 0 }, c0);
-  chrome(c0, 'os', '2:14');
+  chrome(c0, 'os', STORY.t.lock);
   tl.fromTo('#phone', { autoAlpha: 0, x: L.callPhone[0], y: L.callPhone[1] + 40, scale: L.callPhone[2] * 0.95 },
     { autoAlpha: 1, x: L.callPhone[0], y: L.callPhone[1], scale: L.callPhone[2], duration: 0.9, ...IR }, c0);
   [0, 1, 2].forEach((i) => {
@@ -590,7 +594,7 @@ if (!SHORT) {
   showWhy('t-alerts', t0);
   // The next morning: a reminder reaches the phone, as a web push.
   nav('scr-emerg', 'scr-lockday', t0, 'fade', 0.45);
-  chrome(t0, 'os', '9:05');
+  chrome(t0, 'os', STORY.t.day);
   vibrate(t0 + 1.6);
   notify('#pn1', t0 + 1.65);
   showHow('t-alerts', t0 + 1.9);
@@ -664,7 +668,7 @@ if (!SHORT) {
   // Rohan's phone, a minute later.
   const m = r1 + 0.45;
   nav('scr-voice', 'scr-lock2', m, 'fade', 0.5);
-  chrome(m, 'os', '2:15');
+  chrome(m, 'os', STORY.t.lock2);
   tl.to('#res-time', { text: '2:15', duration: 0.01 }, m + 0.1);
   tl.fromTo('#t-res .clock-big', { scale: 1.06 }, { scale: 1, duration: 0.5, ...IR }, m + 0.1);
   tl.to('#res-h1a', { autoAlpha: 0, duration: 0.3 }, m + 0.1);
