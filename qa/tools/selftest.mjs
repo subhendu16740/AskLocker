@@ -1879,6 +1879,52 @@ await test("e2e: an identity comes back from its backup with the Recovery Key, a
   await assert.rejects(vc.openIdentity(backup.replace('r1.', 'r2.'), recoveryKey, ASHA), { code: 'unknown_format' });
 });
 
+await test('e2e: a new device gets the keys only through its own one-time key, and both screens show the same code', async () => {
+  const asha = await vc.newIdentity();
+  const request = await vc.newRequestKeyPair();
+  const requestPublic = await vc.exportPublicKey(request.publicKey);
+  const where = vc.context.deviceRequest(ASHA, DOC);
+  const locked = await vc.lockTextForPublicKey(requestPublic, await vc.exportIdentity(asha), where);
+  assert.ok(locked.startsWith('l1.'));
+  const back = await vc.importIdentity(await vc.unlockTextWithPrivateKey(locked, request.privateKey, where), true);
+  assert.deepEqual(await vc.publicIdentity(back), await vc.publicIdentity(asha), 'the same keys arrive');
+  const other = await vc.newRequestKeyPair();
+  await assert.rejects(vc.unlockTextWithPrivateKey(locked, other.privateKey, where), { code: 'cannot_open' }, "a server's own key opens nothing");
+  await assert.rejects(vc.unlockTextWithPrivateKey(locked, request.privateKey, vc.context.deviceRequest(RAVI, DOC)), { code: 'cannot_open' });
+  const code = await vc.pairingCode(requestPublic);
+  assert.match(code, /^\d{3} \d{3}$/);
+  assert.equal(await vc.pairingCode(requestPublic), code, 'the same key, the same code');
+  assert.notEqual(await vc.pairingCode(await vc.exportPublicKey(other.publicKey)), code, 'a swapped key shows another code');
+});
+
+await test("e2e: the phone's lock (a passkey's PRF output) seals the identity, and only that output opens it", async () => {
+  const asha = await vc.newIdentity();
+  const prf = vc.newSalt(32);
+  const salt = vc.newSalt(32);
+  const key = await vc.keyFromPasskey(prf, salt);
+  const sealed = await vc.sealIdentityWithKey(asha, key, vc.context.passkeyUnlock(ASHA));
+  const back = await vc.openIdentityWithKey(sealed, await vc.keyFromPasskey(new Uint8Array(prf), salt), vc.context.passkeyUnlock(ASHA));
+  assert.deepEqual(await vc.publicIdentity(back), await vc.publicIdentity(asha));
+  assert.equal(back.encrypt.privateKey.extractable, false, 'kept, never handed on');
+  await assert.rejects(vc.openIdentityWithKey(sealed, await vc.keyFromPasskey(vc.newSalt(32), salt), vc.context.passkeyUnlock(ASHA)), { code: 'cannot_open' });
+  await assert.rejects(vc.openIdentityWithKey(sealed, key, vc.context.passkeyUnlock(RAVI)), { code: 'cannot_open' }, "Asha's served to Ravi");
+  await assert.rejects(vc.keyFromPasskey(new Uint8Array(16), salt), { code: 'bad_key' });
+});
+
+await test('e2e: a device keeps a copy only its own key opens, and the old backup format still opens', async () => {
+  const asha = await vc.newIdentity();
+  const deviceKey = await vc.newDeviceKey();
+  assert.equal(deviceKey.extractable, false);
+  const kept = await vc.sealIdentityWithKey(asha, deviceKey, vc.context.deviceKeep(ASHA));
+  const back = await vc.openIdentityWithKey(kept, deviceKey, vc.context.deviceKeep(ASHA), true);
+  assert.equal(back.encrypt.privateKey.extractable, true, 'so this device can lock it for a new phone');
+  await assert.rejects(vc.openIdentityWithKey(kept, await vc.newDeviceKey(), vc.context.deviceKeep(ASHA)), { code: 'cannot_open' });
+  await assert.rejects(vc.importIdentity('{"v":2}'), { code: 'unknown_format' });
+  const recoveryKey = await vc.newRecoveryKey();
+  const backup = await vc.sealIdentity(back, recoveryKey, ASHA);
+  assert.deepEqual(await vc.publicIdentity(await vc.openIdentity(backup, recoveryKey, ASHA)), await vc.publicIdentity(asha));
+});
+
 if (failures.length) {
   console.error(failures.map((f) => `✗ ${f}`).join('\n'));
   console.error(`\n${failures.length} self-test(s) failed, ${passed} passed.`);
