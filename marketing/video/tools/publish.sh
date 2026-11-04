@@ -7,6 +7,9 @@
 #   marketing/<family|business>/posters/  asklocker-<family|business>-<feature>-<size>.png
 #   marketing/nri/films/                  asklocker-nri-<16x9|9x16>[-short].mp4 (the family film told from abroad)
 #   marketing/privacy/<films|reels|covers>/  the privacy film (tools/privacy.sh)
+#   marketing/languages/                  asklocker-<family|business>-16x9-<language>.mp4
+#                                         (tools/languages.sh; only added to, never emptied,
+#                                         since they are made a few languages at a time)
 # and every updated video in one folder, numbered in the order to watch them
 # (marketing/launch/README.md lists them): first why AskLocker was made
 # (tools/why.sh), which makes no claim about encryption and can be posted
@@ -49,6 +52,7 @@ launched() { [[ $1 == *-launch.* || $1 == *-launch-sfx-only.* ]]; }
 for f in out/asklocker-family-*.mp4 out/asklocker-nri-*.mp4 out/asklocker-business-*.mp4; do
   [ -e "$f" ] || continue
   [[ $f == *-sfx-only.mp4 ]] && continue
+  [[ $f == *-16x9-in-* ]] && continue # a film in another language: languages/ below
   launched "$f" && continue
   name=$(basename "$f")
   a=${name#asklocker-}
@@ -77,6 +81,24 @@ for f in out/asklocker-privacy-*-9x16.mp4 out/asklocker-privacy-*-9x16-sfx-only.
 done
 for f in out/posters/asklocker-privacy-*-cover.png; do
   [ -e "$f" ] && cp "$f" "$DEST/privacy/covers/"
+done
+# The family and business films in India's languages (tools/languages.sh),
+# with music, named by language. Only added to: a language not in out/ keeps
+# the film already published.
+language() { # a code from src/i18n.js -> its name; nothing for qq, the pseudo-language for checking fit
+  case $1 in
+    hi) echo hindi ;; bn) echo bengali ;; mr) echo marathi ;; ta) echo tamil ;; te) echo telugu ;;
+    gu) echo gujarati ;; kn) echo kannada ;; ml) echo malayalam ;; pa) echo punjabi ;;
+  esac
+}
+for f in out/asklocker-family-16x9-in-*.mp4 out/asklocker-business-16x9-in-*.mp4; do
+  [ -e "$f" ] || continue
+  [[ $f == *-sfx-only.mp4 ]] && continue
+  name=$(basename "$f" .mp4)
+  lang=$(language "${name##*-in-}")
+  [ -n "$lang" ] || continue
+  mkdir -p "$DEST/languages"
+  cp "$f" "$DEST/languages/${name%-in-*}-$lang.mp4"
 done
 
 # ─── The launch set, in the order to watch it ───────────────────────────
@@ -157,7 +179,7 @@ for r in locker:the-locker-on-your-phone who:who-can-open-it asking:asking-witho
 done
 
 for d in family/films family/shorts family/posters nri/films business/films business/shorts business/posters \
-  privacy/films privacy/reels privacy/covers; do
+  privacy/films privacy/reels privacy/covers languages; do
   [ -d "$DEST/$d" ] && echo "$d: $(find "$DEST/$d" -type f | wc -l) files, $(du -sh "$DEST/$d" | cut -f1)"
 done
 echo "launch: $(find "$L" -maxdepth 1 -name '*.mp4' | wc -l) videos, $(du -sh --exclude=no-music --exclude=covers --exclude=posters "$L" | cut -f1)"

@@ -18,13 +18,12 @@ Metro only bundles from `src/app`, and none of these files are TypeScript.
   business), a short for each feature (23–39) and the encryption reels
   (40–51), with `no-music/`, `covers/` and `posters/` beside them.
   [`launch/README.md`](launch/README.md) lists every video.
-- **The family and business films in nine Indian languages** (Hindi,
-  Bengali, Marathi, Tamil, Telugu, Gujarati, Kannada, Malayalam, Punjabi),
-  16:9, today's claims: **not kept here**, to keep the repository small (the
-  owner's choice, 4 November 2026). They were sent to the owner, and
-  `video/tools/languages.sh` makes them again. First drafts: have someone who
-  speaks each language watch its film before it goes out
-  ([`video/README.md`](video/README.md#in-indias-languages)).
+- `languages/`: **the family and business films in nine Indian languages**
+  (Hindi, Bengali, Marathi, Tamil, Telugu, Gujarati, Kannada, Malayalam,
+  Punjabi), 16:9, with today's claims, so they can be posted today. The
+  translations are first drafts: have someone who speaks each language watch
+  its film before it goes out. [`languages/README.md`](languages/README.md)
+  lists them.
 - `video/`: the code that makes them: both films and every feature's short and
   poster, in 16:9, 9:16 and 1:1. See [`video/README.md`](video/README.md) to
   render them.
@@ -56,6 +55,7 @@ posters, chapters, transcripts and what to fix before they go out (`reviewNotes`
 | `privacy/films/` | What happens to your documents: where they're kept, who can open them, what the AI gets, every service, and taking it back | 2:16 in [16:9](./privacy/films/asklocker-privacy-16x9.mp4) and [9:16](./privacy/films/asklocker-privacy-9x16.mp4) |
 | `privacy/reels/` | Four reels from it, one a week (below) | 9:16, 27 to 31 seconds, with music, and `-sfx-only` without it |
 | `privacy/covers/` | Each one's cover: the frame that says the most | the reels' 1080x1920, the film's in both shapes |
+| `languages/` | The family film and the business film in Hindi, Bengali, Marathi, Tamil, Telugu, Gujarati, Kannada, Malayalam and Punjabi ([list](./languages/README.md)) | 16:9: the family film 2:15 to 2:21, the business film 1:31 |
 
 Where each fits: 16:9 films for the website, YouTube, LinkedIn and pitches;
 9:16 films and shorts for Reels, YouTube Shorts and WhatsApp Status (the
@@ -163,8 +163,9 @@ LAUNCH=1 ./tools/films.sh && LAUNCH=1 ./tools/features.sh   # the launch set,
 ./tools/publish.sh     # copy them here (the launch set into launch/)
 ```
 
-The family and business films in India's languages, also not kept here:
-`./tools/languages.sh` (all nine) or `./tools/languages.sh ta ml` (some).
+The family and business films in India's languages: `./tools/languages.sh`
+(all nine) or `./tools/languages.sh ta ml` (some), then `./tools/publish.sh`,
+which adds them to `languages/`.
 
 The language versions of the family short (its voice scene in each of the
 app's ten voice languages) are not kept here, to keep the repository small:

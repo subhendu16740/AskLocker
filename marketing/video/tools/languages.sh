@@ -7,6 +7,7 @@
 #        WORKERS=4 sets how many frames render at once (4 unless set)
 # They are today's films (no --launch). Have someone who speaks each language
 # watch its films before they go out: the translations are first drafts.
+# tools/publish.sh then copies them into marketing/languages/, named by language.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 ALL=(hi bn mr ta te gu kn ml pa)

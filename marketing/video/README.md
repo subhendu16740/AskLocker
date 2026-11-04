@@ -157,8 +157,9 @@ one a week for a month. See [The privacy film](#the-privacy-film).
 
 Rendered files go to `out/`, which is not committed; `tools/publish.sh` copies
 the finished films, shorts and posters into `marketing/family/` and
-`marketing/business/`, the NRI film into `marketing/nri/` and the privacy film
-into `marketing/privacy/`, which are (see `marketing/README.md`). To put one on
+`marketing/business/`, the NRI film into `marketing/nri/`, the privacy film
+into `marketing/privacy/` and the films in India's languages into
+`marketing/languages/`, which are (see `marketing/README.md`). To put one on
 asklocker.com, see `site/README.md` (`node site/tools/add-video.mjs`).
 
 ## Render
@@ -197,7 +198,7 @@ node tools/render.mjs --film features --feature ask --portrait      # one short,
 ./tools/mux.sh feature-ask-9x16                                     # -> out/asklocker-feature-ask-9x16.mp4
 ./tools/films.sh                      # all twelve film cuts, with sound (or name some: nri-9x16)
 ./tools/privacy.sh                    # the privacy film in both shapes, its four reels, and their covers
-./tools/publish.sh                    # out/ -> marketing/<family|business>/<films|shorts|posters>/, marketing/nri/films/, marketing/privacy/
+./tools/publish.sh                    # out/ -> marketing/<family|business>/<films|shorts|posters>/, marketing/nri/films/, marketing/privacy/, marketing/languages/
 ```
 
 A poster is the frame the feature names (`window.__hero`), taken as a PNG at
@@ -206,7 +207,9 @@ three minutes on four cores; all seventeen, about 45 minutes; all twelve film
 cuts, about three hours; the privacy film and its reels, about 50 minutes,
 two `privacy.sh` runs side by side. `publish.sh` replaces the ten folders in
 `marketing/` with what `out/` holds, so render everything first. The films go
-there with music; the shorts and the privacy reels with and without.
+there with music; the shorts and the privacy reels with and without. The films
+in India's languages are the exception: `publish.sh` only adds to
+`marketing/languages/`, so a language not in `out/` keeps its published film.
 
 Single frames, for checking a change without a full render:
 
@@ -696,14 +699,15 @@ The family film and the business film, 16:9, in the app's nine Indian
 languages: Hindi, Bengali, Marathi, Tamil, Telugu, Gujarati, Kannada,
 Malayalam and Punjabi (`?ui=hi`, `bn`, `mr`, `ta`, `te`, `gu`, `kn`, `ml`,
 `pa`). They are today's films, made on 4 November 2026 at the owner's ask, and
-they are **not committed**: the repository already holds 900 MB of video that
-every build downloads, so they are sent to the owner and made again with one
-command.
+kept in `marketing/languages/` (318 MB, the owner's ask the same day), named by
+language (`asklocker-family-16x9-tamil.mp4`). All eighteen take about three
+hours on four cores.
 
 ```bash
 ./tools/languages.sh                  # all nine, both films -> out/asklocker-<film>-16x9-in-<code>.mp4
 ./tools/languages.sh ta ml            # some of them
 FILMS=business ./tools/languages.sh hi   # one film
+./tools/publish.sh                    # -> marketing/languages/asklocker-<film>-16x9-<language>.mp4, only adding
 node tools/render.mjs --film business --ui ta --strings   # every string it shows, and any Tamil lacks
 node tools/i18n-check.mjs             # every table against its English
 ```
