@@ -292,6 +292,12 @@ const familyQuestionsJudge = (expect) => (outcome) => {
 const vaultQuestionsJudge = (expect) => (outcome) => (missingTable(outcome.error)
   ? ['skipped', 'migration 069 is not applied to DEV yet']
   : judge(expect, outcome));
+// Each person's encryption keys (070): written only through functions that
+// take the caller from the session, the locked backup read by nobody but its
+// owner (through my_identity()), never by a SELECT. Skipped until 070.
+const keysJudge = (expect) => (outcome) => (missingTable(outcome.error) || ['PGRST202'].includes(String(outcome.error?.code))
+  ? ['skipped', 'migration 070 is not applied to DEV yet']
+  : judge(expect, outcome));
 // A family vault made a business (054): only its admin sees what would
 // change, or makes the move; the rule itself is the server's. Skipped until 054.
 const businessVaultJudge = (expect) => (outcome) => {
@@ -1209,6 +1215,14 @@ export async function runAccessChecks(cfg, { a, b, anon, vaultA, vaultB, docsA }
     ['B', "read QA Vault A's question count (server-only)", vaultQuestionsJudge('refused-or-empty'), () => b.client.from('vault_question_usage').select('questions').eq('family_id', A.family)],
     ['B', "raise QA Vault A's question count (server-only)", vaultQuestionsJudge('refused'), () => b.client.from('vault_question_usage').insert({ family_id: A.family, month: '2026-10-01', questions: 9999 })],
     ['B', "ask which of account A's families has questions left (server-only)", familyQuestionsJudge('refused'), rpc(b, 'family_question_room', { p_user_id: A.user })],
+    // Encryption keys (070): public parts for vault-mates, the backup for its owner alone.
+    ['anon', "read anyone's encryption keys", keysJudge('refused-or-empty'), () => anon.client.from('user_keys').select('user_id, fingerprint').limit(5)],
+    ['anon', 'read an identity backup', keysJudge('refused'), rpc(anon, 'my_identity', {})],
+    ['anon', 'set up encryption keys', keysJudge('refused'), rpc(anon, 'register_my_identity', { p_encrypt_public: 'x', p_sign_public: 'x', p_fingerprint: 'x', p_backup: 'x' })],
+    ['B', "read anyone's locked key backup by SELECT", keysJudge('refused'), () => b.client.from('user_keys').select('backup').limit(5)],
+    ['B', 'write encryption keys for account A', keysJudge('refused'), () => b.client.from('user_keys').insert({ user_id: A.user, encrypt_public: 'x', sign_public: 'x', fingerprint: 'x', backup: 'x' })],
+    ['B', "replace account A's key backup", keysJudge('refused'), () => b.client.from('user_keys').update({ backup: 'x' }).eq('user_id', A.user).select('user_id')],
+    ['B', "delete account A's encryption keys", keysJudge('refused-or-empty'), () => b.client.from('user_keys').delete().eq('user_id', A.user).select('user_id')],
     ['anon', 'see what making QA Vault A a business would change', businessVaultJudge('refused'), rpc(anon, 'business_vault_preview', { p_family_id: A.family })],
     ['anon', 'make QA Vault A a business vault', businessVaultJudge('refused'), rpc(anon, 'make_business_vault', { p_family_id: A.family })],
     ['B', 'see what making QA Vault A a business would change', businessVaultJudge('refused'), rpc(b, 'business_vault_preview', { p_family_id: A.family })],

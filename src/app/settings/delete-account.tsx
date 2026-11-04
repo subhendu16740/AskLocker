@@ -18,6 +18,7 @@ import { router, useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../lib/auth';
 import { forgetAccount } from '../../lib/storage';
+import { forgetKeysOnThisDevice } from '../../lib/vault-keys';
 import { forgetPushOnThisDevice } from '../../lib/push';
 import {
   previewAccountDeletion, deleteAccount, signOutThisDevice,
@@ -77,6 +78,7 @@ export default function DeleteAccountScreen() {
       await deleteAccount();
       // Now, not at Done: closing the tab instead must not leave them behind.
       if (user) forgetAccount(user.id).catch(() => undefined);
+      if (user) forgetKeysOnThisDevice(user.id).catch(() => undefined);
       forgetPushOnThisDevice().catch(() => undefined);   // the server's rows went with the account
       setDone(true);
     } catch (err: any) {

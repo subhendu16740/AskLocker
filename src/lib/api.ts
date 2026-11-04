@@ -2685,3 +2685,65 @@ export async function recordAgreement(version: string, platform: string, appBuil
   }
   return data;
 }
+
+// ─── Encryption keys (070) ───────────────────────────────────────
+//
+// End-to-end encryption, Phase 1 (docs/end-to-end-encryption.md). The
+// server keeps each person's PUBLIC keys and their keys locked with their
+// Recovery Key, which it cannot open. Making, locking and unlocking happen
+// on the device (src/lib/vault-keys.web.ts); these only carry the results.
+// Test builds only, while nothing is encrypted.
+
+export interface MyIdentity {
+  encryptPublic: string;
+  signPublic: string;
+  fingerprint: string;
+  /** The keys locked with the Recovery Key ("r1.…"). Only its owner gets it. */
+  backup: string;
+  keyVersion: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** The signed-in person's keys; null when not set up; 'unavailable' before 070. */
+export async function fetchMyIdentity(): Promise<MyIdentity | null | 'unavailable'> {
+  const { data, error } = await supabase.rpc('my_identity');
+  if (error) {
+    if (missingFunction(error)) return 'unavailable';
+    throw error;
+  }
+  const row = Array.isArray(data) ? data[0] : null;
+  if (!row) return null;
+  return {
+    encryptPublic: row.encrypt_public,
+    signPublic: row.sign_public,
+    fingerprint: row.fingerprint,
+    backup: row.backup,
+    keyVersion: row.key_version,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+/** Saves new keys' public parts and their locked backup to the account. */
+export async function registerMyIdentity(encryptPublic: string, signPublic: string, fingerprint: string, backup: string): Promise<void> {
+  const { error } = await supabase.rpc('register_my_identity', {
+    p_encrypt_public: encryptPublic,
+    p_sign_public: signPublic,
+    p_fingerprint: fingerprint,
+    p_backup: backup,
+  });
+  if (error) throw error;
+}
+
+/** The same keys, locked again with a new Recovery Key. */
+export async function updateMyIdentityBackup(backup: string): Promise<void> {
+  const { error } = await supabase.rpc('update_my_identity_backup', { p_backup: backup });
+  if (error) throw error;
+}
+
+/** Test builds only: forgets the account's keys. */
+export async function deleteMyIdentity(): Promise<void> {
+  const { error } = await supabase.rpc('delete_my_identity');
+  if (error) throw error;
+}
