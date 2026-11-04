@@ -175,6 +175,17 @@ body[data-mode="business"] { --primary: #0F5C57; --secondary: #1A7A72; --tint: #
 .watch .lead { font-size: 15px; color: var(--body); margin-top: 6px; }
 .watch .film { margin: 16px 0; }
 .watch-grid { display: grid; gap: 12px; }
+/* The landing page's Privacy policy row, opened in place */
+.row + .policy-more { border-top: 1px solid var(--divider); padding-top: 12px; margin-top: 12px; }
+.policy-more summary { cursor: pointer; list-style: none; }
+.policy-more summary::-webkit-details-marker { display: none; }
+.policy-more summary > .i { color: var(--meta); align-self: center; transition: transform .15s; }
+.policy-more[open] summary > .i { transform: rotate(180deg); }
+.policy-sum { padding: 4px 0 0 44px; display: grid; gap: 12px; margin-top: 12px; }
+/* The privacy policy: Settings' cards, at reading width */
+.narrow { max-width: 720px; }
+.policy-part { padding-top: 24px; }
+.policy-note { margin: 8px 4px 0; }
 @media (min-width: 860px) { .watch-grid { grid-template-columns: 1.6fr 1fr; align-items: start; } }
 .chapters { list-style: none; padding: 0; margin: 8px 0 0; display: grid; gap: 6px; }
 .chapters li { display: flex; gap: 12px; font-size: 13px; line-height: 18px; }

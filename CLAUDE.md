@@ -708,7 +708,7 @@ copies, so DEV needs its own secrets and its own `documents` storage bucket.
 - **To show "AskLocker" instead of an address**: Google's brand
   verification, free — a public home page and privacy policy on a domain
   verified in Search Console, both linked from the OAuth consent screen.
-  The policy is `https://asklocker.com/privacy` (`public/privacy.html`).
+  The policy is `https://asklocker.com/privacy` (`site/pages/privacy.mjs`).
 
 ### Fingerprint sign-in — a passkey, after Google once
 
@@ -885,13 +885,13 @@ supabase/
   migrations/                # SQL — incomplete, see Database
   queries/                   # read-only queries to paste into the SQL editor (document-categories.sql)
 
-public/                      # copied to the web build's root: sw.js (shows notifications), manifest, icons, privacy.html (the privacy policy, asklocker.com/privacy), lab/ (test pages, DEV builds only)
+public/                      # copied to the web build's root: sw.js (shows notifications), manifest, icons, lab/ (test pages, DEV builds only)
 qa/                          # end-to-end QA against DEV (own package.json)
   run.mjs  questions.yaml    # the runner, and what it asks
   fixtures/documents.mjs     # the SPECIMEN documents and the facts they carry
   sql/                       # the 023 sweep and the 024 fingerprint
 
-site/                        # the public site, web only: the landing page at /, films, robots.txt, sitemap.xml, llms.txt (site/README.md)
+site/                        # the public site, web only: the landing page at /, films, the privacy policy (/privacy), robots.txt, sitemap.xml, llms.txt (site/README.md)
   build.mjs  content.mjs     # the generator (last step of npm run build), and every word on the landing page
   videos/<slug>/             # one film each: video.json, poster.jpg, transcript.md, video.mp4 (drafts until "draft": false)
   tools/add-video.mjs        # a rendered film into videos/<slug>/, as a draft
@@ -3855,7 +3855,9 @@ rule again once pinned chunks are mixed in.
   you". Settings › Privacy says the three that matter in a line each (who
   can see documents; encrypted, not end-to-end, so our servers and team can
   open them; parts go to AI services) and links to the privacy policy,
-  `public/privacy.html` at `asklocker.com/privacy`, which says all of it
+  at `asklocker.com/privacy` (`policy` in `site/content.mjs`, drawn by
+  `site/pages/privacy.mjs` in the site's design; the landing page's Privacy
+  section opens a line a section of it in place), which says all of it
   plainly and names every outside service but the usage analytics one,
   which it describes (the owner's ask, 25 October 2026). The QA self-test
   checks the policy names each service that gets document text and makes

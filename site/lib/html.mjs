@@ -193,6 +193,7 @@ export function orgAndSite() {
       '@type': 'Organization',
       '@id': abs('/#org'),
       name: 'AskLocker',
+      alternateName: ['Ask Locker', 'asklocker.com'],
       url: abs('/'),
       logo: { '@type': 'ImageObject', url: abs('/icon-512.png'), width: 512, height: 512 },
       email: SUPPORT_EMAIL,
@@ -202,7 +203,10 @@ export function orgAndSite() {
       '@type': 'WebSite',
       '@id': abs('/#website'),
       url: abs('/'),
+      // Google's site name for the results: the name, and how else people
+      // write it, so "ask locker" is read as this site, not "app locker".
       name: 'AskLocker',
+      alternateName: ['Ask Locker', 'asklocker.com'],
       inLanguage: 'en-IN',
       publisher: { '@id': abs('/#org') },
     },

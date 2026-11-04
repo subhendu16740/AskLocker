@@ -1,7 +1,7 @@
 // Settings › Privacy — three lines, the full policy, and the usage switch, as
 // popular apps do it (the owner's ask, 25 October 2026: the screen read as too
 // wordy). The details — every outside service by name, Gmail, payments, how
-// long things are kept — are in the privacy policy, public/privacy.html,
+// long things are kept — are in the privacy policy, site/content.mjs (`policy`),
 // at asklocker.com/privacy. Every line here and there has to stay true of the
 // code, and of the people who run AskLocker: documents are not end-to-end
 // encrypted, so nothing may promise that nobody but the family can see them.
