@@ -262,7 +262,7 @@ a note there, a teammate cannot read, change or delete someone's note, and on Pr
 out and a note's reminder reaches its owner (056); nobody but its owner
 deletes a vault, and only the server calls 057's functions),
 a question asked by relation ("my mother's passport"), and the full upload → ingest →
-expiry-notification pipeline, the reminder made once however often Home asks (on Family Plus; QA Vault A is on Free, where 048 makes none, and that is checked), and that each answered question is counted once (049; account A's monthly count is started again before it asks; each run also starts A's and B's counts for the day again, and QA Vault A's and QA Business A's invitations, `qa/lib/dev-day.mjs`, since one run invites B three times). By hand only, suite `languages` asks 12
+expiry-notification pipeline, the reminder made once however often Home asks (on Family Plus; QA Vault A is on Free, where 048 makes none, and that is checked), and that each answered question is counted once (049; account A's monthly count is started again before it asks; each run also starts A's and B's counts for the day again, QA Vault A's and QA Business A's invitations, and A's and B's address lookups (068), `qa/lib/dev-day.mjs`, since one run invites B three times). By hand only, suite `languages` asks 12
 questions about documents in eight more Indian languages — two of them
 photos OCR'd the way the web app does it, with Tesseract — which is about
 43% of the free Groq day on its own. See `qa/README.md`.

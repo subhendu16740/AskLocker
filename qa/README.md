@@ -41,11 +41,13 @@ Each question costs about 9K tokens, ~6.5K of them on the relevance judge
   20 are deferred, not failed.
 - Since 050 a person on Free also tries at most 10 questions a day and adds
   at most 50 documents a day, and a family invites the same person at most 3
-  times a day — and one run invites B three times. So every run starts A's
-  and B's counts for the day, and QA Vault A's invitations, again first
-  (`lib/dev-day.mjs`; DEV only, their rows only, the same token). Without the
-  token, questions past the day's 10 are deferred, and a second run in a day
-  may have its invitations refused.
+  times a day — and one run invites B three times. Since 068 an admin also
+  looks up at most 40 addresses in any 24 hours, which a few runs use up. So
+  every run starts A's and B's counts for the day, QA Vault A's invitations
+  and A's and B's address lookups again first (`lib/dev-day.mjs`; DEV only,
+  their rows only, the same token). Without the token, questions past the
+  day's 10 are deferred, and a second run in a day may have its invitations
+  refused.
 
 Worst day: ~100K tokens on gpt-oss-20b (half its free day) and ~40K on
 gpt-oss-120b, the model people's answers come from.
