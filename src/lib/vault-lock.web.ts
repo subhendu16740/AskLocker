@@ -52,13 +52,15 @@ async function myId(): Promise<string> {
 
 // ─── Which vaults are locked ─────────────────────────────────────
 
-let locked: { at: number; ids: Set<string> } | null = null;
+let locked: { at: number; user: string; ids: Set<string> } | null = null;
 
 /** The locked vaults the signed-in person is in, kept a minute. */
 export async function lockedVaults(force = false): Promise<Set<string>> {
-  if (!force && locked && Date.now() - locked.at < 60_000) return locked.ids;
-  const ids = new Set(await fetchLockedVaultIds());
-  locked = { at: Date.now(), ids };
+  const { data } = await supabase.auth.getSession();
+  const user = data.session?.user.id ?? '';
+  if (!force && locked && locked.user === user && Date.now() - locked.at < 60_000) return locked.ids;
+  const ids = user ? new Set(await fetchLockedVaultIds()) : new Set<string>();
+  locked = { at: Date.now(), user, ids };
   return ids;
 }
 
@@ -73,15 +75,17 @@ export async function isLockedVault(familyId: string): Promise<boolean> {
 
 // ─── A vault's keys ──────────────────────────────────────────────
 
-const vaultKeyCache = new Map<string, Map<number, CryptoKey>>();
+// Opened vault keys, by person and vault, with the keys that opened them:
+// forgotten here, or replaced by new keys, and they are opened afresh.
+const vaultKeyCache = new Map<string, { identity: object; keys: Map<number, CryptoKey> }>();
 
 /** Every version of a vault's key this person holds, opened on this device. */
 export async function vaultKeys(familyId: string, force = false): Promise<Map<number, CryptoKey>> {
-  const cached = vaultKeyCache.get(familyId);
-  if (cached?.size && !force) return cached;
   const userId = await myId();
   const identity = await myDeviceIdentity(userId);
   if (!identity) throw new LockedVaultError('no_keys_here', NO_KEYS_HERE);
+  const cached = vaultKeyCache.get(`${userId}:${familyId}`);
+  if (cached && cached.identity === identity && cached.keys.size && !force) return cached.keys;
   const keys = new Map<number, CryptoKey>();
   for (const g of await fetchMyGrants(familyId)) {
     try {
@@ -90,8 +94,11 @@ export async function vaultKeys(familyId: string, force = false): Promise<Map<nu
       // A grant for keys this person had before (a new phone): not theirs to open.
     }
   }
-  if (!keys.size) throw new LockedVaultError('no_vault_key', WAITING);
-  vaultKeyCache.set(familyId, keys);
+  if (!keys.size) {
+    vaultKeyCache.delete(`${userId}:${familyId}`);
+    throw new LockedVaultError('no_vault_key', WAITING);
+  }
+  vaultKeyCache.set(`${userId}:${familyId}`, { identity, keys });
   return keys;
 }
 
@@ -118,7 +125,7 @@ export async function lockVault(familyId: string): Promise<void> {
   const vaultKey = await newSecretKey();
   const grant = await grantVaultKey(vaultKey, await publicIdentity(identity), { vaultId: familyId, userId, keyVersion: 1 });
   await lockVaultRpc(familyId, grant);
-  vaultKeyCache.set(familyId, new Map([[1, vaultKey]]));
+  vaultKeyCache.set(`${userId}:${familyId}`, { identity, keys: new Map([[1, vaultKey]]) });
   await lockedVaults(true);
 }
 
@@ -147,7 +154,9 @@ export async function tendVault(familyId: string): Promise<VaultTending | null> 
   try {
     keys = await vaultKeys(familyId);
   } catch (err) {
-    if (err instanceof LockedVaultError) return { waitingForMe: true, needsApproval: [], admin };
+    // No keys on this device: the person unlocks them (the caller says so).
+    // Keys, but no grant here yet: someone in the vault lets them in.
+    if (err instanceof LockedVaultError && err.code === 'no_vault_key') return { waitingForMe: true, needsApproval: [], admin };
     throw err;
   }
   if (status.needsNewKey && admin) {
@@ -237,9 +246,21 @@ async function fileKeyOf(row: SealedDocumentRow): Promise<CryptoKey> {
 }
 
 const detailsCache = new Map<string, Map<string, DocumentDetails>>();
+const indexCache = new Map<string, { at: number; passages: IndexedPassage[] }>();
+/** Caches are each person's: another account signing in on this page starts afresh. */
+let cacheUser = '';
+async function forPerson(): Promise<void> {
+  const user = await myId();
+  if (user !== cacheUser) {
+    cacheUser = user;
+    detailsCache.clear();
+    indexCache.clear();
+  }
+}
 
 /** The opened details of a locked vault's documents, by document id. */
 export async function sealedDetails(familyId: string, force = false): Promise<Map<string, DocumentDetails>> {
+  await forPerson();
   const cached = detailsCache.get(familyId);
   if (cached && !force) return cached;
   const out = new Map<string, DocumentDetails>();
@@ -419,14 +440,13 @@ export async function forgetLockedDocument(familyId: string, documentId: string)
 
 // ─── The search index ────────────────────────────────────────────
 
-const indexCache = new Map<string, { at: number; passages: IndexedPassage[] }>();
-
 export function forgetVaultIndex(familyId: string): void {
   indexCache.delete(familyId);
 }
 
 /** A locked vault's passages, opened here; kept ten minutes. */
 export async function vaultIndex(familyId: string): Promise<IndexedPassage[]> {
+  await forPerson();
   const cached = indexCache.get(familyId);
   if (cached && Date.now() - cached.at < 10 * 60_000) return cached.passages;
   const out: IndexedPassage[] = [];
