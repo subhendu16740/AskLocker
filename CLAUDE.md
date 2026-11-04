@@ -22,11 +22,18 @@ sees says AskLocker: the app name, slug and scheme in `app.config.ts`, the
 Android package `com.asklocker.app`, the web manifest and service worker,
 the login and share pages, Help, About, the notifications and emails the
 functions send, Razorpay's checkout and the QA suite's reports. The icon
-is a locker with a speech bubble — drawn once as SVG and rendered to every
-size in `assets/images/` (`icon.png`, the adaptive icon's three layers,
-`splash-icon.png`, `favicon.png`, `logo-mark.png` for the login box),
-`public/` (`icon-192.png`, `icon-512.png`, `badge-96.png`) and
-`assets/expo.icon/` (iOS).
+is the question lock (since 4 November 2026; a locker with a speech bubble
+before): an open padlock whose shackle bends into a question mark, the
+keyhole its dot, white on navy. It is drawn once,
+`assets/expo.icon/Assets/asklocker-mark.svg` (the keyhole a real hole, so
+the one-colour icons keep it), and `node scripts/render-icons.mjs` renders
+it to every size in `assets/images/` (`icon.png`, the adaptive icon's three
+layers, `splash-icon.png`, `favicon.png`, `logo-mark.png` for the login
+box) and `public/` (`icon-192.png`, `icon-512.png`, `badge-96.png`);
+`assets/expo.icon/` uses the SVG itself (iOS). The site's logo
+(`logo()` in `site/lib/html.mjs`) and the films' (`logoMark()` in
+`marketing/video/src/parts.js`) draw the same shapes inline; change all
+three together, then run the script and `node site/tools/og-card.mjs`.
 
 ---
 
