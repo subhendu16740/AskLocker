@@ -12,6 +12,7 @@ import {
   lockScreen, pushNotif, cameraScreen, phoneShell, askMessages, askHeader, saveBar, askInput, brand, THEME,
 } from './parts.js';
 import { LAUNCH, END_LINE, LAUNCH_LINE_BUSINESS } from './claims.js';
+import { t } from './i18n.js';
 
 const TEAL = THEME.business.primary;
 
@@ -129,10 +130,13 @@ function askEmpty(id) {
   </div>`;
 }
 
+/** The question typed on Ask (src/business.js types it). */
+export const ASK_Q = `When is the ${BIZ.supplier} bill due, and how much is it?`;
+
 export function askScreen() {
   const turns = [{
-    q: `When is the ${BIZ.supplier} bill due, and how much is it?`, loading: 'Searching documents...',
-    a: `${BIZ.supplier}' bill ${BIZ.billNo} is for <mark class="hl" id="ask-hl">₹1,18,000</mark>, due on 25 October 2026. It's dated 2 October and includes ₹18,000 IGST.`,
+    q: t(ASK_Q), loading: 'Searching documents...',
+    a: t(`${BIZ.supplier}' bill ${BIZ.billNo} is for <mark class="hl" id="ask-hl">₹1,18,000</mark>, due on 25 October 2026. It's dated 2 October and includes ₹18,000 IGST.`),
     src: BIZ.scanFile,
   }];
   return `<section class="scr biz" id="scr-ask">${sbFill}
@@ -382,9 +386,9 @@ const num = (i) => String(i + 1).padStart(2, '0');
 /** A full-screen statement: a small label, a heading, and what follows it. */
 function block(id, eyebrow, heading, inner = '', note = '') {
   return `<div class="fm-block" id="${id}">
-    <div class="fm-eyebrow">${eyebrow}</div>
+    <div class="fm-eyebrow">${t(eyebrow)}</div>
     <div class="fm-h">${words(heading)}</div>
-    ${inner}${note ? `<div class="fm-p">${note}</div>` : ''}
+    ${inner}${note ? `<div class="fm-p">${t(note)}</div>` : ''}
   </div>`;
 }
 
@@ -394,10 +398,10 @@ function block(id, eyebrow, heading, inner = '', note = '') {
 function chapter(i, heading, points, plan = '') {
   const [id, name] = CHAPTERS[i];
   return `<div class="fm-chapter" id="${id}">
-    <div class="fm-label"><span class="fm-num">${num(i)}</span><span>${name}</span></div>
+    <div class="fm-label"><span class="fm-num">${num(i)}</span><span>${t(name)}</span></div>
     <div class="fm-h2">${words(heading)}</div>
-    <div class="sub fm-bullets">${points.map((p) => `<div class="fm-b"><span class="fm-bi">${icon('check', 18, THEME.business.primary, 2.6)}</span><span>${p}</span></div>`).join('')}
-      ${plan ? `<div class="fm-plan">${icon('star', 16, '#B7791F', 2.4)}<span>${plan}</span></div>` : ''}</div>
+    <div class="sub fm-bullets">${points.map((p) => `<div class="fm-b"><span class="fm-bi">${icon('check', 18, THEME.business.primary, 2.6)}</span><span>${t(p)}</span></div>`).join('')}
+      ${plan ? `<div class="fm-plan">${icon('star', 16, '#B7791F', 2.4)}<span>${t(plan)}</span></div>` : ''}</div>
   </div>`;
 }
 
@@ -415,8 +419,8 @@ const DUE = [
 function timeline() {
   return `<div class="fm-tl"><i class="fm-line" id="fm-line"></i>
     ${DUE.map(([date, when, what, detail, tone], i) => `<div class="fm-node" id="node-${i + 1}"><i class="fm-dot"></i>
-      <div class="fm-nd"><b>${date}</b><span class="fm-when${tone ? ` ${tone}` : ''}">${when}</span></div>
-      <div class="fm-nw">${what}</div><div class="fm-nx">${detail}</div></div>`).join('')}
+      <div class="fm-nd"><b>${t(date)}</b><span class="fm-when${tone ? ` ${tone}` : ''}">${t(when)}</span></div>
+      <div class="fm-nw">${t(what)}</div><div class="fm-nx">${t(detail)}</div></div>`).join('')}
   </div>`;
 }
 
@@ -426,19 +430,21 @@ export function textBlocks(short) {
     ['credit-card', 'Bank & Loans'], ['users', 'Payroll']];
   const shown = short ? CHAPTERS.slice(0, 3) : CHAPTERS;
   const tick = (on) => (on ? icon('check', 22, THEME.business.primary, 2.6) : icon('minus', 22, '#B8C4C2', 2.4));
-  const row = (label, cells, cls = '') => `<tr class="${cls}"><td>${label}</td>${cells.map((c) => `<td>${typeof c === 'boolean' ? tick(c) : c}</td>`).join('')}</tr>`;
+  // A cell with words in it is translated; a price or a number is not.
+  const cell = (c) => (typeof c === 'boolean' ? tick(c) : /[A-Za-z]/.test(c) ? t(c) : c);
+  const row = (label, cells, cls = '') => `<tr class="${cls}"><td>${t(label)}</td>${cells.map((c) => `<td>${cell(c)}</td>`).join('')}</tr>`;
   return `
   ${brand('brand', 'The document vault for small businesses.', { badge: 'for Business' })}
   ${block('f-docs', 'The challenge', 'A business runs on documents.',
-    `<div class="fm-grid">${docs.map(([ic, n]) => `<div class="fm-tile"><span class="fm-ti">${icon(ic, 22, THEME.business.primary)}</span><span>${n}</span></div>`).join('')}</div>`,
+    `<div class="fm-grid">${docs.map(([ic, n]) => `<div class="fm-tile"><span class="fm-ti">${icon(ic, 22, THEME.business.primary)}</span><span>${t(n)}</span></div>`).join('')}</div>`,
     'They arrive by email, on chat apps and on paper, and stay wherever they land.')}
   ${block('f-dates', 'The next 90 days', 'Each one carries a date that matters.', timeline(),
     'Five dates in five documents. Missing one means late fees, a lapsed policy or an unpaid invoice.')}
   ${block('f-pillars', 'AskLocker for Business', 'One place for every business document.',
     `<div class="fm-pillars">${CHAPTERS.map(([id, name, ic, line], i) => `<div class="fm-pillar" id="pl-${i + 1}">
       <div class="fm-pn">${num(i)}</div><div class="fm-pi">${icon(ic, 24, THEME.business.primary)}</div>
-      <div class="fm-pt">${name}</div><div class="fm-pd">${line}</div></div>`).join('')}</div>`)}
-  <div class="fm-chapters" id="fm-chapters">${shown.map(([id, name], i) => `<span id="cb-${i}"><b>${num(i)}</b>${name}</span>`).join('')}<i class="fm-ind" id="fm-ind"></i></div>
+      <div class="fm-pt">${t(name)}</div><div class="fm-pd">${t(line)}</div></div>`).join('')}</div>`)}
+  <div class="fm-chapters" id="fm-chapters">${shown.map(([id, name], i) => `<span id="cb-${i}"><b>${num(i)}</b>${t(name)}</span>`).join('')}<i class="fm-ind" id="fm-ind"></i></div>
   ${chapter(0, 'Scan or upload. AskLocker files it.', [
     'Category suggested from the text',
     'Reads the GSTIN, dates and total',
@@ -476,11 +482,11 @@ export function textBlocks(short) {
       ['shield', 'Admins in charge', 'Admins manage the team and can remove any record. A business always keeps one.'],
       ['archive', 'Records that stay', 'When someone leaves, what they added stays with the business.'],
       ['link', 'Sharing with limits', 'Share one document by link for 1 or 7 days, or 30 on a paid plan. Turn it off any time.'],
-    ]).map(([ic, t, b], i) => `<div class="fm-card" id="fc-${i + 1}"><div class="fm-ci">${icon(ic, 26, THEME.business.primary)}</div><b>${t}</b><span>${b}</span></div>`).join('')}</div>`,
+    ]).map(([ic, title, b], i) => `<div class="fm-card" id="fc-${i + 1}"><div class="fm-ci">${icon(ic, 26, THEME.business.primary)}</div><b>${t(title)}</b><span>${t(b)}</span></div>`).join('')}</div>`,
     LAUNCH ? "To answer a question, only the parts it needs go to an AI service. We don't keep them."
       : 'To answer questions, AskLocker sends passages of your documents to outside AI services. Settings › Privacy names them.')}
   ${block('f-plans', 'Plans', 'Start free. Move up as you grow.',
-    `<table class="fm-table" id="fm-table"><thead><tr><th></th><th>Free</th><th>Plus</th><th>Pro</th><th>Enterprise</th></tr></thead><tbody>
+    `<table class="fm-table" id="fm-table"><thead><tr><th></th>${['Free', 'Plus', 'Pro', 'Enterprise'].map((p) => `<th>${t(p)}</th>`).join('')}</tr></thead><tbody>
       ${row('Price a month', ['Free', '₹499', '₹999', '₹3,999'], 'price')}
       ${row('People', ['2', '5', '10', '50'])}
       ${row('Space', ['100 MB a person', '20 GB', '50 GB', '200 GB'])}
@@ -495,27 +501,29 @@ export function textBlocks(short) {
 
 export function callouts() {
   const T = THEME.business.primary;
-  const check = (t) => `<div class="co-check">${icon('check', 16, T, 2.6)}<span>${t}</span></div>`;
+  const check = (s) => `<div class="co-check">${icon('check', 16, T, 2.6)}<span>${t(s)}</span></div>`;
+  const label = (ic, s) => `<div class="co-label">${icon(ic, 14, T, 2.6)}<span>${t(s)}</span></div>`;
+  const row = (k, v) => `<div class="co-row"><span class="co-k">${t(k)}</span><span class="co-v">${v}</span></div>`;
   return `
   <div class="callout" id="co-bill" style="width:390px">
-    <div class="co-label">${icon('file-text', 14, T, 2.6)}<span>Read from the bill</span></div>
-    <div class="co-row"><span class="co-k">Supplier GSTIN</span><span class="co-v">${BIZ.supplierGstin}</span></div>
-    <div class="co-row"><span class="co-k">Bill no.</span><span class="co-v">${BIZ.billNo}</span></div>
-    <div class="co-row"><span class="co-k">Total</span><span class="co-v">₹1,18,000.00</span></div>
-    <div class="co-row"><span class="co-k">Due date</span><span class="co-v">25 Oct 2026</span></div>
-    <div class="co-foot">${icon('check', 14, '#16A34A', 2.6)}<span>Filed under Purchase Bills</span></div>
+    ${label('file-text', 'Read from the bill')}
+    ${row('Supplier GSTIN', BIZ.supplierGstin)}
+    ${row('Bill no.', BIZ.billNo)}
+    ${row('Total', '₹1,18,000.00')}
+    ${row('Due date', t('25 Oct 2026'))}
+    <div class="co-foot">${icon('check', 14, '#16A34A', 2.6)}<span>${t('Filed under Purchase Bills')}</span></div>
   </div>
   <div class="callout" id="co-overview" style="width:390px">
-    <div class="co-label">${icon('bar-chart-2', 14, T, 2.6)}<span>Read from your documents</span></div>
+    ${label('bar-chart-2', 'Read from your documents')}
     ${check('Renewals, from expiry dates')}
     ${check('Bills due, from due dates')}
     ${check('Money in and out, from invoice totals')}
-    <div class="co-quiet">Nothing to type in. Open a document to check it.</div>
+    <div class="co-quiet">${t('Nothing to type in. Open a document to check it.')}</div>
   </div>
   <div class="callout" id="co-alerts" style="width:400px">
-    <div class="co-label">${icon('bell', 14, T, 2.6)}<span>Before it expires</span></div>
+    ${label('bell', 'Before it expires')}
     <div class="co-steps"><i class="track"></i>
-      ${[['90', 'days'], ['30', 'days'], ['7', 'days'], ['On the', 'day']].map(([a, b]) => `<div class="co-step"><i class="dot"></i><b>${a}</b><span>${b}</span></div>`).join('')}</div>
-    <div class="co-foot">${icon(LAUNCH ? 'smartphone' : 'edit-3', 14, '#16A34A', 2.6)}<span>${LAUNCH ? 'Worked out on your phone, notes too' : 'Notes remind you on the day you pick'}</span></div>
+      ${[['90', 'days'], ['30', 'days'], ['7', 'days'], ['On the', 'day']].map(([a, b]) => `<div class="co-step"><i class="dot"></i><b>${t(a)}</b><span>${t(b)}</span></div>`).join('')}</div>
+    <div class="co-foot">${icon(LAUNCH ? 'smartphone' : 'edit-3', 14, '#16A34A', 2.6)}<span>${t(LAUNCH ? 'Worked out on your phone, notes too' : 'Notes remind you on the day you pick')}</span></div>
   </div>`;
 }

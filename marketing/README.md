@@ -18,6 +18,13 @@ Metro only bundles from `src/app`, and none of these files are TypeScript.
   business), a short for each feature (23–39) and the encryption reels
   (40–51), with `no-music/`, `covers/` and `posters/` beside them.
   [`launch/README.md`](launch/README.md) lists every video.
+- **The family and business films in nine Indian languages** (Hindi,
+  Bengali, Marathi, Tamil, Telugu, Gujarati, Kannada, Malayalam, Punjabi),
+  16:9, today's claims: **not kept here**, to keep the repository small (the
+  owner's choice, 4 November 2026). They were sent to the owner, and
+  `video/tools/languages.sh` makes them again. First drafts: have someone who
+  speaks each language watch its film before it goes out
+  ([`video/README.md`](video/README.md#in-indias-languages)).
 - `video/`: the code that makes them: both films and every feature's short and
   poster, in 16:9, 9:16 and 1:1. See [`video/README.md`](video/README.md) to
   render them.
@@ -150,6 +157,9 @@ LAUNCH=1 ./tools/films.sh && LAUNCH=1 ./tools/features.sh   # the launch set,
 ./tools/locked.sh && ./tools/locked.sh business             # and its own film, both versions
 ./tools/publish.sh     # copy them here (the launch set into launch/)
 ```
+
+The family and business films in India's languages, also not kept here:
+`./tools/languages.sh` (all nine) or `./tools/languages.sh ta ml` (some).
 
 The language versions of the family short (its voice scene in each of the
 app's ten voice languages) are not kept here, to keep the repository small:

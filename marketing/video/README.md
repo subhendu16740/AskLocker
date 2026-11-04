@@ -4,8 +4,10 @@ Three launch films, as code: two for families (one told from abroad) and one
 for business, a poster and a short for each feature, and a film that says what
 AskLocker does with a family's documents, with four reels cut from it (below);
 three films on why AskLocker was made ([Why we built it](#why-we-built-it));
-and, behind a switch, the launch set for end-to-end encryption, never posted
-before it ships ([The launch set](#the-launch-set)).
+the family and business films in nine Indian languages
+([In India's languages](#in-indias-languages)); and, behind a switch, the
+launch set for end-to-end encryption, never posted before it ships
+([The launch set](#the-launch-set)).
 `src/intro.html` builds any of them as a GSAP timeline (`?film=family`,
 `?film=nri`, `?film=business`, `?film=features`, `?film=privacy`, `?film=why`
 or, for the launch set only, `?film=locked` and `?film=locked-business`) that
@@ -685,6 +687,61 @@ checked against them on 3 November 2026: ₹1.84 lakh crore (the Finance
 Minister, 4 October 2025, via The Hindu and PTI), and the breakdown and the
 quote from the Press Information Bureau's "Your Money, Your Right" release
 of 26 December 2025. `src/why-screens.js` holds every word.
+
+## In India's languages
+
+The family film and the business film, 16:9, in the app's nine Indian
+languages: Hindi, Bengali, Marathi, Tamil, Telugu, Gujarati, Kannada,
+Malayalam and Punjabi (`?ui=hi`, `bn`, `mr`, `ta`, `te`, `gu`, `kn`, `ml`,
+`pa`). They are today's films, made on 4 November 2026 at the owner's ask, and
+they are **not committed**: the repository already holds 900 MB of video that
+every build downloads, so they are sent to the owner and made again with one
+command.
+
+```bash
+./tools/languages.sh                  # all nine, both films -> out/asklocker-<film>-16x9-in-<code>.mp4
+./tools/languages.sh ta ml            # some of them
+FILMS=business ./tools/languages.sh hi   # one film
+node tools/render.mjs --film business --ui ta --strings   # every string it shows, and any Tamil lacks
+node tools/i18n-check.mjs             # every table against its English
+```
+
+What changes is every word the film itself shows: headlines, lines, callouts,
+cards, the plans table, subtitles and the end card. The phone keeps the app's
+English, because the app is in English. Only what a person types or says into
+Ask, and the answers, are in the film's language, as AskLocker answers in the
+language it is asked in, and the family film's voice scene speaks it
+(`src/voice-lines.js`). Maa's messages stay in Hinglish, since the Sharmas are
+from Lucknow, with subtitles in the film's language. AskLocker, Family Plus,
+the plan names, file names, codes and Settings › Privacy stay in Latin, as the
+app shows them. The "Ask by relation" examples stay as they are: they are what
+the app understands as written (other languages reach it through the
+question's English translation).
+
+- **The words** are in `src/i18n/<code>.js`, keyed by the English, and
+  `src/i18n.js` `t()` looks them up in the helpers that draw film text
+  (`words()`, `rich()`, `brand()`, `whyHow()`, `trustBlock()`) and the few
+  places that draw it directly. A string a language lacks shows in English,
+  and `--strings` names it. `?ui=qq` accents every Latin letter, so anything
+  left untranslated stands out. The translations are first drafts: **have
+  someone who speaks each language watch its films before they go out.**
+  The never-say rules hold in every language; `tools/i18n-check.mjs` checks
+  markup, numbers, stray Latin and the words for "safe", "secure" and
+  "confidential".
+- **The type**: Anek (Ek Type) for headlines and text, a grotesque like
+  Bricolage, and Noto Serif for the serif lines, upright since these scripts
+  have no italics (`fonts/indic.css`, `tools/fonts_indic.py`, all OFL). Each
+  follows the films' own fonts in the stacks, so Latin keeps its look.
+  `src/i18n.css` takes out tracking and capitals and gives every line room;
+  each word's mask is sized to its script's marks, measured on every
+  translated line (Telugu's stacked conjuncts need the deepest).
+- **Fit**: Tamil or Malayalam can run half as long again as the English, so
+  in a translated film `fitWide()` sets any text wider than its box a step
+  smaller, and the family film's privacy cards shrink until the line under
+  them is in the frame (`fitAbove()`). English is laid out as before.
+- **Today's claims only**: the tables hold the strings of today's films. A
+  launch version (`--launch --ui`) would show the launch lines in English
+  until they are added.
 
 ## Licences
 

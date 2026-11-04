@@ -10,9 +10,10 @@
 import {
   gsap, PORTRAIT, SHORT, $, $$, build, askArea, inputOverflow, at, scrollTo, layoutChat, place, initialState,
   setLayout, tl, cue, IR, showCallout, reveal, hide, fadeIn, swap, nextZ, nav, chrome, tap, type, vibrate, phoneIn,
-  notify, bubblePop, drawer, finish,
+  notify, bubblePop, drawer, finish, fitWide,
 } from './engine.js';
-import { phone, textBlocks, callouts, BIZ, PURCHASE, CHAPTERS } from './business-screens.js';
+import { phone, textBlocks, callouts, BIZ, PURCHASE, CHAPTERS, ASK_Q } from './business-screens.js';
+import { t, UI } from './i18n.js';
 // The launch set (?claims=launch): reminders in the app, and access and
 // control in the encryption brief's words (src/claims.js).
 import { LAUNCH } from './claims.js';
@@ -29,6 +30,8 @@ const L = PORTRAIT ? {
 };
 
 await build({ cards: '', texts: textBlocks(SHORT), phone: phone(), callouts: callouts(), subs: '', look: 'formal' });
+// A film in another language (src/i18n.js): text wider than its box is set smaller.
+if (UI) fitWide();
 
 // ─── Layout passes: what flexbox would have settled in the app ──────────
 askArea('#ask-area', '#scr-ask');
@@ -41,7 +44,7 @@ $('#cam-doc').style.marginTop = `${-$('#cam-doc').offsetHeight / 2}px`;
 const ocrSlot = $('.ocr-slot');
 ocrSlot.style.height = `${$('#ocr-done').offsetHeight}px`;
 
-const Q1 = `When is the ${BIZ.supplier} bill due, and how much is it?`;
+const Q1 = t(ASK_Q);
 const OV = { q1: inputOverflow('#ask-line', Q1) };
 
 // Manage team: the banner and the pending invitation open once it is sent.

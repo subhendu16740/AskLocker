@@ -11,6 +11,7 @@ import {
 import { VOICE_LINES, APP_PHRASES, voiceSubtitles } from './voice-lines.js';
 import { FILM } from './engine.js';
 import { LAUNCH, END_LINE, LAUNCH_LINE } from './claims.js';
+import { t, UI } from './i18n.js';
 
 // ─── Story data (edit here to re-cast the film) ──────────────────────────
 // Two stories share these scenes: the family film (Rohan in Bengaluru) and
@@ -326,10 +327,13 @@ function askEmpty(id, ic, title, sub) {
   </div>`;
 }
 
+/** The question typed on Ask (src/family.js types it). */
+export const ASK_Q = "What is Papa's health insurance policy number?";
+
 export function askScreen() {
   const turns = [{
-    q: "What is Papa's health insurance policy number?", loading: 'Searching documents...',
-    a: `Papa's health insurance policy number is <mark class="hl" id="ask-hl">${STORY.policyNo}</mark>, with ${STORY.insurer}. It's valid till 14 March 2027, with a sum insured of ₹10,00,000.`,
+    q: t(ASK_Q), loading: 'Searching documents...',
+    a: t(`Papa's health insurance policy number is <mark class="hl" id="ask-hl">${STORY.policyNo}</mark>, with ${STORY.insurer}. It's valid till 14 March 2027, with a sum insured of ₹10,00,000.`),
     src: STORY.scanFile, vault: STORY.familyName,
   }];
   return `<section class="scr" id="scr-ask">${sbFill}
@@ -635,12 +639,12 @@ export function scrambleCards() {
 }
 
 export function textBlocks() {
-  const langs = `<div class="langs" id="langs"><div class="langs-head">Speech to text and text to speech, in</div>${VOICE_LANGUAGES.map(([n, e]) => `<div class="lang"><b>${n}</b><i>${e}</i></div>`).join('')}
-    <div class="langs-note">Each phone reads aloud in its own voices.</div></div>`;
+  const langs = `<div class="langs" id="langs"><div class="langs-head">${t('Speech to text and text to speech, in')}</div>${VOICE_LANGUAGES.map(([n, e]) => `<div class="lang"><b>${n}</b><i>${t(e)}</i></div>`).join('')}
+    <div class="langs-note">${t('Each phone reads aloud in its own voices.')}</div></div>`;
   return `
   <div class="tblock on-dark" id="t-hook">
     <div class="clock-big"><span class="t">2:14</span><span class="ampm">AM</span></div>
-    <div class="where">${STORY.where}</div>
+    <div class="where">${t(STORY.where)}</div>
   </div>
   <div class="time-chip" id="time-chip">${icon('clock', 24, '#D4807B', 2.4)}<span id="chip-time">2:16 AM${STORY.chipWhere}</span></div>
   <div class="cap-top" id="caps">
@@ -651,9 +655,9 @@ export function textBlocks() {
     <div class="big-em" id="ins-2">${words(STORY.insight[1])}</div>
   </div>
   <div class="center-block on-dark" id="t-stat">
-    <div class="stat-num" id="stat-num"><span class="rs">₹</span><span id="stat-val">1.84</span> lakh crore</div>
-    <div class="stat-line" id="stat-line">of Indians' money lies unclaimed. <b>“In many cases, families are simply unaware that such assets exist.”</b></div>
-    <div class="stat-src" id="stat-src">Ministry of Finance, 2025</div>
+    <div class="stat-num" id="stat-num"><span class="rs">₹</span><span id="stat-val">1.84</span> ${t('lakh crore')}</div>
+    <div class="stat-line" id="stat-line">${t('of Indians\' money lies unclaimed. <b>“In many cases, families are simply unaware that such assets exist.”</b>')}</div>
+    <div class="stat-src" id="stat-src">${t('Ministry of Finance, 2025')}</div>
   </div>
   <div class="q-block on-dark" id="t-question"><div class="big">${words(STORY.question)}</div></div>
   ${brand('brand', 'Every family document. One question away.')}
@@ -686,58 +690,60 @@ export function textBlocks() {
       ['eye-off', 'Yours alone', "Your personal vault is yours alone. Your family won't see it."],
     ], 'Search sends passages of your documents to outside AI services. Settings › Privacy names them.')}
   <div class="tblock on-dark res-block" id="t-res">
-    <div class="kicker">${icon('heart', 22, 'currentColor', 2.4)}<span>${STORY.res.kicker}</span></div>
+    <div class="kicker">${icon('heart', 22, 'currentColor', 2.4)}<span>${t(STORY.res.kicker)}</span></div>
     <div class="clock-big"><span class="t" id="res-time">2:14</span><span class="ampm">AM</span></div>
     <div class="res-lines"><div class="h1" id="res-h1a">${words('Maa asks. AskLocker answers.')}</div>
       <div class="h1" id="res-h1b">${words(STORY.res.h1b)}</div></div>
-    <div class="sub" id="res-sub">${STORY.res.sub}</div>
+    <div class="sub" id="res-sub">${t(STORY.res.sub)}</div>
   </div>
   ${brand('endcard', END_LINE.family, { cta: STORY.cta, ctaNote: STORY.ctaNote, url: STORY.url, end: true })}`;
 }
 
 export function callouts() {
-  const check = (t) => `<div class="co-check">${icon('check', 16, '#16A34A', 2.6)}<span>${t}</span></div>`;
+  const check = (s) => `<div class="co-check">${icon('check', 16, '#16A34A', 2.6)}<span>${t(s)}</span></div>`;
+  const label = (ic, s) => `<div class="co-label">${icon(ic, 14, '#D4807B', 2.6)}<span>${t(s)}</span></div>`;
+  const row = (k, v) => `<div class="co-row"><span class="co-k">${t(k)}</span><span class="co-v">${v}</span></div>`;
+  const foot = (ic, s) => `<div class="co-foot">${icon(ic, 14, '#16A34A', 2.6)}<span>${t(s)}</span></div>`;
   const ask = (q, who) => `<div class="co-ask"><span class="q">“${q}”</span>${icon('chevron-right', 16, '#9CA3AF', 2.4)}<span class="who">${who}</span></div>`;
   return `
   <div class="callout" id="co-gmail" style="width:380px">
-    <div class="co-label">${icon('mail', 14, '#D4807B', 2.6)}<span>Your inbox, your tick</span></div>
+    ${label('mail', 'Your inbox, your tick')}
     ${check('Only checks emails with a PDF or photo')}
     ${check("Your family doesn't see what it finds")}
     ${check('Disconnecting clears the list')}
   </div>
   <div class="callout" id="co-scan" style="width:370px">
-    <div class="co-label">${icon('zap', 14, '#D4807B', 2.6)}<span>Read off the page</span></div>
-    <div class="co-row"><span class="co-k">Policy no.</span><span class="co-v">${STORY.policyNo}</span></div>
-    <div class="co-row"><span class="co-k">Valid till</span><span class="co-v">14 Mar 2027</span></div>
-    <div class="co-row"><span class="co-k">Sum insured</span><span class="co-v">₹10,00,000</span></div>
-    <div class="co-foot">${icon('bell', 14, '#16A34A', 2.6)}<span>Expiry reminder added</span></div>
+    ${label('zap', 'Read off the page')}
+    ${row('Policy no.', STORY.policyNo)}
+    ${row('Valid till', t('14 Mar 2027'))}
+    ${row('Sum insured', '₹10,00,000')}
+    ${foot('bell', 'Expiry reminder added')}
   </div>
   <div class="callout" id="co-tree" style="width:390px">
-    <div class="co-label">${icon('users', 14, '#D4807B', 2.6)}<span>Ask by relation</span></div>
+    ${label('users', 'Ask by relation')}
     ${ask("Papa's health policy", STORY.papa)}
     ${ask('Dadi ki pension', STORY.dadi)}
     ${ask('दादी की पेंशन', STORY.dadi)}
-    <div class="co-quiet">Worked out from the family tree.</div>
+    <div class="co-quiet">${t('Worked out from the family tree.')}</div>
   </div>
   <div class="callout" id="co-alerts" style="width:400px">
-    <div class="co-label">${icon('bell', 14, '#D4807B', 2.6)}<span>Before it expires</span></div>
+    ${label('bell', 'Before it expires')}
     <div class="co-steps"><i class="track"></i>
-      ${[['90', 'days'], ['30', 'days'], ['7', 'days'], ['On the', 'day']].map(([a, b]) => `<div class="co-step"><i class="dot"></i><b>${a}</b><span>${b}</span></div>`).join('')}</div>
-    <div class="co-foot">${LAUNCH ? `${icon('smartphone', 14, '#16A34A', 2.6)}<span>Birthdays too, worked out on your phone</span>`
-      : `${icon('gift', 14, '#16A34A', 2.6)}<span>Birthdays too, on the morning</span>`}</div>
+      ${[['90', 'days'], ['30', 'days'], ['7', 'days'], ['On the', 'day']].map(([a, b]) => `<div class="co-step"><i class="dot"></i><b>${t(a)}</b><span>${t(b)}</span></div>`).join('')}</div>
+    ${LAUNCH ? foot('smartphone', 'Birthdays too, worked out on your phone') : foot('gift', 'Birthdays too, on the morning')}
   </div>
   <div class="wave" id="wave">${Array.from({ length: 26 }, () => '<i></i>').join('')}</div>`;
 }
 
 export function subtitles(lang = '') {
-  const v = voiceSubtitles(lang || 'hi', STORY.policyNo);
+  const v = UI ? null : voiceSubtitles(lang || 'hi', STORY.policyNo);
   // Without subtitles (English), the voice lines' stay empty and unseen.
   const line = (id, text) => `<div class="subline on-light" id="${id}"${text ? '' : ' style="display:none"'}>${text ?? ''}</div>`;
   return `
-    <div class="subline" id="sub-1">${STORY.subs[0]}</div>
-    <div class="subline" id="sub-2">${STORY.subs[1]}</div>
+    <div class="subline" id="sub-1">${t(STORY.subs[0])}</div>
+    <div class="subline" id="sub-2">${t(STORY.subs[1])}</div>
     ${line('sub-3', v?.q)}
     ${line('sub-4', v?.a1)}
     ${line('sub-4b', v?.a2)}
-    <div class="subline" id="sub-5">${STORY.subs[2]}</div>`;
+    <div class="subline" id="sub-5">${t(STORY.subs[2])}</div>`;
 }

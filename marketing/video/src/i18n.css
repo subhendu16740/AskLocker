@@ -1,0 +1,69 @@
+/* The films in India's languages (?ui=, src/i18n.js): their scripts' type.
+ * build() puts each script's fonts after the films' own in --display and
+ * --serif (fonts/indic.css), so Latin keeps its look. These scripts have no
+ * italics and no capitals, and their vowel signs rise above and fall below the
+ * letters: so the serif lines stand upright, nothing is tracked or set in
+ * capitals, and every line gets room. Only film text changes: the phone keeps
+ * the app's own type. */
+
+.ui-indic { font-synthesis: none; }
+.ui-indic :is(#texts, #callouts, #subs) :not(.wordmark) { letter-spacing: 0 !important; text-transform: none !important; }
+
+/* A word's mask (src/parts.js words()) holds the marks above and below it.
+ * The word's own box grows instead of the mask, so a word set 118% down, as
+ * every reveal starts, is still out of sight. Measured on every translated
+ * line (canvas ink bounds against a 1.3 line): no script rises more than
+ * 0.10em above it; Tamil and Kannada fall 0.14em below, and Telugu, whose
+ * conjuncts stack under the letter, 0.41em. A deeper mask than a script needs
+ * would show a rising word over the line beneath it. */
+.ui-indic { --mask-up: 0.16em; --mask-down: 0.2em; }
+.ui-te { --mask-down: 0.48em; }
+.ui-indic .w { padding-top: 0; padding-bottom: 0; margin-top: calc(-1 * var(--mask-up)); margin-bottom: calc(-1 * var(--mask-down)); }
+.ui-indic .wi { padding: var(--mask-up) 0 var(--mask-down); }
+
+/* Serif lines: upright, a little heavier, the size of the line around them. */
+.ui-indic .em, .ui-indic .big-em { font-style: normal; font-weight: 500; }
+.ui-indic :is(.h1, .why-t, .cap-line) .em { font-size: 1em; line-height: inherit; }
+
+/* Room between lines. */
+.ui-indic .h1 { line-height: 1.32; }
+.ui-indic.portrait .h1 { line-height: 1.3; }
+.ui-indic .big { line-height: 1.3; }
+.ui-indic .big-em { font-size: 104px; line-height: 1.35; margin-top: 0; }
+.ui-indic.portrait .big-em { font-size: 100px; }
+.ui-indic .why-t { font-size: 44px; line-height: 1.45; }
+.ui-indic .sub { line-height: 1.6; }
+.ui-indic .cap-line { line-height: 1.35; }
+.ui-indic .where { line-height: 1.55; }
+.ui-indic .stat-line { line-height: 1.55; }
+.ui-indic .tagline { line-height: 1.45; }
+.ui-indic .cta-note { line-height: 1.45; }
+.ui-indic .cta { line-height: 1.3; padding-top: 18px; padding-bottom: 18px; }
+.ui-indic .trust-t { line-height: 1.35; }
+.ui-indic .trust-b { line-height: 1.55; }
+.ui-indic .subline { line-height: 1.5; }
+.ui-indic .langs-head, .ui-indic .langs-note { line-height: 1.5; }
+
+/* Labels that were small capitals are plain words, a size up. */
+.ui-indic .kicker { font-size: 25px; line-height: 1.3; }
+.ui-indic .wh-tag { height: 38px; font-size: 19px; line-height: 1.3; }
+.ui-indic .stat-src { font-size: 22px; line-height: 1.4; }
+.ui-indic .co-label { font-size: 15px; line-height: 1.3; }
+
+/* The business film. */
+.ui-indic .fm-eyebrow { font-size: 23px; line-height: 1.3; }
+.ui-indic .fm-label { line-height: 1.3; }
+.ui-indic .fm-h { line-height: 1.3; }
+.ui-indic .fm-h2 { line-height: 1.32; }
+.ui-indic .fm-p { line-height: 1.55; }
+.ui-indic .fm-nd b { font-size: 34px; line-height: 1.3; }
+.ui-indic .fm-nw { line-height: 1.4; }
+.ui-indic .fm-nx { line-height: 1.5; }
+.ui-indic .fm-pt { line-height: 1.3; }
+.ui-indic .fm-pd { line-height: 1.5; }
+
+/* The privacy scene's heading, a size down: the cards under it need the room. */
+.ui-indic #t-trust .h1 { font-size: 72px; }
+
+/* The business timeline: a long label wraps before it meets its neighbour's. */
+.ui-indic .fm-node { padding: 0 14px; }

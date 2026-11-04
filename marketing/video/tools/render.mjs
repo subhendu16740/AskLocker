@@ -22,6 +22,11 @@
 //   --film locked --launch   the launch's own film (src/locked.js), and --reel
 //   one of its reels; --film locked-business the same film for a business
 //   --film why --reel founder|family|business   why AskLocker was made (src/why.js)
+//   --ui hi   the film's words in Hindi (src/i18n.js; bn, mr, ta, te, gu, kn, ml, pa
+//   too, qq to test): the tag ends -in-hi, and the family film's voice scene
+//   speaks it unless --lang names another
+//   --strings   no video: every string the film shows, and those its --ui
+//   language lacks, -> out/strings-<tag>.json
 //   tools/mux.sh <tag> then adds sound -> out/asklocker-<tag>.mp4
 //   node tools/render.mjs --stills 3,12.5   PNGs of single frames -> out/stills/
 //   (--stills hero: the frame the film names for its poster or cover)
@@ -57,7 +62,11 @@ const size = orientation === 'portrait' ? { width: 1080, height: 1920 } : { widt
 const short = flag('short');
 const film = opt('film', 'family');
 if (!['family', 'nri', 'business', 'features', 'privacy', 'locked', 'locked-business', 'why'].includes(film)) throw new Error(`--film is family, nri, business, features, privacy, locked, locked-business or why, not ${film}`);
-const lang = opt('lang', '');
+// --ui: the film's words in an Indian language (src/i18n.js); the family
+// film's voice scene speaks it too, unless --lang names another.
+const ui = opt('ui', '');
+if (ui && !['hi', 'bn', 'mr', 'ta', 'te', 'gu', 'kn', 'ml', 'pa', 'qq'].includes(ui)) throw new Error(`--ui is hi, bn, mr, ta, te, gu, kn, ml, pa or qq, not ${ui}`);
+const lang = opt('lang', ui && ui !== 'qq' && ['family', 'nri'].includes(film) ? ui : '');
 if (lang && !['family', 'nri'].includes(film)) throw new Error('--lang is for the family and NRI films, whose voice scene it changes');
 const feature = opt('feature', '');
 if ((film === 'features') !== Boolean(feature)) throw new Error('--feature names one feature of --film features (src/features.js)');
@@ -68,7 +77,7 @@ if (reel && !['privacy', 'locked', 'locked-business', 'why'].includes(film)) thr
 const launch = flag('launch');
 const shape = orientation === 'portrait' ? '9x16' : '16x9';
 const tag = (feature ? `feature-${feature}-${shape}`
-  : `${film}${reel ? `-${reel}` : ''}-${shape}${short ? '-short' : ''}${lang ? `-${lang}` : ''}`) + (launch ? '-launch' : '');
+  : `${film}${reel ? `-${reel}` : ''}-${shape}${short ? '-short' : ''}${lang && lang !== ui ? `-${lang}` : ''}`) + (ui ? `-in-${ui}` : '') + (launch ? '-launch' : '');
 
 // ─── Static server: module scripts do not load from file:// ───────────────
 const TYPES = {
@@ -88,7 +97,7 @@ const server = createServer(async (req, res) => {
   }
 });
 await new Promise((ok) => server.listen(0, '127.0.0.1', ok));
-const base = `http://127.0.0.1:${server.address().port}/src/intro.html?film=${film}&orientation=${orientation}${short ? '&cut=short' : ''}${lang ? `&lang=${lang}` : ''}${feature ? `&feature=${feature}` : ''}${reel ? `&reel=${reel}` : ''}${launch ? '&claims=launch' : ''}`;
+const base = `http://127.0.0.1:${server.address().port}/src/intro.html?film=${film}&orientation=${orientation}${short ? '&cut=short' : ''}${lang ? `&lang=${lang}` : ''}${feature ? `&feature=${feature}` : ''}${reel ? `&reel=${reel}` : ''}${launch ? '&claims=launch' : ''}${ui ? `&ui=${ui}` : ''}`;
 
 // CHROMIUM=/path/to/chrome uses that browser instead of the one this
 // Playwright version downloads (a machine with Chromium pre-installed).
@@ -120,6 +129,29 @@ const duration = await probe.page.evaluate(() => window.__duration);
 const cues = await probe.page.evaluate(() => window.__cues);
 await mkdir(OUT, { recursive: true });
 await writeFile(join(OUT, `cues-${tag}.json`), JSON.stringify({ duration, fps, cues }, null, 2));
+
+if (flag('strings')) {
+  // What the film says, for its translations (src/i18n.js): every string that
+  // went through t(), those the --ui language has no entry for, and any text
+  // on the film's own layers that is still in Latin letters.
+  const report = await probe.page.evaluate(() => {
+    const latin = [];
+    for (const layer of ['#texts', '#callouts', '#subs']) {
+      const walk = document.createTreeWalker(document.querySelector(layer), NodeFilter.SHOW_TEXT);
+      for (let n = walk.nextNode(); n; n = walk.nextNode()) {
+        const text = n.textContent.trim();
+        if (/[A-Za-z]/.test(text) && !latin.includes(text)) latin.push(text);
+      }
+    }
+    return { ui: window.__i18n.ui, seen: [...window.__i18n.seen], missing: [...window.__i18n.missing], latin };
+  });
+  const file = join(OUT, `strings-${tag}.json`);
+  await writeFile(file, JSON.stringify(report, null, 2));
+  console.log(`${file}: ${report.seen.length} strings, ${report.missing.length} missing in ${ui || 'en'}, ${report.latin.length} in Latin letters`);
+  await browser.close();
+  server.close();
+  process.exit(0);
+}
 
 if (stills) {
   await mkdir(join(OUT, 'stills'), { recursive: true });

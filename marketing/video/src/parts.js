@@ -4,6 +4,7 @@
 // a port of the real component in src/app/** or src/components/**, sized by
 // src/constants/design.ts.
 import { icon } from './icons.js';
+import { t } from './i18n.js';
 
 export { icon };
 
@@ -90,10 +91,10 @@ export function avatar(name, size, { me = false, onApp = false } = {}) {
 
 // Each word in its own span, for the word-by-word reveal; ~ is a space that
 // never breaks, so a line can keep its last words together.
-export const words = (text) => text.split(' ').map((w) => `<span class="w"><span class="wi">${w.replace(/~/g, ' ')}</span></span>`).join(' ');
+export const words = (text) => t(text).split(' ').map((w) => `<span class="w"><span class="wi">${w.replace(/~/g, ' ')}</span></span>`).join(' ');
 // Like words(), for a "why" line: *stars* mark the emphasis, | breaks the
 // line, and ~ is a space that never breaks.
-export const rich = (text) => text.split('|').map((line) => line.split(/(\*[^*]+\*)/).filter((p) => p.trim()).map((part) => {
+export const rich = (text) => t(text).split('|').map((line) => line.split(/(\*[^*]+\*)/).filter((p) => p.trim()).map((part) => {
   const em = part.startsWith('*');
   return part.replace(/\*/g, '').trim().split(/\s+/)
     .map((w) => `<span class="w"><span class="wi${em ? ' em' : ''}">${w.replace(/~/g, ' ')}</span></span>`).join(' ');
@@ -261,21 +262,21 @@ export function askInput(prefix) {
 /** Every feature scene says why it exists, then how AskLocker answers it. */
 export function whyHow(id, kicker, kIcon, why, how, sub, { plus = '', after = '' } = {}) {
   return `<div class="tblock wh" id="${id}">
-      <div class="kicker">${icon(kIcon, 22, 'currentColor', 2.4)}<span>${kicker}</span>${plus ? `<span class="k-plus">${plus}</span>` : ''}</div>
-      <div class="wh-why"><div class="wh-tag why">Why</div><div class="why-t">${rich(why)}</div></div>
-      <div class="wh-how"><div class="wh-tag how">How</div><div class="h1">${words(how)}</div><div class="sub">${sub}</div>${after}</div></div>`;
+      <div class="kicker">${icon(kIcon, 22, 'currentColor', 2.4)}<span>${t(kicker)}</span>${plus ? `<span class="k-plus">${t(plus)}</span>` : ''}</div>
+      <div class="wh-why"><div class="wh-tag why">${t('Why')}</div><div class="why-t">${rich(why)}</div></div>
+      <div class="wh-how"><div class="wh-tag how">${t('How')}</div><div class="h1">${words(how)}</div><div class="sub">${t(sub)}</div>${after}</div></div>`;
 }
 
 /** The trust scene: why, how, four cards, and the plain words under them. */
 export function trustBlock(why, how, cards, note) {
   return `<div id="t-trust">
-    <div class="trust-head"><div class="kicker">${icon('shield', 22, 'currentColor', 2.4)}<span>Privacy</span></div>
-      <div class="wh-why"><div class="wh-tag why">Why</div><div class="why-t">${rich(why)}</div></div>
-      <div class="wh-how"><div class="wh-tag how">How</div><div class="h1">${words(how)}</div></div></div>
+    <div class="trust-head"><div class="kicker">${icon('shield', 22, 'currentColor', 2.4)}<span>${t('Privacy')}</span></div>
+      <div class="wh-why"><div class="wh-tag why">${t('Why')}</div><div class="why-t">${rich(why)}</div></div>
+      <div class="wh-how"><div class="wh-tag how">${t('How')}</div><div class="h1">${words(how)}</div></div></div>
     <div class="trust-body"><div class="trust-row">
-      ${cards.map(([ic, t, b], i) => `<div class="trust-card" id="tc${i + 1}"><div class="trust-ic">${icon(ic, 30, '#2A3D66')}</div><div class="trust-t">${t}</div><div class="trust-b">${b}</div></div>`).join('')}
+      ${cards.map(([ic, title, b], i) => `<div class="trust-card" id="tc${i + 1}"><div class="trust-ic">${icon(ic, 30, '#2A3D66')}</div><div class="trust-t">${t(title)}</div><div class="trust-b">${t(b)}</div></div>`).join('')}
     </div>
-    <div class="trust-note" id="trust-note">${note}</div></div>
+    <div class="trust-note" id="trust-note">${t(note)}</div></div>
   </div>`;
 }
 
@@ -285,10 +286,10 @@ export function brand(id, tagline, { badge = '', cta = '', ctaNote = '', url = '
   return `<div class="brand" id="${id}">
     <div class="logo-tile" id="${end ? 'end-logo' : 'logo'}">${logoMark()}</div>
     <div class="wordmark" id="${end ? 'end-word' : 'wordmark'}">AskLocker</div>
-    ${badge ? `<div class="biz-badge" id="${p}badge">${icon('briefcase', 26, '#fff', 2.4)}<span>${badge}</span></div>` : ''}
-    <div class="tagline" id="${end ? 'end-tag' : 'tagline'}">${tagline}</div>
-    ${cta ? `<div class="cta${badge ? ' biz' : ''}" id="end-cta"><span>${cta}</span>${icon('chevron-right', 26, '#fff', 2.6)}</div>` : ''}
-    ${ctaNote ? `<div class="cta-note" id="end-note">${ctaNote}</div>` : ''}
+    ${badge ? `<div class="biz-badge" id="${p}badge">${icon('briefcase', 26, '#fff', 2.4)}<span>${t(badge)}</span></div>` : ''}
+    <div class="tagline" id="${end ? 'end-tag' : 'tagline'}">${t(tagline)}</div>
+    ${cta ? `<div class="cta${badge ? ' biz' : ''}" id="end-cta"><span>${t(cta)}</span>${icon('chevron-right', 26, '#fff', 2.6)}</div>` : ''}
+    ${ctaNote ? `<div class="cta-note" id="end-note">${t(ctaNote)}</div>` : ''}
     ${url ? `<div class="cta-url" id="end-url">${url}</div>` : ''}
   </div>`;
 }

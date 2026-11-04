@@ -16,9 +16,10 @@
 import {
   gsap, PORTRAIT, SHORT, $, $$, build, askArea, inputOverflow, at, scrollTo, layoutChat, place, initialState,
   setLayout, tl, cue, IR, showCallout, reveal, showWhy, showHow, hide, fadeIn, swap, nextZ, nav, chrome, tap, type,
-  vibrate, phoneTo, phoneIn, popCard, notify, bubblePop, sub, count, drawer, motion, finish, LANG,
+  vibrate, phoneTo, phoneIn, popCard, notify, bubblePop, sub, count, drawer, motion, finish, LANG, H, fitWide, fitAbove,
 } from './engine.js';
-import { phone, scrambleCards, textBlocks, callouts, subtitles, HEALTH, STORY } from './family-screens.js';
+import { phone, scrambleCards, textBlocks, callouts, subtitles, HEALTH, STORY, ASK_Q } from './family-screens.js';
+import { t, UI } from './i18n.js';
 import { VOICE_LINES } from './voice-lines.js';
 // The launch set (?claims=launch): no Gmail import, reminders in the app, and
 // the privacy scene and end card in the encryption brief's words.
@@ -57,11 +58,24 @@ await build({
   fontText: `${VOICE_LINES[LANG || 'hi'].q} ${VOICE_LINES[LANG || 'hi'].lead} ${VOICE_LINES[LANG || 'hi'].a2}`,
 });
 
+// A film in another language: text wider than its box is set smaller first.
+if (UI) fitWide();
+
 // ─── Layout passes: what flexbox would have settled in the app ──────────
 askArea('#ask-area', '#scr-ask');
 askArea('#v-area', '#scr-voice');
 $('#tag-scroll').style.top = `${$('#scr-tag .sb-fill').offsetHeight + $('#scr-tag .v4-bar').offsetHeight}px`;
 $('#tag-scroll').style.bottom = `${$('#scr-tag .tabbar').offsetHeight}px`;
+
+// The privacy scene's cards sit under its heading, however many lines the
+// film's language gives it (src/i18n.js), and in a long one they shrink until
+// the line under them is in the frame. In English they stay at 590.
+if (!PORTRAIT) {
+  const head = $('#t-trust .trust-head');
+  const body = $('#t-trust .trust-body');
+  body.style.top = `${Math.max(body.offsetTop, head.offsetTop + head.offsetHeight + 40)}px`;
+  if (UI) fitAbove('#t-trust .trust-body', ['#t-trust .trust-row', '#trust-note'], H - 44);
+}
 
 // The family tree opens scrolled to centre your own card (family-tree.tsx).
 {
@@ -91,7 +105,7 @@ hint.style.height = `${hintH[1]}px`;
 const micW = $('#v-mic').offsetWidth;
 const pillW = $('#mic-listen').offsetWidth;
 $('#v-mic').style.width = `${pillW}px`;
-const Q1 = "What is Papa's health insurance policy number?";
+const Q1 = t(ASK_Q);
 const VQ = VOICE_LINES[LANG || 'hi'].q;
 const OV = { q1: inputOverflow('#ask-line', Q1), vq: inputOverflow('#v-line', VQ) };
 $('#v-mic').style.width = '';

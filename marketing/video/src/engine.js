@@ -9,6 +9,8 @@
 // Opened directly in a browser it plays in real time: space to pause, arrow
 // keys to scrub, a number key to jump to that tenth of the film.
 
+import { UI, UI_LANGS } from './i18n.js';
+
 export const gsap = window.gsap;
 gsap.registerPlugin(window.TextPlugin);
 
@@ -34,8 +36,16 @@ const stage = document.getElementById('stage');
 
 // ─── Build the stage ─────────────────────────────────────────────────────
 export async function build({ cards, texts, phone, callouts, subs, look = '', fontText = '' }) {
-  stage.className = `${PORTRAIT ? 'portrait' : W === H ? 'square' : 'landscape'}${look ? ` ${look}` : ''}`;
+  // ?ui= (src/i18n.js): the film's words in an Indian language. Its script's
+  // fonts follow the films' own in every stack, which keep the Latin.
+  const ui = UI && UI !== 'qq' ? UI_LANGS[UI].fonts : null;
+  stage.className = `${PORTRAIT ? 'portrait' : W === H ? 'square' : 'landscape'}${look ? ` ${look}` : ''}${UI ? ` ui ui-${UI}` : ''}${ui ? ' ui-indic' : ''}`;
   Object.assign(stage.style, { width: `${W}px`, height: `${H}px` });
+  if (ui) {
+    stage.lang = UI;
+    stage.style.setProperty('--display', `'Bricolage Grotesque', '${ui[0]}', '${ui[2]}', sans-serif`);
+    stage.style.setProperty('--serif', `'Instrument Serif', '${ui[1]}', Georgia, serif`);
+  }
   stage.innerHTML = `
     <div id="bg-night" class="layer"></div>
     <div id="bg-day" class="layer"><div class="blob b1"></div><div class="blob b2"></div><div class="blob b3"></div><div class="grid"></div></div>
@@ -73,7 +83,31 @@ export async function build({ cards, texts, phone, callouts, subs, look = '', fo
     const ui = getComputedStyle(document.documentElement).getPropertyValue('--ui');
     await Promise.all([400, 500, 600, 700].map((w) => document.fonts.load(`${w} 15px ${ui}`, fontText)));
   }
+  // The film's language: each of its script's fonts, for every word on the stage.
+  if (ui) await Promise.all(ui.map((family) => document.fonts.load(`500 40px "${family}"`, stage.textContent)));
   await document.fonts.ready;
+}
+
+// ─── Fit: a film's words in another language (src/i18n.js) ─────────────
+// The layouts were drawn for the English, and Tamil or Malayalam can run
+// half as long again. These shrink only what does not fit, so a film in a
+// language that fits is laid out exactly as drawn.
+
+/** Any block of film text wider than its own box is set smaller, a step at a
+ * time, until it fits; never below 70%. */
+export function fitWide(layers = ['#texts', '#callouts']) {
+  for (const el of layers.flatMap((l) => $$(`${l} *`))) {
+    if (!el.clientWidth || el.scrollWidth <= el.clientWidth + 8 || getComputedStyle(el).display === 'inline') continue;
+    const base = parseFloat(getComputedStyle(el).fontSize);
+    for (let k = 0.96; el.scrollWidth > el.clientWidth + 8 && k >= 0.7; k -= 0.04) el.style.fontSize = `${base * k}px`;
+  }
+}
+
+/** Shrinks parts (CSS zoom, in flow under the same box) until the box ends
+ * above `bottom` on the stage; never below 70%. */
+export function fitAbove(box, parts, bottom) {
+  const end = () => $(box).getBoundingClientRect().bottom - stage.getBoundingClientRect().top;
+  for (let z = 0.97; end() > bottom && z >= 0.7; z -= 0.03) parts.forEach((p) => { $(p).style.zoom = z; });
 }
 
 // ─── Layout passes: what flexbox would have settled in the app ──────────
