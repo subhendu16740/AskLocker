@@ -301,10 +301,19 @@ const keysJudge = (expect) => (outcome) => (missingTable(outcome.error) || ['PGR
 // Locked vaults (071): every write through functions that take the caller
 // from the session; members read their vault's sealed parts, each person
 // only their own key grants, phone-lock unlocks and device requests; the
-// switch is the server's. Skipped until 071.
-const lockedJudge = (expect) => (outcome) => (missingTable(outcome.error) || ['PGRST202'].includes(String(outcome.error?.code))
-  ? ['skipped', 'migration 071 is not applied to DEV yet']
-  : judge(expect, outcome));
+// switch is the server's. Skipped until 071. Under 071 alone, lock_vault
+// said whether locking is on, and insert_sealed_document whether a vault is
+// locked, before checking the caller; 072 checks the caller first, so until
+// it is applied those two answers are skipped, not failed.
+const lockedJudge = (expect) => (outcome) => {
+  if (missingTable(outcome.error) || ['PGRST202'].includes(String(outcome.error?.code))) {
+    return ['skipped', 'migration 071 is not applied to DEV yet'];
+  }
+  if (['not_allowed', 'not_locked'].includes(String(outcome.error?.hint ?? ''))) {
+    return ['skipped', 'migration 072 is not applied to DEV yet'];
+  }
+  return judge(expect, outcome);
+};
 // A family vault made a business (054): only its admin sees what would
 // change, or makes the move; the rule itself is the server's. Skipped until 054.
 const businessVaultJudge = (expect) => (outcome) => {

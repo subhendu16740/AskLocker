@@ -180,7 +180,9 @@ Four things will mislead you if you assume otherwise:
    write goes through functions that take the caller from `auth.uid()`, a
    member reads their vault's sealed parts and their own grants, a locked
    vault refuses a readable document, and only its owner locks a vault,
-   where `e2e_config` allows it: see the same section).
+   where `e2e_config` allows it; since 072 each of these functions checks
+   the caller before saying anything about the vault: see the same
+   section).
    **A new writable
    column needs its own `GRANT` in a migration.** Nobody joins a family
    without saying yes: only an admin asks a person in, through the
@@ -973,7 +975,7 @@ tabs. `(tabs)` is a layout group, so routes are `/home`, `/search`, `/upload`.
 | `speech-text.ts` | `toSpeech()`: strips markdown and spells out ID numbers before they are read aloud — and a number named as one ("train number 16782", "PNR: 4512", "PIN 751001", "नंबर 16782") digit by digit, from its digits; the screen keeps the digits |
 | `voice-languages.ts` | The language picker list and the few phrases the app itself says, per language |
 | `storage.ts` | Key-value cache: localStorage on web, AsyncStorage on native |
-| `database.types.ts` | Generated Supabase types, current to 071 (070's and 071's functions added by hand) (030, 052, 055, 058, 059, 061 and 063 changed nothing in them, nor did 065, whose one function only the Edge Functions call, nor 066 and 067, numbers and function bodies; 049's, 050's, 051's, 053's, 054's, 056's, 057's, 060's, 062's, 064's, 068's and 069's added by hand). Regenerate after every migration and re-append the hand-written block at the bottom (see the typecheck note) |
+| `database.types.ts` | Generated Supabase types, current to 072 (070's and 071's functions added by hand) (030, 052, 055, 058, 059, 061, 063 and 072 changed nothing in them, nor did 065, whose one function only the Edge Functions call, nor 066 and 067, numbers and function bodies; 049's, 050's, 051's, 053's, 054's, 056's, 057's, 060's, 062's, 064's, 068's and 069's added by hand). Regenerate after every migration and re-append the hand-written block at the bottom (see the typecheck note) |
 
 ---
 
@@ -3065,7 +3067,11 @@ where it does not.
   member leaves, new keys and an admin's approval, moving older documents,
   expiry dates, deletes); the self-test pins the crypto and the ranking;
   QA's access probes cover every table and function (skipped until 071 is
-  on DEV).
+  on DEV). They found that two functions answered before checking the
+  caller: `lock_vault()` said whether locking is on, and
+  `insert_sealed_document()` whether a vault is locked, to anyone signed
+  in. 072 checks the caller first (the owner, the vault's key); until it is
+  on DEV those two probes are skipped.
 - **The phone app** has stand-ins for every one of these files until EAS
   builds exist: nothing is locked there, and it says to use the web app.
 - **`supabase/functions/_shared/vault-crypto.ts` runs only on members'
