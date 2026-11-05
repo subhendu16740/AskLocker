@@ -95,6 +95,8 @@ export default function UploadScreen() {
   const [categoryTouched, setCategoryTouched] = useState(false);
   const [allCategories, setAllCategories] = useState(false);
   const [uploading, setUploading] = useState(false);
+  // A locked vault (071): reading, search vectors and sealing on this device, as they go.
+  const [lockStep, setLockStep] = useState<string | null>(null);
   // `expiresOn`: a date ingest found in a document saved to a vault on Free —
   // the moment to offer Family Plus's expiry reminders (049).
   const [uploadResult, setUploadResult] = useState<
@@ -331,6 +333,11 @@ export default function UploadScreen() {
         // Only someone in this vault's tree: the choice may be from another vault's.
         belongsToMemberId: owners.some((o) => o.id === selectedPerson) ? selectedPerson : undefined,
         ocrText: ocrText || undefined,
+        languages: documentLanguages,
+        onLockProgress: (stage, done, total) => setLockStep(
+          stage === 'reading' ? `Reading page ${done} of ${total}…`
+            : stage === 'searching' ? (total ? `Preparing search ${done} of ${total}…` : 'Preparing search…')
+              : 'Locking…'),
       });
       track('document_added', {
         category: categoryForAnalytics(categories.find((c) => c.id === selectedCategory)),
@@ -355,6 +362,7 @@ export default function UploadScreen() {
       setErrorMsg(err.message ?? 'Something went wrong. Try again.');
     } finally {
       setUploading(false);
+      setLockStep(null);
     }
   };
 
@@ -620,7 +628,7 @@ export default function UploadScreen() {
                 {uploading ? (
                   <View style={styles.uploadingRow}>
                     <ActivityIndicator color="#FFFFFF" size="small" />
-                    <Text style={styles.saveBtnText}>Uploading...</Text>
+                    <Text style={styles.saveBtnText}>{lockStep ?? 'Uploading...'}</Text>
                   </View>
                 ) : (
                   <Text style={styles.saveBtnText} numberOfLines={1}>

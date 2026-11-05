@@ -16,6 +16,7 @@ import {
   fetchDocumentById, getDocumentSignedUrl, deleteDocument,
   updateDocument, fetchCategories,
 } from '../../lib/api';
+import { openDocumentFile } from '../../lib/vault-lock';
 import { supabase } from '../../lib/supabase';
 import type { FamilyDocumentDetailRow } from '../../lib/database.types';
 import { ScreenHeader } from '../../components/screen-header';
@@ -119,11 +120,20 @@ export default function DocumentViewerScreen() {
     if (!doc?.storage_path) return;
     setPreviewLoading(true);
     setPreviewError(false);
-    getDocumentSignedUrl(doc.storage_path)
+    // A locked document (071) is opened here, on this device: its file comes
+    // sealed, and the preview and Download use what this device opened.
+    let opened: string | null = null;
+    const load = doc.ingestion_status === 'sealed' && currentFamily
+      ? openDocumentFile(currentFamily.id, doc.id, doc.storage_path).then((f) => (opened = URL.createObjectURL(f.blob)))
+      : getDocumentSignedUrl(doc.storage_path);
+    load
       .then(setPreviewUrl)
       .catch(() => setPreviewError(true))
       .finally(() => setPreviewLoading(false));
-  }, [doc?.storage_path]);
+    return () => {
+      if (opened) URL.revokeObjectURL(opened);
+    };
+  }, [doc?.storage_path, doc?.ingestion_status]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ─── Action Handlers ───────────────────────────────────────────
 
