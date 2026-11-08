@@ -2,7 +2,7 @@
 
 2:14 AM. Maa and Papa are in Lucknow. You're in Bengaluru.
 
-Maa writes, in Hinglish: "Son, we've brought Papa to the hospital. They're asking for the insurance policy number. Where is it?"
+Maa writes: "Son, we've brought Papa to the hospital. They're asking for the insurance policy number. Where is it?"
 
 The search begins. Somewhere in 2,847 emails, or the old office email? The PDF wants a password. The OTP goes to Papa's phone. The original is in the almirah back home.
 
