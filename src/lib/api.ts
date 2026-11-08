@@ -1,10 +1,12 @@
 import { supabase } from './supabase';
 import {
-  documentDetails, documentFileKeyText, forgetLockedDocument, isLockedVault, isSealedChat, knownLocked, lockedVaults, openChat,
-  openSharedFile, overlaySealed, readOnDevice, sealChat,
-  renameLockedDocument, sealDocument, searchLockedVaults, type LockProgress,
+  LOCKED_VAULT_NAME, addSealedPerson, documentDetails, documentFileKeyText, forgetLockedDocument, isLockedVault, isSealedChat,
+  knownLocked, lockedCards, lockedOverview, lockedVaultName, lockedVaults, openChat, openLockedTree, openNoteBody, openSharedFile,
+  overlaySealed, overlayVaultNames, readOnDevice, renameLockedDocument, sealCard, sealChat, sealDocument, sealNoteBody, sealPerson,
+  sealTreeLinks, searchLockedVaults, type LockProgress, type SealedCard,
 } from './vault-lock';
 import { insertSealedDocument } from './e2e-api';
+import { connectInTree, linksAmong } from './tree-rules';
 import { accountKey, storageGet, storageSet } from './storage';
 import { longDate, parseDocumentDate } from './dates';
 import { isSaveable, mimeTypeFor, unsupportedFileMessage } from './file-types';
@@ -55,7 +57,9 @@ export async function fetchUserFamilies(userId: string): Promise<FamilyWithMembe
 
   if (famErr) throw famErr;
 
-  const familyMap = new Map((familyRows ?? []).map((f) => [f.id, f]));
+  // A locked vault's name is opened on this device (073).
+  const opened = await overlayVaultNames((familyRows ?? []) as Array<{ id: string; name: string }>);
+  const familyMap = new Map(opened.map((f) => [f.id, f]));
 
   return memberships
     .filter((m) => familyMap.has(m.family_id))
@@ -188,7 +192,9 @@ export async function fetchDocumentById(
 
   if (error) throw error;
   const rows = data as FamilyDocumentDetailRow[] | null;
-  const row = rows?.[0] ?? null;
+  const found = rows?.[0] ?? null;
+  // In a locked vault, whose it is is opened here (073).
+  const row = found ? (await overlaySealed(familyId, [found]))[0] : null;
   if (row?.ingestion_status !== 'sealed') return row;
   // A locked document (071): its name and details are opened here.
   const details = await documentDetails(familyId, documentId).catch(() => null);
@@ -1299,7 +1305,21 @@ export async function fetchNotifications(
   });
 
   if (error) throw error;
-  return (data ?? []) as NotificationRow[];
+  const rows = (data ?? []) as NotificationRow[];
+  // The server names a locked vault "Locked vault" (073): its members read its name.
+  if (!rows.some((r) => `${r.title} ${r.message ?? ''}`.includes(LOCKED_VAULT_NAME))) return rows;
+  const names = new Map<string, string | null>();
+  for (const r of rows) {
+    if (!names.has(r.family_id) && (await isLockedVault(r.family_id).catch(() => false))) {
+      names.set(r.family_id, await lockedVaultName(r.family_id).catch(() => null));
+    }
+  }
+  return rows.map((r) => {
+    const name = names.get(r.family_id);
+    return name
+      ? { ...r, title: r.title.split(LOCKED_VAULT_NAME).join(name), message: (r.message ?? '').split(LOCKED_VAULT_NAME).join(name) }
+      : r;
+  });
 }
 
 export async function markNotificationRead(notificationId: string, userId: string): Promise<void> {
@@ -2256,7 +2276,7 @@ export async function previewBusinessDeletion(familyId: string): Promise<Busines
   }>({ action: 'business_preview', family_id: familyId });
   return {
     familyId: business.family_id,
-    name: business.name,
+    name: await realVaultName(business.family_id, business.name),
     otherMembers: business.other_members ?? [],
     documentCount: business.document_count ?? 0,
     // A delete-account from before 057 says nothing: 051's functions decide.
@@ -2270,9 +2290,26 @@ export async function deleteBusiness(familyId: string, typedName: string): Promi
   const result = await deleteAccountInvoke<{ files_deleted: number }>({
     action: 'delete_business',
     family_id: familyId,
-    confirm_name: typedName,
+    confirm_name: await nameTheServerKeeps(familyId, typedName),
   });
   return { filesDeleted: result.files_deleted ?? 0 };
+}
+
+/** A locked vault's real name, opened here, where the server says "Locked vault" (073). */
+async function realVaultName(familyId: string, serverName: string): Promise<string> {
+  if (serverName !== LOCKED_VAULT_NAME) return serverName;
+  return (await lockedVaultName(familyId).catch(() => null)) ?? serverName;
+}
+
+/**
+ * The name to send when deleting: in a locked vault the server only knows
+ * "Locked vault", so the real name typed is checked here and that is sent.
+ */
+async function nameTheServerKeeps(familyId: string, typed: string): Promise<string> {
+  if (!(await isLockedVault(familyId).catch(() => false))) return typed;
+  const real = await lockedVaultName(familyId).catch(() => null);
+  const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
+  return real && same(typed, real) ? LOCKED_VAULT_NAME : typed;
 }
 
 /** What deleting a family vault would take (057): the same as a business's. */
@@ -2287,7 +2324,7 @@ export async function previewFamilyDeletion(familyId: string): Promise<FamilyDel
   }>({ action: 'family_preview', family_id: familyId });
   return {
     familyId: family.family_id,
-    name: family.name,
+    name: await realVaultName(family.family_id, family.name),
     canDelete: family.can_delete === true,
     ownerName: family.owner_name ?? null,
     otherMembers: family.other_members ?? [],
@@ -2300,7 +2337,7 @@ export async function deleteFamilyVault(familyId: string, typedName: string): Pr
   const result = await deleteAccountInvoke<{ files_deleted: number }>({
     action: 'delete_family',
     family_id: familyId,
-    confirm_name: typedName,
+    confirm_name: await nameTheServerKeeps(familyId, typedName),
   });
   return { filesDeleted: result.files_deleted ?? 0 };
 }
@@ -2423,7 +2460,12 @@ export async function fetchBusinessOverview(familyId: string): Promise<BusinessO
     bills?: { document_id: string; file_name: string; category: string | null; due_date: string | null; total_amount: string | null; invoice_number: string | null }[] | null;
     money?: { kind: 'in' | 'out'; invoice_date: string | null; total_amount: string | null; created_at: string }[] | null;
   };
-  const r = (data ?? {}) as Raw;
+  let r = (data ?? {}) as Raw;
+  // A locked business's dates and amounts are sealed: worked out here (073).
+  if (await isLockedVault(familyId).catch(() => false)) {
+    const tier = r.tier === 'pro' || r.tier === 'plus' ? r.tier : 'free';
+    r = (await lockedOverview(familyId, tier, await fetchAllDocuments(familyId))) as Raw;
+  }
   const n = (k: string) => Number(r.counts?.[k] ?? 0) || 0;
   return {
     tier: r.tier === 'pro' || r.tier === 'plus' ? r.tier : 'free',
@@ -2473,6 +2515,18 @@ type NoteRow = { id: string; body: string; remind_on: string | null; done: boole
 const toNote = (r: NoteRow): Note => ({ id: r.id, body: r.body, remindOn: r.remind_on, done: r.done, createdAt: r.created_at });
 const notesUnavailable = () => new FeatureUnavailable("Notes aren't switched on yet.");
 
+/** A note's text sealed for a locked vault (073), else as it is. */
+async function noteBodyFor(familyId: string, body: string): Promise<string> {
+  if (!(await isLockedVault(familyId).catch(() => false))) return body;
+  const clean = body.trim();
+  if (!clean || clean.length > 2000) throw new Error('A note is 1 to 2,000 characters.');
+  return sealNoteBody(familyId, clean);
+}
+
+async function openedNote(familyId: string, row: NoteRow): Promise<Note> {
+  return { ...toNote(row), body: await openNoteBody(familyId, row.body) };
+}
+
 /** Your own notes in a business, open ones first. */
 export async function fetchNotes(familyId: string): Promise<Note[]> {
   const { data, error } = await supabase
@@ -2485,26 +2539,30 @@ export async function fetchNotes(familyId: string): Promise<Note[]> {
     if (isMissingMigration(error)) throw notesUnavailable();
     throw error;
   }
-  return ((data ?? []) as NoteRow[]).map(toNote);
+  return Promise.all(((data ?? []) as NoteRow[]).map((r) => openedNote(familyId, r)));
 }
 
 export async function addNote(familyId: string, body: string, remindOn: string | null): Promise<Note> {
   const { data, error } = await supabase
     .from('scratch_notes')
-    .insert({ family_id: familyId, body, remind_on: remindOn })
+    .insert({ family_id: familyId, body: await noteBodyFor(familyId, body), remind_on: remindOn })
     .select(NOTE_COLUMNS)
     .single();
   if (error) {
     if (isMissingMigration(error)) throw notesUnavailable();
     throw error;
   }
-  return toNote(data as NoteRow);
+  return openedNote(familyId, data as NoteRow);
 }
 
 export async function updateNote(id: string, patch: { body?: string; remind_on?: string | null; done?: boolean }): Promise<Note> {
-  const { data, error } = await supabase.from('scratch_notes').update(patch).eq('id', id).select(NOTE_COLUMNS).single();
+  // The note's vault decides whether its text is sealed (073).
+  const { data: owner } = await supabase.from('scratch_notes').select('family_id').eq('id', id).maybeSingle();
+  const familyId = (owner as { family_id?: string } | null)?.family_id ?? '';
+  const sealed = patch.body !== undefined && familyId ? { ...patch, body: await noteBodyFor(familyId, patch.body) } : patch;
+  const { data, error } = await supabase.from('scratch_notes').update(sealed).eq('id', id).select(NOTE_COLUMNS).single();
   if (error) throw error;
-  return toNote(data as NoteRow);
+  return familyId ? openedNote(familyId, data as NoteRow) : toNote(data as NoteRow);
 }
 
 export async function deleteNote(id: string): Promise<void> {
@@ -2582,7 +2640,7 @@ export async function fetchFamilyTree(familyId: string): Promise<FamilyTree> {
     : await supabase.from('family_people').select('id, display_name, gender, birth_date, user_id').eq('family_id', familyId).order('created_at');
   if (people.error) throw people.error;
   if (links.error) throw links.error;
-  return {
+  const tree: FamilyTree = {
     people: ((people.data ?? []) as Array<{
       id: string; display_name: string; gender: string | null; birth_date: string | null; user_id: string | null; nickname?: string | null;
     }>).map((p) => ({
@@ -2596,6 +2654,29 @@ export async function fetchFamilyTree(familyId: string): Promise<FamilyTree> {
     links: (links.data ?? []).map((l) => ({ from: l.from_person, to: l.to_person, kind: l.kind as KinLink['kind'] })),
     nicknames,
   };
+  // A locked vault's people and links are sealed: opened here (073).
+  if (!(await isLockedVault(familyId).catch(() => false))) return tree;
+  const opened = await openLockedTree(familyId, tree.people, tree.links);
+  return { ...tree, ...opened, nicknames: true };
+}
+
+/** Which vault a person is in, and whether it is locked. */
+async function personVault(personId: string): Promise<{ familyId: string; locked: boolean } | null> {
+  const { data } = await supabase.from('family_people').select('family_id').eq('id', personId).maybeSingle();
+  const familyId = (data as { family_id?: string } | null)?.family_id;
+  if (!familyId) return null;
+  return { familyId, locked: await isLockedVault(familyId).catch(() => false) };
+}
+
+/** 031's checks on a person's details (tree_check_details), for a locked vault, where the phone keeps them. */
+function checkPersonDetails(details: PersonDetails): void {
+  const name = details.name.trim();
+  if (!name) throw new Error('Please enter a name.');
+  if (name.length > 80) throw new Error('That name is too long (80 characters at most).');
+  if (details.birthDate) {
+    if (details.birthDate > new Date().toISOString().slice(0, 10)) throw new Error('That date of birth is in the future.');
+    if (details.birthDate < '1850-01-01') throw new Error('That date of birth is too far in the past.');
+  }
 }
 
 /**
@@ -2608,6 +2689,20 @@ export async function addFamilyPerson(
   details: PersonDetails,
   relation?: { kind: RelativeKind; relativeId: string; otherParentId?: string | null },
 ): Promise<string> {
+  if (await isLockedVault(familyId).catch(() => false)) {
+    // A locked vault (073): the tree's rules are kept here, and the server keeps who may write.
+    checkPersonDetails(details);
+    const tree = await fetchFamilyTree(familyId);
+    const ids = tree.people.map((p) => p.id);
+    if (relation) connectInTree(tree.links, [...ids, 'new'], 'new', relation.kind, relation.relativeId, relation.otherParentId);
+    const id = await addSealedPerson(familyId, {
+      name: details.name.trim(), gender: details.gender ?? null, birthDate: details.birthDate ?? null, nickname: null,
+    });
+    if (relation) {
+      await sealTreeLinks(familyId, connectInTree(tree.links, [...ids, id], id, relation.kind, relation.relativeId, relation.otherParentId));
+    }
+    return id;
+  }
   // Left out rather than sent as null: each has a NULL default.
   const { data, error } = await supabase.rpc('add_family_person', {
     p_family_id: familyId,
@@ -2633,6 +2728,13 @@ export async function linkFamilyPeople(
   relativeId: string,
   otherParentId?: string | null,
 ): Promise<void> {
+  if (await isLockedVault(familyId).catch(() => false)) {
+    const tree = await fetchFamilyTree(familyId);
+    const ids = tree.people.map((p) => p.id);
+    if (!ids.includes(personId)) throw new Error("That person is not in this family's tree.");
+    await sealTreeLinks(familyId, connectInTree(tree.links, ids, personId, kind, relativeId, otherParentId));
+    return;
+  }
   const { error } = await supabase.rpc('link_family_people', {
     p_family_id: familyId,
     p_person: personId,
@@ -2645,6 +2747,15 @@ export async function linkFamilyPeople(
 
 /** Name, gender, birth date. An admin, or the person themselves. */
 export async function updateFamilyPerson(personId: string, details: PersonDetails): Promise<void> {
+  const vault = await personVault(personId);
+  if (vault?.locked) {
+    checkPersonDetails(details);
+    const current = (await fetchFamilyTree(vault.familyId)).people.find((p) => p.id === personId);
+    await sealPerson(vault.familyId, personId, {
+      name: details.name.trim(), gender: details.gender ?? null, birthDate: details.birthDate ?? null, nickname: current?.nickname ?? null,
+    });
+    return;
+  }
   // A gender or birth date left out is cleared: the function's defaults are NULL.
   const { error } = await supabase.rpc('update_family_person', {
     p_person_id: personId,
@@ -2660,6 +2771,17 @@ export async function updateFamilyPerson(personId: string, details: PersonDetail
  * the person themselves; the database checks (045).
  */
 export async function setFamilyPersonNickname(personId: string, nickname: string): Promise<void> {
+  const vault = await personVault(personId);
+  if (vault?.locked) {
+    const clean = nickname.trim();
+    if (clean.length > 40) throw new Error('That nickname is too long (40 characters at most).');
+    const current = (await fetchFamilyTree(vault.familyId)).people.find((p) => p.id === personId);
+    if (!current) throw new Error("That person is not in this family's tree.");
+    await sealPerson(vault.familyId, personId, {
+      name: current.name, gender: current.gender, birthDate: current.birthDate ?? null, nickname: clean || null,
+    });
+    return;
+  }
   const { error } = await supabase.rpc('set_family_person_nickname', { p_person_id: personId, p_nickname: nickname.trim() });
   if (error) {
     if (String(error.code) === 'PGRST202') throw new Error("Nicknames aren't available yet.");
@@ -2673,8 +2795,14 @@ export async function setFamilyPersonNickname(personId: string, nickname: string
  * out by removing them from the family instead. Admins only.
  */
 export async function removeFamilyPerson(personId: string): Promise<void> {
+  const vault = await personVault(personId);
   const { error } = await supabase.rpc('remove_family_person', { p_person_id: personId });
   if (error) throw error;
+  if (vault?.locked) {
+    // Their sealed details went with them (073); their links go from the sealed list.
+    const tree = await fetchFamilyTree(vault.familyId).catch(() => null);
+    if (tree) await sealTreeLinks(vault.familyId, linksAmong(tree.links, tree.people.map((p) => p.id))).catch(() => undefined);
+  }
 }
 
 // ─── Emergency cards (032) ───────────────────────────────────────
@@ -2709,11 +2837,22 @@ function toEmergencyCard(row: Tables<'family_emergency_cards'>): EmergencyCard {
   };
 }
 
+/** A locked vault's sealed cards (073), as rows toEmergencyCard() reads. */
+async function sealedCardRows(familyId: string): Promise<Tables<'family_emergency_cards'>[]> {
+  if (!(await isLockedVault(familyId).catch(() => false))) return [];
+  const cards = await lockedCards(familyId).catch(() => new Map<string, SealedCard>());
+  return [...cards].map(([personId, card]) => ({
+    ...(card as object), person_id: personId, family_id: familyId, updated_by: null, updated_at: '',
+  }) as unknown as Tables<'family_emergency_cards'>);
+}
+
 /** Every card in the family. People without one are simply not in the list. */
 export async function fetchEmergencyCards(familyId: string): Promise<EmergencyCard[]> {
   const { data, error } = await supabase.from('family_emergency_cards').select('*').eq('family_id', familyId);
   if (error) throw error;
-  return (data ?? []).map(toEmergencyCard);
+  const sealed = await sealedCardRows(familyId);
+  const readable = (data ?? []).filter((r) => !sealed.some((s) => s.person_id === r.person_id));
+  return [...sealed, ...readable].map(toEmergencyCard);
 }
 
 /** One person's card, or null when they have none yet. */
@@ -2725,6 +2864,8 @@ export async function fetchEmergencyCard(familyId: string, personId: string): Pr
     .eq('person_id', personId)
     .maybeSingle();
   if (error) throw error;
+  const sealed = (await sealedCardRows(familyId)).find((r) => r.person_id === personId);
+  if (sealed) return toEmergencyCard(sealed);
   return data ? toEmergencyCard(data) : null;
 }
 
@@ -2746,6 +2887,13 @@ export async function saveEmergencyCard(personId: string, card: EmergencyCardInp
     contacts: card.contacts.map((c) => ({ name: c.name, relation: c.relation, phone: c.phone })),
     notes: card.notes,
   };
+  const vault = await personVault(personId);
+  if (vault?.locked) {
+    // A locked vault (073): sealed here; a card with nothing on it goes, as save_emergency_card() does.
+    const filled = Object.entries(payload).some(([k, v]) => (k === 'contacts' ? (v as unknown[]).length > 0 : typeof v === 'string' && v.trim() !== ''));
+    await sealCard(vault.familyId, personId, filled ? (payload as unknown as SealedCard) : null);
+    return;
+  }
   const { error } = await supabase.rpc('save_emergency_card', {
     p_person_id: personId,
     p_card: payload as unknown as Json,

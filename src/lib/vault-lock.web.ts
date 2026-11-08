@@ -18,10 +18,13 @@ import { cleanText } from '../../supabase/functions/_shared/text';
 import { MAX_DOCUMENT_TEXT } from '../../supabase/functions/_shared/limits';
 import { supabase } from './supabase';
 import {
-  addVaultKeyVersionRpc, fetchLockedVaultIds, fetchMyGrants, fetchSealedDocuments, fetchVaultKeyStatus, finishVaultMove,
-  grantVaultKeyRpc, lockVaultRpc, sealExistingDocumentRpc, sweepSealedDocuments, updateSealedDetailsRpc,
-  type SealedDocumentRow, type VaultKeyMember,
+  addSealedPersonRpc, addVaultKeyVersionRpc, deleteVaultItemRpc, fetchLockedVaultIds, fetchMyGrants, fetchPaidBills, fetchSealedDocuments,
+  fetchSealedVaultItems, fetchVaultKeyStatus, finishVaultMove, grantVaultKeyRpc, lockVaultRpc, sealExistingDocumentRpc, sealVaultItemRpc,
+  sweepSealedDocuments, updateSealedDetailsRpc, type SealedDocumentRow, type VaultItemKind, type VaultKeyMember,
 } from './e2e-api';
+import { buildGraph, relativesNamedIn, type Gender, type KinLink } from '../../supabase/functions/_shared/kinship';
+import { linksAmong } from './tree-rules';
+import { parseDocumentDate } from './dates';
 import { ensureKeys, myDeviceIdentity } from './vault-keys';
 import { packVector, rankPassages, unpackVector, type IndexedPassage, type RankedPassage, type SealedPassage } from './local-search';
 import { embedQuery, embedTexts } from './on-device-model';
@@ -181,6 +184,9 @@ export async function tendVault(familyId: string): Promise<VaultTending | null> 
     }
     await grantMissing(familyId, keys, m);
   }
+  // Anything still readable here (a new member's own entry, a note written
+  // elsewhere) is sealed now, by whoever may write it (073).
+  await moveVaultDetails(familyId, admin).catch(() => undefined);
   return { waitingForMe: false, needsApproval, admin };
 }
 
@@ -255,6 +261,8 @@ async function forPerson(): Promise<void> {
     cacheUser = user;
     detailsCache.clear();
     indexCache.clear();
+    itemsCache.clear();
+    movedAt.clear();
   }
 }
 
@@ -276,20 +284,32 @@ export async function sealedDetails(familyId: string, force = false): Promise<Ma
   return out;
 }
 
-/** A locked vault's rows with their real names, opened here; other vaults' rows as they are. */
-export async function overlaySealed<T extends Pick<FamilyDocumentRow, 'id' | 'file_name' | 'ingestion_status'>>(
+/**
+ * A locked vault's rows with their real names, opened here: each document's,
+ * and whose it is (073). Other vaults' rows as they are.
+ */
+export async function overlaySealed<T extends Pick<FamilyDocumentRow, 'id' | 'file_name' | 'ingestion_status'> & Partial<Pick<FamilyDocumentRow, 'belongs_to_member' | 'member_name'>>>(
   familyId: string, rows: T[],
 ): Promise<T[]> {
-  if (!rows.some((r) => r.ingestion_status === 'sealed')) return rows;
-  try {
-    const details = await sealedDetails(familyId);
-    if (rows.some((r) => r.ingestion_status === 'sealed' && !details.has(r.id))) {
-      const fresh = await sealedDetails(familyId, true);
-      return rows.map((r) => (r.ingestion_status === 'sealed' ? { ...r, file_name: fresh.get(r.id)?.name ?? r.file_name } : r));
+  let out = rows;
+  if (rows.some((r) => r.ingestion_status === 'sealed')) {
+    try {
+      let details = await sealedDetails(familyId);
+      if (rows.some((r) => r.ingestion_status === 'sealed' && !details.has(r.id))) details = await sealedDetails(familyId, true);
+      out = rows.map((r) => (r.ingestion_status === 'sealed' ? { ...r, file_name: details.get(r.id)?.name ?? r.file_name } : r));
+    } catch {
+      // Not opened here: the rows say "Locked document".
     }
-    return rows.map((r) => (r.ingestion_status === 'sealed' ? { ...r, file_name: details.get(r.id)?.name ?? r.file_name } : r));
+  }
+  if (!out.some((r) => r.belongs_to_member) || !(await isLockedVault(familyId).catch(() => false))) return out;
+  try {
+    const items = await vaultItems(familyId);
+    return out.map((r) => {
+      const p = r.belongs_to_member ? (items.get(`person:${r.belongs_to_member}`) as SealedPerson | undefined) : undefined;
+      return p ? { ...r, member_name: p.name } : r;
+    });
   } catch {
-    return rows;
+    return out;
   }
 }
 
@@ -496,7 +516,14 @@ export async function searchLockedVaults(familyIds: string[], question: string, 
   } catch {
     vector = null; // the model could not load: words alone
   }
-  return rankPassages(all, vector, question, { limit, perDocument: 4 }).map((p) => ({
+  // "Nani's pension": the people a question names by relation, from the
+  // asker's place in each vault's tree, opened here (073), join the words.
+  const names = new Set<string>();
+  for (const id of familyIds) {
+    for (const n of await relativesInQuestion(id, question).catch(() => [])) names.add(n);
+  }
+  const words = names.size ? `${question} ${[...names].join(' ')}` : question;
+  return rankPassages(all, vector, words, { limit, perDocument: 4 }).map((p) => ({
     family_id: p.familyId,
     document_id: p.documentId,
     document_name: p.documentName,
@@ -606,4 +633,307 @@ export async function openChat<M>(envelope: SealedChatEnvelope): Promise<{ title
   const identity = await myDeviceIdentity(userId);
   if (!identity) throw new LockedVaultError('no_keys_here', NO_KEYS_HERE);
   return JSON.parse(await unlockTextWithPrivateKey(envelope.sealed, identity.encrypt.privateKey, context.personal(userId, 'saved-chat', envelope.rid)));
+}
+
+
+// ─── A locked vault's name, tree, cards and notes (073) ──────────
+
+/** What the server keeps in their place: a locked vault's name, a person's. */
+export const LOCKED_VAULT_NAME = 'Locked vault';
+export const LOCKED_PERSON_NAME = 'Person';
+
+/** A person in a locked vault's tree, sealed with the vault's key. */
+export interface SealedPerson {
+  v: 1;
+  name: string;
+  gender: Gender;
+  birthDate: string | null;
+  nickname: string | null;
+}
+
+/** An emergency card as save_emergency_card() takes it (032), sealed. */
+export type SealedCard = Record<string, unknown> & { contacts?: unknown[] };
+
+// Opened records, by vault, as "<kind>:<item id>".
+const itemsCache = new Map<string, Map<string, unknown>>();
+const movedAt = new Map<string, number>();
+
+async function vaultItems(familyId: string, force = false): Promise<Map<string, unknown>> {
+  await forPerson();
+  const cached = itemsCache.get(familyId);
+  if (cached && !force) return cached;
+  const out = new Map<string, unknown>();
+  for (const row of await fetchSealedVaultItems(familyId)) {
+    try {
+      const key = await vaultKeyFor(familyId, row.key_version);
+      out.set(`${row.kind}:${row.item_id}`, await openJson(key, row.sealed, context.record(familyId, row.kind, row.item_id)));
+    } catch {
+      // Sealed with a key version this person does not hold, or changed: left out.
+    }
+  }
+  itemsCache.set(familyId, out);
+  return out;
+}
+
+async function sealItem(familyId: string, kind: VaultItemKind, itemId: string, value: unknown): Promise<void> {
+  const { version, key } = await latestVaultKey(familyId);
+  await sealVaultItemRpc(familyId, kind, itemId, version, await sealJson(key, value, context.record(familyId, kind, itemId)));
+  (await vaultItems(familyId)).set(`${kind}:${itemId}`, value);
+}
+
+/** Whatever was opened for a vault is opened again next time. */
+export function forgetVaultRecords(familyId: string): void {
+  itemsCache.delete(familyId);
+}
+
+/** A locked vault's real name, opened here, or null. */
+export async function lockedVaultName(familyId: string): Promise<string | null> {
+  const items = await vaultItems(familyId);
+  return (items.get(`vault-name:${familyId}`) as { name?: string } | undefined)?.name ?? null;
+}
+
+/** Vaults with their real names where they are locked and opened here; the rest as they are. */
+export async function overlayVaultNames<T extends { id: string; name: string }>(vaults: T[]): Promise<T[]> {
+  let locked: Set<string>;
+  try {
+    locked = await lockedVaults();
+  } catch {
+    return vaults;
+  }
+  if (!vaults.some((v) => locked.has(v.id))) return vaults;
+  return Promise.all(vaults.map(async (v) => {
+    if (!locked.has(v.id)) return v;
+    const name = await lockedVaultName(v.id).catch(() => null);
+    return name ? { ...v, name } : v;
+  }));
+}
+
+/** Name a locked vault: an admin's, sealed here. */
+export async function sealVaultName(familyId: string, name: string): Promise<void> {
+  const clean = name.trim();
+  if (!clean) throw new LockedVaultError('bad_name', 'Please enter a name.');
+  await sealItem(familyId, 'vault-name', familyId, { v: 1, name: clean.slice(0, 120) });
+}
+
+/** A locked vault's tree with its people's real details and links, opened here. */
+export async function openLockedTree<P extends { id: string; name: string; gender: Gender; birthDate: string | null; nickname?: string | null }>(
+  familyId: string, people: P[], links: KinLink[],
+): Promise<{ people: P[]; links: KinLink[] }> {
+  const items = await vaultItems(familyId);
+  const opened = people.map((p) => {
+    const s = items.get(`person:${p.id}`) as SealedPerson | undefined;
+    return s ? { ...p, name: s.name, gender: s.gender, birthDate: s.birthDate, nickname: s.nickname } : p;
+  });
+  const sealedLinks = (items.get(`tree-links:${familyId}`) as { links?: KinLink[] } | undefined)?.links ?? [];
+  const all = [...sealedLinks];
+  for (const l of links) if (!all.some((x) => x.from === l.from && x.to === l.to && x.kind === l.kind)) all.push(l);
+  return { people: opened, links: linksAmong(all, opened.map((p) => p.id)) };
+}
+
+/** One person's details in a locked vault: an admin, or the person themselves. */
+export async function sealPerson(familyId: string, personId: string, details: Omit<SealedPerson, 'v'>): Promise<void> {
+  await sealItem(familyId, 'person', personId, { v: 1, ...details });
+}
+
+/** Someone new in a locked vault's tree: an admin's. The id is chosen here, since the record is bound to it. */
+export async function addSealedPerson(familyId: string, details: Omit<SealedPerson, 'v'>): Promise<string> {
+  const id = crypto.randomUUID();
+  const { version, key } = await latestVaultKey(familyId);
+  const value: SealedPerson = { v: 1, ...details };
+  await addSealedPersonRpc(familyId, id, version, await sealJson(key, value, context.record(familyId, 'person', id)));
+  (await vaultItems(familyId)).set(`person:${id}`, value);
+  return id;
+}
+
+/** A locked vault's links, all of them: an admin's. */
+export async function sealTreeLinks(familyId: string, links: KinLink[]): Promise<void> {
+  await sealItem(familyId, 'tree-links', familyId, { v: 1, links });
+}
+
+/** A locked vault's emergency cards, opened here, by person. */
+export async function lockedCards(familyId: string): Promise<Map<string, SealedCard>> {
+  const items = await vaultItems(familyId);
+  const out = new Map<string, SealedCard>();
+  for (const [k, v] of items) if (k.startsWith('emergency-card:')) out.set(k.slice('emergency-card:'.length), (v as { card: SealedCard }).card);
+  return out;
+}
+
+/** Save one person's card in a locked vault, or (null) take it away. An admin, or the person. */
+export async function sealCard(familyId: string, personId: string, card: SealedCard | null): Promise<void> {
+  if (!card) {
+    await deleteVaultItemRpc(familyId, 'emergency-card', personId);
+    (await vaultItems(familyId)).delete(`emergency-card:${personId}`);
+    return;
+  }
+  await sealItem(familyId, 'emergency-card', personId, { v: 1, card });
+}
+
+const NOTE_FORM = /^n1\.(\d+)\.([0-9a-f-]{36})\.(e1\.[A-Za-z0-9_-]+)$/;
+
+export function isSealedNote(body: string): boolean {
+  return NOTE_FORM.test(body);
+}
+
+/** A note's text sealed for a locked vault: "n1.<key version>.<id>.<sealed>". */
+export async function sealNoteBody(familyId: string, text: string): Promise<string> {
+  const { version, key } = await latestVaultKey(familyId);
+  const rid = crypto.randomUUID();
+  return `n1.${version}.${rid}.${await sealJson(key, { body: text }, context.record(familyId, 'note', rid))}`;
+}
+
+/** A note's text, opened here when it is sealed. */
+export async function openNoteBody(familyId: string, body: string): Promise<string> {
+  const m = body.match(NOTE_FORM);
+  if (!m) return body;
+  try {
+    const key = await vaultKeyFor(familyId, Number(m[1]));
+    return (await openJson<{ body: string }>(key, m[3], context.record(familyId, 'note', m[2]))).body;
+  } catch {
+    return 'This note could not be opened on this device.';
+  }
+}
+
+/**
+ * Seal what a locked vault still holds readable, as far as this person may:
+ * an admin its name, its links, everyone's details and cards; anyone their
+ * own entry and card, and their own notes. The server blanks each readable
+ * copy as it is sealed (073). Kept to once every few minutes a vault.
+ */
+export async function moveVaultDetails(familyId: string, admin: boolean, force = false): Promise<void> {
+  const userId = await myId();
+  await forPerson();
+  if (!force && Date.now() - (movedAt.get(familyId) ?? 0) < 5 * 60_000) return;
+  movedAt.set(familyId, Date.now());
+  const items = await vaultItems(familyId, true);
+  const db = supabase as any;
+
+  if (admin) {
+    const { data: fam } = await db.from('families').select('name').eq('id', familyId).maybeSingle();
+    if (fam?.name && fam.name !== LOCKED_VAULT_NAME) await sealVaultName(familyId, fam.name);
+  }
+
+  const { data: people } = await db.from('family_people')
+    .select('id, user_id, display_name, gender, birth_date, nickname').eq('family_id', familyId);
+  const rows = (people ?? []) as { id: string; user_id: string | null; display_name: string; gender: string | null; birth_date: string | null; nickname: string | null }[];
+  for (const r of rows) {
+    const readable = r.display_name !== LOCKED_PERSON_NAME || r.gender || r.birth_date || r.nickname;
+    if (!readable || !(admin || r.user_id === userId)) continue;
+    const before = items.get(`person:${r.id}`) as SealedPerson | undefined;
+    await sealPerson(familyId, r.id, {
+      name: r.display_name !== LOCKED_PERSON_NAME ? r.display_name : before?.name ?? r.display_name,
+      gender: r.gender === 'female' || r.gender === 'male' ? r.gender : before?.gender ?? null,
+      birthDate: r.birth_date ?? before?.birthDate ?? null,
+      nickname: r.nickname ?? before?.nickname ?? null,
+    });
+  }
+
+  if (admin) {
+    const { data: links } = await db.from('family_links').select('from_person, to_person, kind').eq('family_id', familyId);
+    const readable = ((links ?? []) as { from_person: string; to_person: string; kind: KinLink['kind'] }[])
+      .map((l) => ({ from: l.from_person, to: l.to_person, kind: l.kind }));
+    if (readable.length) {
+      const sealed = (items.get(`tree-links:${familyId}`) as { links?: KinLink[] } | undefined)?.links ?? [];
+      const all = [...sealed];
+      for (const l of readable) if (!all.some((x) => x.from === l.from && x.to === l.to && x.kind === l.kind)) all.push(l);
+      await sealTreeLinks(familyId, linksAmong(all, rows.map((r) => r.id)));
+    }
+  }
+
+  const { data: cards } = await db.from('family_emergency_cards').select('*').eq('family_id', familyId);
+  const mine = new Set(rows.filter((r) => r.user_id === userId).map((r) => r.id));
+  for (const c of (cards ?? []) as Record<string, unknown>[]) {
+    const personId = String(c.person_id);
+    if (!admin && !mine.has(personId)) continue;
+    const { person_id: _p, family_id: _f, updated_by: _b, updated_at: _a, ...card } = c;
+    await sealCard(familyId, personId, card as SealedCard);
+  }
+
+  const { data: notes } = await db.from('scratch_notes').select('id, body').eq('family_id', familyId);
+  for (const n of (notes ?? []) as { id: string; body: string }[]) {
+    if (isSealedNote(n.body)) continue;
+    await db.from('scratch_notes').update({ body: await sealNoteBody(familyId, n.body) }).eq('id', n.id);
+  }
+}
+
+/**
+ * A locked business's overview, worked out here from the documents it opens,
+ * in the shape business_overview() answers (056), as far as `tier` goes.
+ */
+export async function lockedOverview(
+  familyId: string,
+  tier: 'free' | 'plus' | 'pro',
+  docs: Pick<FamilyDocumentRow, 'id' | 'file_name' | 'category_name' | 'created_at'>[],
+): Promise<Record<string, unknown>> {
+  const details = await sealedDetails(familyId, true);
+  const paid = await fetchPaidBills(familyId).catch(() => new Map<string, string>());
+  const today = indiaToday();
+  const day = (s: string | null | undefined) => {
+    const d = s ? parseDocumentDate(s) : null;
+    return d ? Math.round(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / 86_400_000) : null;
+  };
+  const iso = (n: number) => new Date(n * 86_400_000).toISOString().slice(0, 10);
+  const meta = (id: string, key: string) => details.get(id)?.meta.find((m) => m.key === key)?.value ?? null;
+  const latestExpiry = (id: string) => {
+    const d = details.get(id);
+    const days = [d?.expiryDate, ...(d?.meta.filter((m) => m.key === 'expiry_date').map((m) => m.value) ?? [])]
+      .map(day).filter((n): n is number => n !== null);
+    return days.length ? Math.max(...days) : null;
+  };
+  const live = docs.filter((d) => details.has(d.id));
+  const expiries = live.map((d) => ({ d, e: latestExpiry(d.id) })).filter((x): x is { d: typeof live[number]; e: number } => x.e !== null);
+  const bills = live.filter((d) => meta(d.id, 'due_date') && !paid.has(d.id));
+  const trade = live.filter((d) => d.category_name === 'Sales Invoices' || d.category_name === 'Purchase Bills');
+  const out: Record<string, unknown> = {
+    tier,
+    counts: {
+      renewals: expiries.filter((x) => x.e >= today && x.e <= today + 90).length,
+      expired: expiries.filter((x) => x.e >= today - 30 && x.e <= today - 1).length,
+      bills: bills.length,
+      invoices: trade.length,
+      documents: docs.length,
+    },
+    renewals: null,
+    bills: null,
+    money: null,
+  };
+  if (tier === 'plus' || tier === 'pro') {
+    out.renewals = expiries.filter((x) => x.e >= today - 30 && x.e <= today + 90).sort((a, b) => a.e - b.e).slice(0, 100)
+      .map((x) => ({ document_id: x.d.id, file_name: x.d.file_name, category: x.d.category_name, expiry_date: iso(x.e) }));
+    out.bills = bills.slice(0, 200).map((d) => ({
+      document_id: d.id, file_name: d.file_name, category: d.category_name,
+      due_date: meta(d.id, 'due_date'), total_amount: meta(d.id, 'total_amount'), invoice_number: meta(d.id, 'invoice_number'),
+    }));
+  }
+  if (tier === 'pro') {
+    out.money = trade.slice(0, 1000).map((d) => ({
+      kind: d.category_name === 'Sales Invoices' ? 'in' : 'out',
+      invoice_date: meta(d.id, 'invoice_date'), total_amount: meta(d.id, 'total_amount'), created_at: d.created_at,
+    }));
+  }
+  return out;
+}
+
+/** The names of the people a question names by relation in a locked vault's tree. */
+async function relativesInQuestion(familyId: string, question: string): Promise<string[]> {
+  const userId = await myId();
+  const db = supabase as any;
+  const [{ data: people }, { data: links }] = await Promise.all([
+    db.from('family_people').select('id, user_id, display_name, gender, birth_date, nickname').eq('family_id', familyId),
+    db.from('family_links').select('from_person, to_person, kind').eq('family_id', familyId),
+  ]);
+  const rows = ((people ?? []) as { id: string; user_id: string | null; display_name: string; gender: string | null; birth_date: string | null; nickname: string | null }[])
+    .map((r) => ({
+      id: r.id, userId: r.user_id, name: r.display_name, gender: (r.gender === 'female' || r.gender === 'male' ? r.gender : null) as Gender,
+      birthDate: r.birth_date, nickname: r.nickname,
+    }));
+  const tree = await openLockedTree(familyId, rows,
+    ((links ?? []) as { from_person: string; to_person: string; kind: KinLink['kind'] }[]).map((l) => ({ from: l.from_person, to: l.to_person, kind: l.kind })));
+  const me = tree.people.find((p) => p.userId === userId)?.id ?? null;
+  return relativesNamedIn(buildGraph(tree.people, tree.links), me, question).map((r) => r.name);
+}
+
+/** Today in India, as a day number (056 counts days by India's calendar). */
+function indiaToday(): number {
+  const ist = new Date(Date.now() + 5.5 * 3_600_000);
+  return Math.round(Date.UTC(ist.getUTCFullYear(), ist.getUTCMonth(), ist.getUTCDate()) / 86_400_000);
 }

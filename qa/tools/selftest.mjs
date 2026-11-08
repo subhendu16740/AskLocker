@@ -54,6 +54,7 @@ import { loadQuestions, selectQuestions, groupCount, rotationGroup, estimateFor 
 import { documents, permanentDocuments } from '../fixtures/documents.mjs';
 import * as vc from '../../supabase/functions/_shared/vault-crypto.ts';
 import * as localSearch from '../../src/lib/local-search.ts';
+import * as treeRules from '../../src/lib/tree-rules.ts';
 
 let passed = 0;
 const failures = [];
@@ -1948,6 +1949,23 @@ await test('e2e: search on the phone ranks by meaning and words, four passages a
   assert.ok(capped.some((p) => p.documentId === 'resume'));
   const words = localSearch.rankPassages([P('a', 'SPECIMEN पासपोर्ट संख्या P1234567', far), P('b', 'SPECIMEN bill', far)], null, 'पासपोर्ट');
   assert.equal(words[0].documentId, 'a', 'words alone, in any script, when the model is not there');
+});
+
+await test("e2e: a locked vault's tree keeps 031's rules on the phone, in the server's words (073)", () => {
+  const ids = ['nani', 'maa', 'asha', 'ravi', 'dadi'];
+  let links = treeRules.connectInTree([], ids, 'nani', 'parent', 'maa');
+  links = treeRules.connectInTree(links, ids, 'asha', 'child', 'maa', 'ravi');
+  assert.deepEqual(links.map((l) => `${l.from}>${l.to}`).sort(), ['maa>asha', 'nani>maa', 'ravi>asha']);
+  assert.equal(treeRules.connectInTree(links, ids, 'nani', 'parent', 'maa'), links, 'the same link again changes nothing');
+  assert.throws(() => treeRules.connectInTree(links, ids, 'dadi', 'parent', 'asha'), /at most two parents/);
+  assert.throws(() => treeRules.connectInTree(links, ids, 'asha', 'parent', 'nani'), /own ancestor/);
+  assert.throws(() => treeRules.connectInTree(links, ids, 'maa', 'spouse', 'asha'), /already connected/);
+  assert.throws(() => treeRules.connectInTree(links, ids, 'asha', 'sibling', 'asha'), /own relative/);
+  assert.throws(() => treeRules.connectInTree(links, ids, 'asha', 'spouse', 'stranger'), /not in this family's tree/);
+  assert.throws(() => treeRules.connectInTree(links, ids, 'dadi', 'child', 'ravi', 'dadi'), /different second parent/);
+  const pair = treeRules.connectInTree(links, ids, 'ravi', 'spouse', 'maa');
+  assert.ok(pair.some((l) => l.kind === 'spouse' && l.from < l.to), 'a pair is stored once, smaller id first');
+  assert.deepEqual(treeRules.linksAmong(links, ['maa', 'asha']).map((l) => `${l.from}>${l.to}`), ['maa>asha'], 'someone taken out takes their links');
 });
 
 if (failures.length) {

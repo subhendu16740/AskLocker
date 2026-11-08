@@ -143,3 +143,66 @@ export async function sealChat<M>(_title: string, _messages: M[], _vaultIds: str
 export async function openChat<M>(_envelope: SealedChatEnvelope): Promise<{ title: string; messages: M[] }> {
   throw new Error(NOT_HERE);
 }
+
+// ─── A locked vault's name, tree, cards and notes (073) ──────────
+// Nothing is locked in the phone app: names, trees, cards and notes are read
+// and written as they are, and the sealing functions say to use the web app.
+
+export const LOCKED_VAULT_NAME = 'Locked vault';
+export const LOCKED_PERSON_NAME = 'Person';
+
+export interface SealedPerson {
+  v: 1;
+  name: string;
+  gender: 'female' | 'male' | null;
+  birthDate: string | null;
+  nickname: string | null;
+}
+
+export type SealedCard = Record<string, unknown> & { contacts?: unknown[] };
+
+export function forgetVaultRecords(_familyId: string): void {}
+export async function lockedVaultName(_familyId: string): Promise<string | null> {
+  return null;
+}
+export async function overlayVaultNames<T extends { id: string; name: string }>(vaults: T[]): Promise<T[]> {
+  return vaults;
+}
+export async function sealVaultName(_familyId: string, _name: string): Promise<void> {
+  throw new LockedVaultError(NOT_HERE);
+}
+export async function openLockedTree<P>(_familyId: string, people: P[], links: import('../../supabase/functions/_shared/kinship').KinLink[]) {
+  return { people, links };
+}
+export async function sealPerson(_familyId: string, _personId: string, _details: Omit<SealedPerson, 'v'>): Promise<void> {
+  throw new LockedVaultError(NOT_HERE);
+}
+export async function addSealedPerson(_familyId: string, _details: Omit<SealedPerson, 'v'>): Promise<string> {
+  throw new LockedVaultError(NOT_HERE);
+}
+export async function sealTreeLinks(_familyId: string, _links: unknown[]): Promise<void> {
+  throw new LockedVaultError(NOT_HERE);
+}
+export async function lockedCards(_familyId: string): Promise<Map<string, SealedCard>> {
+  return new Map();
+}
+export async function sealCard(_familyId: string, _personId: string, _card: SealedCard | null): Promise<void> {
+  throw new LockedVaultError(NOT_HERE);
+}
+export function isSealedNote(body: string): boolean {
+  return /^n1\./.test(body);
+}
+export async function sealNoteBody(_familyId: string, _text: string): Promise<string> {
+  throw new LockedVaultError(NOT_HERE);
+}
+export async function openNoteBody(_familyId: string, body: string): Promise<string> {
+  return isSealedNote(body) ? 'This note can be opened in the web app.' : body;
+}
+export async function moveVaultDetails(_familyId: string, _admin: boolean, _force = false): Promise<void> {}
+export async function lockedOverview(
+  _familyId: string,
+  tier: 'free' | 'plus' | 'pro',
+  _docs: Pick<FamilyDocumentRow, 'id' | 'file_name' | 'category_name' | 'created_at'>[],
+): Promise<Record<string, unknown>> {
+  return { tier, counts: {}, renewals: null, bills: null, money: null };
+}

@@ -181,8 +181,13 @@ Four things will mislead you if you assume otherwise:
    member reads their vault's sealed parts and their own grants, a locked
    vault refuses a readable document, and only its owner locks a vault,
    where `e2e_config` allows it; since 072 each of these functions checks
-   the caller before saying anything about the vault: see the same
-   section).
+   the caller before saying anything about the vault; 073's sealed
+   records of a locked vault's name, tree and cards, `sealed_vault_items`,
+   are read by its members and written only through `seal_vault_item`,
+   `add_sealed_person` and `delete_vault_item` (from `auth.uid()`: an
+   admin, or the person themselves for their own details and card), and a
+   locked vault refuses a readable name, person, link, card or note: see
+   the same section).
    **A new writable
    column needs its own `GRANT` in a migration.** Nobody joins a family
    without saying yes: only an admin asks a person in, through the
@@ -875,7 +880,7 @@ src/
     notifications.tsx        # expiry alerts, uploads, invites, Family Plus
     family.tsx               # Manage Family: the open vault's members, invitations (Pending approval), leaving; the personal vault's own page (046); Manage team for a business (051). No vaults: they are in Settings › Your vaults    (NOT a tab)
     delete-vault.tsx         # Delete a family or a business, its owner only (057): what goes and who loses it, type its name
-    lock-vault.tsx           # Lock a vault, its owner, test builds only (071): locks it and moves its older documents
+    lock-vault.tsx           # Lock a vault, its owner, test builds only (071, 073): locks it, then moves its name, tree, cards, notes and older documents into the lock
     make-business.tsx        # Make this a business vault: what stays, changes and goes, for an admin of a family vault (054)
     overview.tsx             # a business's Overview (drawer): counts; renewals and bills due on Plus; money in and out on Pro (056)
     notes.tsx                # My notes (drawer, in a business): each person's own notes, reminders on a paid plan (056)
@@ -962,9 +967,10 @@ tabs. `(tabs)` is a layout group, so routes are `/home`, `/search`, `/upload`.
 | `ocr.ts` | Platform-split OCR with progress callback; reads the person's chosen languages |
 | `ocr-languages.ts` | The document-language picker list, and `resolveOcrLanguages()` which always appends English |
 | `vault-keys.ts` / `vault-keys.web.ts` | A person's encryption keys on this device (070, 071, test builds only): `ensureKeys()` makes them without a screen; kept twice in IndexedDB (`asklocker-keys`); `addPhoneLock()` / `unlockWithPhoneLock()` (a passkey's PRF), `startDeviceRequest()` / `pendingDeviceRequests()` / `approveDeviceRequest()`, `prepareBackupKey()` / `unlockWithRecoveryKey()`, `makeNewKeys()`, `myDeviceIdentity()`, `forgetKeysOnThisDevice()` (also on deleting the account), `keysErrorText()`. Types in `vault-keys-types.ts`. See [Locked vaults](#locked-vaults--end-to-end-encryption-vault-by-vault-test-builds-only-070-071) |
-| `vault-lock.ts` / `vault-lock.web.ts` | Locked vaults (071): `lockVault()`, `tendVault()`, `approveMember()`, `sealDocument()`, `readOnDevice()`, `overlaySealed()`, `documentDetails()`, `openDocumentFile()`, `renameLockedDocument()`, `searchLockedVaults()`, `lockedExpiries()`, `documentFileKeyText()` / `openSharedFile()`, `sealChat()` / `openChat()`, `moveOlderDocuments()` |
-| `e2e-api.ts` | Locked vaults' database calls (071), nothing else |
+| `vault-lock.ts` / `vault-lock.web.ts` | Locked vaults (071, 073): `lockVault()`, `tendVault()`, `approveMember()`, `sealDocument()`, `readOnDevice()`, `overlaySealed()` (names, and whose a document is), `documentDetails()`, `openDocumentFile()`, `renameLockedDocument()`, `searchLockedVaults()` (relations resolved from the opened tree), `lockedExpiries()`, `documentFileKeyText()` / `openSharedFile()`, `sealChat()` / `openChat()`, `moveOlderDocuments()`; 073's `overlayVaultNames()`, `openLockedTree()`, `sealPerson()`, `addSealedPerson()`, `sealTreeLinks()`, `lockedCards()` / `sealCard()`, `sealNoteBody()` / `openNoteBody()`, `moveVaultDetails()`, `lockedOverview()` |
+| `e2e-api.ts` | Locked vaults' database calls (071, 073), nothing else |
 | `local-search.ts` | Search on the phone, pure: 8-bit vectors (`packVector()`), `rankPassages()` (0.7 meaning, 0.3 words, four a document) |
+| `tree-rules.ts` | The family tree's rules for a locked vault (073), pure: `connectInTree()` (031's one link a pair, two parents at most, nobody their own ancestor, in its words), `linksAmong()` |
 | `on-device-model.ts` / `.web.ts`, `on-device-reader.ts` / `.web.ts`, `gmail-device.ts` / `.web.ts` | Locked vaults on the phone: gte-small (transformers.js 4.3.1), PDF.js 4.10.38, both from jsDelivr when first needed; Gmail in the browser |
 | `analytics.ts` | Usage counts with PostHog (production builds only): `track(event, props)`, typed by `AnalyticsEvents` so only named events and properties can be sent; a random id per device (`deviceKey.analyticsId`), the Privacy switch (`analyticsOn`, `setAnalyticsOn`), `categoryForAnalytics()` (built-in names only), `screenName()` (the route, never an id). Screen views come from `components/analytics-tracker.tsx` in the root layout. Off in every build but production |
 | `razorpay.ts` / `razorpay.web.ts` | Paying for Family Plus (044): on the web, Razorpay's own checkout window (`openCheckout`; checkout.js is loaded the first time someone pays, and card and UPI details go to Razorpay, never to us); the phone app's file is a stand-in until EAS builds exist. Types in `razorpay-types.ts` |
@@ -975,7 +981,7 @@ tabs. `(tabs)` is a layout group, so routes are `/home`, `/search`, `/upload`.
 | `speech-text.ts` | `toSpeech()`: strips markdown and spells out ID numbers before they are read aloud — and a number named as one ("train number 16782", "PNR: 4512", "PIN 751001", "नंबर 16782") digit by digit, from its digits; the screen keeps the digits |
 | `voice-languages.ts` | The language picker list and the few phrases the app itself says, per language |
 | `storage.ts` | Key-value cache: localStorage on web, AsyncStorage on native |
-| `database.types.ts` | Generated Supabase types, current to 072 (070's and 071's functions added by hand) (030, 052, 055, 058, 059, 061, 063 and 072 changed nothing in them, nor did 065, whose one function only the Edge Functions call, nor 066 and 067, numbers and function bodies; 049's, 050's, 051's, 053's, 054's, 056's, 057's, 060's, 062's, 064's, 068's and 069's added by hand). Regenerate after every migration and re-append the hand-written block at the bottom (see the typecheck note) |
+| `database.types.ts` | Generated Supabase types, current to 073 (070's, 071's and 073's functions added by hand) (030, 052, 055, 058, 059, 061, 063 and 072 changed nothing in them, nor did 065, whose one function only the Edge Functions call, nor 066 and 067, numbers and function bodies; 049's, 050's, 051's, 053's, 054's, 056's, 057's, 060's, 062's, 064's, 068's and 069's added by hand). Regenerate after every migration and re-append the hand-written block at the bottom (see the typecheck note) |
 
 ---
 
@@ -1052,7 +1058,7 @@ Supabase, cloud-hosted. Three layers:
   question_usage, daily_usage, scratch_notes, agreement_versions,
   user_agreements, vault_question_usage, user_keys, e2e_config,
   locked_vaults, vault_keys, vault_key_grants, sealed_documents,
-  key_device_requests, key_unlocks.
+  key_device_requests, key_unlocks, sealed_vault_items.
   RLS enabled.
 - **Layer 2 (private)** — one isolated schema per family (`family_<short_uuid>`)
   holding documents, document_metadata, document_chunks, expiry_alerts,
@@ -3055,17 +3061,39 @@ where it does not.
   locked vault runs in the browser (`gmail-device.web.ts`, Google Identity
   Services' token client, `EXPO_PUBLIC_GMAIL_CLIENT_ID`); the server's
   `gmail-import` answers 409 `vault_locked`.
-- **Still readable in a locked vault**: its name, the family tree,
-  nicknames, emergency cards and notes, and the business overview's
-  figures (Phase 3). **No screen, policy, agreement or video says
-  end-to-end** until Phase 3 and an outside review (Phase 5) are done; the
+- **A locked vault's name, tree, cards and notes (073)** are sealed with
+  the vault's key too, in `sealed_vault_items` (the name, the tree's links,
+  each person's details, each person's card) and, for notes, in
+  `scratch_notes` itself (`n1.<version>.<id>.<sealed>`). The server keeps
+  "Locked vault" and "Person" in their place, and the vault's own
+  notifications stop saying its old name; the app shows the real ones
+  (`overlayVaultNames()` in `fetchUserFamilies`, notifications, the tree,
+  cards, notes, whose a document is, a vault's deletion, whose real name
+  is checked on the phone). Who may write stays the server's
+  (`seal_vault_item`: an admin the name and links, an admin or the person
+  their own details and card); the tree's shape is the app's
+  (`tree-rules.ts`, 031's rules), and a locked vault refuses readable
+  copies by triggers. After locking, the owner's app moves them
+  (`moveVaultDetails()`); every member's app seals its own entry, card and
+  notes when it opens the vault. The business overview of a locked
+  business is worked out on the phone (`lockedOverview()`), and a question
+  naming a relation is resolved there from the opened tree. Still
+  readable: membership and roles, how many people the tree has, which
+  bills were marked paid and when, a note's reminder date; birthday
+  reminders stop for a locked vault. **No screen, policy, agreement or
+  video says end-to-end** until an outside review (Phase 5) is done; the
   privacy rule under Conventions stands.
 - **Tested**: 071 on a local Postgres (23 scenarios, the 023 sweep empty,
   applied twice); the device flows in Node against an in-memory server
   keeping 071's rules (18 flows: lock, seal, let in, search, open, share,
   rename, backup key, phone lock, a device approved, rotation after a
   member leaves, new keys and an admin's approval, moving older documents,
-  expiry dates, deletes); the self-test pins the crypto and the ranking;
+  expiry dates, deletes) and, for 073, six more (moving the name, tree,
+  cards and notes; members reading them and a stranger not; a viewer
+  editing only their own entry; the tree's rules; whose a document is; the
+  overview; "Nani's pension" resolved on the phone); 073 on a local
+  Postgres (every permission, the readable copies refused, applied twice);
+  the self-test pins the crypto, the ranking and the tree's rules;
   QA's access probes cover every table and function (skipped until 071 is
   on DEV). They found that two functions answered before checking the
   caller: `lock_vault()` said whether locking is on, and

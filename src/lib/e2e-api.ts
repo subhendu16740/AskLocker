@@ -331,3 +331,57 @@ export async function replaceMyIdentityRpc(encryptPublic: string, signPublic: st
   if (error) throw error;
   return Number(data);
 }
+
+// ─── A locked vault's name, tree, cards (073) ────────────────────
+
+export type VaultItemKind = 'vault-name' | 'tree-links' | 'person' | 'emergency-card';
+
+export interface SealedVaultItemRow {
+  family_id: string;
+  kind: VaultItemKind;
+  item_id: string;
+  key_version: number;
+  sealed: string;
+}
+
+/** A vault's sealed records; nothing where 073 is missing. */
+export async function fetchSealedVaultItems(familyId: string, kinds?: VaultItemKind[]): Promise<SealedVaultItemRow[]> {
+  let query = (supabase as any).from('sealed_vault_items').select('family_id, kind, item_id, key_version, sealed').eq('family_id', familyId);
+  if (kinds?.length) query = query.in('kind', kinds);
+  const { data, error } = await query.limit(5000);
+  if (error) {
+    if (isMissingMigration(error)) return [];
+    throw error;
+  }
+  return (data ?? []) as SealedVaultItemRow[];
+}
+
+export async function sealVaultItemRpc(familyId: string, kind: VaultItemKind, itemId: string, keyVersion: number, sealed: string): Promise<void> {
+  const { error } = await (supabase as any).rpc('seal_vault_item', {
+    p_family_id: familyId, p_kind: kind, p_item_id: itemId, p_key_version: keyVersion, p_sealed: sealed,
+  });
+  if (error) throw error;
+}
+
+export async function addSealedPersonRpc(familyId: string, personId: string, keyVersion: number, sealed: string): Promise<string> {
+  const { data, error } = await (supabase as any).rpc('add_sealed_person', {
+    p_family_id: familyId, p_person_id: personId, p_key_version: keyVersion, p_sealed: sealed,
+  });
+  if (error) throw error;
+  return data as string;
+}
+
+export async function deleteVaultItemRpc(familyId: string, kind: 'emergency-card', itemId: string): Promise<void> {
+  const { error } = await (supabase as any).rpc('delete_vault_item', { p_family_id: familyId, p_kind: kind, p_item_id: itemId });
+  if (error) throw error;
+}
+
+/** A locked business's bills marked paid, by document id: the day, "DD/MM/YYYY". */
+export async function fetchPaidBills(familyId: string): Promise<Map<string, string>> {
+  const { data, error } = await (supabase as any).rpc('paid_bills', { p_family_id: familyId });
+  if (error) {
+    if (isMissingMigration(error)) return new Map();
+    throw error;
+  }
+  return new Map(((data ?? []) as { document_id: string; paid_on: string }[]).map((r) => [r.document_id, r.paid_on]));
+}

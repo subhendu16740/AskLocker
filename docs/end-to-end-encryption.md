@@ -1,11 +1,11 @@
 # End-to-end encryption — the plan
 
-**Status: Phases 0, 1, 2 and 4 are built, in test builds only, vault by
-vault (4 November 2026); nothing on asklocker.com is locked.** Until
-Phases 3 and 5 are done, every screen, the privacy policy and the agreement
-keep saying documents are **not** end-to-end encrypted, and the marketing
-videos stay unpublished (CLAUDE.md, "Never promise more privacy than
-AskLocker gives").
+**Status: Phases 0 to 4 are built, in test builds only, vault by vault
+(Phase 3 on 8 November 2026); nothing on asklocker.com is locked.** Until
+the outside review (Phase 5) is done, every screen, the privacy policy and
+the agreement keep saying documents are **not** end-to-end encrypted, and
+the marketing videos stay unpublished (CLAUDE.md, "Never promise more
+privacy than AskLocker gives").
 
 The goal, in the owner's words (3 November 2026): nobody in the middle,
 inside AskLocker or outside it, can open a family's documents or
@@ -242,11 +242,41 @@ attachment is read, sealed and saved like an upload. The server's
 (the Gmail project's client id) and the page's address in that client's
 Authorized JavaScript origins.
 
-### Still readable in a locked vault (Phase 3)
+### A vault's name, family tree, emergency cards and notes (Phase 3, 073)
 
-Vault names, the family tree and nicknames, emergency cards and notes are
-not sealed yet; they need their server checks moved into the app first.
-The privacy words stay as they are until Phase 3 and the review are done.
+Each is sealed with the vault key, bound to its place
+(`asklocker/v1/<kind>/<vault>/<record>`), and kept in `sealed_vault_items`:
+the vault's name, its tree links (one record), each person's details (name,
+gender, date of birth, nickname) and each person's emergency card. The
+server keeps "Locked vault" and "Person" in their place, and the vault's
+own notifications stop saying its old name. Notes stay in `scratch_notes`,
+their text sealed (`n1.<key version>.<id>.<sealed>`), each still its
+owner's alone by RLS; a reminder on one says "A note reminder".
+
+- **Who may write is still the server's** (`seal_vault_item`,
+  `add_sealed_person`, `delete_vault_item`, the caller from `auth.uid()`):
+  an admin the name and the links, an admin or the person themselves their
+  details and card (031's and 032's rule). **The tree's shape is the
+  app's** (`src/lib/tree-rules.ts`, 031's rules and words: one link a pair,
+  two parents at most, nobody their own ancestor), since the server cannot
+  see the links.
+- **A locked vault refuses readable copies** on every path: a readable
+  name, person, link, card or note is refused by a trigger. A member's own
+  entry, made with their membership, keeps their account name until their
+  app seals it.
+- **Moving them**: after locking, the owner's app seals the vault's name,
+  its links, everyone's details and cards, and its own notes; every
+  member's app seals its own entry, card and notes when it opens the vault
+  (`moveVaultDetails()`, from `tendVault()`).
+- **What the phone works out instead**: who a question names by relation
+  ("Nani's pension", from the asker's place in the opened tree), the names
+  on documents, the business overview (renewals, bills due, money in and
+  out, from the documents it opens), and deleting a vault by its name (the
+  real name is checked on the phone; the server checks the one it keeps).
+- **Still readable**: who is a member, with what role; how many people the
+  tree has; which bills were marked paid, and when (the activity log
+  records it anyway); a note's reminder date. **Birthday reminders stop**
+  for a locked vault: the server no longer knows anyone's birthday.
 
 ---
 
@@ -261,7 +291,10 @@ The privacy words stay as they are until Phase 3 and the review are done.
 | Expiry reminders pushed by the server | Worked out in the app |
 | A share link opens a signed address to the file | The link carries the file key after `#`; the page opens the file in the browser |
 | Gmail import on the server | In the browser |
-| The business overview reads details in the database | Not yet: Phase 3 |
+| The business overview reads details in the database | The phone works it out from the documents it opens |
+| The family tree, cards, notes and the vault's name are readable | Sealed with the vault key; the tree's rules kept on the phone |
+| Relations in a question are resolved on the server | On the phone, from the opened tree |
+| Birthday reminders pushed by the server | None for a locked vault |
 
 Unchanged: plans, limits (they count sizes and numbers), payments,
 invitations, deleting an account or a vault, the 30-day removal after
@@ -276,11 +309,11 @@ Plus ends (it picks documents by size and date).
 | **0** | The crypto core and its self-tests; the lab; this plan | Done 3 November 2026 |
 | **1** | Keys and devices: identity, phone lock, approving a device, optional backup key, new keys after losing everything | Built 4 November 2026 (071), test builds only |
 | **2** | Locked vaults: documents read, sealed and searched on the phone; Ask; viewer; share links; reminders in the app; saved chats | Built 4 November 2026, test builds only |
-| **3** | Vault names, tree, cards and notes sealed; the business overview on the phone | Not started |
+| **3** | Vault names, tree, cards and notes sealed; the business overview on the phone | Built 8 November 2026 (073), test builds only |
 | **4** | Moving existing vaults, Gmail import on the phone | Built 4 November 2026, test builds only |
 | **5** | An outside security review of the code and the key flows, fixes, and only then the claim and the videos | Not started |
 
-**The claim, once Phases 3 and 5 are done**, and not a word before:
+**The claim, once Phase 5 is done**, and not a word before:
 
 > Only the people in your vault can open your documents. Nobody at
 > AskLocker can. To answer a question, your phone sends only the passages

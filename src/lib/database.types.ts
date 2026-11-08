@@ -1849,6 +1849,13 @@ export type Database = {
       update_sealed_details: { Args: { p_family_id: string; p_document_id: string; p_details: string }; Returns: undefined }
       finish_vault_move: { Args: { p_family_id: string }; Returns: number }
       sealed_documents_sweep: { Args: { p_family_id: string }; Returns: number }
+      seal_vault_item: {
+        Args: { p_family_id: string; p_kind: string; p_item_id: string; p_key_version: number; p_sealed: string }
+        Returns: undefined
+      }
+      add_sealed_person: { Args: { p_family_id: string; p_person_id: string; p_key_version: number; p_sealed: string }; Returns: string }
+      delete_vault_item: { Args: { p_family_id: string; p_kind: string; p_item_id: string }; Returns: undefined }
+      paid_bills: { Args: { p_family_id: string }; Returns: Json }
       update_my_identity_backup: { Args: { p_backup: string }; Returns: undefined }
       delete_my_identity: { Args: never; Returns: undefined }
       identity_fingerprint: { Args: { p_encrypt_public: string; p_sign_public: string }; Returns: string }

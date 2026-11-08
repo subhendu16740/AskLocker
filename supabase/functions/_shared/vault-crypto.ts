@@ -104,7 +104,7 @@ function version(value: number): string {
 /** What one document holds, each sealed with its file key. */
 export type DocumentPart = 'file' | 'name' | 'passages' | 'details';
 /** What a vault holds outside its documents, each sealed with the vault key. */
-export type VaultRecord = 'vault-name' | 'person' | 'emergency-card' | 'saved-chat' | 'note';
+export type VaultRecord = 'vault-name' | 'tree-links' | 'person' | 'emergency-card' | 'saved-chat' | 'note';
 
 /**
  * The context every sealed item is bound to. Change one and it no longer
