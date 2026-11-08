@@ -174,7 +174,15 @@ Four things will mislead you if you assume otherwise:
    owner and their vault-mates, and the Recovery-Key-locked backup by its
    owner alone, through `my_identity()`, never by a SELECT (the column grant
    leaves it out): see
-   [End-to-end encryption](#end-to-end-encryption--planned-phase-0-done-phase-1-started-3-november-2026)).
+   [Locked vaults](#locked-vaults--end-to-end-encryption-vault-by-vault-test-builds-only-070-071);
+   071's locked vaults keep their keys, key grants, phone-lock unlocks,
+   device requests and sealed documents in tables no client writes: every
+   write goes through functions that take the caller from `auth.uid()`, a
+   member reads their vault's sealed parts and their own grants, a locked
+   vault refuses a readable document, and only its owner locks a vault,
+   where `e2e_config` allows it; since 072 each of these functions checks
+   the caller before saying anything about the vault: see the same
+   section).
    **A new writable
    column needs its own `GRANT` in a migration.** Nobody joins a family
    without saying yes: only an admin asks a person in, through the
@@ -473,6 +481,15 @@ button (see [Signing in](#signing-in--google-only-with-googles-own-button-where-
   the anon key; the same client the Supabase Google provider uses)
 - `EXPO_PUBLIC_GOOGLE_WEB_ORIGINS` — the web addresses in that client's
   Authorized JavaScript origins, comma-separated
+
+and, optional, by `src/lib/gmail-device.web.ts` — Gmail import into a locked
+vault, which runs in the browser (see
+[Locked vaults](#locked-vaults--end-to-end-encryption-vault-by-vault-test-builds-only-070-071)):
+
+- `EXPO_PUBLIC_GMAIL_CLIENT_ID` — the Gmail project's OAuth client id (the
+  same client as the `GMAIL_CLIENT_ID` secret; public). The page's address
+  must be in that client's Authorized JavaScript origins. Unset, a locked
+  vault offers no Gmail import.
 
 and, optional, by `src/lib/analytics.ts` — usage counts (see Usage counts
 under [Conventions](#conventions)). Production builds send to AskLocker's
@@ -858,6 +875,7 @@ src/
     notifications.tsx        # expiry alerts, uploads, invites, Family Plus
     family.tsx               # Manage Family: the open vault's members, invitations (Pending approval), leaving; the personal vault's own page (046); Manage team for a business (051). No vaults: they are in Settings › Your vaults    (NOT a tab)
     delete-vault.tsx         # Delete a family or a business, its owner only (057): what goes and who loses it, type its name
+    lock-vault.tsx           # Lock a vault, its owner, test builds only (071): locks it and moves its older documents
     make-business.tsx        # Make this a business vault: what stays, changes and goes, for an admin of a family vault (054)
     overview.tsx             # a business's Overview (drawer): counts; renewals and bills due on Plus; money in and out on Pro (056)
     notes.tsx                # My notes (drawer, in a business): each person's own notes, reminders on a paid plan (056)
@@ -874,7 +892,7 @@ src/
       profile.tsx  security.tsx  notifications.tsx  privacy.tsx   # notifications: the switch, and this device (034); privacy: three lines, the privacy policy, Share app usage
       storage.tsx  help.tsx  feedback.tsx  about.tsx   # storage: one table, a row per vault: used, space, its plan, ★ for a paid one (038, 039), and first what you added on Free (060); help: a business's answers in Business mode
       vaults.tsx             # Your vaults: Family vaults and Business vaults, open, create, Make it a business, Delete (057)
-      encryption.tsx         # Security › Encryption keys, test builds and the web only: set up keys, the Recovery Key once, unlock this device with it (070)
+      encryption.tsx         # Security › Encryption keys, test builds and the web only: keys made without a screen; the phone's lock, approving a new device, an optional backup key, new keys (070, 071)
       delete-account.tsx     # Security › Delete account: shows what goes, asks for DELETE (029)
     document/[id].tsx        # document viewer; Share opens the share sheet (036, web only)
     documents.tsx            # All documents (Home's three counts, See all): tabs Documents, Family (Team) and Categories; a vault filter, a person's or a category's documents, Delete one or several (Select)
@@ -943,7 +961,11 @@ tabs. `(tabs)` is a layout group, so routes are `/home`, `/search`, `/upload`.
 | `app-info.ts` | Version, release date and commit (stamped into `extra` by `app.config.ts` at build time), and the support contact Help and the privacy policy show (`support@asklocker.com`, Cloudflare Email Routing) |
 | `ocr.ts` | Platform-split OCR with progress callback; reads the person's chosen languages |
 | `ocr-languages.ts` | The document-language picker list, and `resolveOcrLanguages()` which always appends English |
-| `vault-keys.ts` / `vault-keys.web.ts` | Encryption keys on this device (070, end-to-end encryption Phase 1, test builds only): on the web, made by `_shared/vault-crypto.ts`, kept in IndexedDB (`asklocker-keys`) in a form the browser will not hand out, the account holding only the public parts and a copy locked with the Recovery Key; `loadKeysState()` (and the background check that this device's keys are the account's), `prepareKeys()`, `unlockWithRecoveryKey()`, `checkRecoveryKey()`, `prepareNewRecoveryKey()`, `forgetKeysOnThisDevice()` (also on deleting the account), `keysErrorText()`. The phone app's file is a stand-in until EAS builds exist. Types in `vault-keys-types.ts` |
+| `vault-keys.ts` / `vault-keys.web.ts` | A person's encryption keys on this device (070, 071, test builds only): `ensureKeys()` makes them without a screen; kept twice in IndexedDB (`asklocker-keys`); `addPhoneLock()` / `unlockWithPhoneLock()` (a passkey's PRF), `startDeviceRequest()` / `pendingDeviceRequests()` / `approveDeviceRequest()`, `prepareBackupKey()` / `unlockWithRecoveryKey()`, `makeNewKeys()`, `myDeviceIdentity()`, `forgetKeysOnThisDevice()` (also on deleting the account), `keysErrorText()`. Types in `vault-keys-types.ts`. See [Locked vaults](#locked-vaults--end-to-end-encryption-vault-by-vault-test-builds-only-070-071) |
+| `vault-lock.ts` / `vault-lock.web.ts` | Locked vaults (071): `lockVault()`, `tendVault()`, `approveMember()`, `sealDocument()`, `readOnDevice()`, `overlaySealed()`, `documentDetails()`, `openDocumentFile()`, `renameLockedDocument()`, `searchLockedVaults()`, `lockedExpiries()`, `documentFileKeyText()` / `openSharedFile()`, `sealChat()` / `openChat()`, `moveOlderDocuments()` |
+| `e2e-api.ts` | Locked vaults' database calls (071), nothing else |
+| `local-search.ts` | Search on the phone, pure: 8-bit vectors (`packVector()`), `rankPassages()` (0.7 meaning, 0.3 words, four a document) |
+| `on-device-model.ts` / `.web.ts`, `on-device-reader.ts` / `.web.ts`, `gmail-device.ts` / `.web.ts` | Locked vaults on the phone: gte-small (transformers.js 4.3.1), PDF.js 4.10.38, both from jsDelivr when first needed; Gmail in the browser |
 | `analytics.ts` | Usage counts with PostHog (production builds only): `track(event, props)`, typed by `AnalyticsEvents` so only named events and properties can be sent; a random id per device (`deviceKey.analyticsId`), the Privacy switch (`analyticsOn`, `setAnalyticsOn`), `categoryForAnalytics()` (built-in names only), `screenName()` (the route, never an id). Screen views come from `components/analytics-tracker.tsx` in the root layout. Off in every build but production |
 | `razorpay.ts` / `razorpay.web.ts` | Paying for Family Plus (044): on the web, Razorpay's own checkout window (`openCheckout`; checkout.js is loaded the first time someone pays, and card and UPI details go to Razorpay, never to us); the phone app's file is a stand-in until EAS builds exist. Types in `razorpay-types.ts` |
 | `google-button.ts` / `google-button.web.ts` | Google's own sign-in button on the web (Google Identity Services): `googleButtonAvailable()` (a client id is set and this origin is in `EXPO_PUBLIC_GOOGLE_WEB_ORIGINS`), `renderGoogleButton()` (loads Google's script once, a fresh nonce each time). The phone app's file says no, so it keeps the redirect sign-in. Types in `google-button-types.ts`; see [Signing in](#signing-in--google-only-with-googles-own-button-where-it-is-set-up) |
@@ -953,7 +975,7 @@ tabs. `(tabs)` is a layout group, so routes are `/home`, `/search`, `/upload`.
 | `speech-text.ts` | `toSpeech()`: strips markdown and spells out ID numbers before they are read aloud — and a number named as one ("train number 16782", "PNR: 4512", "PIN 751001", "नंबर 16782") digit by digit, from its digits; the screen keeps the digits |
 | `voice-languages.ts` | The language picker list and the few phrases the app itself says, per language |
 | `storage.ts` | Key-value cache: localStorage on web, AsyncStorage on native |
-| `database.types.ts` | Generated Supabase types, current to 070 (070's added by hand) (030, 052, 055, 058, 059, 061 and 063 changed nothing in them, nor did 065, whose one function only the Edge Functions call, nor 066 and 067, numbers and function bodies; 049's, 050's, 051's, 053's, 054's, 056's, 057's, 060's, 062's, 064's, 068's and 069's added by hand). Regenerate after every migration and re-append the hand-written block at the bottom (see the typecheck note) |
+| `database.types.ts` | Generated Supabase types, current to 072 (070's and 071's functions added by hand) (030, 052, 055, 058, 059, 061, 063 and 072 changed nothing in them, nor did 065, whose one function only the Edge Functions call, nor 066 and 067, numbers and function bodies; 049's, 050's, 051's, 053's, 054's, 056's, 057's, 060's, 062's, 064's, 068's and 069's added by hand). Regenerate after every migration and re-append the hand-written block at the bottom (see the typecheck note) |
 
 ---
 
@@ -972,6 +994,10 @@ src/lib/razorpay.ts                /  razorpay.web.ts
 src/lib/google-button.ts           /  google-button.web.ts
 src/lib/app-lock-device.ts         /  app-lock-device.web.ts
 src/lib/vault-keys.ts              /  vault-keys.web.ts
+src/lib/vault-lock.ts              /  vault-lock.web.ts
+src/lib/on-device-model.ts         /  on-device-model.web.ts
+src/lib/on-device-reader.ts        /  on-device-reader.web.ts
+src/lib/gmail-device.ts            /  gmail-device.web.ts
 src/app/+html.tsx                     (web only — HTML shell, @font-face; NOT used by the single-page export)
 public/sw.js                          (web only — the service worker that shows notifications)
 src/global.css                        (web only)
@@ -1024,7 +1050,9 @@ Supabase, cloud-hosted. Three layers:
   push_subscriptions, reminders_sent, push_config, document_shares,
   family_invites, plan_limits, family_plans, member_usage, plan_payments,
   question_usage, daily_usage, scratch_notes, agreement_versions,
-  user_agreements, vault_question_usage, user_keys.
+  user_agreements, vault_question_usage, user_keys, e2e_config,
+  locked_vaults, vault_keys, vault_key_grants, sealed_documents,
+  key_device_requests, key_unlocks.
   RLS enabled.
 - **Layer 2 (private)** — one isolated schema per family (`family_<short_uuid>`)
   holding documents, document_metadata, document_chunks, expiry_alerts,
@@ -2966,60 +2994,96 @@ where it does not.
   chat with QA Vault A's answers, and B's chat with them goes when B leaves.
   Before 069 those checks are skipped.
 
-### End-to-end encryption — planned, Phase 0 done, Phase 1 started (3 November 2026)
+### Locked vaults — end-to-end encryption, vault by vault, test builds only (070, 071)
 
-- **It works on a real phone.** The owner's Android phone (8 cores) ran
-  the lab: every lock and unlock in milliseconds, a key kept unreadable in
-  IndexedDB, search on the phone right 4 of 4 with a question in about
-  20 ms, reading about 1 s a passage on one thread (0.5 s on four, which
-  the app's pages cannot have yet), the graphics chip failing, and a
-  fingerprint giving a key (PRF). The numbers and what each decides are in
-  the plan. An iPhone is still to be measured.
-- **Phase 1 has begun: each person's keys (070), test builds only.**
-  Settings › Security › Encryption keys (`settings/encryption.tsx`, on the
-  web where `isProduction` is false) makes a person's keys on the device,
-  shows their Recovery Key once (saved only after its last four
-  characters are typed back), and unlocks another device with it
-  (`src/lib/vault-keys.web.ts`). The account keeps only the public keys,
-  their fingerprint (which 070 recomputes, so a row cannot carry another
-  key's) and the keys locked with the Recovery Key, which the server
-  cannot open and nobody but the owner can read. A device keeps its keys
-  in IndexedDB, unreadable, and asks the browser not to clear them; each
-  time the screen opens it checks those keys are the account's. A new
-  Recovery Key needs the old one; with the old one lost but a device still
-  working, a later phase replaces the keys instead. Signing out keeps the
-  keys on the device; deleting the account forgets them there and the row
-  goes with the account. Still to come in Phase 1: approving a new device
-  from one already signed in, a fingerprint unlocking the keys (PRF), and
-  vault keys locked for each member.
-- **Nothing is encrypted end to end yet.** The plan, the owner's
-  decisions and the phases are in
-  [`docs/end-to-end-encryption.md`](docs/end-to-end-encryption.md):
-  documents, vault names, the tree, cards, chats, notes and the search
-  index sealed on members' devices; only accounts, membership, sizes,
-  times, counts and each document's built-in category readable; joining
-  automatic with signed invitations; reminders worked out in the app;
-  recovery by another device, a Recovery Key or a recovery contact.
-  **No screen, policy, agreement or video says end-to-end until Phase 5**
-  (an outside review) is done; the privacy rule under Conventions stands.
+- **The owner's goal (4 November 2026): only the people in a vault can read
+  its documents; the AI service reads the passages an answer is written
+  from; nobody at AskLocker reads anything; nobody is asked to remember or
+  switch on anything.** Built as locked vaults, in test builds only, where
+  `e2e_config.locking_allowed` (071) is true, which only DEV should have.
+  A vault that is not locked works exactly as before. The design, as built,
+  is in [`docs/end-to-end-encryption.md`](docs/end-to-end-encryption.md).
+- **A person's keys** (`src/lib/vault-keys.web.ts`, 070, 071) are made on
+  the device without a screen; the account keeps only their public parts.
+  The device keeps them twice in IndexedDB: as keys the browser will not
+  hand out, and sealed with a device key of its own the browser will not
+  hand out either, so it can lock them for a new device. A new device gets
+  them by the phone's lock (an "AskLocker documents key", a passkey whose
+  PRF output seals them, `key_unlocks`; synced by Google Password Manager
+  or iCloud Keychain; not the passkey fingerprint sign-in uses), by
+  approval from a signed-in device (the same six digits on both,
+  `key_device_requests`), or by an optional backup key (`user_keys.backup`,
+  nullable since 071; Copy, Download, Print). Lose all three and the person
+  makes new keys (`replace_my_identity`): an admin lets them back into each
+  vault; their personal vault does not come back. Settings › Security ›
+  Encryption keys shows all of it. If the documents key is picked by
+  mistake at fingerprint sign-in, the button stays (`documentsKeyHere`,
+  `app-lock.tsx`).
+- **A vault's key** (`src/lib/vault-lock.web.ts`): its owner locks it once
+  (Settings › Your vaults › Lock it, `lock-vault.tsx`); each version is
+  locked for each member (`vault_key_grants`). Whenever a member's app opens
+  it (Home's `LockedVaultNotices`), the key is locked for members who have
+  none, with no tap; after someone leaves, an admin's app makes the next
+  version; someone whose keys changed waits for an admin's "Let them back
+  in" (`grant_vault_key` refuses anyone else). Opened keys are cached per
+  person and tied to the keys that opened them.
+- **A locked document** is read on the phone (photos with Tesseract, PDFs
+  with PDF.js from jsDelivr, `on-device-reader.web.ts`, scanned pages drawn
+  and read; spreadsheets as since 061), split (`_shared/chunking.ts`), its
+  details found (`_shared/metadata.ts`), given search vectors on the phone
+  (gte-small with transformers.js, `on-device-model.web.ts`; 8-bit,
+  `local-search.ts`), and sealed with a file key: the file (its name and type
+  inside), its details, its passages. The phone chooses its id, since the
+  parts are bound to it. The server keeps a row named "Locked document"
+  with status `sealed`, which no server reader touches, and the sealed parts
+  (`sealed_documents`); a locked vault refuses a readable document
+  (`insert_family_document`, HINT `vault_locked`). Lists, details, the
+  viewer, Download, renames, deletes and expiry dates (Reminders) all open
+  or seal on the device (`overlaySealed()` in `api.ts`'s fetchers).
+- **Ask**: the phone searches its locked vaults (0.7 meaning, 0.3 words, four
+  passages a document) and sends the best 15 as `client_passages`;
+  rag-search takes them only for vaults the asker is in, judges and answers
+  with them beside what it finds elsewhere, and keeps them, and the
+  question, out of its logs.
+- **Share links** to a locked document carry `~vault~document~key` after the
+  `#`; the share page opens the file in the browser. **Saved chats** that
+  quote a locked vault are sealed for their owner (their own public key),
+  the quoted vaults left readable for 069. **Moving older documents**
+  (`moveOlderDocuments()`, `seal_existing_document`): read, sealed and
+  uploaded on the phone; the server deletes its readable text, details,
+  alerts and links, and the app the readable file. **Gmail import** into a
+  locked vault runs in the browser (`gmail-device.web.ts`, Google Identity
+  Services' token client, `EXPO_PUBLIC_GMAIL_CLIENT_ID`); the server's
+  `gmail-import` answers 409 `vault_locked`.
+- **Still readable in a locked vault**: its name, the family tree,
+  nicknames, emergency cards and notes, and the business overview's
+  figures (Phase 3). **No screen, policy, agreement or video says
+  end-to-end** until Phase 3 and an outside review (Phase 5) are done; the
+  privacy rule under Conventions stands.
+- **Tested**: 071 on a local Postgres (23 scenarios, the 023 sweep empty,
+  applied twice); the device flows in Node against an in-memory server
+  keeping 071's rules (18 flows: lock, seal, let in, search, open, share,
+  rename, backup key, phone lock, a device approved, rotation after a
+  member leaves, new keys and an admin's approval, moving older documents,
+  expiry dates, deletes); the self-test pins the crypto and the ranking;
+  QA's access probes cover every table and function (skipped until 071 is
+  on DEV). They found that two functions answered before checking the
+  caller: `lock_vault()` said whether locking is on, and
+  `insert_sealed_document()` whether a vault is locked, to anyone signed
+  in. 072 checks the caller first (the owner, the vault's key); until it is
+  on DEV those two probes are skipped.
+- **The phone app** has stand-ins for every one of these files until EAS
+  builds exist: nothing is locked there, and it says to use the web app.
 - **`supabase/functions/_shared/vault-crypto.ts` runs only on members'
-  devices.** It lives in `_shared/` so the app and the QA self-test share
-  one copy, like `kinship.ts`; no Edge Function may import it (the
-  self-test fails if one does), because a server that can unlock a vault
-  key is the middle the design removes. WebCrypto only: AES-256-GCM with
-  the place an item belongs to as associated data, ECDH P-256 + HKDF to
-  lock a vault key for a member, ECDSA P-256, a 28-character Recovery Key.
-  The self-test pins that an item opens only with its key, in its place,
-  unchanged; that a grant opens only for its member; that every wrong
-  character in a Recovery Key is caught. Nothing in the app calls it yet.
+  devices.** No Edge Function may import it (the self-test fails if one
+  does). WebCrypto only: AES-256-GCM with the place an item belongs to as
+  associated data, ECDH P-256 + HKDF to lock a key for one public key
+  (`g1.` for a vault key, `l1.` for anything else), ECDSA P-256, HKDF of a
+  passkey's PRF output, a 28-character backup key.
 - **`/lab/e2e.html` measures a real phone**, on DEV builds only:
   `scripts/lab-pages.mjs` (part of `npm run build`) deletes `dist/lab/`
-  unless `EXPO_PUBLIC_SUPABASE_URL` names DEV, and in a DEV build writes
-  `dist/lab/vault-crypto.js` from the `.ts` with Node's own type
-  stripping. The page reads nothing of AskLocker's and sends nothing; it
-  downloads transformers.js 4.3.1 (jsDelivr) and gte-small (Hugging Face).
-  `/lab/*` alone is cross-origin isolated (`public/_headers`)
-  so the model may use several threads; never the app's pages, where
+  unless `EXPO_PUBLIC_SUPABASE_URL` names DEV. `/lab/*` alone is
+  cross-origin isolated (`public/_headers`); never the app's pages, where
   isolation would break Google's and Razorpay's windows.
 
 ### Edge Functions load supabase-js at one version
@@ -3168,6 +3232,10 @@ where it does not.
   see [Personal vaults](#personal-vaults-and-asking-across-vaults-046).
   A business vault's tree is not read, so relations are not resolved there
   (051).
+  **Locked vaults (071)**: the phone searches them itself and sends its best
+  passages as `client_passages` (with `locked_family_ids`); rag-search takes
+  them only for vaults the asker is in, judges and answers with them beside
+  its own, and logs neither them nor the question.
   **Each question is counted (049)** for the asker before any AI step runs,
   and given back only when the AI service failed (067; before, also when
   nothing was found); past the month's allowance it
@@ -3313,6 +3381,8 @@ where it does not.
   503 `needs_migration` where 029 is not applied.
 - **`gmail-connect`**, **`gmail-callback`**, **`gmail-scan`**,
   **`gmail-import`** — Gmail import; see [below](#gmail-import--your-own-mailbox-your-tick-026).
+  `gmail-import` answers 409 `vault_locked` for a locked vault (071), whose
+  import runs in the browser.
 
 All of them handle CORS preflight explicitly.
 

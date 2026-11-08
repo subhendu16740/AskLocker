@@ -1,7 +1,7 @@
 // ─── Vault crypto: end-to-end encryption, on members' devices only ──────
 //
-// Phase 0 of docs/end-to-end-encryption.md. Nothing calls this yet: the app
-// starts using it in Phase 1, and QA's self-test pins it now.
+// docs/end-to-end-encryption.md. The app's locked vaults (test builds) use it,
+// and QA's self-test pins it.
 //
 // RUNS ONLY ON MEMBERS' DEVICES (and in QA's self-test). No Edge Function may
 // import this file. A server that can unlock a vault key is exactly the
@@ -27,9 +27,9 @@
 //     ↑ locked by
 //   vault key (one per vault)    — also seals the vault's name, tree, cards,
 //     ↑ locked for each member      saved chats and notes
-//   member's identity key        — kept on their devices; a locked copy on
-//     ↑ backed up by                the server opens only with...
-//   their Recovery Key           — which only they hold.
+//   member's identity key        — kept on their devices, brought to a new
+//     ↑ by                          one by the phone's lock (a passkey's
+//   PRF key, another device, or the backup (Recovery) Key.
 // ────────────────────────────────────────────────────────────────
 
 const subtle = globalThis.crypto.subtle;
@@ -44,6 +44,8 @@ export const BINARY_MAGIC = new Uint8Array([0x41, 0x4c, 0x01]); // "AL", version
 export const GRANT_PREFIX = 'g1.';
 /** An identity locked by a Recovery Key: "r1." + salt + "." + sealed. */
 export const BACKUP_PREFIX = 'r1.';
+/** Anything locked for one public key: "l1." + epk + "." + salt + "." + sealed. */
+export const LOCK_PREFIX = 'l1.';
 
 const NONCE_BYTES = 12;
 const TAG_BYTES = 16;
@@ -118,6 +120,16 @@ export const context = {
   vaultKey: (vaultId: string, userId: string, vaultKeyVersion: number) =>
     `asklocker/v1/vault-key/${id(vaultId, 'vaultId')}/${id(userId, 'userId')}/${version(vaultKeyVersion)}`,
   identityBackup: (userId: string) => `asklocker/v1/identity-backup/${id(userId, 'userId')}`,
+  /** An identity locked for a new device's one-time key, after "Approve". */
+  deviceRequest: (userId: string, requestId: string) =>
+    `asklocker/v1/device-request/${id(userId, 'userId')}/${id(requestId, 'requestId')}`,
+  /** An identity sealed with the key a passkey gives (WebAuthn PRF). */
+  passkeyUnlock: (userId: string) => `asklocker/v1/passkey-unlock/${id(userId, 'userId')}`,
+  /** An identity sealed with this device's own key, to lock it for others later. */
+  deviceKeep: (userId: string) => `asklocker/v1/device-keep/${id(userId, 'userId')}`,
+  /** A person's own record outside any vault, locked for their own public key. */
+  personal: (userId: string, kind: 'saved-chat', recordId: string) =>
+    `asklocker/v1/personal/${kind}/${id(userId, 'userId')}/${id(recordId, 'recordId')}`,
 };
 
 // ─── Sealing ────────────────────────────────────────────────────
@@ -430,13 +442,11 @@ interface IdentityPayload {
 }
 
 /**
- * The identity, locked with the Recovery Key, for the server to keep. Bound
- * to the account it belongs to, so one person's backup cannot be served to
- * another.
+ * The identity as text, private halves included. Only ever sealed straight
+ * away (a backup, a passkey, a new device, this device's own copy); the
+ * private halves must be extractable.
  */
-export async function sealIdentity(identity: Identity, recoveryKey: string, userId: string): Promise<string> {
-  const salt = randomBytes(SALT_BYTES);
-  const key = await recoveryWrappingKey(recoveryKey, salt);
+export async function exportIdentity(identity: Identity): Promise<string> {
   const [ep, epub, sp, spub] = await Promise.all([
     subtle.exportKey('pkcs8', identity.encrypt.privateKey),
     subtle.exportKey('spki', identity.encrypt.publicKey),
@@ -450,7 +460,48 @@ export async function sealIdentity(identity: Identity, recoveryKey: string, user
     signPrivate: toBase64Url(new Uint8Array(sp)),
     signPublic: toBase64Url(new Uint8Array(spub)),
   };
-  return `${BACKUP_PREFIX}${toBase64Url(salt)}.${await sealJson(key, payload, context.identityBackup(userId))}`;
+  return JSON.stringify(payload);
+}
+
+/** The identity back from exportIdentity(). Private halves extractable only if asked. */
+export async function importIdentity(text: string, extractable = false): Promise<Identity> {
+  let p: IdentityPayload;
+  try {
+    p = JSON.parse(text) as IdentityPayload;
+  } catch {
+    throw new VaultCryptoError('unknown_format', 'These keys could not be read.');
+  }
+  if (p?.v !== 1) throw new VaultCryptoError('unknown_format', 'These keys are from a newer AskLocker.');
+  const [encryptPrivate, encryptPublic, signPrivate, signPublic] = await Promise.all([
+    subtle.importKey('pkcs8', fromBase64Url(p.encryptPrivate), ECDH, extractable, ['deriveBits']),
+    subtle.importKey('spki', fromBase64Url(p.encryptPublic), ECDH, true, []),
+    subtle.importKey('pkcs8', fromBase64Url(p.signPrivate), ECDSA, extractable, ['sign']),
+    subtle.importKey('spki', fromBase64Url(p.signPublic), ECDSA, true, ['verify']),
+  ]);
+  return {
+    encrypt: { privateKey: encryptPrivate, publicKey: encryptPublic },
+    sign: { privateKey: signPrivate, publicKey: signPublic },
+  };
+}
+
+/** The identity sealed with a secret key (a passkey's, this device's own). */
+export async function sealIdentityWithKey(identity: Identity, key: CryptoKey, ctx: string): Promise<string> {
+  return sealText(key, await exportIdentity(identity), ctx);
+}
+
+export async function openIdentityWithKey(sealed: string, key: CryptoKey, ctx: string, extractable = false): Promise<Identity> {
+  return importIdentity(await openText(key, sealed, ctx), extractable);
+}
+
+/**
+ * The identity, locked with the Recovery Key, for the server to keep. Bound
+ * to the account it belongs to, so one person's backup cannot be served to
+ * another.
+ */
+export async function sealIdentity(identity: Identity, recoveryKey: string, userId: string): Promise<string> {
+  const salt = randomBytes(SALT_BYTES);
+  const key = await recoveryWrappingKey(recoveryKey, salt);
+  return `${BACKUP_PREFIX}${toBase64Url(salt)}.${await sealIdentityWithKey(identity, key, context.identityBackup(userId))}`;
 }
 
 /**
@@ -463,16 +514,91 @@ export async function openIdentity(backup: string, recoveryKey: string, userId: 
   const sealed = rest.join('.');
   if (!salt || !sealed) throw new VaultCryptoError('unknown_format', 'This identity backup is cut short.');
   const key = await recoveryWrappingKey(recoveryKey, fromBase64Url(salt));
-  const p = await openJson<IdentityPayload>(key, sealed, context.identityBackup(userId));
-  if (p.v !== 1) throw new VaultCryptoError('unknown_format', 'This identity backup is from a newer AskLocker.');
-  const [encryptPrivate, encryptPublic, signPrivate, signPublic] = await Promise.all([
-    subtle.importKey('pkcs8', fromBase64Url(p.encryptPrivate), ECDH, extractable, ['deriveBits']),
-    subtle.importKey('spki', fromBase64Url(p.encryptPublic), ECDH, true, []),
-    subtle.importKey('pkcs8', fromBase64Url(p.signPrivate), ECDSA, extractable, ['sign']),
-    subtle.importKey('spki', fromBase64Url(p.signPublic), ECDSA, true, ['verify']),
-  ]);
-  return {
-    encrypt: { privateKey: encryptPrivate, publicKey: encryptPublic },
-    sign: { privateKey: signPrivate, publicKey: signPublic },
-  };
+  return openIdentityWithKey(sealed, key, context.identityBackup(userId), extractable);
+}
+
+// ─── Locking for one public key (a new device, a person's own records) ──
+
+/** A fresh ECDH key pair whose private half cannot be read out: a new device's one-time key. */
+export async function newRequestKeyPair(): Promise<CryptoKeyPair> {
+  return subtle.generateKey(ECDH, false, ['deriveBits']);
+}
+
+/** A public key as text (SPKI, base64url), as the server keeps it. */
+export async function exportPublicKey(key: CryptoKey): Promise<string> {
+  return toBase64Url(new Uint8Array(await subtle.exportKey('spki', key)));
+}
+
+/**
+ * Bytes locked so that only the holder of `recipientPublic`'s private half
+ * opens them: a fresh ephemeral ECDH key, HKDF bound to `ctx`.
+ */
+export async function lockForPublicKey(recipientPublic: string, data: Uint8Array, ctx: string): Promise<string> {
+  const theirs = await subtle.importKey('spki', fromBase64Url(recipientPublic), ECDH, false, []);
+  const ephemeral = await subtle.generateKey(ECDH, false, ['deriveBits']);
+  const shared = await subtle.deriveBits({ name: 'ECDH', public: theirs }, ephemeral.privateKey, 256);
+  const salt = randomBytes(SALT_BYTES);
+  const sealed = await seal(await grantKey(shared, salt, ctx), data, ctx);
+  const epk = new Uint8Array(await subtle.exportKey('spki', ephemeral.publicKey));
+  return `${LOCK_PREFIX}${toBase64Url(epk)}.${toBase64Url(salt)}.${sealed}`;
+}
+
+export async function unlockWithPrivateKey(locked: string, privateKey: CryptoKey, ctx: string): Promise<Uint8Array<ArrayBuffer>> {
+  if (!locked.startsWith(LOCK_PREFIX)) throw new VaultCryptoError('unknown_format', 'This is not something AskLocker locked.');
+  const [epk, salt, ...rest] = locked.slice(LOCK_PREFIX.length).split('.');
+  const sealed = rest.join('.');
+  if (!epk || !salt || !sealed) throw new VaultCryptoError('unknown_format', 'This is cut short.');
+  let shared: ArrayBuffer;
+  try {
+    const theirs = await subtle.importKey('spki', fromBase64Url(epk), ECDH, false, []);
+    shared = await subtle.deriveBits({ name: 'ECDH', public: theirs }, privateKey, 256);
+  } catch {
+    throw new VaultCryptoError('cannot_open', 'This could not be unlocked.');
+  }
+  return open(await grantKey(shared, fromBase64Url(salt), ctx), sealed, ctx);
+}
+
+export async function lockTextForPublicKey(recipientPublic: string, text: string, ctx: string): Promise<string> {
+  return lockForPublicKey(recipientPublic, encoder.encode(text), ctx);
+}
+
+export async function unlockTextWithPrivateKey(locked: string, privateKey: CryptoKey, ctx: string): Promise<string> {
+  return decoder.decode(await unlockWithPrivateKey(locked, privateKey, ctx));
+}
+
+/**
+ * Six digits from a public key, "123 456", shown on both devices when one
+ * approves the other. A server that swapped the key would change them.
+ */
+export async function pairingCode(publicKey: string): Promise<string> {
+  const digest = new Uint8Array(await subtle.digest('SHA-256', encoder.encode(`asklocker/v1/pairing/${publicKey}`)));
+  const n = ((digest[0] << 24) | (digest[1] << 16) | (digest[2] << 8) | digest[3]) >>> 0;
+  const code = String(n % 1_000_000).padStart(6, '0');
+  return `${code.slice(0, 3)} ${code.slice(3)}`;
+}
+
+// ─── Keys from the phone's lock, and this device's own ──────────
+
+/**
+ * The key a passkey gives (WebAuthn PRF: 32 bytes the authenticator derives
+ * from its secret and our salt), through HKDF, to seal the identity. The
+ * output itself never leaves the device.
+ */
+export async function keyFromPasskey(prfOutput: ArrayBuffer | Uint8Array, salt: Uint8Array): Promise<CryptoKey> {
+  const bytes = prfOutput instanceof Uint8Array ? own(prfOutput) : new Uint8Array(prfOutput);
+  if (bytes.length < 32) throw new VaultCryptoError('bad_key', 'The phone gave too short a key.');
+  const base = await subtle.importKey('raw', bytes, 'HKDF', false, ['deriveKey']);
+  return subtle.deriveKey(
+    { name: 'HKDF', hash: 'SHA-256', salt: own(salt), info: encoder.encode('asklocker/v1/passkey-unlock') },
+    base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+}
+
+/** Random bytes for a passkey's PRF input, or anything else. */
+export function newSalt(bytes = 32): Uint8Array<ArrayBuffer> {
+  return randomBytes(bytes);
+}
+
+/** A key that never leaves this device (IndexedDB keeps it as it is). */
+export async function newDeviceKey(): Promise<CryptoKey> {
+  return subtle.generateKey({ name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
 }

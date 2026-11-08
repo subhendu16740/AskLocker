@@ -164,6 +164,7 @@ Deno.serve(async (req) => {
   try {
     const {
       family_id, family_ids, scope, query: rawQuery, history: rawHistory, language: rawLanguage, voice: rawVoice,
+      client_passages: rawClientPassages, locked_family_ids: rawLockedIds,
     } = await req.json();
     // A question, not a document: Ask's box takes 500 characters, and nothing
     // longer is sent on to the AI service (050).
@@ -225,12 +226,23 @@ Deno.serve(async (req) => {
     vaults = vaults.slice(0, MAX_VAULTS);
     const multi = vaults.length > 1;
 
+    // Locked vaults (071): the phone searched them itself and sends the
+    // passages it found, opened on the device. Taken only for vaults the
+    // asker is in (checked above), passed to the AI service like any other
+    // passage, and never stored or written to the logs; the question and its
+    // rewrites are kept out of the logs too.
+    const lockedSearched = Array.isArray(rawLockedIds)
+      ? new Set(rawLockedIds.filter((x: unknown): x is string => typeof x === 'string' && vaults.some(v => v.familyId === x)))
+      : new Set<string>();
+    const quiet = lockedSearched.size > 0;
+    const clientChunks = clientPassagesFrom(rawClientPassages, lockedSearched, vaults);
+
     const history = sanitiseHistory(rawHistory);
     // Did the client send cited documents (new shape) or only IDs (old bundle)?
     // Distinguishes "pinning had nothing to work with" from "pinning failed".
     const clientSentSources = Array.isArray(rawHistory)
       && rawHistory.some((t: unknown) => Array.isArray((t as HistoryTurn)?.sources));
-    console.log(`[rag] Query: "${query}" for ${multi ? `${vaults.length} vaults` : `family=${vaults[0]?.familyId}`} (history: ${history.length} turns, sources: ${clientSentSources})`);
+    console.log(`[rag] Query: ${quiet ? '(locked vault, not logged)' : `"${query}"`} for ${multi ? `${vaults.length} vaults` : `family=${vaults[0]?.familyId}`} (history: ${history.length} turns, sources: ${clientSentSources})`);
 
     if (vaults.length === 0) {
       return jsonResponse({
@@ -284,14 +296,14 @@ Deno.serve(async (req) => {
     const trans = nonEnglish
       ? await translateToEnglish(query)
       : { query, changed: false as boolean, error: undefined as string | undefined, model: undefined as string | undefined };
-    if (trans.changed) console.log(`[rag] Translated: "${trans.query}"`);
+    if (trans.changed && !quiet) console.log(`[rag] Translated: "${trans.query}"`);
     else if (nonEnglish) console.warn(`[rag] Not translated${trans.error ? ` (${trans.error})` : ''}`);
 
     const cond = history.length > 0
       ? await condenseQuery(trans.query, history, { toEnglish: nonEnglish })
       : { query: trans.query, changed: false as boolean, error: undefined as string | undefined, model: undefined as string | undefined };
     const standalone = cond.query;
-    if (cond.changed) console.log(`[rag] Condensed: "${standalone}"`);
+    if (cond.changed && !quiet) console.log(`[rag] Condensed: "${standalone}"`);
     else if (history.length > 0) console.log(`[rag] Not condensed${cond.error ? ` (${cond.error})` : ''}`);
 
     // A ticket's words for what the question asks: a train ticket never says
@@ -333,7 +345,12 @@ Deno.serve(async (req) => {
     const owned = searched.flatMap(s => s.owned);
     // Each vault's best first, in turn, so the judge's places are shared out
     // rather than won by whichever vault holds the most documents.
-    const retrievedChunks = multi ? takeInTurn(searched.map(s => s.retrieved)) : searched[0].retrieved;
+    const serverChunks = multi ? takeInTurn(searched.map(s => s.retrieved)) : searched[0].retrieved;
+    // What the phone found in locked vaults takes its turn beside the rest.
+    const retrievedChunks = clientChunks.length
+      ? (serverChunks.length ? takeInTurn([clientChunks, serverChunks]) : clientChunks)
+      : serverChunks;
+    if (clientChunks.length) console.log(`[rag] ${clientChunks.length} passage(s) from locked vaults, found on the phone`);
     const pinError = first(searched.map(s => s.pinError));
     const ownedError = first(searched.map(s => s.ownedError));
     const treeError = first(searched.map(s => s.tree.error));
@@ -671,6 +688,30 @@ function keepIndexesUp(searched: VaultSearch[]): void {
 }
 
 // ─── Retrieve Chunks ───────────────────────────────────────────
+
+/** Passages a phone sent from its locked vaults (071): bounded, and only for vaults the asker is in. */
+function clientPassagesFrom(raw: unknown, locked: Set<string>, vaults: Vault[]): ChunkResult[] {
+  if (!Array.isArray(raw) || locked.size === 0) return [];
+  const out: ChunkResult[] = [];
+  for (const p of raw.slice(0, RERANK_CANDIDATES)) {
+    const r = p as Record<string, unknown>;
+    if (typeof r?.family_id !== 'string' || !locked.has(r.family_id)) continue;
+    if (typeof r.document_id !== 'string' || !/^[0-9a-f-]{36}$/i.test(r.document_id)) continue;
+    if (typeof r.content !== 'string' || !r.content.trim()) continue;
+    const vault = vaults.find(v => v.familyId === r.family_id);
+    out.push({
+      document_id: r.document_id,
+      file_name: typeof r.document_name === 'string' ? r.document_name.slice(0, 200) : 'Locked document',
+      file_type: '',
+      category_name: null,
+      content: r.content.slice(0, MAX_CHARS_PER_CHUNK),
+      chunk_index: Number.isInteger(r.chunk_index) ? Number(r.chunk_index) : 0,
+      family_id: r.family_id,
+      vault: vault ? vaultLabel(vault) : undefined,
+    });
+  }
+  return out;
+}
 
 interface ChunkResult {
   document_id: string;

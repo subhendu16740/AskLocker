@@ -1,4 +1,10 @@
 import { supabase } from './supabase';
+import {
+  documentDetails, documentFileKeyText, forgetLockedDocument, isLockedVault, isSealedChat, knownLocked, lockedVaults, openChat,
+  openSharedFile, overlaySealed, readOnDevice, sealChat,
+  renameLockedDocument, sealDocument, searchLockedVaults, type LockProgress,
+} from './vault-lock';
+import { insertSealedDocument } from './e2e-api';
 import { accountKey, storageGet, storageSet } from './storage';
 import { longDate, parseDocumentDate } from './dates';
 import { isSaveable, mimeTypeFor, unsupportedFileMessage } from './file-types';
@@ -167,7 +173,8 @@ export async function fetchRecentDocuments(
   });
 
   if (error) throw error;
-  return (data ?? []) as FamilyDocumentRow[];
+  // A locked vault's names are opened on this device (071).
+  return overlaySealed(familyId, (data ?? []) as FamilyDocumentRow[]);
 }
 
 export async function fetchDocumentById(
@@ -181,7 +188,16 @@ export async function fetchDocumentById(
 
   if (error) throw error;
   const rows = data as FamilyDocumentDetailRow[] | null;
-  return rows?.[0] ?? null;
+  const row = rows?.[0] ?? null;
+  if (row?.ingestion_status !== 'sealed') return row;
+  // A locked document (071): its name and details are opened here.
+  const details = await documentDetails(familyId, documentId).catch(() => null);
+  if (!details) return row;
+  return {
+    ...row,
+    file_name: details.name,
+    metadata: details.meta.map((m) => ({ key: m.key, value: m.value, auto_extracted: true, confidence: null })),
+  };
 }
 
 // ─── Stats ───────────────────────────────────────────────────────
@@ -383,11 +399,28 @@ export async function ragSearch(
   history: RagHistoryTurn[] = [],
   options: RagSearchOptions = {},
 ): Promise<RagSearchResult> {
+  // Locked vaults (071) are searched here, on the phone; the server judges
+  // and answers from the passages sent, and keeps nothing.
+  let clientPassages: Awaited<ReturnType<typeof searchLockedVaults>> = [];
+  let lockedIds: string[] = [];
+  try {
+    const locked = await lockedVaults();
+    const asked = options.vaults === 'all' ? [...locked] : options.vaults?.length ? options.vaults : [familyId];
+    lockedIds = asked.filter((id) => locked.has(id));
+    if (lockedIds.length) {
+      const lastUser = [...history].reverse().find((t) => t.role === 'user')?.content ?? '';
+      clientPassages = await searchLockedVaults(lockedIds, history.length ? `${lastUser} ${query}` : query);
+    }
+  } catch {
+    clientPassages = [];
+  }
+
   const { data, error } = await supabase.functions.invoke('rag-search', {
     body: {
       family_id: familyId,
       query,
       history,
+      ...(lockedIds.length ? { client_passages: clientPassages, locked_family_ids: lockedIds } : {}),
       ...(options.vaults === 'all' ? { scope: 'all' } : options.vaults?.length ? { family_ids: options.vaults } : {}),
       ...(options.language ? { language: options.language } : {}),
       ...(options.voice ? { voice: true } : {}),
@@ -878,6 +911,10 @@ export interface UploadDocumentParams {
   categoryId?: string;
   belongsToMemberId?: string;
   ocrText?: string; // Pre-extracted OCR text from client-side processing
+  /** A locked vault (071): the document languages, for reading on this device. */
+  languages?: string[];
+  /** A locked vault (071): reading, search vectors and sealing, as they go. */
+  onLockProgress?: LockProgress;
 }
 
 export async function uploadDocument(params: UploadDocumentParams): Promise<string> {
@@ -904,6 +941,33 @@ export async function uploadDocument(params: UploadDocumentParams): Promise<stri
   if (room && person && !personFits(person, fileSizeBytes)) {
     await fetchPaymentsStatus();
     throw new StorageFullError(room, fileSizeBytes, person);
+  }
+
+  // A locked vault (071): read, split, given search vectors and sealed here;
+  // the server keeps only what it cannot open.
+  if (await isLockedVault(familyId)) {
+    const bytes = new Uint8Array(await fileBlob.arrayBuffer());
+    const text = ocrText ?? (await readOnDevice({ bytes, fileType, name: fileName }, params.languages, params.onLockProgress));
+    const sealed = await sealDocument({
+      familyId, storageNamespace, fileName, fileType, mime: mimeTypeFor(fileType), bytes, text,
+      onProgress: params.onLockProgress,
+    });
+    const { error: sErr } = await supabase.storage
+      .from('documents')
+      .upload(sealed.storagePath, new Blob([sealed.sealedFile.slice()]), { contentType: mimeTypeFor(fileType), upsert: false });
+    if (sErr) throw new Error(`Couldn't upload the file. ${sErr.message}`);
+    try {
+      return await insertSealedDocument({
+        familyId, documentId: sealed.documentId, fileType, fileSizeBytes: sealed.sealedFile.length,
+        storagePath: sealed.storagePath, categoryId: categoryId ?? null, belongsToMember: belongsToMemberId ?? null,
+        keyVersion: sealed.keyVersion, fileKey: sealed.fileKey, details: sealed.details,
+        passages: sealed.passages, passageCount: sealed.passageCount,
+      });
+    } catch (err) {
+      await supabase.storage.from('documents').remove([sealed.storagePath]).catch(() => undefined);
+      if (limitHint(err)) throw new Error((err as Error).message);
+      throw new Error(`Couldn't save the document. ${(err as Error).message}`);
+    }
   }
 
   // 1. Upload to Supabase Storage
@@ -991,6 +1055,8 @@ export async function deleteDocument(
 
   // 2. Remove file from storage (best-effort)
   await supabase.storage.from('documents').remove([storagePath]);
+  // A locked vault's sealed parts go too (071).
+  if (knownLocked(familyId)) await forgetLockedDocument(familyId, documentId);
 }
 
 export async function updateDocument(
@@ -999,6 +1065,16 @@ export async function updateDocument(
   userId: string,
   updates: { fileName?: string; categoryId?: string; belongsToMember?: string },
 ): Promise<void> {
+  // A locked document's name is sealed (071): never sent in the clear.
+  if (updates.fileName && (await isLockedVault(familyId))) {
+    try {
+      await renameLockedDocument(familyId, documentId, updates.fileName);
+      updates = { ...updates, fileName: undefined };
+      if (!updates.categoryId && !updates.belongsToMember) return;
+    } catch (err) {
+      if ((err as { code?: string })?.code !== 'not_sealed') throw err;
+    }
+  }
   const { error } = await supabase.rpc('update_family_document', {
     p_family_id: familyId,
     p_document_id: documentId,
@@ -1079,9 +1155,16 @@ export async function createShareLink(
   }
   const made = data as { id: string; token: string; expires_at: string };
   const { data: auth } = await supabase.auth.getSession();
+  // A locked document (071): the link also carries what opens its file,
+  // after "#", which browsers never send to a server.
+  let token = made.token;
+  if (knownLocked(familyId) || (await isLockedVault(familyId))) {
+    const key = await documentFileKeyText(familyId, documentId).catch(() => null);
+    if (key) token = `${made.token}~${familyId}~${documentId}~${key}`;
+  }
   return {
     status: 'made',
-    token: made.token,
+    token,
     link: {
       id: made.id,
       note: note?.trim() || null,
@@ -1137,7 +1220,11 @@ export interface SharedDocument {
 }
 
 /** The public page's call: no account, only the link's secret. */
-export async function openSharedDocument(token: string): Promise<SharedDocument | 'gone' | 'unavailable'> {
+export async function openSharedDocument(link: string): Promise<SharedDocument | 'gone' | 'unavailable'> {
+  // A locked document's link (071) also carries its vault, its id and the
+  // key that opens its file: "<secret>~<vault>~<document>~<key>". Only the
+  // secret goes to the server.
+  const [token, vaultId, documentId, fileKey] = link.split('~');
   if (!/^[0-9a-f]{64}$/.test(token)) return 'gone';
   const { data, error } = await supabase.functions.invoke('share', { body: { token } });
   if (error) {
@@ -1147,6 +1234,18 @@ export async function openSharedDocument(token: string): Promise<SharedDocument 
     // 503: 036 not applied; a bare 404: the function is not deployed here yet.
     if (body?.status === 'needs_migration' || (httpStatus === 404 && !body?.status)) return 'unavailable';
     throw new Error("Couldn't open this link. Try again.");
+  }
+  if (vaultId && documentId && fileKey) {
+    try {
+      const file = await openSharedFile(data.url, vaultId, documentId, fileKey);
+      const url = URL.createObjectURL(file.blob);
+      return {
+        fileName: file.name, fileType: file.fileType, expiresAt: data.expires_at, sharedBy: data.shared_by ?? null,
+        url, downloadUrl: url,
+      };
+    } catch {
+      throw new Error("Couldn't open this document. Check the whole link was copied.");
+    }
   }
   return {
     fileName: data.file_name,
@@ -1973,6 +2072,11 @@ export async function getSavedChat(id: string): Promise<SavedChat | null> {
   const { data, error } = await savedChats().select('id, title, messages, updated_at').eq('id', id).maybeSingle();
   if (error) throw error;
   if (!data) return null;
+  // A chat that quotes a locked vault (071) is sealed for its owner: opened here.
+  if (isSealedChat(data.messages)) {
+    const opened = await openChat<SavedChatMessage>(data.messages[0]);
+    return { id: data.id, title: opened.title, updatedAt: data.updated_at, messages: opened.messages };
+  }
   return {
     id: data.id,
     title: data.title,
@@ -2015,8 +2119,17 @@ function chatBytes(messages: SavedChatMessage[]): number {
  * throw ChatStorageFullError.
  */
 export async function saveChat(familyId: string, messages: SavedChatMessage[], id?: string | null): Promise<string> {
-  const stored = chatForStorage(messages);
-  const title = savedChatTitle(stored);
+  const plain = chatForStorage(messages);
+  let stored: unknown[] = plain;
+  let title = savedChatTitle(plain);
+  // A chat that quotes a locked vault (071) is sealed for its owner, its
+  // title too; the vaults it quotes stay readable, for 069's rule.
+  const quoted = [familyId, ...plain.flatMap((m) => (m.sources ?? []).map((s) => s.family_id).filter((x): x is string => !!x))];
+  const locked = await lockedVaults().catch(() => new Set<string>());
+  if (quoted.some((v) => locked.has(v))) {
+    stored = await sealChat(title, plain, quoted);
+    title = 'Locked chat';
+  }
   const asJson = stored as unknown as Json;
   const refused = async (error: { hint?: string; message?: string }): Promise<never> => {
     if (error.hint !== 'storage_full') throw error;
@@ -2033,7 +2146,7 @@ export async function saveChat(familyId: string, messages: SavedChatMessage[], i
   }
   // Before 038 (no limits) or offline, the server alone decides.
   const room = await fetchStorageStatus(familyId).catch(() => null);
-  if (room && room.usedBytes + chatBytes(stored) > room.limitBytes) {
+  if (room && room.usedBytes + chatBytes(stored as SavedChatMessage[]) > room.limitBytes) {
     await fetchPaymentsStatus();
     throw new ChatStorageFullError(room);
   }
@@ -2698,8 +2811,8 @@ export interface MyIdentity {
   encryptPublic: string;
   signPublic: string;
   fingerprint: string;
-  /** The keys locked with the Recovery Key ("r1.…"). Only its owner gets it. */
-  backup: string;
+  /** The keys locked with the backup (Recovery) Key ("r1.…"), or null when none was saved (071). Only its owner gets it. */
+  backup: string | null;
   keyVersion: number;
   createdAt: string;
   updatedAt: string;
@@ -2726,7 +2839,7 @@ export async function fetchMyIdentity(): Promise<MyIdentity | null | 'unavailabl
 }
 
 /** Saves new keys' public parts and their locked backup to the account. */
-export async function registerMyIdentity(encryptPublic: string, signPublic: string, fingerprint: string, backup: string): Promise<void> {
+export async function registerMyIdentity(encryptPublic: string, signPublic: string, fingerprint: string, backup: string | null): Promise<void> {
   const { error } = await supabase.rpc('register_my_identity', {
     p_encrypt_public: encryptPublic,
     p_sign_public: signPublic,

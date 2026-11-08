@@ -27,7 +27,7 @@ function AuthGate() {
     if (seg === 's') return;
     // A route missing here sends a signed-in person to /home — which, for
     // gmail-import, would throw away the code Google just sent back.
-    const inProtectedRoute = seg === '(tabs)' || seg === 'document' || seg === 'family' || seg === 'settings' || seg === 'setup-family' || seg === 'notifications' || seg === 'gmail-import' || seg === 'reminders' || seg === 'saved-chats' || seg === 'family-tree' || seg === 'person' || seg === 'emergency' || seg === 'plus' || seg === 'documents' || seg === 'delete-vault' || seg === 'make-business' || seg === 'overview' || seg === 'notes' || seg === 'welcome';
+    const inProtectedRoute = seg === '(tabs)' || seg === 'document' || seg === 'family' || seg === 'settings' || seg === 'setup-family' || seg === 'notifications' || seg === 'gmail-import' || seg === 'reminders' || seg === 'saved-chats' || seg === 'family-tree' || seg === 'person' || seg === 'emergency' || seg === 'plus' || seg === 'documents' || seg === 'delete-vault' || seg === 'make-business' || seg === 'lock-vault' || seg === 'overview' || seg === 'notes' || seg === 'welcome';
 
     if (!session && inProtectedRoute) {
       router.replace('/login' as any);
@@ -102,6 +102,7 @@ export default function RootLayout() {
           <Stack.Screen name="person/[id]" />
           <Stack.Screen name="delete-vault" />
           <Stack.Screen name="make-business" />
+          <Stack.Screen name="lock-vault" />
           <Stack.Screen name="overview" />
           <Stack.Screen name="notes" />
         </Stack>
