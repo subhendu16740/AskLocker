@@ -53,6 +53,7 @@ for f in out/asklocker-family-*.mp4 out/asklocker-nri-*.mp4 out/asklocker-busine
   [ -e "$f" ] || continue
   [[ $f == *-sfx-only.mp4 ]] && continue
   [[ $f == *-16x9-in-* ]] && continue # a film in another language: languages/ below
+  [[ $f == *-16x9-en.mp4 || $f == *-narrated.mp4 ]] && continue # the site's English cut, and the narrator trial
   launched "$f" && continue
   name=$(basename "$f")
   a=${name#asklocker-}
