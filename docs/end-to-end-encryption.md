@@ -311,7 +311,7 @@ Plus ends (it picks documents by size and date).
 | **2** | Locked vaults: documents read, sealed and searched on the phone; Ask; viewer; share links; reminders in the app; saved chats | Built 4 November 2026, test builds only |
 | **3** | Vault names, tree, cards and notes sealed; the business overview on the phone | Built 8 November 2026 (073), test builds only |
 | **4** | Moving existing vaults, Gmail import on the phone | Built 4 November 2026, test builds only |
-| **5** | An outside security review of the code and the key flows, fixes, and only then the claim and the videos | Not started |
+| **5** | An outside security review of the code and the key flows, fixes, and only then the claim and the videos | The brief for the firm is written (8 November 2026, [below](#outside-review-phase-5)); the review is not started |
 
 **The claim, once Phase 5 is done**, and not a word before:
 
@@ -419,9 +419,78 @@ Said plainly, in the plan and later in the privacy policy:
 - **A browser can clear its storage**; the app asks it not to, and the
   Recovery Key or another device brings the key back.
 
-## Outside review
+## Outside review (Phase 5)
 
-Before the claim: a review of `vault-crypto.ts`, the key flows (joining,
-leaving, new devices, recovery) and the web app's delivery, by a firm
-that does this work. The cost is a quote to ask for once Phase 3 is
-written; the claim waits for it.
+The claim waits for this. What follows is the brief to send a firm, so it
+can quote a fixed price. Cure53, Trail of Bits, NCC Group, Include Security
+and Doyensec all review end-to-end encrypted web apps; ask two or three
+for a quote. Give them read access to the repository (it is public) and
+two test accounts on DEV. Never give them PROD access, a real document,
+or a service role key.
+
+### What we ask them to answer
+
+1. Can anyone who is not in a vault read its documents, its name, its
+   family tree, a person's details, an emergency card or a business's
+   notes? Count the server's operator, a former member and another
+   account with the public key.
+2. Can a member with fewer rights do more than they should? For example,
+   a viewer renaming the vault, changing the tree's links, editing
+   someone else's card, or locking others out.
+3. After someone leaves, is what is added next out of their reach?
+4. Is the cryptography used correctly? Check the nonces, the associated
+   data (can a sealed item be moved to another record, vault, kind or key
+   version and still open?), key derivation, curves, signatures, the
+   six-digit device codes and the backup key's strength.
+5. How far can an operator who changes the server's answers get? For
+   example, by adding a member with its own key, swapping a public key or
+   sending older code. What would a member notice?
+
+### In scope (about 5,900 lines)
+
+| What | Files |
+|---|---|
+| The crypto core | `supabase/functions/_shared/vault-crypto.ts` (604 lines; self-tests in `qa/tools/selftest.mjs`) |
+| A person's keys: made on the device, the phone's lock (passkey PRF), approving a device, the backup key, new keys | `src/lib/vault-keys.web.ts`, `vault-keys-types.ts`, `src/app/settings/encryption.tsx` |
+| Vault keys, grants, rotation; sealing and opening documents, names, the tree, cards, notes; search; share links; moving older documents | `src/lib/vault-lock.web.ts`, `e2e-api.ts`, `tree-rules.ts`, `local-search.ts`, `src/app/lock-vault.tsx` |
+| The database's rules: who may write what, and readable copies refused | `supabase/migrations/070_user_keys.sql`, `071_locked_vaults.sql`, `072_locked_vaults_caller_first.sql`, `073_locked_vault_details.sql` |
+| Reading on the phone; Gmail in the browser | `on-device-reader.web.ts`, `on-device-model.web.ts`, `gmail-device.web.ts` |
+| The passages a question sends; share links | `supabase/functions/rag-search/index.ts` (`client_passages`), `supabase/functions/share/index.ts`, `src/app/s.tsx` |
+| How the web app is served | `public/_headers`, Cloudflare Pages; scripts loaded from jsDelivr (PDF.js, transformers.js, Tesseract) |
+
+The design is in [The design, as built](#the-design-as-built). The
+database's rules are summed up in CLAUDE.md, point 3 at the top and
+"Locked vaults".
+
+### Known, and not findings
+
+These are known and accepted. They are listed in
+[Limits that stay true](#limits-that-stay-true) and under Phase 3.
+
+- The server sees accounts, who is in which vault and their roles,
+  sizes, times, counts and built-in categories. It also sees how many
+  people a tree has, which bills were marked paid and when, and a note's
+  reminder date.
+- The AI service reads the passages an answer is written from.
+- The web app's code comes from AskLocker's server.
+- Joining is automatic, without proof.
+- A lost personal vault is lost.
+- Locking is only in test builds, and only where
+  `e2e_config.locking_allowed` is true. The phone app is not built yet.
+
+We still want to hear if any of these is worse than we think.
+
+### What we want back
+
+- A report: each finding with how serious it is, where it is, how to
+  reproduce it and a fix.
+- A second look at our fixes. Then a short letter that we may quote, or
+  a summary we may publish, saying what was reviewed and when.
+
+### Before sending it
+
+- Apply 073 to DEV, and run QA once with every 070–073 probe passing.
+- Fix what our own review found. It is not committed, since the
+  repository is public.
+- Freeze the files above on a branch for the review. Changes made after
+  it need the firm's second look before the claim.
