@@ -18,21 +18,15 @@ export const THEME = {
 };
 
 export function logoMark() {
-  // The app's icon (public/icon-512.png): a locker with a speech bubble. The
-  // shapes are assets/expo.icon/Assets/asklocker-mark.svg, placed, weighted
-  // and coloured as the icon has them (it matches the PNG pixel for pixel):
-  // the bubble coral, ringed in the tile's navy where it crosses the locker,
-  // its "?" white (Liberation Sans Bold, as a path, so the mark needs no font).
-  // .lm-bubble lets the reveal pop the bubble in.
-  return `<svg viewBox="0 0 1024 1024" aria-hidden="true"><g transform="translate(-30 20)">
-    <g fill="none" stroke="#fff" stroke-width="44" stroke-linecap="round" stroke-linejoin="round">
-      <rect x="300" y="236" width="330" height="588" rx="54"/><path d="M382 340H548M382 412H548M568 560V650"/></g>
-    <circle cx="465" cy="640" r="30" fill="#fff"/>
-    <g class="lm-bubble">
-      <path d="M708 150h118a86 86 0 0 1 86 86v96a86 86 0 0 1-86 86h-82l-74 64v-64a86 86 0 0 1-48-78v-104a86 86 0 0 1 86-86z"
-        fill="#D4807B" stroke="#2A3D66" stroke-width="28" stroke-linejoin="round"/>
-      <path fill="#fff" d="M809.6 233.8Q809.6 243.3 805.3 250.8Q801.1 258.3 789.4 266.6L782 272Q775.4 276.8 772.1 281.7Q768.8 286.5 768.5 292.4H742.5Q743.1 282.4 748.1 274.6Q753.1 266.8 762.9 260Q773.3 252.8 777.6 247.2Q781.9 241.7 781.9 235Q781.9 226.4 776.3 221.4Q770.7 216.4 760.3 216.4Q750.5 216.4 743.8 222.2Q737.1 227.9 735.9 237.4L708.1 236.2Q710.7 216.4 724.4 205.4Q738.1 194.4 760 194.4Q783.1 194.4 796.3 204.8Q809.6 215.3 809.6 233.8ZM741.7 334V307.6H769.9V334Z"/></g>
-  </g></svg>`;
+  // The app's icon (public/icon-512.png): the question lock, an open padlock
+  // whose shackle bends into a question mark, the keyhole its dot. The shapes
+  // are assets/expo.icon/Assets/asklocker-mark.svg, white, the keyhole a real
+  // hole so the tile shows through. .lm-bubble is the question mark, which
+  // the reveal pops up out of the lock (engine.js).
+  return `<svg viewBox="0 0 1024 1024" aria-hidden="true">
+    <g class="lm-bubble"><path d="M368 416V384A144 144 0 0 1 656 384C656 448 612 474 572 492C532 510 512 512 512 520" fill="none" stroke="#fff" stroke-width="96" stroke-linecap="round"/></g>
+    <path fill="#fff" fill-rule="evenodd" d="M320 512H704A64 64 0 0 1 768 576V768A64 64 0 0 1 704 832H320A64 64 0 0 1 256 768V576A64 64 0 0 1 320 512Z M480 695.4A64 64 0 1 1 544 695.4V752A16 16 0 0 1 528 768H496A16 16 0 0 1 480 752Z"/>
+  </svg>`;
 }
 
 export function spinner(color = '#2A3D66', size = 20, cls = '') {

@@ -23,6 +23,8 @@ import { Redirect, router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../lib/auth';
 import { useFamily } from '../lib/family-context';
+import { isLockedVault } from '../lib/vault-lock';
+import { GmailLockedImport } from '../components/gmail-locked-import';
 import { isBusinessVault, vaultName } from '../lib/vaults';
 import { plusName } from '../lib/plans';
 import {
@@ -69,7 +71,22 @@ function readable(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
+/** A locked vault (071) imports in the browser instead (GmailLockedImport). */
 export default function GmailImportScreen() {
+  const { currentFamily } = useFamily();
+  const [locked, setLocked] = useState<boolean | null>(null);
+  useEffect(() => {
+    if (!currentFamily) return;
+    let live = true;
+    isLockedVault(currentFamily.id).then((v) => live && setLocked(v)).catch(() => live && setLocked(false));
+    return () => { live = false; };
+  }, [currentFamily?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  if (locked === null && currentFamily) return null;
+  if (locked) return <GmailLockedImport />;
+  return <ServerGmailImport />;
+}
+
+function ServerGmailImport() {
   const { user } = useAuth();
   const { currentFamily, members } = useFamily();
   const { isFree } = useFamilyPlan();

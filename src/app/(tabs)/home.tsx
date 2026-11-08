@@ -17,6 +17,7 @@ import { useModeOnPlus } from '../../lib/family-plan';
 import { PlusStar } from '../../components/screen-header';
 import { InvitationCards } from '../../components/invitation-cards';
 import { LockOffer } from '../../components/lock-offer';
+import { LockedVaultNotices } from '../../components/locked-vault-notices';
 import { UseForOffer } from '../../components/use-for-offer';
 import { isBusinessVault, isPersonalVault, vaultIcon, vaultName } from '../../lib/vaults';
 import { useVaultTheme, vaultTheme } from '../../lib/vault-theme';
@@ -227,6 +228,7 @@ export default function HomeScreen() {
 
         {/* Invitations to join a family (037): answered here, the first place anyone looks */}
         <InvitationCards style={styles.invites} />
+        <LockedVaultNotices style={styles.invites} />
 
         {/* What they will use AskLocker for, asked once of someone new (051) */}
         <UseForOffer style={styles.invites} />

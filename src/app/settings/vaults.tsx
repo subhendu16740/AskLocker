@@ -20,6 +20,9 @@ import { BUSINESS_THEME, FAMILY_THEME, type VaultTheme } from '../../lib/vault-t
 import { track } from '../../lib/analytics';
 import { useAuth } from '../../lib/auth';
 import { fetchVaultOwners } from '../../lib/api';
+import { isProduction } from '../../lib/environment';
+import { fetchLockingAllowed } from '../../lib/e2e-api';
+import { lockedVaults } from '../../lib/vault-lock';
 import { ScreenHeader } from '../../components/screen-header';
 import { Muted, Status, Toggle, screenStyles } from '../../components/settings-ui';
 import { color, radius, shadow, size, space, type } from '../../constants/design';
@@ -152,9 +155,16 @@ export default function VaultsScreen() {
   const { user } = useAuth();
   // Who owns each vault (068); null before 068, when every admin is offered the move.
   const [owners, setOwners] = useState<Record<string, string> | null>(null);
+  // Locked vaults (071), test builds only: where locking is allowed, and which are locked.
+  const [lockingAllowed, setLockingAllowed] = useState(false);
+  const [locked, setLocked] = useState<Set<string>>(new Set());
   useFocusEffect(useCallback(() => {
     refreshFamilies().catch(() => {});
     fetchVaultOwners().then(setOwners).catch(() => setOwners(null));
+    if (!isProduction) {
+      fetchLockingAllowed().then(setLockingAllowed).catch(() => setLockingAllowed(false));
+      lockedVaults(true).then(setLocked).catch(() => undefined);
+    }
   }, [refreshFamilies]));
 
   const familyVaults = [
@@ -168,7 +178,19 @@ export default function VaultsScreen() {
     router.replace('/home' as any);
   };
 
-  const actionsFor = (v: FamilyWithMembership): Action[] => {
+  const lockAction = (v: FamilyWithMembership): Action[] => {
+    // Only the owner locks a vault (071), and only in a test build where locking is allowed.
+    if (isProduction || v.role !== 'admin' || !owners || owners[v.family_id] !== user?.id) return [];
+    if (!lockingAllowed && !locked.has(v.family_id)) return [];
+    return [{
+      label: locked.has(v.family_id) ? 'Locked' : 'Lock it', icon: 'lock',
+      onPress: () => router.push({ pathname: '/lock-vault', params: { family: v.family_id } } as any),
+    }];
+  };
+
+  const actionsFor = (v: FamilyWithMembership): Action[] => [...lockAction(v), ...otherActions(v)];
+
+  const otherActions = (v: FamilyWithMembership): Action[] => {
     if (isPersonalVault(v.families) || v.role !== 'admin') return [];
     const remove: Action = {
       label: 'Delete', icon: 'trash-2', danger: true,

@@ -1,18 +1,22 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
-  <g fill="none" stroke="#FFFFFF" stroke-width="52" stroke-linecap="round" stroke-linejoin="round">
-    <!-- locker body -->
-    <rect x="300" y="236" width="330" height="588" rx="54"/>
-    <!-- vent slits -->
-    <line x1="382" y1="340" x2="548" y2="340"/>
-    <line x1="382" y1="412" x2="548" y2="412"/>
-    <!-- handle -->
-    <line x1="568" y1="560" x2="568" y2="650"/>
-  </g>
-  <!-- keyhole -->
-  <circle cx="465" cy="640" r="30" fill="#FFFFFF"/>
-  <!-- speech bubble, overlapping the locker's top-right corner -->
-  <g>
-    <path d="M708 150 h118 a86 86 0 0 1 86 86 v96 a86 86 0 0 1 -86 86 h-82 l-74 64 v-64 a86 86 0 0 1 -48 -78 v-104 a86 86 0 0 1 86 -86 z"
-          fill="#FFFFFF" stroke="none" stroke-width="0" stroke-linejoin="round"/>
-    <text x="760" y="334" font-family="Helvetica, Arial, sans-serif" font-weight="700" font-size="200" text-anchor="middle" fill="#2A3D66">?</text>
-  </g></svg>
+  <!-- AskLocker's mark, the question lock (4 November 2026): an open
+       padlock whose shackle bends into a question mark, the keyhole its
+       dot. White on nothing: the icon's navy is the tile behind it (this
+       file's icon.json fill, the PNGs' background), and the keyhole is a
+       real hole, so the one-colour icons (Android's monochrome layer, the
+       notification badge) keep it.
+
+       Drawn on a grid, so it stays sharp on a screen at 1x: every straight
+       edge is on a multiple of 32 (the lock's on multiples of 64), so at
+       16, 32, 48 and 64 px each one falls exactly on a pixel instead of
+       between two, and the shackle is 3 px wide at 32 px. Keep it so when
+       changing a shape. Every PNG is rendered from this file:
+       node scripts/render-icons.mjs -->
+  <!-- the shackle, a question mark: 96 wide, its outer edges at x 320 and
+       704, its top at y 192 -->
+  <path d="M368 416V384A144 144 0 0 1 656 384C656 448 612 474 572 492C532 510 512 512 512 520"
+        fill="none" stroke="#FFFFFF" stroke-width="96" stroke-linecap="round"/>
+  <!-- the body, x 256-768, y 512-832, with the keyhole cut out -->
+  <path fill="#FFFFFF" fill-rule="evenodd"
+        d="M320 512H704A64 64 0 0 1 768 576V768A64 64 0 0 1 704 832H320A64 64 0 0 1 256 768V576A64 64 0 0 1 320 512Z M480 695.4A64 64 0 1 1 544 695.4V752A16 16 0 0 1 528 768H496A16 16 0 0 1 480 752Z"/>
+</svg>
