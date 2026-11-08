@@ -1,9 +1,9 @@
 {
   "title": "AskLocker for families",
-  "description": "At 2:14 AM Papa is in hospital and nobody can find his health policy number. Then the same night with AskLocker: documents brought in, a paper policy scanned, the question asked aloud in Hindi, and the answer read back.",
+  "description": "At 2:14 AM Papa is in hospital and nobody can find his health policy number. Then the same night with AskLocker: documents brought in, a paper policy scanned, the question asked aloud, and the answer read back.",
   "audience": "family",
   "uploadDate": "2026-11-03",
-  "durationSeconds": 135,
+  "durationSeconds": 134.2,
   "width": 1920,
   "height": 1080,
   "video": "video.mp4",
@@ -31,40 +31,41 @@
     },
     {
       "start": 65,
-      "title": "Ask aloud, in Hindi"
+      "title": "Ask aloud"
     },
     {
-      "start": 87,
+      "start": 86,
       "title": "The family tree"
     },
     {
-      "start": 95,
+      "start": 94,
       "title": "Emergency card"
     },
     {
-      "start": 103,
+      "start": 102,
       "title": "Reminders"
     },
     {
-      "start": 111,
+      "start": 110,
       "title": "Who can open your documents"
     },
     {
-      "start": 119,
+      "start": 118,
       "title": "The same night, with AskLocker"
     },
     {
-      "start": 129,
+      "start": 128,
       "title": "Start your family vault"
     }
   ],
   "order": 1,
   "reviewNotes": [
-    "Chapter times were measured from marketing/video's timeline (16:9 full cut, 135 s) on 3 November 2026. A changed film needs them measured again.",
+    "Chapter times were measured from marketing/video's cue sheets (16:9 full cut, voice scene in English, 134.2 s) on 6 November 2026: those after the voice scene are 0.94 s earlier than the Hindi cut's. A changed film needs them measured again.",
     "Rendered on 3 November 2026 with the end card's price corrected to ₹99 a month (PLUS_PRICE).",
     "Checked on 3 November 2026: the statistic at 0:20 holds. ₹1.84 lakh crore is the Finance Minister's figure at the campaign's launch on 4 October 2025 (PTI; PIB release 2174806 itemises about ₹1.01 lakh crore of it), and the quote is word for word in PIB's 'Your Money, Your Right' release of 26 December 2025 (Ministry of Finance, https://www.pib.gov.in/PressReleasePage.aspx?PRID=2208730).",
     "Published on 3 November 2026 at the owner's decision. The Gmail scene (0:33) shows a feature that, until Google verifies the Gmail scope, only listed test users can connect.",
-    "Replaced on 4 November 2026 with marketing/family/films/asklocker-family-16x9.mp4 (branch claude/admiring-curie-737iko): the owner asked for calmer sound, and that render has score.py's softer notification, chimes and beeps, so the 2:14 AM phone no longer rings with a buzz. The picture is the same frame for frame and the length the same, so the chapters and transcript hold."
+    "Replaced on 4 November 2026 with marketing/family/films/asklocker-family-16x9.mp4 (branch claude/admiring-curie-737iko): the owner asked for calmer sound, and that render has score.py's softer notification, chimes and beeps, so the 2:14 AM phone no longer rings with a buzz. The picture is the same frame for frame and the length the same, so the chapters and transcript hold.",
+    "Replaced on 6 November 2026 with the English cut, at the owner's ask, for viewers anywhere: node tools/render.mjs --lang en, then tools/mux.sh family-16x9-en, from marketing/video on claude/admiring-curie-737iko (f5cbcfa). Maa asks aloud in English and the app answers in English; the rest is the same frame for frame. Her two messages stay in Hinglish under English subtitles, as marketing/video's README keeps them in every language. The poster is the same moment, 2.3 s into the spoken answer (76.2 s)."
   ],
   "draft": false
 }
