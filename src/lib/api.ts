@@ -2,7 +2,7 @@ import { supabase } from './supabase';
 import {
   LOCKED_VAULT_NAME, addSealedPerson, documentDetails, documentFileKeyText, forgetLockedDocument, isLockedVault, isSealedChat,
   knownLocked, lockedCards, lockedOverview, lockedVaultName, lockedVaults, openChat, openLockedTree, openNoteBody, openSharedFile,
-  overlaySealed, overlayVaultNames, readOnDevice, renameLockedDocument, sealCard, sealChat, sealDocument, sealNoteBody, sealPerson,
+  overlaySealed, overlayVaultNames, readOnDevice, updateLockedDocument, sealCard, sealChat, sealDocument, sealNoteBody, sealPerson,
   sealTreeLinks, searchLockedVaults, type LockProgress, type SealedCard,
 } from './vault-lock';
 import { insertSealedDocument } from './e2e-api';
@@ -954,8 +954,14 @@ export async function uploadDocument(params: UploadDocumentParams): Promise<stri
   if (await isLockedVault(familyId)) {
     const bytes = new Uint8Array(await fileBlob.arrayBuffer());
     const text = ocrText ?? (await readOnDevice({ bytes, fileType, name: fileName }, params.languages, params.onLockProgress));
+    // Whose it is and what it is filed under go inside the seal (074); the row
+    // keeps a built-in category only.
+    const categoryName = categoryId
+      ? ((await (supabase as any).from('document_categories').select('name').eq('id', categoryId).maybeSingle()).data?.name ?? null)
+      : null;
     const sealed = await sealDocument({
       familyId, storageNamespace, fileName, fileType, mime: mimeTypeFor(fileType), bytes, text,
+      belongsTo: belongsToMemberId ?? null, categoryId: categoryId ?? null, categoryName,
       onProgress: params.onLockProgress,
     });
     const { error: sErr } = await supabase.storage
@@ -965,7 +971,7 @@ export async function uploadDocument(params: UploadDocumentParams): Promise<stri
     try {
       return await insertSealedDocument({
         familyId, documentId: sealed.documentId, fileType, fileSizeBytes: sealed.sealedFile.length,
-        storagePath: sealed.storagePath, categoryId: categoryId ?? null, belongsToMember: belongsToMemberId ?? null,
+        storagePath: sealed.storagePath, categoryId: categoryId ?? null, belongsToMember: null,
         keyVersion: sealed.keyVersion, fileKey: sealed.fileKey, details: sealed.details,
         passages: sealed.passages, passageCount: sealed.passageCount,
       });
@@ -1071,12 +1077,24 @@ export async function updateDocument(
   userId: string,
   updates: { fileName?: string; categoryId?: string; belongsToMember?: string },
 ): Promise<void> {
-  // A locked document's name is sealed (071): never sent in the clear.
-  if (updates.fileName && (await isLockedVault(familyId))) {
+  // A locked document's name, whose it is and its category are sealed (071,
+  // 074): never sent in the clear. The row takes a built-in category only.
+  if ((updates.fileName || updates.categoryId || updates.belongsToMember) && (await isLockedVault(familyId))) {
     try {
-      await renameLockedDocument(familyId, documentId, updates.fileName);
-      updates = { ...updates, fileName: undefined };
-      if (!updates.categoryId && !updates.belongsToMember) return;
+      const categoryName = updates.categoryId
+        ? ((await (supabase as any).from('document_categories').select('name').eq('id', updates.categoryId).maybeSingle()).data?.name ?? null)
+        : undefined;
+      await updateLockedDocument(familyId, documentId, {
+        ...(updates.fileName ? { name: updates.fileName } : {}),
+        ...(updates.belongsToMember ? { belongsTo: updates.belongsToMember } : {}),
+        ...(updates.categoryId ? { categoryId: updates.categoryId, categoryName } : {}),
+      });
+      if (updates.categoryId) {
+        await supabase.rpc('update_family_document', {
+          p_family_id: familyId, p_document_id: documentId, p_user_id: userId, p_category_id: updates.categoryId,
+        }); // refused for a family's own category, which stays sealed only
+      }
+      return;
     } catch (err) {
       if ((err as { code?: string })?.code !== 'not_sealed') throw err;
     }

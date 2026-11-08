@@ -1,7 +1,8 @@
 # End-to-end encryption — the plan
 
 **Status: Phases 0 to 4 are built, in test builds only, vault by vault
-(Phase 3 on 8 November 2026); nothing on asklocker.com is locked.** Until
+(Phase 3 on 8 November 2026, with our own review's fixes, 074); nothing on
+asklocker.com is locked.** Until
 the outside review (Phase 5) is done, every screen, the privacy policy and
 the agreement keep saying documents are **not** end-to-end encrypted, and
 the marketing videos stay unpublished (CLAUDE.md, "Never promise more
@@ -128,8 +129,11 @@ The owner's, 3 and 4 November 2026.
    itself as keys the browser will not hand out, for every day, and a copy
    sealed with a device key the browser will not hand out either, so this
    device can lock the identity for a new phone, a passkey or a new backup
-   key. A script can use them while the page is open; it cannot copy them
-   out.
+   key. That copy opens with the device key beside it, so a script running
+   in AskLocker's page could read the keys out, not only use them; what
+   stops that is the page sending no such script (see "Limits that stay
+   true"). On a shared computer, Settings › Security › Encryption keys ›
+   "Shared computer" forgets them at sign-out (074).
 3. **Back on a new device, three ways, any one enough:**
    - **The phone's lock** (a passkey that gives a key, WebAuthn PRF). Made
      with one fingerprint or PIN; Google Password Manager and iCloud
@@ -138,10 +142,17 @@ The owner's, 3 and 4 November 2026.
      The passkey is AskLocker's own, named "AskLocker documents key", not
      the one fingerprint sign-in uses.
    - **Approving from a device already signed in.** The new device makes a
-     one-time key pair and shows a six-digit code made from its public key;
-     the signed-in device shows the same code beside "Approve"; the identity
-     is locked for that public key (`key_device_requests`, 071). A server
-     that swapped the key would change the code.
+     one-time key pair and a random value, and sends the key with the
+     value hidden (its hash). The signed-in device answers, without a tap,
+     with a random value of its own, which it keeps; only then does the
+     new device show its value. Both show six digits from the key and both
+     values; the identity is locked for that key once the person taps
+     Approve (`key_device_requests`, 071; the two values, 074). A server
+     in the middle must commit to its own key before it sees the signed-in
+     device's value, and give the new device a value before it sees the
+     new device's, so its codes match by one chance in a million. (A code
+     from the key alone, as in 071, could be matched by trying keys: half a
+     minute on one computer.)
    - **The backup key**, offered once with Save (copy, download, print) or
      Skip (`user_keys.backup`, optional since 071).
 4. **Lost every way back** (every device, the passkey and the backup key):
@@ -154,16 +165,36 @@ The owner's, 3 and 4 November 2026.
 - **One per vault and key version** (`vault_keys`), locked for each member
   with their public key (`vault_key_grants`, `g1.…`). Members read only
   their own grants.
+- **Each version is signed by whoever made it** (074): with a commitment
+  to the key (an HMAC under it, `kc1.…`) and their public keys, kept in
+  `vault_keys`. A member's app takes a version only when the key it opens
+  matches that commitment and the signature is good, from keys it trusts
+  for its maker. So a grant of some other key, planted by another member
+  or made up by a server, is caught, and thrown away
+  (`discard_my_vault_grant`) for an honest one; an admin's grant replaces
+  anyone else's.
 - **Locking a vault** (`lock_vault`, the owner): version 1, locked for the
   owner, then for every member as their apps meet it.
+- **Whose keys a device trusts** (074): each device remembers the key ID
+  (fingerprint, worked out on the device, never taken from the server) it
+  first saw for each person. After that it takes a different one only when
+  an admin it trusts let that person in (a signed `member-key` record), or
+  when the person at the device compares key IDs and taps "It matches".
+  The key ID is on everyone's Encryption keys screen, five groups of four.
 - **Joining:** whenever a member's app opens a locked vault it locks the
-  key for any member who has none (`vault_key_members`, `grant_vault_key`).
-  No tap. Someone whose keys **changed** since their last grant is locked
-  for only by an admin, after "Approve" (`needs_approval`): that stops a
-  server from slipping its own key in as a member's new phone.
-- **Leaving or being removed:** the next admin app to open the vault makes
-  the next version and locks it for everyone left; new documents use it.
-  What someone already opened, they keep.
+  key for any member who has none (`grant_vault_key`), when it trusts
+  their keys. No tap. Someone whose keys **changed** is locked for only by
+  an admin, after comparing key IDs and "Let them in" (`needs_approval`,
+  and each device's own memory): so a server cannot slip its own key in
+  as a member's new phone, even by saying nothing changed. An admin whose
+  own keys were not let back in cannot make a new version either.
+- **Leaving or being removed:** the vault is marked for a new version
+  (`locked_vaults.rotate_needed`, 074), and each admin's app also
+  remembers who was in it. The next admin app to open it makes the next
+  version and locks it for everyone left; everything new is sealed with the
+  newest version, which the server checks (074), and a device never takes
+  a version older than the newest it has seen. What someone already
+  opened, they keep.
 
 ### A locked document
 
@@ -218,14 +249,18 @@ document.
 ### Saved chats
 
 A chat that holds an answer from a locked vault is sealed for its owner
-(locked with their own public key) before it is saved. The vaults its
+before it is saved, with a key only they can work out (ECDH of their own
+key pair, 074), so nobody else can open it or make one that opens as theirs. The vaults its
 sources came from stay readable, so 069's rule (a chat goes when its owner
 leaves a vault it quotes) still holds.
 
 ### Moving a vault's older documents
 
-After locking, the owner's app moves each older document ("Locking your
-documents… 12 of 30"): downloads it, takes its text from the server (it
+After locking, each member's app moves the older documents they added
+(the owner's at once, "Locking your documents… 12 of 30"; everyone else's
+from Home's "Lock them now"): in a family nobody else locks them, admins
+included, as nobody else deletes them (047; in a business an admin may,
+051). It downloads each, takes its text from the server (it
 was readable anyway), splits it, makes vectors, seals it, uploads the
 sealed file and calls `seal_existing_document` (071), which points the row
 at the sealed file, deletes the readable text, passages, details and
@@ -250,8 +285,16 @@ the vault's name, its tree links (one record), each person's details (name,
 gender, date of birth, nickname) and each person's emergency card. The
 server keeps "Locked vault" and "Person" in their place, and the vault's
 own notifications stop saying its old name. Notes stay in `scratch_notes`,
-their text sealed (`n1.<key version>.<id>.<sealed>`), each still its
-owner's alone by RLS; a reminder on one says "A note reminder".
+their text sealed with their owner's own key, not the vault's
+(`n2.<id>.<sealed>`, 074), so nobody else in the vault can open one; a
+reminder on one says "A note reminder".
+
+- **Each record is signed by whoever wrote it** (074), inside the seal:
+  who, with their public keys, when, and the record. A member's app takes
+  it only from someone who may write it (an admin; for a person or a card,
+  the person themselves), from keys it trusts, and never older than the
+  newest copy of it this device has seen. A document's details carry whose
+  it is and its own category too; the row keeps a built-in category only.
 
 - **Who may write is still the server's** (`seal_vault_item`,
   `add_sealed_person`, `delete_vault_item`, the caller from `auth.uid()`):
@@ -267,7 +310,12 @@ owner's alone by RLS; a reminder on one says "A note reminder".
 - **Moving them**: after locking, the owner's app seals the vault's name,
   its links, everyone's details and cards, and its own notes; every
   member's app seals its own entry, card and notes when it opens the vault
-  (`moveVaultDetails()`, from `tendVault()`).
+  (`moveVaultDetails()`, from `tendVault()`). A readable copy is sealed
+  only where nothing is sealed yet, and once an admin's app has moved a
+  vault it never reads its readable name, links or cards again (074): a
+  server could otherwise put one up for an admin's app to seal as its own.
+- **A locked family cannot become a business** (054) yet: the team would
+  read its sealed tree and cards.
 - **What the phone works out instead**: who a question names by relation
   ("Nani's pension", from the asker's place in the opened tree), the names
   on documents, the business overview (renewals, bills due, money in and
@@ -275,8 +323,10 @@ owner's alone by RLS; a reminder on one says "A note reminder".
   real name is checked on the phone; the server checks the one it keeps).
 - **Still readable**: who is a member, with what role; how many people the
   tree has; which bills were marked paid, and when (the activity log
-  records it anyway); a note's reminder date. **Birthday reminders stop**
-  for a locked vault: the server no longer knows anyone's birthday.
+  records it anyway); a note's reminder date; how much space the sealed
+  parts take (they count toward the vault's space, 074). **Birthday
+  reminders stop** for a locked vault: the server no longer knows anyone's
+  birthday, and sealing a person takes their birthday notices with them.
 
 ---
 
@@ -410,7 +460,17 @@ Said plainly, in the plan and later in the privacy policy:
   was broken into could send code that leaks keys; this is true of every
   encrypted web app (Proton's and Tresorit's included). The phone apps,
   signed by the stores, narrow it.
-- **Joining**: above. Signed invitations and visible joins, not proof.
+- **Joining**: above. A device trusts the keys it first sees for someone
+  (as Signal and WhatsApp do), so a server could give a brand-new device,
+  or a newcomer, its own keys; after that, a change shows. Comparing key
+  IDs is the proof, and it is offered, not required.
+- **Members are trusted with the vault key.** A member can seal junk that
+  the others' apps then refuse, or read everything in the vault; what they
+  may write is still the server's rule, signed and checked on devices.
+- **Which scripts a page may run is not limited yet** (`public/_headers`
+  stops plug-ins and a foreign `<base>`): Google's sign-in, Razorpay's
+  checkout and the readers from jsDelivr need a list tried in a browser
+  first.
 - **The AI service reads the passages an answer is written from.**
 - **What the server sees**: accounts, membership, sizes, times, counts,
   built-in categories.
@@ -446,14 +506,14 @@ or a service role key.
    example, by adding a member with its own key, swapping a public key or
    sending older code. What would a member notice?
 
-### In scope (about 5,900 lines)
+### In scope (about 6,700 lines)
 
 | What | Files |
 |---|---|
 | The crypto core | `supabase/functions/_shared/vault-crypto.ts` (604 lines; self-tests in `qa/tools/selftest.mjs`) |
 | A person's keys: made on the device, the phone's lock (passkey PRF), approving a device, the backup key, new keys | `src/lib/vault-keys.web.ts`, `vault-keys-types.ts`, `src/app/settings/encryption.tsx` |
 | Vault keys, grants, rotation; sealing and opening documents, names, the tree, cards, notes; search; share links; moving older documents | `src/lib/vault-lock.web.ts`, `e2e-api.ts`, `tree-rules.ts`, `local-search.ts`, `src/app/lock-vault.tsx` |
-| The database's rules: who may write what, and readable copies refused | `supabase/migrations/070_user_keys.sql`, `071_locked_vaults.sql`, `072_locked_vaults_caller_first.sql`, `073_locked_vault_details.sql` |
+| The database's rules: who may write what, and readable copies refused | `supabase/migrations/070_user_keys.sql`, `071_locked_vaults.sql`, `072_locked_vaults_caller_first.sql`, `073_locked_vault_details.sql`, `074_locked_vaults_review_fixes.sql` |
 | Reading on the phone; Gmail in the browser | `on-device-reader.web.ts`, `on-device-model.web.ts`, `gmail-device.web.ts` |
 | The passages a question sends; share links | `supabase/functions/rag-search/index.ts` (`client_passages`), `supabase/functions/share/index.ts`, `src/app/s.tsx` |
 | How the web app is served | `public/_headers`, Cloudflare Pages; scripts loaded from jsDelivr (PDF.js, transformers.js, Tesseract) |
@@ -490,7 +550,7 @@ We still want to hear if any of these is worse than we think.
 ### Before sending it
 
 - Apply 073 to DEV, and run QA once with every 070–073 probe passing.
-- Fix what our own review found. It is not committed, since the
-  repository is public.
+- Our own review's fixes are in: 074 and the app (8 November 2026). Its
+  report is not committed, since the repository is public.
 - Freeze the files above on a branch for the review. Changes made after
   it need the firm's second look before the claim.

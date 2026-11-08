@@ -32,11 +32,13 @@ import {
   newDeviceKey,
   newIdentity,
   newRecoveryKey,
+  newPairingNonce,
   newRequestKeyPair,
   newSalt,
   openIdentity,
   openIdentityWithKey,
   pairingCode,
+  pairingCommitment,
   publicIdentity,
   sealIdentity,
   sealIdentityWithKey,
@@ -57,12 +59,14 @@ import {
   cancelDeviceRequestRpc,
   fetchKeyUnlocks,
   fetchMyDeviceRequests,
+  offerDeviceNonceRpc,
   removeKeyUnlockRpc,
   replaceMyIdentityRpc,
   requestDeviceKeysRpc,
+  revealDeviceNonceRpc,
   takeDeviceAnswerRpc,
 } from './e2e-api';
-import { deviceKey, storageSet } from './storage';
+import { accountKey, deviceKey, storageGet, storageRemove, storageSet } from './storage';
 import type {
   DeviceRequest, KeysState, PendingDevice, PhoneLockEntry, PreparedKeys, ServerIdentity, UnlockWays,
 } from './vault-keys-types';
@@ -432,19 +436,40 @@ export async function removePhoneLock(id: string): Promise<void> {
 
 // ─── Approving a new device from one already signed in ──────────
 
-/** This (new) device asks for the keys and waits for another device to approve it. */
+/**
+ * This (new) device asks for the keys and waits for another device to
+ * approve it. It sends its one-time key with its value hidden (a hash), waits
+ * for the signed-in device's value, then shows its own: only then is the code
+ * known, on both, and a server in the middle cannot have chosen a key that
+ * shows the same one (vault-crypto.ts, "Approving a new device").
+ */
 export async function startDeviceRequest(userId: string): Promise<DeviceRequest> {
   const me = await myIdentityOrThrow();
   const pair = await newRequestKeyPair();
   const requestKey = await exportPublicKey(pair.publicKey);
-  const id = await requestDeviceKeysRpc(requestKey, deviceLabel());
-  const code = await pairingCode(requestKey);
+  const myNonce = newPairingNonce();
+  const id = await requestDeviceKeysRpc(requestKey, await pairingCommitment(requestKey, myNonce), deviceLabel());
   let stopped = false;
+  let showCode: (code: string) => void = () => undefined;
+  let noCode: (err: unknown) => void = () => undefined;
+  const code = new Promise<string>((resolve, reject) => { showCode = resolve; noCode = reject; });
+  code.catch(() => undefined);
+  let shown = false;
   const done = (async () => {
     const until = Date.now() + 15 * 60_000;
     while (!stopped && Date.now() < until) {
       await new Promise((r) => setTimeout(r, 3000));
       if (stopped) break;
+      if (!shown) {
+        // The other device's value first; ours only after it.
+        const row = (await fetchMyDeviceRequests().catch(() => [])).find((r) => r.id === id);
+        if (!row) break;
+        if (!row.approverNonce) continue;
+        if (!row.requestNonce) await revealDeviceNonceRpc(id, myNonce);
+        showCode(await pairingCode(requestKey, row.approverNonce, myNonce));
+        shown = true;
+        continue;
+      }
       const answer = await takeDeviceAnswerRpc(id).catch(() => null);
       if (!answer) continue;
       const identity = await importIdentity(await unlockTextWithPrivateKey(answer, pair.privateKey, context.deviceRequest(userId, id)), true);
@@ -454,6 +479,7 @@ export async function startDeviceRequest(userId: string): Promise<DeviceRequest>
     }
     throw new VaultKeysError(stopped ? 'cancelled' : 'request_gone', stopped ? 'Stopped.' : 'That took too long. Ask again.');
   })();
+  done.catch((err) => noCode(err));
   return {
     code,
     done,
@@ -464,16 +490,73 @@ export async function startDeviceRequest(userId: string): Promise<DeviceRequest>
   };
 }
 
-/** New devices asking this one for the keys, with the code each shows. */
+// This device's own value for each request it answers: kept here, never read
+// back from the server, which could otherwise choose the code. In the tab's
+// storage too, so a reload keeps it.
+const myNonces = new Map<string, string>();
+function nonceKey(requestId: string): string {
+  return `fv:pairing:${requestId}`;
+}
+function rememberedNonce(requestId: string): string | null {
+  const here = myNonces.get(requestId);
+  if (here) return here;
+  try {
+    const kept = sessionStorage.getItem(nonceKey(requestId));
+    if (kept) myNonces.set(requestId, kept);
+    return kept;
+  } catch {
+    return null;
+  }
+}
+function rememberNonce(requestId: string, nonce: string): void {
+  myNonces.set(requestId, nonce);
+  try {
+    sessionStorage.setItem(nonceKey(requestId), nonce);
+  } catch {
+    // Kept in memory for this visit.
+  }
+}
+
+/** The code for a request, once the new device has shown its value and it matches what it promised. */
+async function codeFor(row: { requestKey: string; commitment: string | null; requestNonce: string | null }, mine: string): Promise<string | null> {
+  if (!row.requestNonce || !row.commitment) return null;
+  if ((await pairingCommitment(row.requestKey, row.requestNonce)) !== row.commitment) return null;
+  return pairingCode(row.requestKey, mine, row.requestNonce);
+}
+
+/**
+ * New devices asking this one for the keys. This device answers each with
+ * its own value (no tap), and shows the code once the new device shows its.
+ */
 export async function pendingDeviceRequests(): Promise<PendingDevice[]> {
   const rows = (await fetchMyDeviceRequests()).filter((r) => !r.answered && new Date(r.expiresAt).getTime() > Date.now());
-  return Promise.all(rows.map(async (r) => ({ id: r.id, code: await pairingCode(r.requestKey), label: r.label, createdAt: r.createdAt })));
+  const out: PendingDevice[] = [];
+  for (const r of rows) {
+    let mine = rememberedNonce(r.id);
+    if (!mine && !r.approverNonce) {
+      const nonce = newPairingNonce();
+      if (await offerDeviceNonceRpc(r.id, nonce).catch(() => false)) {
+        rememberNonce(r.id, nonce);
+        mine = nonce;
+      }
+    }
+    if (!mine) {
+      out.push({ id: r.id, code: null, elsewhere: true, label: r.label, createdAt: r.createdAt });
+      continue;
+    }
+    out.push({ id: r.id, code: await codeFor(r, mine), elsewhere: false, label: r.label, createdAt: r.createdAt });
+  }
+  return out;
 }
 
 /** Approve one: the keys, locked for that device's one-time key. */
 export async function approveDeviceRequest(userId: string, requestId: string): Promise<void> {
   const row = (await fetchMyDeviceRequests()).find((r) => r.id === requestId);
   if (!row || row.answered) throw new VaultKeysError('request_gone', 'That request has ended. Ask again on the new device.');
+  const mine = rememberedNonce(requestId);
+  if (!mine || !(await codeFor(row, mine))) {
+    throw new VaultKeysError('request_gone', "This request can't be approved here. Ask again on the new device.");
+  }
   const identity = await handOnIdentity(userId);
   const answer = await lockTextForPublicKey(row.requestKey, await exportIdentity(identity), context.deviceRequest(userId, requestId));
   await answerDeviceRequestRpc(requestId, answer);
@@ -494,6 +577,25 @@ export async function forgetKeysOnThisDevice(userId: string): Promise<void> {
   opened.delete(userId);
   if (typeof indexedDB === 'undefined') return;
   await removeKept(userId).catch(() => undefined);
+}
+
+/**
+ * A shared computer: the keys are forgotten here when this person signs out,
+ * so the next person at it cannot use them. They come back with the phone's
+ * lock, another device or the backup key.
+ */
+export async function forgetsKeysOnSignOut(userId: string): Promise<boolean> {
+  return (await storageGet(accountKey.keysOnSignOut(userId)).catch(() => null)) === 'forget';
+}
+
+export async function setForgetKeysOnSignOut(userId: string, on: boolean): Promise<void> {
+  if (on) await storageSet(accountKey.keysOnSignOut(userId), 'forget');
+  else await storageRemove(accountKey.keysOnSignOut(userId));
+}
+
+/** At sign-out (auth.tsx): the keys go too, where the person asked. */
+export async function forgetKeysAtSignOut(userId: string): Promise<void> {
+  if (await forgetsKeysOnSignOut(userId)) await forgetKeysOnThisDevice(userId);
 }
 
 /** Test builds only: forgets the keys on the account and here (refused once they open a locked vault). */

@@ -2,7 +2,7 @@
 // only until EAS builds exist (vault-lock.web.ts): here nothing is locked,
 // lists show rows as they are, and every action says to use the web app.
 
-import type { VaultKeyMember } from './e2e-api';
+import type { VaultKeyMember, VaultKeyStatus } from './e2e-api';
 import type { FamilyDocumentRow } from './database.types';
 import type { RankedPassage } from './local-search';
 
@@ -14,10 +14,17 @@ export class LockedVaultError extends Error {
   code = 'not_here';
 }
 
+export interface KeysToCheck {
+  member: VaultKeyMember;
+  keyId: string;
+  serverSaysChanged: boolean;
+}
+
 export interface VaultTending {
   waitingForMe: boolean;
-  needsApproval: VaultKeyMember[];
+  needsApproval: KeysToCheck[];
   admin: boolean;
+  myReadable: number;
 }
 
 export interface DocumentDetails {
@@ -29,6 +36,9 @@ export interface DocumentDetails {
   meta: { key: string; value: string }[];
   expiryDate: string | null;
   addedAt: string;
+  belongsTo?: string | null;
+  categoryId?: string | null;
+  categoryName?: string | null;
 }
 
 export interface SealedNewDocument {
@@ -72,6 +82,9 @@ export async function lockVault(_familyId: string): Promise<void> {
 export async function tendVault(_familyId: string): Promise<VaultTending | null> {
   return null;
 }
+export async function trustMember(_familyId: string, _memberId: string): Promise<void> {
+  throw new Error(NOT_HERE);
+}
 export async function approveMember(_familyId: string, _memberId: string): Promise<void> {
   throw new Error(NOT_HERE);
 }
@@ -98,6 +111,15 @@ export async function openSharedFile(
 export async function renameLockedDocument(_familyId: string, _documentId: string, _name: string): Promise<void> {
   throw new Error(NOT_HERE);
 }
+export async function updateLockedDocument(
+  _familyId: string, _documentId: string,
+  _change: { name?: string; belongsTo?: string | null; categoryId?: string | null; categoryName?: string | null },
+): Promise<void> {
+  throw new Error(NOT_HERE);
+}
+export function safeMime(_fileType: string | null | undefined): string {
+  return 'application/octet-stream';
+}
 export async function readOnDevice(
   _file: { bytes: Uint8Array; fileType: string; name: string; uri?: string }, _languages?: string[], _onProgress?: LockProgress,
 ): Promise<string> {
@@ -106,6 +128,7 @@ export async function readOnDevice(
 export async function sealDocument(_p: {
   familyId: string; storageNamespace: string; documentId?: string; fileName: string; fileType: string;
   mime: string; bytes: Uint8Array; text: string; onProgress?: LockProgress;
+  belongsTo?: string | null; categoryId?: string | null; categoryName?: string | null;
 }): Promise<SealedNewDocument> {
   throw new Error(NOT_HERE);
 }
@@ -198,7 +221,7 @@ export async function sealNoteBody(_familyId: string, _text: string): Promise<st
 export async function openNoteBody(_familyId: string, body: string): Promise<string> {
   return isSealedNote(body) ? 'This note can be opened in the web app.' : body;
 }
-export async function moveVaultDetails(_familyId: string, _admin: boolean, _force = false): Promise<void> {}
+export async function moveVaultDetails(_familyId: string, _admin: boolean, _force = false, _status?: VaultKeyStatus): Promise<void> {}
 export async function lockedOverview(
   _familyId: string,
   tier: 'free' | 'plus' | 'pro',

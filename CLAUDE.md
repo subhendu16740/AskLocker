@@ -186,8 +186,15 @@ Four things will mislead you if you assume otherwise:
    are read by its members and written only through `seal_vault_item`,
    `add_sealed_person` and `delete_vault_item` (from `auth.uid()`: an
    admin, or the person themselves for their own details and card), and a
-   locked vault refuses a readable name, person, link, card or note: see
-   the same section).
+   locked vault refuses a readable name, person, link, card or note; 074
+   adds no table a client writes: each version of a vault's key is signed
+   by its maker (`lock_vault`, `add_vault_key_version`, which only an admin
+   holding the latest key may call), a grant is thrown away only by its
+   recipient (`discard_my_vault_grant`), a new device's code takes both
+   devices' values (`offer_device_nonce`, `reveal_device_nonce`, the
+   caller's own requests), everything new is sealed with a vault's latest
+   key, and a person's keys can be made only where `e2e_config` allows it:
+   see the same section).
    **A new writable
    column needs its own `GRANT` in a migration.** Nobody joins a family
    without saying yes: only an admin asks a person in, through the
@@ -966,9 +973,9 @@ tabs. `(tabs)` is a layout group, so routes are `/home`, `/search`, `/upload`.
 | `app-info.ts` | Version, release date and commit (stamped into `extra` by `app.config.ts` at build time), and the support contact Help and the privacy policy show (`support@asklocker.com`, Cloudflare Email Routing) |
 | `ocr.ts` | Platform-split OCR with progress callback; reads the person's chosen languages |
 | `ocr-languages.ts` | The document-language picker list, and `resolveOcrLanguages()` which always appends English |
-| `vault-keys.ts` / `vault-keys.web.ts` | A person's encryption keys on this device (070, 071, test builds only): `ensureKeys()` makes them without a screen; kept twice in IndexedDB (`asklocker-keys`); `addPhoneLock()` / `unlockWithPhoneLock()` (a passkey's PRF), `startDeviceRequest()` / `pendingDeviceRequests()` / `approveDeviceRequest()`, `prepareBackupKey()` / `unlockWithRecoveryKey()`, `makeNewKeys()`, `myDeviceIdentity()`, `forgetKeysOnThisDevice()` (also on deleting the account), `keysErrorText()`. Types in `vault-keys-types.ts`. See [Locked vaults](#locked-vaults--end-to-end-encryption-vault-by-vault-test-builds-only-070-071) |
-| `vault-lock.ts` / `vault-lock.web.ts` | Locked vaults (071, 073): `lockVault()`, `tendVault()`, `approveMember()`, `sealDocument()`, `readOnDevice()`, `overlaySealed()` (names, and whose a document is), `documentDetails()`, `openDocumentFile()`, `renameLockedDocument()`, `searchLockedVaults()` (relations resolved from the opened tree), `lockedExpiries()`, `documentFileKeyText()` / `openSharedFile()`, `sealChat()` / `openChat()`, `moveOlderDocuments()`; 073's `overlayVaultNames()`, `openLockedTree()`, `sealPerson()`, `addSealedPerson()`, `sealTreeLinks()`, `lockedCards()` / `sealCard()`, `sealNoteBody()` / `openNoteBody()`, `moveVaultDetails()`, `lockedOverview()` |
-| `e2e-api.ts` | Locked vaults' database calls (071, 073), nothing else |
+| `vault-keys.ts` / `vault-keys.web.ts` | A person's encryption keys on this device (070, 071, test builds only): `ensureKeys()` makes them without a screen; kept twice in IndexedDB (`asklocker-keys`); `addPhoneLock()` / `unlockWithPhoneLock()` (a passkey's PRF), `startDeviceRequest()` / `pendingDeviceRequests()` / `approveDeviceRequest()` (the code from both devices' values, 074), `prepareBackupKey()` / `unlockWithRecoveryKey()`, `makeNewKeys()`, `myDeviceIdentity()`, `forgetKeysOnThisDevice()` (also on deleting the account, and at sign-out on a shared computer: `setForgetKeysOnSignOut()`, `forgetKeysAtSignOut()` from `auth.tsx`, 074), `keysErrorText()`. Types in `vault-keys-types.ts`. See [Locked vaults](#locked-vaults--end-to-end-encryption-vault-by-vault-test-builds-only-070-071) |
+| `vault-lock.ts` / `vault-lock.web.ts` | Locked vaults (071, 073, 074): `lockVault()`, `tendVault()` (also each person's own older documents still readable), `approveMember()`, `trustMember()` (074: after comparing key IDs), `vaultKeys()` (only versions whose maker signed them and whose key matches), `sealDocument()`, `readOnDevice()`, `overlaySealed()` (names, and whose a document is), `documentDetails()`, `openDocumentFile()`, `renameLockedDocument()` / `updateLockedDocument()` (whose and its category sealed too, 074), `safeMime()`, `searchLockedVaults()` (relations resolved from the opened tree), `lockedExpiries()`, `documentFileKeyText()` / `openSharedFile()`, `sealChat()` / `openChat()`, `moveOlderDocuments()`; 073's `overlayVaultNames()`, `openLockedTree()`, `sealPerson()`, `addSealedPerson()`, `sealTreeLinks()`, `lockedCards()` / `sealCard()`, `sealNoteBody()` / `openNoteBody()`, `moveVaultDetails()`, `lockedOverview()` |
+| `e2e-api.ts` | Locked vaults' database calls (071, 073, 074), nothing else |
 | `local-search.ts` | Search on the phone, pure: 8-bit vectors (`packVector()`), `rankPassages()` (0.7 meaning, 0.3 words, four a document) |
 | `tree-rules.ts` | The family tree's rules for a locked vault (073), pure: `connectInTree()` (031's one link a pair, two parents at most, nobody their own ancestor, in its words), `linksAmong()` |
 | `on-device-model.ts` / `.web.ts`, `on-device-reader.ts` / `.web.ts`, `gmail-device.ts` / `.web.ts` | Locked vaults on the phone: gte-small (transformers.js 4.3.1), PDF.js 4.10.38, both from jsDelivr when first needed; Gmail in the browser |
@@ -981,7 +988,7 @@ tabs. `(tabs)` is a layout group, so routes are `/home`, `/search`, `/upload`.
 | `speech-text.ts` | `toSpeech()`: strips markdown and spells out ID numbers before they are read aloud — and a number named as one ("train number 16782", "PNR: 4512", "PIN 751001", "नंबर 16782") digit by digit, from its digits; the screen keeps the digits |
 | `voice-languages.ts` | The language picker list and the few phrases the app itself says, per language |
 | `storage.ts` | Key-value cache: localStorage on web, AsyncStorage on native |
-| `database.types.ts` | Generated Supabase types, current to 073 (070's, 071's and 073's functions added by hand) (030, 052, 055, 058, 059, 061, 063 and 072 changed nothing in them, nor did 065, whose one function only the Edge Functions call, nor 066 and 067, numbers and function bodies; 049's, 050's, 051's, 053's, 054's, 056's, 057's, 060's, 062's, 064's, 068's and 069's added by hand). Regenerate after every migration and re-append the hand-written block at the bottom (see the typecheck note) |
+| `database.types.ts` | Generated Supabase types, current to 074 (070's, 071's, 073's and 074's functions added by hand) (030, 052, 055, 058, 059, 061, 063 and 072 changed nothing in them, nor did 065, whose one function only the Edge Functions call, nor 066 and 067, numbers and function bodies; 049's, 050's, 051's, 053's, 054's, 056's, 057's, 060's, 062's, 064's, 068's and 069's added by hand). Regenerate after every migration and re-append the hand-written block at the bottom (see the typecheck note) |
 
 ---
 
@@ -3064,7 +3071,8 @@ where it does not.
 - **A locked vault's name, tree, cards and notes (073)** are sealed with
   the vault's key too, in `sealed_vault_items` (the name, the tree's links,
   each person's details, each person's card) and, for notes, in
-  `scratch_notes` itself (`n1.<version>.<id>.<sealed>`). The server keeps
+  `scratch_notes` itself, with their owner's own key (`n2.<id>.<sealed>`,
+  074). The server keeps
   "Locked vault" and "Person" in their place, and the vault's own
   notifications stop saying its old name; the app shows the real ones
   (`overlayVaultNames()` in `fetchUserFamilies`, notifications, the tree,
@@ -3083,6 +3091,33 @@ where it does not.
   reminders stop for a locked vault. **No screen, policy, agreement or
   video says end-to-end** until an outside review (Phase 5) is done; the
   privacy rule under Conventions stands.
+- **Our own review (8 November 2026) and 074.** Before the outside
+  review, two reviews of all this code (the database's rules, and the
+  crypto and key flows) found that a server or a member could get a key
+  of their own taken. Fixed on both sides, and documented in
+  `docs/end-to-end-encryption.md` ("A vault's key", "Limits that stay
+  true"); the report is not committed. Each version of a vault's key is
+  signed by its maker, with a commitment to the key (`vault_keys`), and a
+  member's app takes only that key; each device remembers each person's
+  key ID (`accountKey.keyTrust`) and takes a change only from an admin's
+  signed `member-key` record or after the person compares key IDs (Home's
+  card shows it; Encryption keys shows one's own, five groups of four); a
+  new device's six digits come from both devices' values, committed first
+  (`pairingCommitment()`, `pairingCode()`); each record of a vault's name,
+  tree and cards is signed by its writer and checked against who may write
+  it, and never taken older than the newest seen (`accountKey.keySeen`);
+  notes and saved chats are sealed with their owner's own key
+  (`selfKey()`); a readable copy is never sealed over a sealed one; a file
+  opens only as PDF, JPEG or PNG (`safeMime()`); the share page clears the
+  key from the address; rag-search logs no question text or locked
+  document name. On the server (074): latest key only, an admin's grant
+  wins, someone leaving marks a new key due, in a family only whoever
+  added an older document locks it (Home's "Lock them now" for the rest),
+  a sealed document keeps no readable name, description, owner or own
+  category, sealed parts are capped and count toward space, a locked
+  family cannot become a business, keys only where locking is on, new
+  keys three times a day at most. 073 (not yet applied anywhere) took its
+  own fixes in place.
 - **Tested**: 071 on a local Postgres (23 scenarios, the 023 sweep empty,
   applied twice); the device flows in Node against an in-memory server
   keeping 071's rules (18 flows: lock, seal, let in, search, open, share,
@@ -3099,7 +3134,13 @@ where it does not.
   caller: `lock_vault()` said whether locking is on, and
   `insert_sealed_document()` whether a vault is locked, to anyone signed
   in. 072 checks the caller first (the owner, the vault's key); until it is
-  on DEV those two probes are skipped.
+  on DEV those two probes are skipped. For 074: 073 and 074 on a local
+  Postgres (each fix, applied twice, the 023 sweep empty), seven more
+  device flows, each an attack that now fails (a made-up key version, a
+  planted grant, keys swapped without a word, a code with a server in the
+  middle, an older card put back or a readable one slipped in, a file
+  passing itself off as a web page, an admin locking someone else's
+  document), and probes for the new functions (skipped until 074).
 - **The phone app** has stand-ins for every one of these files until EAS
   builds exist: nothing is locked there, and it says to use the web app.
 - **`supabase/functions/_shared/vault-crypto.ts` runs only on members'

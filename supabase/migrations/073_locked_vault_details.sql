@@ -10,8 +10,13 @@
 -- the readable copy goes:
 --
 --   sealed_vault_items   one row per sealed record: the vault's name, its
---                        tree links, each person, each emergency card.
---                        Members read their vault's rows; no client writes.
+--                        tree links, each person, each emergency card, and
+--                        each member's keys as an admin let them in (their
+--                        key ID, signed by that admin; a member's app takes a
+--                        changed key only with one). Members read their
+--                        vault's rows; no client writes. Each record is signed
+--                        by whoever wrote it, inside the seal, and the phone
+--                        checks they may write it.
 --   seal_vault_item()    writes one record and blanks the readable copy:
 --                        the vault's name becomes "Locked vault" (and the
 --                        vault's own notifications stop saying the old one),
@@ -19,7 +24,10 @@
 --                        nickname, the tree's readable links and a person's
 --                        readable card are deleted. An admin, or for a person
 --                        or a card, that person themselves (031's and 032's
---                        rule). The caller from auth.uid().
+--                        rule); a member's keys, an admin. Always with the
+--                        vault key's latest version, so a member who left,
+--                        holding the older ones, cannot open what is written
+--                        after. The caller from auth.uid().
 --   add_sealed_person()  someone new in the tree, an admin's. The phone
 --                        chooses the id, since the sealed record is bound to it.
 --   delete_vault_item()  an emptied emergency card. An admin, or the person.
@@ -28,8 +36,9 @@
 --                        phone works out. A member's.
 --
 -- Notes stay in scratch_notes, each person's own (056): in a locked vault the
--- body is sealed on the phone ("n1.<version>.<id>.<sealed>"), and a reminder
--- on one says "A note reminder" instead of its first line.
+-- body is sealed on the phone with its owner's own key, not the vault's
+-- ("n2.<id>.<sealed>"), so nobody else in the vault can open it, and a
+-- reminder on one says "A note reminder" instead of its first line.
 --
 -- In a locked vault the database refuses the readable versions, on every
 -- path: a vault name or description changed, a person added without an
@@ -44,7 +53,9 @@
 -- many people the tree has (its rows, without names); which bills were
 -- marked paid and when (the activity log records it anyway); a note's
 -- reminder date. Birthday reminders stop for a locked vault: the server no
--- longer knows anyone's birthday.
+-- longer knows anyone's birthday, and a person's sealed details take their
+-- birthday notifications with them. A locked family cannot become a
+-- business (054): its sealed tree and cards would be the team's to read.
 --
 -- Apply to DEV, then PROD. Safe to run twice. Nothing a person sees changes
 -- in a vault that is not locked.
@@ -53,8 +64,9 @@
 -- ─── 1. Sealed records ──────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS public.sealed_vault_items (
   family_id    uuid        NOT NULL REFERENCES public.families(id) ON DELETE CASCADE,
-  kind         text        NOT NULL CHECK (kind IN ('vault-name', 'tree-links', 'person', 'emergency-card')),
-  -- The vault's own id for its name and links; the person's for the others.
+  kind         text        NOT NULL CHECK (kind IN ('vault-name', 'tree-links', 'person', 'emergency-card', 'member-key')),
+  -- The vault's own id for its name and links; the person's for a person or
+  -- a card; the member's account id for their keys.
   item_id      uuid        NOT NULL,
   key_version  integer     NOT NULL CHECK (key_version >= 1),
   sealed       text        NOT NULL CHECK (sealed ~ '^e1\.[A-Za-z0-9_-]+$' AND char_length(sealed) <= 400000),
@@ -108,7 +120,10 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM public.locked_vaults WHERE family_id = p_family_id) THEN
     RAISE EXCEPTION 'This vault is not locked.' USING ERRCODE = 'P0001', HINT = 'not_locked';
   END IF;
-  IF p_kind NOT IN ('vault-name', 'tree-links', 'person', 'emergency-card') THEN
+  IF p_key_version IS DISTINCT FROM (SELECT max(k.version) FROM public.vault_keys k WHERE k.family_id = p_family_id) THEN
+    RAISE EXCEPTION 'This vault has a newer key. Open it again.' USING ERRCODE = 'P0001', HINT = 'stale_version';
+  END IF;
+  IF p_kind NOT IN ('vault-name', 'tree-links', 'person', 'emergency-card', 'member-key') THEN
     RAISE EXCEPTION 'Unknown kind of record.' USING ERRCODE = '22023', HINT = 'bad_sealed';
   END IF;
 
@@ -118,6 +133,13 @@ BEGIN
     END IF;
     IF p_item_id IS DISTINCT FROM p_family_id THEN
       RAISE EXCEPTION 'This record is not in the form AskLocker expects.' USING ERRCODE = '22023', HINT = 'bad_sealed';
+    END IF;
+  ELSIF p_kind = 'member-key' THEN
+    IF v_role <> 'admin' THEN
+      RAISE EXCEPTION 'Only an admin can let someone in.' USING ERRCODE = '42501', HINT = 'needs_admin';
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM public.family_members m WHERE m.family_id = p_family_id AND m.user_id = p_item_id) THEN
+      RAISE EXCEPTION 'They are not in this vault.' USING ERRCODE = 'P0001', HINT = 'not_member';
     END IF;
   ELSE
     SELECT * INTO v_person FROM public.family_people p WHERE p.id = p_item_id AND p.family_id = p_family_id;
@@ -165,6 +187,19 @@ BEGIN
        SET display_name = 'Person', gender = NULL, birth_date = NULL, nickname = NULL, updated_at = now()
      WHERE id = p_item_id AND family_id = p_family_id
        AND (display_name IS DISTINCT FROM 'Person' OR gender IS NOT NULL OR birth_date IS NOT NULL OR nickname IS NOT NULL);
+    -- What else said who they are: their birthday notices (035) and the
+    -- name and relation an older app kept on their membership (025).
+    IF v_person.display_name IS NOT NULL AND v_person.display_name <> 'Person' THEN
+      DELETE FROM public.notifications
+       WHERE family_id = p_family_id AND type = 'birthday' AND position(v_person.display_name IN title) > 0;
+    END IF;
+    DELETE FROM public.reminders_sent WHERE family_id = p_family_id AND kind = 'birthday' AND ref_id = p_item_id;
+    IF v_person.user_id IS NOT NULL THEN
+      UPDATE public.family_members SET alias = NULL, relationship = NULL
+       WHERE family_id = p_family_id AND user_id = v_person.user_id AND (alias IS NOT NULL OR relationship IS NOT NULL);
+    END IF;
+  ELSIF p_kind = 'member-key' THEN
+    NULL;  -- nothing readable to take away
   ELSE
     DELETE FROM public.family_emergency_cards WHERE family_id = p_family_id AND person_id = p_item_id;
   END IF;
@@ -202,6 +237,9 @@ BEGIN
   END IF;
   IF NOT EXISTS (SELECT 1 FROM public.locked_vaults WHERE family_id = p_family_id) THEN
     RAISE EXCEPTION 'This vault is not locked.' USING ERRCODE = 'P0001', HINT = 'not_locked';
+  END IF;
+  IF p_key_version IS DISTINCT FROM (SELECT max(k.version) FROM public.vault_keys k WHERE k.family_id = p_family_id) THEN
+    RAISE EXCEPTION 'This vault has a newer key. Open it again.' USING ERRCODE = 'P0001', HINT = 'stale_version';
   END IF;
   IF p_person_id IS NULL OR EXISTS (SELECT 1 FROM public.family_people WHERE id = p_person_id) THEN
     RAISE EXCEPTION 'This person is in the tree already.' USING ERRCODE = '22023', HINT = 'bad_sealed';
@@ -304,13 +342,17 @@ BEGIN
      OR (NEW.description IS DISTINCT FROM OLD.description AND NEW.description IS NOT NULL) THEN
     RAISE EXCEPTION 'This vault is locked: its name is changed on a member''s phone.' USING ERRCODE = 'P0001', HINT = 'vault_locked';
   END IF;
+  -- 054's move would leave its sealed tree and cards for the whole team.
+  IF NEW.kind IS DISTINCT FROM OLD.kind THEN
+    RAISE EXCEPTION 'A locked family vault cannot become a business vault yet.' USING ERRCODE = 'P0001', HINT = 'vault_locked';
+  END IF;
   RETURN NEW;
 END;
 $fn$;
 
 DROP TRIGGER IF EXISTS families_locked_name ON public.families;
 CREATE TRIGGER families_locked_name
-  BEFORE UPDATE OF name, description ON public.families
+  BEFORE UPDATE OF name, description, kind ON public.families
   FOR EACH ROW EXECUTE FUNCTION public.locked_vault_name_stays_sealed();
 
 CREATE OR REPLACE FUNCTION public.locked_vault_people_stay_sealed()
@@ -392,10 +434,35 @@ CREATE TRIGGER family_emergency_cards_locked
   BEFORE INSERT OR UPDATE ON public.family_emergency_cards
   FOR EACH ROW EXECUTE FUNCTION public.locked_vault_cards_stay_sealed();
 
+-- 025's alias and relationship on a membership: the app writes neither, and
+-- 031's trigger copies the alias into a new member's tree entry. In a locked
+-- vault they stay empty.
+CREATE OR REPLACE FUNCTION public.locked_vault_members_say_nothing()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_catalog
+AS $fn$
+BEGIN
+  IF (NEW.alias IS NOT NULL OR NEW.relationship IS NOT NULL)
+     AND EXISTS (SELECT 1 FROM public.locked_vaults WHERE family_id = NEW.family_id) THEN
+    NEW.alias := NULL;
+    NEW.relationship := NULL;
+  END IF;
+  RETURN NEW;
+END;
+$fn$;
+
+DROP TRIGGER IF EXISTS family_members_locked ON public.family_members;
+CREATE TRIGGER family_members_locked
+  BEFORE INSERT OR UPDATE OF alias, relationship ON public.family_members
+  FOR EACH ROW EXECUTE FUNCTION public.locked_vault_members_say_nothing();
+
 
 -- ─── 4. Notes: sealed in a locked vault ─────────────────────────────────────
--- A sealed body is longer than 2,000 characters of text: 056's column check
--- is replaced by one that takes either.
+-- Sealed with their owner's own key ("n2.<id>.<sealed>"). A sealed body is
+-- longer than 2,000 characters of text: 056's column check is replaced by
+-- one that takes either.
 DO $do$
 DECLARE
   v_name text;
@@ -413,8 +480,8 @@ $do$;
 
 ALTER TABLE public.scratch_notes DROP CONSTRAINT IF EXISTS scratch_notes_body_sealed_or_text;
 ALTER TABLE public.scratch_notes ADD CONSTRAINT scratch_notes_body_sealed_or_text CHECK (
-  (body ~ '^n1\.[0-9]+\.[0-9a-f-]{36}\.e1\.[A-Za-z0-9_-]+$' AND char_length(body) <= 12000)
-  OR (body !~ '^n1\.' AND char_length(btrim(body)) BETWEEN 1 AND 2000)
+  (body ~ '^n2\.[0-9a-f-]{36}\.e1\.[A-Za-z0-9_-]+$' AND char_length(body) <= 12000)
+  OR (body !~ '^n[0-9]\.' AND char_length(btrim(body)) BETWEEN 1 AND 2000)
 );
 
 CREATE OR REPLACE FUNCTION public.scratch_notes_sealed_rules()
@@ -425,7 +492,7 @@ SET search_path = public, pg_catalog
 AS $fn$
 DECLARE
   v_locked boolean := EXISTS (SELECT 1 FROM public.locked_vaults WHERE family_id = NEW.family_id);
-  v_sealed boolean := NEW.body ~ '^n1\.';
+  v_sealed boolean := NEW.body ~ '^n[0-9]\.';
 BEGIN
   IF v_locked AND NOT v_sealed THEN
     RAISE EXCEPTION 'This vault is locked: notes are locked on your phone.' USING ERRCODE = 'P0001', HINT = 'vault_locked';
@@ -472,7 +539,7 @@ BEGIN
   ), made AS (
     INSERT INTO public.notifications (user_id, family_id, type, title, message)
     SELECT d.user_id, d.family_id, 'note',
-           CASE WHEN d.body ~ '^n1\.' THEN 'A note reminder'
+           CASE WHEN d.body ~ '^n[0-9]\.' THEN 'A note reminder'
                 ELSE left(split_part(btrim(d.body), E'\n', 1), 80) END,
            format('Your note in %s', d.name)
       FROM due d
@@ -518,6 +585,8 @@ BEGIN
    WHERE family_id = OLD.family_id AND kind = 'emergency-card'
      AND item_id IN (SELECT p.id FROM public.family_people p
                       WHERE p.family_id = OLD.family_id AND (p.id = OLD.id OR p.user_id = OLD.user_id));
+  DELETE FROM public.sealed_vault_items
+   WHERE family_id = OLD.family_id AND kind = 'member-key' AND item_id = OLD.user_id;
   RETURN OLD;
 END;
 $fn$;
@@ -542,6 +611,7 @@ REVOKE ALL ON FUNCTION public.locked_vault_name_stays_sealed() FROM PUBLIC, anon
 REVOKE ALL ON FUNCTION public.locked_vault_people_stay_sealed() FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.locked_vault_links_stay_sealed() FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.locked_vault_cards_stay_sealed() FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.locked_vault_members_say_nothing() FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.scratch_notes_sealed_rules() FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.sealed_items_follow_people() FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.sealed_cards_follow_members() FROM PUBLIC, anon, authenticated;

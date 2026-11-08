@@ -105,14 +105,49 @@ export async function fetchMyGrants(familyId: string): Promise<MyGrant[]> {
   return (data ?? []).map((r: any) => ({ version: r.version, identityVersion: r.identity_version, grant: r.key_grant }));
 }
 
-export async function lockVaultRpc(familyId: string, grant: string): Promise<void> {
-  const { error } = await (supabase as any).rpc('lock_vault', { p_family_id: familyId, p_grant: grant });
+/** A version of a vault's key, as its maker signed it (074): the key's commitment and the maker's public keys. */
+export interface VaultKeyVersionRow {
+  version: number;
+  makerId: string | null;
+  commitment: string | null;
+  signature: string | null;
+  makerEncryptPublic: string | null;
+  makerSignPublic: string | null;
+}
+
+/** Every version of a vault's key, for a member to check what they open. Empty where 071 is missing. */
+export async function fetchVaultKeyVersions(familyId: string): Promise<VaultKeyVersionRow[]> {
+  const { data, error } = await (supabase as any)
+    .from('vault_keys')
+    .select('version, created_by, commitment, signature, maker_encrypt_public, maker_sign_public')
+    .eq('family_id', familyId);
+  if (error) {
+    if (isMissingMigration(error)) return [];
+    throw error;
+  }
+  return (data ?? []).map((r: any) => ({
+    version: Number(r.version), makerId: r.created_by ?? null, commitment: r.commitment ?? null, signature: r.signature ?? null,
+    makerEncryptPublic: r.maker_encrypt_public ?? null, makerSignPublic: r.maker_sign_public ?? null,
+  }));
+}
+
+export async function lockVaultRpc(familyId: string, grant: string, commitment: string, signature: string): Promise<void> {
+  const { error } = await (supabase as any).rpc('lock_vault', {
+    p_family_id: familyId, p_grant: grant, p_commitment: commitment, p_signature: signature,
+  });
   if (error) throw error;
 }
 
-export async function addVaultKeyVersionRpc(familyId: string, version: number, grant: string): Promise<void> {
-  const { error } = await (supabase as any).rpc('add_vault_key_version', { p_family_id: familyId, p_version: version, p_grant: grant });
+export async function addVaultKeyVersionRpc(familyId: string, version: number, grant: string, commitment: string, signature: string): Promise<void> {
+  const { error } = await (supabase as any).rpc('add_vault_key_version', {
+    p_family_id: familyId, p_version: version, p_grant: grant, p_commitment: commitment, p_signature: signature,
+  });
   if (error) throw error;
+}
+
+/** Throw away a grant whose key is not the one its version committed to, so an honest one can take its place. */
+export async function discardMyVaultGrantRpc(familyId: string, version: number): Promise<void> {
+  await (supabase as any).rpc('discard_my_vault_grant', { p_family_id: familyId, p_version: version });
 }
 
 export async function grantVaultKeyRpc(
@@ -282,6 +317,10 @@ export async function removeKeyUnlockRpc(id: string): Promise<void> {
 export interface DeviceRequestRow {
   id: string;
   requestKey: string;
+  /** The new device's value, hidden (074), and the two values once each is given. */
+  commitment: string | null;
+  approverNonce: string | null;
+  requestNonce: string | null;
   label: string | null;
   createdAt: string;
   expiresAt: string;
@@ -291,22 +330,38 @@ export interface DeviceRequestRow {
 export async function fetchMyDeviceRequests(): Promise<DeviceRequestRow[]> {
   const { data, error } = await (supabase as any)
     .from('key_device_requests')
-    .select('id, request_key, label, created_at, expires_at, answered_at')
+    .select('id, request_key, commitment, approver_nonce, request_nonce, label, created_at, expires_at, answered_at')
     .order('created_at');
   if (error) {
     if (isMissingMigration(error)) return [];
     throw error;
   }
   return (data ?? []).map((r: any) => ({
-    id: r.id, requestKey: r.request_key, label: r.label, createdAt: r.created_at,
+    id: r.id, requestKey: r.request_key, commitment: r.commitment ?? null, approverNonce: r.approver_nonce ?? null,
+    requestNonce: r.request_nonce ?? null, label: r.label, createdAt: r.created_at,
     expiresAt: r.expires_at, answered: Boolean(r.answered_at),
   }));
 }
 
-export async function requestDeviceKeysRpc(requestKey: string, label: string): Promise<string> {
-  const { data, error } = await (supabase as any).rpc('request_device_keys', { p_request_key: requestKey, p_label: label });
+export async function requestDeviceKeysRpc(requestKey: string, commitment: string, label: string): Promise<string> {
+  const { data, error } = await (supabase as any).rpc('request_device_keys', {
+    p_request_key: requestKey, p_commitment: commitment, p_label: label,
+  });
   if (error) throw error;
   return data as string;
+}
+
+/** The signed-in device's value, once. True when it is the one kept. */
+export async function offerDeviceNonceRpc(id: string, nonce: string): Promise<boolean> {
+  const { data, error } = await (supabase as any).rpc('offer_device_nonce', { p_id: id, p_nonce: nonce });
+  if (error) throw error;
+  return Boolean(data);
+}
+
+/** The new device's value, after the other device's. */
+export async function revealDeviceNonceRpc(id: string, nonce: string): Promise<void> {
+  const { error } = await (supabase as any).rpc('reveal_device_nonce', { p_id: id, p_nonce: nonce });
+  if (error) throw error;
 }
 
 export async function answerDeviceRequestRpc(id: string, answer: string): Promise<void> {
@@ -334,7 +389,7 @@ export async function replaceMyIdentityRpc(encryptPublic: string, signPublic: st
 
 // ─── A locked vault's name, tree, cards (073) ────────────────────
 
-export type VaultItemKind = 'vault-name' | 'tree-links' | 'person' | 'emergency-card';
+export type VaultItemKind = 'vault-name' | 'tree-links' | 'person' | 'emergency-card' | 'member-key';
 
 export interface SealedVaultItemRow {
   family_id: string;
