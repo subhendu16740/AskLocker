@@ -9,7 +9,7 @@ import {
   searchIn, saveBar, askInput, whyHow, trustBlock, brand,
 } from './parts.js';
 import { VOICE_LINES, APP_PHRASES, voiceSubtitles } from './voice-lines.js';
-import { FILM } from './engine.js';
+import { FILM, LANG } from './engine.js';
 import { LAUNCH, END_LINE, LAUNCH_LINE } from './claims.js';
 import { t, UI } from './i18n.js';
 
@@ -125,7 +125,27 @@ const NRI_STORY = {
   ] },
 };
 
-export const STORY = FILM === 'nri' ? NRI_STORY : FAMILY_STORY;
+// The English cut (?lang=en, render.mjs --lang en: the voice scene in
+// English, for viewers anywhere) has Maa's messages in English too, in the
+// subtitles' words, the first shortened to fit one line. Every other cut
+// keeps them in Hinglish, as the Sharmas from Lucknow write them, with
+// subtitles in the film's language.
+const ENGLISH_MESSAGES = {
+  family: {
+    maaMsgs: ["Son, we've brought Papa to hospital 🙏", "They're asking for the insurance policy number. Where is it??"],
+    maaThanks: 'Found it, son 🙏 Cashless is approved. Go back to sleep ❤️',
+  },
+  nri: {
+    maaMsgs: ["Son, we've brought Papa to hospital 🙏", "They want the policy number. You're the one who bought it, right??"],
+    maaThanks: 'Found it, son 🙏 Cashless is approved. Carry on with your work ❤️',
+  },
+};
+
+const BASE_STORY = FILM === 'nri' ? NRI_STORY : FAMILY_STORY;
+const ENGLISH = LANG === 'en' && !UI ? ENGLISH_MESSAGES[FILM === 'nri' ? 'nri' : 'family'] : null;
+export const STORY = ENGLISH
+  ? { ...BASE_STORY, ...ENGLISH, subs: ["Son, we've brought Papa to hospital.", ...BASE_STORY.subs.slice(1)] }
+  : BASE_STORY;
 
 // Upload offers twelve categories, in this order, before More… (the family
 // order in supabase/functions/_shared/doc-category.ts).
