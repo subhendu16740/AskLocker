@@ -38,10 +38,15 @@ const FAMILY_STORY = {
   // after, and the morning a reminder arrives (made at 9, pushed at 9:05, India time).
   t: { lock: '2:14', lockDate: 'Tuesday, 10 November', lock2: '2:15', day: '9:05', dayDate: 'Monday, 2 November' },
   where: "Maa and Papa are in <b>Lucknow</b>.<br>You're in <b>Bengaluru</b>.",
-  maaMsgs: ['Beta, Papa ko hospital laaye hain 🙏', 'Insurance ka policy number maang rahe hain. Kahan rakha hai??'],
-  maaThanks: 'Mil gaya beta 🙏 Cashless approve ho gaya. Tum so jao ❤️',
+  // Maa's text messages: her two at night and her thanks after, written in
+  // the film's language (the owner's ask, 8 November 2026; Hinglish before).
+  // The same words run as a caption under the phone, since the phone's own
+  // type is too small to read on a phone. Each is a key of
+  // src/i18n/<code>.js; maaSays() drops its quotes and full stop and adds her
+  // emoji, held to the last word by a no-break space.
   subs: ["Son, we've brought Papa to the hospital.", "They're asking for the insurance policy number. Where is it?",
     '“Found it, son. Cashless is approved. Go back to sleep.”'],
+  maaEmoji: ['\u00a0🙏', '', '\u00a0❤️'],
   callFrom: 'Mobile · Lucknow',
   // The scramble: what each card says, and the clock chip's place name.
   chipWhere: '',
@@ -88,8 +93,6 @@ const NRI_STORY = {
   // on 1 November (Canada's clocks went back that morning).
   t: { lock: '3:44', lockDate: 'Monday, 9 November', lock2: '3:45', day: '10:35', dayDate: 'Sunday, 1 November' },
   where: "Maa and Papa are in <b>Lucknow</b>.<br>You're in <b>Toronto</b>, 10½ hours behind.",
-  maaMsgs: ['Beta, Papa ko hospital laaye hain 🙏', 'Policy number maang rahe hain. Tumne hi li thi na??'],
-  maaThanks: 'Mil gaya beta 🙏 Cashless approve ho gaya. Tum aaram se kaam karo ❤️',
   subs: ["Son, we've brought Papa to the hospital.", "They want the policy number. You're the one who bought it, right?",
     '“Found it, son. Cashless is approved. Carry on with your work.”'],
   callFrom: 'Mobile · India',
@@ -126,6 +129,14 @@ const NRI_STORY = {
 };
 
 export const STORY = FILM === 'nri' ? NRI_STORY : FAMILY_STORY;
+
+/** Maa's message i (STORY.subs), as she would send it: in the film's
+ * language, without the quotes and the closing full stop of a subtitle, and
+ * with her emoji. */
+export function maaSays(i) {
+  const text = t(STORY.subs[i]).trim().replace(/^[“”"«»„‘’']+|[“”"«»„‘’']+$/g, '').replace(/[.।]$/, '');
+  return text + STORY.maaEmoji[i];
+}
 
 // Upload offers twelve categories, in this order, before More… (the family
 // order in supabase/functions/_shared/doc-category.ts).
@@ -586,7 +597,7 @@ export function lockDayScreen() {
 
 export function phone(lang = '') {
   return phoneShell(`
-    ${lockScreen('scr-lock', STORY.t.lock, STORY.t.lockDate, lockNotif('ln1', 'Maa', STORY.maaMsgs))}
+    ${lockScreen('scr-lock', STORY.t.lock, STORY.t.lockDate, lockNotif('ln1', 'Maa', [maaSays(0), maaSays(1)]))}
     ${callScreen({ label: 'Incoming call', name: 'Maa', sub: STORY.callFrom })}
     ${uploadScreen()}
     ${gmailScreen()}
@@ -600,7 +611,7 @@ export function phone(lang = '') {
     ${emergencyScreen()}
     ${lockDayScreen()}
     ${notificationsScreen()}${LAUNCH ? remindersScreen() : ''}
-    ${lockScreen('scr-lock2', STORY.t.lock2, STORY.t.lockDate, lockNotif('ln2', 'Maa', [STORY.maaThanks]))}`, STORY.t.lock);
+    ${lockScreen('scr-lock2', STORY.t.lock2, STORY.t.lockDate, lockNotif('ln2', 'Maa', [maaSays(2)]))}`, STORY.t.lock);
 }
 
 // ─── Film layers ─────────────────────────────────────────────────────────

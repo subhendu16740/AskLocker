@@ -718,8 +718,11 @@ cards, the plans table, subtitles and the end card. The phone keeps the app's
 English, because the app is in English. Only what a person types or says into
 Ask, and the answers, are in the film's language, as AskLocker answers in the
 language it is asked in, and the family film's voice scene speaks it
-(`src/voice-lines.js`). Maa's messages stay in Hinglish, since the Sharmas are
-from Lucknow, with subtitles in the film's language. AskLocker, Family Plus,
+(`src/voice-lines.js`). Maa's text messages are in the film's language too,
+English in the English films (the owner's ask, 8 November 2026; Hinglish
+before), with the same words as a caption under the phone, whose own type is
+too small to read on a phone (`maaSays()` in `src/family-screens.js`).
+AskLocker, Family Plus,
 the plan names, file names, codes and Settings › Privacy stay in Latin, as the
 app shows them. The "Ask by relation" examples stay as they are: they are what
 the app understands as written (other languages reach it through the

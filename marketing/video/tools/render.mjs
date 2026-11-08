@@ -60,7 +60,8 @@ const opt = (name, fallback) => {
 const orientation = flag('portrait') ? 'portrait' : 'landscape';
 const fps = Number(opt('fps', 30));
 const scale = Number(opt('scale', 1));
-const workers = Math.max(1, Number(opt('workers', 3)));
+// WORKERS=4 sets the default for every script that renders (four cores: four).
+const workers = Math.max(1, Number(opt('workers', process.env.WORKERS || 3)));
 const stills = opt('stills', null);
 const size = orientation === 'portrait' ? { width: 1080, height: 1920 } : { width: 1920, height: 1080 };
 const short = flag('short');
