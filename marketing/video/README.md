@@ -503,9 +503,9 @@ everyone in them are fictional; the papers carry a SPECIMEN watermark, the
 email addresses in the business film are at example.com, and the phone numbers
 on the emergency card are the app's own placeholder pattern. The logo is the
 app's icon (`public/icon-512.png`): the question lock of
-`assets/expo.icon/Assets/asklocker-mark.svg` (since 4 November 2026; the
-films rendered before carry the old locker and speech bubble until they are
-rendered again). The app was called FamilyVault
+`assets/expo.icon/Assets/asklocker-mark.svg` (since 4 November 2026; every
+film, short, reel and poster in `marketing/` and `site/videos/` was rendered
+again with it on 8 November 2026). The app was called FamilyVault
 until 6 October 2026; the films say AskLocker everywhere a person sees the
 name, as the app does.
 

@@ -26,7 +26,9 @@ by your family."**, its three points (your family holds the key; it still
 answers your questions; you stay in control of getting back in), its "Say"
 lines and its six video ideas. Rendered from the same code as today's set,
 with one switch (`--launch`, `src/claims.js` in `../video/`), so a change of
-wording is made in one place and every video follows.
+wording is made in one place and every video follows. Every video here was
+rendered again on 8 November 2026 with the question-lock icon, the same
+lengths as before.
 
 ## Every video, in the order to watch them
 
