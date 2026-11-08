@@ -125,7 +125,7 @@ function main() {
     // A plain static server knows no _redirects: show the landing page at /,
     // and bring the pages and images it links to.
     copyFileSync(join(out, 'landing.html'), join(out, 'index.html'));
-    for (const f of ['icon-192.png', 'icon-512.png']) copyFileSync(join(ROOT, 'public', f), join(out, f));
+    for (const f of ['icon-192.png', 'icon-512.png', 'favicon.svg', 'favicon-32.png']) copyFileSync(join(ROOT, 'public', f), join(out, f));
   }
 
   const drafts = videos.filter((v) => v.draft).length;

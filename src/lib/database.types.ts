@@ -1321,7 +1321,7 @@ export type Database = {
       }
       user_keys: {
         Row: {
-          backup: string
+          backup: string | null
           created_at: string
           encrypt_public: string
           fingerprint: string
@@ -1331,7 +1331,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
-          backup: string
+          backup: string | null
           created_at?: string
           encrypt_public: string
           fingerprint: string
@@ -1807,9 +1807,48 @@ export type Database = {
         }[]
       }
       register_my_identity: {
-        Args: { p_backup: string; p_encrypt_public: string; p_fingerprint: string; p_sign_public: string }
+        Args: { p_backup: string | null; p_encrypt_public: string; p_fingerprint: string; p_sign_public: string }
         Returns: number
       }
+      // 071: locked vaults (hand-written; the app calls them through e2e-api.ts)
+      replace_my_identity: {
+        Args: { p_encrypt_public: string; p_sign_public: string; p_fingerprint: string; p_backup?: string | null }
+        Returns: number
+      }
+      add_key_unlock: {
+        Args: { p_credential_id: string; p_prf_salt: string; p_sealed_identity: string; p_label?: string | null }
+        Returns: string
+      }
+      remove_key_unlock: { Args: { p_id: string }; Returns: undefined }
+      request_device_keys: { Args: { p_request_key: string; p_label?: string | null }; Returns: string }
+      answer_device_request: { Args: { p_id: string; p_answer: string }; Returns: undefined }
+      take_device_answer: { Args: { p_id: string }; Returns: string | null }
+      cancel_device_request: { Args: { p_id: string }; Returns: undefined }
+      lock_vault: { Args: { p_family_id: string; p_grant: string }; Returns: number }
+      add_vault_key_version: { Args: { p_family_id: string; p_version: number; p_grant: string }; Returns: undefined }
+      grant_vault_key: {
+        Args: { p_family_id: string; p_version: number; p_member: string; p_identity_version: number; p_grant: string }
+        Returns: undefined
+      }
+      vault_key_status: { Args: { p_family_id: string }; Returns: Json }
+      insert_sealed_document: {
+        Args: {
+          p_family_id: string; p_document_id: string; p_file_type: string; p_file_size_bytes: number; p_storage_path: string
+          p_category_id: string | null; p_belongs_to_member: string | null; p_key_version: number
+          p_file_key: string; p_details: string; p_passages: string | null; p_passage_count: number
+        }
+        Returns: string
+      }
+      seal_existing_document: {
+        Args: {
+          p_family_id: string; p_document_id: string; p_storage_path: string; p_key_version: number
+          p_file_key: string; p_details: string; p_passages: string | null; p_passage_count: number
+        }
+        Returns: string
+      }
+      update_sealed_details: { Args: { p_family_id: string; p_document_id: string; p_details: string }; Returns: undefined }
+      finish_vault_move: { Args: { p_family_id: string }; Returns: number }
+      sealed_documents_sweep: { Args: { p_family_id: string }; Returns: number }
       update_my_identity_backup: { Args: { p_backup: string }; Returns: undefined }
       delete_my_identity: { Args: never; Returns: undefined }
       identity_fingerprint: { Args: { p_encrypt_public: string; p_sign_public: string }; Returns: string }

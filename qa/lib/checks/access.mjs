@@ -298,6 +298,22 @@ const vaultQuestionsJudge = (expect) => (outcome) => (missingTable(outcome.error
 const keysJudge = (expect) => (outcome) => (missingTable(outcome.error) || ['PGRST202'].includes(String(outcome.error?.code))
   ? ['skipped', 'migration 070 is not applied to DEV yet']
   : judge(expect, outcome));
+// Locked vaults (071): every write through functions that take the caller
+// from the session; members read their vault's sealed parts, each person
+// only their own key grants, phone-lock unlocks and device requests; the
+// switch is the server's. Skipped until 071. Under 071 alone, lock_vault
+// said whether locking is on, and insert_sealed_document whether a vault is
+// locked, before checking the caller; 072 checks the caller first, so until
+// it is applied those two answers are skipped, not failed.
+const lockedJudge = (expect) => (outcome) => {
+  if (missingTable(outcome.error) || ['PGRST202'].includes(String(outcome.error?.code))) {
+    return ['skipped', 'migration 071 is not applied to DEV yet'];
+  }
+  if (['not_allowed', 'not_locked'].includes(String(outcome.error?.hint ?? ''))) {
+    return ['skipped', 'migration 072 is not applied to DEV yet'];
+  }
+  return judge(expect, outcome);
+};
 // A family vault made a business (054): only its admin sees what would
 // change, or makes the move; the rule itself is the server's. Skipped until 054.
 const businessVaultJudge = (expect) => (outcome) => {
@@ -1223,6 +1239,29 @@ export async function runAccessChecks(cfg, { a, b, anon, vaultA, vaultB, docsA }
     ['B', 'write encryption keys for account A', keysJudge('refused'), () => b.client.from('user_keys').insert({ user_id: A.user, encrypt_public: 'x', sign_public: 'x', fingerprint: 'x', backup: 'x' })],
     ['B', "replace account A's key backup", keysJudge('refused'), () => b.client.from('user_keys').update({ backup: 'x' }).eq('user_id', A.user).select('user_id')],
     ['B', "delete account A's encryption keys", keysJudge('refused-or-empty'), () => b.client.from('user_keys').delete().eq('user_id', A.user).select('user_id')],
+    // Locked vaults (071).
+    ['anon', 'read which vaults are locked', lockedJudge('refused-or-empty'), () => anon.client.from('locked_vaults').select('family_id').limit(5)],
+    ['anon', "read anyone's vault key grants", lockedJudge('refused-or-empty'), () => anon.client.from('vault_key_grants').select('family_id, key_grant').limit(5)],
+    ['anon', "read any vault's sealed documents", lockedJudge('refused-or-empty'), () => anon.client.from('sealed_documents').select('document_id, file_key').limit(5)],
+    ['anon', 'lock QA Vault A', lockedJudge('refused'), rpc(anon, 'lock_vault', { p_family_id: A.family, p_grant: 'g1.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA.BBBBBBBBBBBBBBBBBBBBBB.e1.CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC' })],
+    ['anon', "read QA Vault A's key status", lockedJudge('refused'), rpc(anon, 'vault_key_status', { p_family_id: A.family })],
+    ['anon', 'ask a device for keys', lockedJudge('refused'), rpc(anon, 'request_device_keys', { p_request_key: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA', p_label: 'QA' })],
+    ['B', 'lock QA Vault A', lockedJudge('refused'), rpc(b, 'lock_vault', { p_family_id: A.family, p_grant: 'g1.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA.BBBBBBBBBBBBBBBBBBBBBB.e1.CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC' })],
+    ['B', "read QA Vault A's key status", lockedJudge('refused'), rpc(b, 'vault_key_status', { p_family_id: A.family })],
+    ['B', "give itself QA Vault A's key", lockedJudge('refused'), rpc(b, 'grant_vault_key', { p_family_id: A.family, p_version: 1, p_member: b.user.id, p_identity_version: 1, p_grant: 'g1.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA.BBBBBBBBBBBBBBBBBBBBBB.e1.CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC' })],
+    ['B', "make a new version of QA Vault A's key", lockedJudge('refused'), rpc(b, 'add_vault_key_version', { p_family_id: A.family, p_version: 2, p_grant: 'g1.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA.BBBBBBBBBBBBBBBBBBBBBB.e1.CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC' })],
+    ['B', 'add a sealed document to QA Vault A', lockedJudge('refused'), rpc(b, 'insert_sealed_document', { p_family_id: A.family, p_document_id: '00000000-0000-4000-8000-000000000071', p_file_type: 'pdf', p_file_size_bytes: 10, p_storage_path: 'x/y.al', p_category_id: null, p_belongs_to_member: null, p_key_version: 1, p_file_key: 'e1.x', p_details: 'e1.x', p_passages: null, p_passage_count: 0 })],
+    ['B', "move one of QA Vault A's documents into a lock", lockedJudge('refused'), rpc(b, 'seal_existing_document', { p_family_id: A.family, p_document_id: docsA[0]?.id ?? '00000000-0000-4000-8000-000000000071', p_storage_path: 'x/y.al', p_key_version: 1, p_file_key: 'e1.x', p_details: 'e1.x', p_passages: null, p_passage_count: 0 })],
+    ['B', "rewrite a document's sealed details in QA Vault A", lockedJudge('refused'), rpc(b, 'update_sealed_details', { p_family_id: A.family, p_document_id: docsA[0]?.id ?? '00000000-0000-4000-8000-000000000071', p_details: 'e1.x' })],
+    ['B', "sweep QA Vault A's sealed documents", lockedJudge('refused'), rpc(b, 'sealed_documents_sweep', { p_family_id: A.family })],
+    ['B', "say QA Vault A's move is finished", lockedJudge('refused'), rpc(b, 'finish_vault_move', { p_family_id: A.family })],
+    ['B', "read QA Vault A's sealed documents", lockedJudge('refused-or-empty'), () => b.client.from('sealed_documents').select('document_id, details').eq('family_id', A.family)],
+    ['B', "read account A's key grants", lockedJudge('refused-or-empty'), () => b.client.from('vault_key_grants').select('key_grant').eq('user_id', A.user)],
+    ['B', "read account A's phone-lock unlocks", lockedJudge('refused-or-empty'), () => b.client.from('key_unlocks').select('sealed_identity').eq('user_id', A.user)],
+    ['B', "read account A's device requests", lockedJudge('refused-or-empty'), () => b.client.from('key_device_requests').select('answer').eq('user_id', A.user)],
+    ['B', 'write a vault key grant directly', lockedJudge('refused'), () => b.client.from('vault_key_grants').insert({ family_id: A.family, version: 1, user_id: b.user.id, identity_version: 1, key_grant: 'g1.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA.BBBBBBBBBBBBBBBBBBBBBB.e1.CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC' })],
+    ['B', 'turn locked vaults on or off (server-only)', lockedJudge('refused'), () => b.client.from('e2e_config').update({ locking_allowed: true }).eq('only_row', true).select('only_row')],
+    ['B', 'ask whether this project allows locking (server-only)', lockedJudge('refused'), rpc(b, 'e2e_locking_allowed', {})],
     ['anon', 'see what making QA Vault A a business would change', businessVaultJudge('refused'), rpc(anon, 'business_vault_preview', { p_family_id: A.family })],
     ['anon', 'make QA Vault A a business vault', businessVaultJudge('refused'), rpc(anon, 'make_business_vault', { p_family_id: A.family })],
     ['B', 'see what making QA Vault A a business would change', businessVaultJudge('refused'), rpc(b, 'business_vault_preview', { p_family_id: A.family })],

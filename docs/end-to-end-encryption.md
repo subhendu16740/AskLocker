@@ -1,7 +1,8 @@
 # End-to-end encryption — the plan
 
-**Status: planned. Phase 0 is done (it works on a real phone); nothing is encrypted yet.**
-Until Phase 5 is done, every screen, the privacy policy and the agreement
+**Status: Phases 0, 1, 2 and 4 are built, in test builds only, vault by
+vault (4 November 2026); nothing on asklocker.com is locked.** Until
+Phases 3 and 5 are done, every screen, the privacy policy and the agreement
 keep saying documents are **not** end-to-end encrypted, and the marketing
 videos stay unpublished (CLAUDE.md, "Never promise more privacy than
 AskLocker gives").
@@ -56,7 +57,8 @@ Standard pieces only, all WebCrypto, nothing home-made
 | Sealing | AES-256-GCM, a fresh random 96-bit nonce every time, and a context string as associated data |
 | Locking a key for a person | ECDH P-256 with a fresh ephemeral key, then HKDF-SHA-256 |
 | Signatures | ECDSA P-256 with SHA-256 |
-| Recovery Key | 128 random bits, 28 characters in 7 groups of 4 (Crockford base32, the last two a checksum) |
+| Backup key (the Recovery Key) | 128 random bits, 28 characters in 7 groups of 4 (Crockford base32, the last two a checksum) |
+| A key from the phone's lock | WebAuthn PRF, through HKDF-SHA-256 |
 
 **Layers** (envelope encryption, as in Google Workspace's client-side
 encryption, Proton Drive and Apple's Advanced Data Protection):
@@ -67,8 +69,8 @@ file key (one per document)   seals the file, its name, its passages, its detail
 vault key (one per vault)     also seals the vault's name, tree, cards, chats, notes
    ↑ locked for each member
 member's identity key         kept on their devices
-   ↑ backed up by
-their Recovery Key            which only they hold
+   ↑ brought to a new device by
+the phone's lock (a passkey), another signed-in device, or the backup key
 ```
 
 **Every sealed item is bound to its place.** The context names the vault,
@@ -80,7 +82,8 @@ key version; her Recovery Key backup opens only as hers.
 
 **Formats** (each starts with its version, so a later change can be told
 apart): sealed text `e1.…`, a sealed file starts with the bytes `AL 01`,
-a vault key locked for a member `g1.…`, an identity backup `r1.…`.
+a vault key locked for a member `g1.…`, an identity backup `r1.…`,
+anything locked for one public key `l1.…`.
 
 **Keys stay on devices.** A device keeps its identity in IndexedDB as a
 key the browser will not hand out (`deviceCopy()`), and asks the browser
@@ -91,102 +94,174 @@ Function imports `vault-crypto.ts`; the self-test fails if one does.
 
 ## Decisions
 
-The owner's, 3 November 2026.
+The owner's, 3 and 4 November 2026.
 
-### Joining is automatic
+- **The goal is the owner's, not a word:** only the people in a vault can
+  read its documents. The AI service reads the passages an answer is
+  written from; nobody at AskLocker reads anything.
+- **Nobody is asked to remember anything.** The phone's own lock
+  (fingerprint, face, PIN or pattern) is the everyday way back; a backup key
+  is offered once and can be skipped (4 November: "we cannot put the user
+  to enable or memorize so many things").
+- **Joining is automatic.** An admin invites, the person says yes, and they
+  are in.
+- **Nothing readable but the categories**: each document's built-in
+  category is counted across everyone for marketing, never per family.
+- **Reminders are worked out in the app** (option A).
+- **Gmail import moves onto the phone** (4 November), so it keeps working.
+- **It is turned on vault by vault**, by the vault's owner, in test builds
+  only, on a project that allows it (`e2e_config.locking_allowed`, false on
+  PROD). A vault that is not locked works exactly as before.
 
-An admin invites, the person says yes, and they are in: nobody confirms
-anything else. Behind it:
+---
 
-1. The invitation is **signed** by the admin's identity key, naming the
-   vault, the email and the role.
-2. The person signs in, their app makes their identity if it has none,
-   and they accept.
-3. The next app of someone in the vault to open (usually the admin's)
-   checks the acceptance answers that signed invitation and locks the
-   vault key for the new member, without a tap. Until then the new member
-   sees "Waiting for someone in your family to open AskLocker".
-4. **Background checks, never questions:** each member's app checks that
-   the public key the server lists for them is their own; every member
-   sees "Ravi joined", and "Ravi's key changed (new phone)" when it does,
-   as WhatsApp shows a changed security code.
+## The design, as built
 
-**The honest limit:** a server that lies could add a key of its own at the
-moment someone joins. Signed invitations and visible joins make that loud,
-not impossible. The outside review looks at this first (the ETH Zurich
-study of five encrypted cloud services, 2024, found key authenticity the
-usual weak point), and key transparency can come later.
+### A person's keys
 
-**Leaving or being removed** makes a new vault key (the next version) for
-everyone else. What the person already opened, they keep: no encryption
-can take back what someone has seen.
+1. **Made on the device, without a screen.** The first time someone opens
+   Settings › Security › Encryption keys in a test build (later: the first
+   sign-in), the app makes their identity: an ECDH key (others lock vault
+   keys for it) and an ECDSA key (they sign with it). The public halves
+   and their fingerprint go to `user_keys` (070).
+2. **Kept on the device** in IndexedDB (`asklocker-keys`): the identity
+   itself as keys the browser will not hand out, for every day, and a copy
+   sealed with a device key the browser will not hand out either, so this
+   device can lock the identity for a new phone, a passkey or a new backup
+   key. A script can use them while the page is open; it cannot copy them
+   out.
+3. **Back on a new device, three ways, any one enough:**
+   - **The phone's lock** (a passkey that gives a key, WebAuthn PRF). Made
+     with one fingerprint or PIN; Google Password Manager and iCloud
+     Keychain carry it to the person's other phones. Its output never
+     leaves the device; HKDF of it seals the identity (`key_unlocks`, 071).
+     The passkey is AskLocker's own, named "AskLocker documents key", not
+     the one fingerprint sign-in uses.
+   - **Approving from a device already signed in.** The new device makes a
+     one-time key pair and shows a six-digit code made from its public key;
+     the signed-in device shows the same code beside "Approve"; the identity
+     is locked for that public key (`key_device_requests`, 071). A server
+     that swapped the key would change the code.
+   - **The backup key**, offered once with Save (copy, download, print) or
+     Skip (`user_keys.backup`, optional since 071).
+4. **Lost every way back** (every device, the passkey and the backup key):
+   the person makes new keys (`replace_my_identity`, 071). Every family
+   vault comes back once one of its admins approves "Asha set up a new
+   phone"; their personal vault does not.
 
-### Nothing readable but the categories
+### A vault's key
 
-Above. A family's own category name is sealed; the server keeps the
-built-in category's id, or none.
+- **One per vault and key version** (`vault_keys`), locked for each member
+  with their public key (`vault_key_grants`, `g1.…`). Members read only
+  their own grants.
+- **Locking a vault** (`lock_vault`, the owner): version 1, locked for the
+  owner, then for every member as their apps meet it.
+- **Joining:** whenever a member's app opens a locked vault it locks the
+  key for any member who has none (`vault_key_members`, `grant_vault_key`).
+  No tap. Someone whose keys **changed** since their last grant is locked
+  for only by an admin, after "Approve" (`needs_approval`): that stops a
+  server from slipping its own key in as a member's new phone.
+- **Leaving or being removed:** the next admin app to open the vault makes
+  the next version and locks it for everyone left; new documents use it.
+  What someone already opened, they keep.
 
-### Reminders: fully private (option A)
+### A locked document
 
-The server cannot know an expiry date, so it cannot send expiry or
-birthday reminders. Instead:
+The phone does what the server used to:
 
-- the app works out what is due each time it opens (Home, Reminders);
-- the phone app, once EAS builds exist, schedules the notifications on
-  the phone itself;
-- invitations, plan notices and other notices about the service still
-  reach devices, since the server already knows them.
+1. **Reads it**: photos with Tesseract (as Upload always has), PDFs with
+   PDF.js in the browser (`_shared/pdf-layout.ts`, the same layout rules
+   as the server's), scanned PDF pages drawn and read with Tesseract,
+   spreadsheets as since 061.
+2. **Splits it** (`_shared/chunking.ts`), **finds its details**
+   (`_shared/metadata.ts`: expiry dates, ID numbers, amounts) and **makes
+   its search vectors** on the phone (gte-small with transformers.js, the
+   model the lab measured; 8-bit vectors, 384 bytes each).
+3. **Seals it** with a new file key: the file (with its name and type in a
+   sealed header, so whoever opens it knows what it is), its details
+   (`name`, the details found, its own category name), and its passages
+   with their vectors. The file key is locked with the vault key.
+4. **Saves it**: the sealed file to Storage (`<vault>/<id>.al`, so no
+   server reader takes it for a PDF), then `insert_sealed_document` (071),
+   which keeps every check `insert_family_document` makes (the folder, the
+   file, the day's limit) and stores the sealed parts in `sealed_documents`.
+   The row says "Locked document"; its status is `sealed`, which no server
+   reader touches (`start_document_read`, `rag_documents_to_ingest`, 071).
 
-So "expiry reminders for everyone" on Family Plus becomes reminders in
-the app (and on phones with the phone app). The Plans page, Help and the
-Plus words change with it, in Phase 3.
+Lists, the viewer, downloads, the person's page and Reminders open the
+names and details on the phone. Deleting is as before; the sealed row
+goes too (`sealed_documents_sweep`).
 
-### Recovery
+### Search and Ask
 
-What families lose a phone to is the usual case, so most of recovery is
-free: everyone in a vault holds its key, so a member who loses everything
-is simply let back in (the joining flow above) and gets every family
-vault back. Only what is theirs alone, their **personal vault**, saved
-chats and notes, needs their own key back. Three ways, as Apple's
-Advanced Data Protection offers:
+- The phone fetches the vault's sealed passages once a visit, opens them
+  and keeps them in memory.
+- A question: the phone makes its vector (about 20 ms), ranks passages 0.7
+  by meaning and 0.3 by words, at most 4 from a document, and sends the
+  best 15 with the question to rag-search (`client_passages`). rag-search
+  checks the asker is in each vault, judges and answers from them with the
+  documents it found itself in vaults that are not locked, counts the
+  question as before, and keeps nothing.
 
-1. **Approve from another device** that is signed in (a code on one, a
-   tap on the other).
-2. **The Recovery Key**, shown once at setup, to write down or save in a
-   password manager.
-3. **A recovery contact** (optional): someone in the family whose app can
-   help unlock theirs, after a code passed between them.
+### Share links
 
-On phones whose passkeys give a key (WebAuthn PRF; Phase 0 measures
-which), the fingerprint unlocks the identity too, so most people never
-type the Recovery Key.
+The link carries what opens the file after `#`, which browsers never send:
+`/s#<secret>~<vault>~<document>~<file key>`. The page sends the secret to
+`share` as before, downloads the sealed file and opens it in the browser.
 
-Lose every device, the Recovery Key and every helper, and the personal
-vault cannot be opened, by anyone. Setup says so in one plain line.
+### Reminders
 
-### Support
+The app reads expiry dates from the details it opened (Reminders, Home).
+The server cannot know them, so it sends no expiry reminder for a locked
+document.
 
-Staff cannot see documents, so support works the way Proton's and
-Tresorit's does: from what the server already knows (accounts, sizes,
-times, errors), from the person's own screen, and from a report the
-person chooses to send, which carries no document content.
+### Saved chats
+
+A chat that holds an answer from a locked vault is sealed for its owner
+(locked with their own public key) before it is saved. The vaults its
+sources came from stay readable, so 069's rule (a chat goes when its owner
+leaves a vault it quotes) still holds.
+
+### Moving a vault's older documents
+
+After locking, the owner's app moves each older document ("Locking your
+documents… 12 of 30"): downloads it, takes its text from the server (it
+was readable anyway), splits it, makes vectors, seals it, uploads the
+sealed file and calls `seal_existing_document` (071), which points the row
+at the sealed file, deletes the readable text, passages, details and
+expiry alerts, and turns off the document's share links. The app then
+deletes the readable file. Supabase's backups keep old copies up to 7 days.
+
+### Gmail import
+
+For a locked vault, import runs in the browser: Google gives the page a
+Gmail permission for an hour (Google Identity Services), the page searches
+Gmail with the same rules (`_shared/gmail-rules.ts`), and each ticked
+attachment is read, sealed and saved like an upload. The server's
+`gmail-import` refuses a locked vault. Needs `EXPO_PUBLIC_GMAIL_CLIENT_ID`
+(the Gmail project's client id) and the page's address in that client's
+Authorized JavaScript origins.
+
+### Still readable in a locked vault (Phase 3)
+
+Vault names, the family tree and nicknames, emergency cards and notes are
+not sealed yet; they need their server checks moved into the app first.
+The privacy words stay as they are until Phase 3 and the review are done.
 
 ---
 
 ## What changes
 
-| Today | After |
+| Today | In a locked vault |
 |---|---|
 | The server reads files (`ingest-document`): PDF text, OCR.space for scans | The phone reads them: text, photos and scanned pages with Tesseract, spreadsheets as now |
-| The server makes search vectors (gte-small, Cloudflare) | The phone makes them: the same gte-small, in the browser (transformers.js) |
-| Search runs in the database (`rag_retrieve_chunks`) | The phone downloads the vault's sealed index, opens it and searches it |
+| The server makes search vectors (gte-small, Cloudflare) | The phone makes them: gte-small in the browser (transformers.js) |
+| Search runs in the database (`rag_retrieve_chunks`) | The phone opens the vault's sealed passages and searches them |
 | rag-search searches, judges and answers | The phone searches; rag-search judges and answers from the passages the phone sends, and keeps nothing |
-| Relations ("Nani's pension") resolved on the server | Resolved on the phone, from the tree it opened (`kinship.ts` already runs in the app) |
-| Expiry and birthday reminders pushed by the server | Worked out in the app; scheduled on the phone by the phone app |
+| Expiry reminders pushed by the server | Worked out in the app |
 | A share link opens a signed address to the file | The link carries the file key after `#`; the page opens the file in the browser |
-| The business overview reads details in the database | The phone works it out from the details it opened |
-| Gmail import | Off until rebuilt on the phone (it reads mail on the server) |
-| `reembed-index`, server OCR and the PDF reader | Removed once every vault is moved |
+| Gmail import on the server | In the browser |
+| The business overview reads details in the database | Not yet: Phase 3 |
 
 Unchanged: plans, limits (they count sizes and numbers), payments,
 invitations, deleting an account or a vault, the 30-day removal after
@@ -196,23 +271,20 @@ Plus ends (it picks documents by size and date).
 
 ## Phases
 
-About 12 to 14 weeks in all.
-
-| Phase | What | Weeks |
+| Phase | What | State |
 |---|---|---|
-| **0** | The crypto core and its self-tests; the lab page that measures a real phone; this plan. Done 3 November 2026: it works on a phone (above) | 1 (done) |
-| **1** | Keys and devices: making an identity, the Recovery Key screen, keeping keys on the device, a new device by approval, by Recovery Key or by fingerprint; tables for public keys, backups and locked vault keys. Nothing encrypted yet. **Started 3 November 2026**: 070 and the Encryption keys screen (keys, Recovery Key, unlock with it), test builds only | 3 |
-| **2** | New documents sealed, behind a per-vault switch on DEV: reading, splitting, vectors and details on the phone; the sealed index and search on the phone; Ask from the passages it sends; the viewer and share links | 3–4 |
-| **3** | Everything else sealed: vault names, tree, cards, chats, notes; reminders in the app; the business overview on the phone; joining and leaving with new vault keys | 2 |
-| **4** | Moving existing vaults: the first admin's app to open locks each document and its index ("Locking your documents… 12 of 30"), then the server deletes what it had. Gmail import off; the content-reading functions removed; the privacy policy, a new agreement version, Help | 2 |
-| **5** | An outside security review of the code and the key flows, fixes, and only then the claim and the videos | 2 + the reviewer's time |
+| **0** | The crypto core and its self-tests; the lab; this plan | Done 3 November 2026 |
+| **1** | Keys and devices: identity, phone lock, approving a device, optional backup key, new keys after losing everything | Built 4 November 2026 (071), test builds only |
+| **2** | Locked vaults: documents read, sealed and searched on the phone; Ask; viewer; share links; reminders in the app; saved chats | Built 4 November 2026, test builds only |
+| **3** | Vault names, tree, cards and notes sealed; the business overview on the phone | Not started |
+| **4** | Moving existing vaults, Gmail import on the phone | Built 4 November 2026, test builds only |
+| **5** | An outside security review of the code and the key flows, fixes, and only then the claim and the videos | Not started |
 
-**The claim, once Phase 5 is done**, and not a word before:
+**The claim, once Phases 3 and 5 are done**, and not a word before:
 
-> End-to-end encrypted. Your documents are locked on your family's
-> devices, and nobody at AskLocker can open them. To answer a question,
-> your phone sends only the passages it needs to an AI service; our
-> server passes them on and keeps nothing.
+> Only the people in your vault can open your documents. Nobody at
+> AskLocker can. To answer a question, your phone sends only the passages
+> it needs to an AI service; our server passes them on and keeps nothing.
 
 Never: "100% private", "unhackable", "zero-knowledge" (the AI service
 reads passages), "military-grade", "bank-level", "nobody can ever see".

@@ -72,6 +72,15 @@ Deno.serve(async (req) => {
     if (!auth.ok) return auth.response;
     const userId = auth.member.userId;
 
+    // A locked vault (071) takes only what a phone sealed: the server must
+    // not fetch, read or store a readable copy. The app imports into one in
+    // the browser instead (gmail-device.web.ts).
+    const { data: lockedRow, error: lockedErr } = await supabase
+      .from('locked_vaults').select('family_id').eq('family_id', family_id).maybeSingle();
+    if (!lockedErr && lockedRow) {
+      return json(409, { status: 'vault_locked', error: 'This vault is locked. Import into it from the web app, which reads Gmail on your device.' });
+    }
+
     // 0. Room for one more today? The rest wait for tomorrow, still ticked.
     const reached = await uploadLimitReached(userId);
     if (reached) return json(429, { status: 'upload_limit', error: reached });

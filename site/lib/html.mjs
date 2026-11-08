@@ -62,6 +62,8 @@ const ICONS = {
   'refresh-cw': '<polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>',
   'bar-chart-2': '<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>',
   'edit-3': '<path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>',
+  menu: '<line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/>',
+  x: '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
 };
 
 export function icon(name, size = 24) {
@@ -70,9 +72,9 @@ export function icon(name, size = 24) {
   return `<svg class="i" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`;
 }
 
-/** The app's mark (assets/expo.icon/Assets/asklocker-mark.svg) on its navy square. */
+/** The app's mark, the question lock (assets/expo.icon/Assets/asklocker-mark.svg), on its navy square. */
 export function logo(size = 36) {
-  return `<svg class="logo" width="${size}" height="${size}" viewBox="0 0 1024 1024" aria-hidden="true"><rect width="1024" height="1024" rx="230" fill="#2A3D66"/><g fill="none" stroke="#fff" stroke-width="52" stroke-linecap="round" stroke-linejoin="round"><rect x="300" y="236" width="330" height="588" rx="54"/><line x1="382" y1="340" x2="548" y2="340"/><line x1="382" y1="412" x2="548" y2="412"/><line x1="568" y1="560" x2="568" y2="650"/></g><circle cx="465" cy="640" r="30" fill="#fff"/><path d="M708 150h118a86 86 0 0 1 86 86v96a86 86 0 0 1-86 86h-82l-74 64v-64a86 86 0 0 1-48-78v-104a86 86 0 0 1 86-86z" fill="#fff"/><text x="760" y="334" font-family="Helvetica, Arial, sans-serif" font-weight="700" font-size="200" text-anchor="middle" fill="#2A3D66">?</text></svg>`;
+  return `<svg class="logo" width="${size}" height="${size}" viewBox="0 0 1024 1024" aria-hidden="true"><rect width="1024" height="1024" rx="230" fill="#2A3D66"/><path d="M368 416V384A144 144 0 0 1 656 384C656 448 612 474 572 492C532 510 512 512 512 520" fill="none" stroke="#fff" stroke-width="96" stroke-linecap="round"/><path fill="#fff" fill-rule="evenodd" d="M320 512H704A64 64 0 0 1 768 576V768A64 64 0 0 1 704 832H320A64 64 0 0 1 256 768V576A64 64 0 0 1 320 512Z M480 695.4A64 64 0 1 1 544 695.4V752A16 16 0 0 1 528 768H496A16 16 0 0 1 480 752Z"/></svg>`;
 }
 
 /**
@@ -107,16 +109,21 @@ const NAV = [
   { href: '/#faq', label: 'FAQ' },
 ];
 
-// The app's top bar: 56 tall, the name in its title style.
+// The app's top bar: 56 tall, the name in its title style. Below 860 px the
+// links move into a menu (a <details>, so it opens without a script, as the
+// privacy page has none), with Sign in, which the bar drops below 480 px.
 function header({ hasFilms }) {
-  const links = NAV.filter((n) => n.when !== 'films' || hasFilms)
-    .map((n) => `<a href="${n.href}">${n.label}</a>`)
-    .join('');
+  const items = NAV.filter((n) => n.when !== 'films' || hasFilms);
+  const links = items.map((n) => `<a href="${n.href}">${n.label}</a>`).join('');
   return `<header class="top">
 <div class="wrap top-in">
 <a class="brand" href="/" aria-label="AskLocker home">${logo(32)}<span>AskLocker</span></a>
 <nav class="nav" aria-label="Main">${links}</nav>
 <div class="top-cta"><a class="btn btn-text" href="/login">Sign in</a><a class="btn btn-primary" href="/onboarding">Get started</a></div>
+<details class="menu">
+<summary aria-label="Menu"><span class="i-menu">${icon('menu', 22)}</span><span class="i-x">${icon('x', 22)}</span></summary>
+<nav class="menu-panel" aria-label="Menu"><div class="wrap">${links}<a class="menu-signin" href="/login">Sign in</a></div></nav>
+</details>
 </div>
 </header>`;
 }
@@ -155,7 +162,8 @@ ${forward ? `<script>${APP_FORWARD}</script>\n` : ''}<meta name="viewport" conte
 <link rel="canonical" href="${url}">
 <meta name="robots" content="${robots}">
 <meta name="theme-color" content="#2A3D66">
-<link rel="icon" href="/icon-192.png" type="image/png">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png">
 <link rel="apple-touch-icon" href="/icon-192.png">
 <link rel="alternate" type="text/markdown" href="/llms-full.txt" title="AskLocker as Markdown, for AI assistants">
 <meta property="og:site_name" content="AskLocker">
