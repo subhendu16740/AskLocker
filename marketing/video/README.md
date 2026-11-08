@@ -699,8 +699,10 @@ of 26 December 2025. `src/why-screens.js` holds every word.
 The family film and the business film, 16:9, in the app's nine Indian
 languages: Hindi, Bengali, Marathi, Tamil, Telugu, Gujarati, Kannada,
 Malayalam and Punjabi (`?ui=hi`, `bn`, `mr`, `ta`, `te`, `gu`, `kn`, `ml`,
-`pa`). They are today's films, made on 4 November 2026 at the owner's ask, and
-kept in `marketing/languages/` (318 MB, the owner's ask the same day), named by
+`pa`). They are today's films, made on 4 November 2026 at the owner's ask (and
+again on 8 November 2026, with the question-lock icon and Maa's messages in
+each language), and kept in `marketing/languages/` (318 MB, the owner's ask
+the same day), named by
 language (`asklocker-family-16x9-tamil.mp4`). All eighteen take about three
 hours on four cores.
 

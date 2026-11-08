@@ -8,7 +8,8 @@
 The family film and the business film, 16:9, in the nine Indian languages
 the app speaks. They carry today's claims, the same as the English films in
 `../family/films/` and `../business/films/`, so they can be posted today.
-Made on 4 November 2026.
+Made on 4 November 2026, and again on 8 November 2026 with the question-lock
+icon and Maa's messages on the lock screen in each film's language.
 
 | Language | Family film | Business film |
 |---|---|---|
@@ -26,10 +27,11 @@ The family film runs a little longer or shorter by language, since its scenes
 wait for their lines.
 
 **What is translated**: every word the film shows, the question asked in Ask
-and its answer, and the family film's voice scene, which speaks the
-language. **What stays in English**: the phone's screens, because the app is
-in English, and the names AskLocker, Family Plus, Plus, Pro, Enterprise and
-Settings › Privacy, as the app shows them.
+and its answer, Maa's messages on the phone's lock screen, and the family
+film's voice scene, which speaks the language. **What stays in English**:
+the rest of the phone's screens, because the app is in English, and the
+names AskLocker, Family Plus, Plus, Pro, Enterprise and Settings › Privacy,
+as the app shows them.
 
 Everything shows a fictional family and business and SPECIMEN papers.
 
