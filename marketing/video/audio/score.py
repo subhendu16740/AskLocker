@@ -48,6 +48,8 @@ from scipy import signal
 SR = 48_000
 RNG = np.random.default_rng(7)
 VOICES = pathlib.Path(__file__).resolve().parent / 'voices'
+# How far the music steps back under the narration (?narration=en), in dB.
+NARRATION_DIP_DB = 14
 
 
 # ─── Building blocks ────────────────────────────────────────────────────────
@@ -373,6 +375,12 @@ def voice_line(c):
     x[-edge:] *= np.linspace(1, 0, edge)
     x = signal.resample_poly(x, SR, rate)
     words = len(x) / SR
+    if c.get('narrator'):
+        # The narrator (tools/narration.py): close and clear, beside the
+        # viewer rather than in the film's rooms, so no reverb.
+        x = highpass(x, 90, 2)
+        x = np.concatenate([x, np.zeros(int(0.3 * SR))])
+        return np.vstack([x, x]), 1.0, words
     if c.get('phone'):
         x = lowpass(highpass(x, 320, 2), 5200, 2)
         x = np.tanh(x * 1.6) / np.tanh(1.6)
@@ -607,6 +615,7 @@ def main():
     fx = np.zeros((2, n))
     voice = np.zeros((2, n))
     spoken = []
+    narrated = []
 
     # The family film tells a story (night, day, night again); the business
     # film is formal and has none of those sections.
@@ -661,7 +670,7 @@ def main():
         elif kind == 'voice':
             sig, gain, words = voice_line(c)
             place(voice, c['t'], sig, gain)
-            spoken.append((c['t'], c['t'] + words))
+            (narrated if c.get('narrator') else spoken).append((c['t'], c['t'] + words))
         elif kind in makers:
             sig, gain = makers[kind](c)
             place(fx, c['t'] - (0.35 if kind == 'whoosh' else 0.0), sig, gain)
@@ -676,7 +685,10 @@ def main():
     music = reverb(music, 2.6, 0.30)
     fx = reverb(fx, 1.4, 0.16)
     # Whoever is speaking is heard: the music steps back, the effects a little.
-    mix = music * duck(n, spoken, 15) + fx * duck(n, spoken, 4) + voice
+    # Under the narrator it steps back less and comes back more slowly, since
+    # the narration runs through half the film and a deep dip would pump.
+    mix = (music * duck(n, spoken, 15) * duck(n, narrated, NARRATION_DIP_DB, 0.35, 0.9)
+           + fx * duck(n, spoken, 4) * duck(n, narrated, 3, 0.35, 0.9) + voice)
     # Gentle fades and a soft limiter.
     fi, fo = int(0.25 * SR), int(1.6 * SR)
     mix[:, :fi] *= np.linspace(0, 1, fi)

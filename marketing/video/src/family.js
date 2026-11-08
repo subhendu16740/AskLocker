@@ -17,6 +17,7 @@ import {
   gsap, PORTRAIT, SHORT, $, $$, build, askArea, inputOverflow, at, scrollTo, layoutChat, place, initialState,
   setLayout, tl, cue, IR, showCallout, reveal, showWhy, showHow, hide, fadeIn, swap, nextZ, nav, chrome, tap, type,
   vibrate, phoneTo, phoneIn, popCard, notify, bubblePop, sub, count, drawer, motion, finish, LANG, H, fitWide, fitAbove,
+  FILM,
 } from './engine.js';
 import { phone, scrambleCards, textBlocks, callouts, subtitles, HEALTH, STORY, ASK_Q } from './family-screens.js';
 import { t, UI } from './i18n.js';
@@ -28,6 +29,11 @@ import { LAUNCH } from './claims.js';
 // tools/voices.py, or a language's from tools/voices_indic.py.
 import { VOICES as HINDI } from './voices.js';
 import { LANG_VOICES } from './voices-langs.js';
+// A guide's voice over the film (?narration=en): each line's length, from
+// tools/narration.py, which also says them into audio/voices/narration/.
+import { NARRATION } from './narration.js';
+
+const NARRATE = new URLSearchParams(location.search).get('narration') || '';
 
 if (LANG && !VOICE_LINES[LANG]) throw new Error(`No voice lines for "${LANG}" in src/voice-lines.js`);
 if (LANG && !LANG_VOICES[LANG]) throw new Error(`No voices for "${LANG}" yet: run tools/voices_indic.py`);
@@ -510,6 +516,7 @@ if (!SHORT) {
   }
   // Maa asks; the words appear a beat behind her, as a recogniser's do.
   const q0 = d + 1.3;
+  S.maaAsks = q0;
   const q1 = q0 + VOICES.ask.dur;
   cue(q0, 'voice', { line: 'ask', wav: wav('ask') });
   sub('sub-3', q0, q1 + 0.5);
@@ -548,6 +555,7 @@ if (!SHORT) {
   const a0 = ans + 0.35;
   const a2 = a0 + VOICES.answer.sentence2;
   const a1 = SHORT ? a2 - 0.4 : a0 + VOICES.answer.dur;
+  S.answered = a1;
   cue(a0, 'voice', { line: 'answer', wav: wav('answer'), ...(SHORT ? { to: VOICES.answer.sentence2 } : {}) });
   if (!PORTRAIT) {
     tl.to($$('#wave i'), { backgroundColor: '#2F7D5C', duration: 0.2, ease: 'none' }, ans - 0.05);
@@ -714,6 +722,7 @@ if (!SHORT) {
   }
   // Rohan's phone, a minute later.
   const m = r1 + 0.45;
+  S.thanks = m;
   nav('scr-voice', 'scr-lock2', m, 'fade', 0.5);
   chrome(m, 'os', STORY.t.lock2);
   tl.to('#res-time', { text: '2:15', duration: 0.01 }, m + 0.1);
@@ -749,6 +758,44 @@ if (!SHORT) {
   if ($('#end-note')) fadeIn('#end-note', t0 + 2.55, { from: 10, duration: 0.6 });
   if ($('#end-url')) fadeIn('#end-url', t0 + 2.75, { from: 8 });
   S.total = t0 + (SHORT ? 5.0 : 5.8);
+}
+
+// ─── The narration (?narration=en) ───────────────────────────────────────
+// A guide's line a scene (tools/narration.py): what the scene is about, in a
+// sentence, said once its headline is up and over before the next scene. It
+// leaves alone what carries itself (the cold open, "Your family won't", the
+// call nobody answers) and never speaks over Maa or the app. audio/score.py
+// lowers the music under each line. A line that would run past its place
+// stops the render here, rather than talking over the next scene.
+if (NARRATE) {
+  const N = NARRATION[NARRATE];
+  if (!N) throw new Error(`No narration "${NARRATE}" in src/narration.js`);
+  if (FILM !== 'family' || SHORT || LAUNCH || UI || LANG) {
+    throw new Error("The narration is written for the full family film, in English, with today's claims");
+  }
+  const lines = [
+    // [line, starts at, over by]
+    ['scramble', S.scramble + 0.55, S.insight - 0.3],
+    ['stat', S.stat + 0.75, S.call - 0.1],
+    ['reveal', S.reveal + 0.6, S.gmail],
+    ['gmail', S.gmail + 0.5, S.scan - 0.2],
+    ['scan', S.scan + 0.6, S.ask - 0.3],
+    ['ask', S.ask + 0.45, S.voice - 0.2],
+    ['voice', S.voice + 0.2, S.maaAsks - 0.15],
+    ['voice2', S.answered + 0.35, S.tree - 0.05],
+    ['tree', S.tree + 0.45, S.emerg - 0.2],
+    ['emerg', S.emerg + 0.45, S.alerts - 0.2],
+    ['alerts', S.alerts + 0.45, S.trust - 0.2],
+    ['trust', S.trust + 0.45, S.res - 0.1],
+    ['res', S.thanks + 1.9, S.end - 0.2],
+    ['end', S.end + 0.8, S.total - 1.2],
+  ];
+  for (const [line, from, by] of lines) {
+    const dur = N.lines[line];
+    if (dur === undefined) throw new Error(`The narration has no line "${line}": run tools/narration.py`);
+    if (from + dur > by) throw new Error(`Narration "${line}" runs ${(from + dur - by).toFixed(2)}s past its place`);
+    cue(from, 'voice', { line: `narration-${line}`, wav: `narration/${NARRATE}/${line}.wav`, narrator: true });
+  }
 }
 
 finish(S);

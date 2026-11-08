@@ -27,6 +27,10 @@
 //   speaks it unless --lang names another
 //   --strings   no video: every string the film shows, and those its --ui
 //   language lacks, -> out/strings-<tag>.json
+//   --narration en   a guide's voice over the full family film (tools/narration.py):
+//   the tag ends -narrated. Its frames are the plain film's, so --cues-only
+//   writes out/cues-<tag>.json alone, and VIDEO=out/video-family-16x9.mp4
+//   tools/mux.sh family-16x9-narrated scores it over the plain film's video
 //   tools/mux.sh <tag> then adds sound -> out/asklocker-<tag>.mp4
 //   node tools/render.mjs --stills 3,12.5   PNGs of single frames -> out/stills/
 //   (--stills hero: the frame the film names for its poster or cover)
@@ -75,9 +79,13 @@ if (reel && !['privacy', 'locked', 'locked-business', 'why'].includes(film)) thr
 // --launch: what the films say once end-to-end encryption ships (src/claims.js).
 // Never posted before the launch; its files end -launch.
 const launch = flag('launch');
+// --narration en: the narrator (src/narration.js); the page refuses any film
+// but the full family film in English with today's claims.
+const narration = opt('narration', '');
+if (narration && narration !== 'en') throw new Error('--narration is en (tools/narration.py)');
 const shape = orientation === 'portrait' ? '9x16' : '16x9';
 const tag = (feature ? `feature-${feature}-${shape}`
-  : `${film}${reel ? `-${reel}` : ''}-${shape}${short ? '-short' : ''}${lang && lang !== ui ? `-${lang}` : ''}`) + (ui ? `-in-${ui}` : '') + (launch ? '-launch' : '');
+  : `${film}${reel ? `-${reel}` : ''}-${shape}${short ? '-short' : ''}${lang && lang !== ui ? `-${lang}` : ''}`) + (ui ? `-in-${ui}` : '') + (launch ? '-launch' : '') + (narration ? '-narrated' : '');
 
 // ─── Static server: module scripts do not load from file:// ───────────────
 const TYPES = {
@@ -97,7 +105,7 @@ const server = createServer(async (req, res) => {
   }
 });
 await new Promise((ok) => server.listen(0, '127.0.0.1', ok));
-const base = `http://127.0.0.1:${server.address().port}/src/intro.html?film=${film}&orientation=${orientation}${short ? '&cut=short' : ''}${lang ? `&lang=${lang}` : ''}${feature ? `&feature=${feature}` : ''}${reel ? `&reel=${reel}` : ''}${launch ? '&claims=launch' : ''}${ui ? `&ui=${ui}` : ''}`;
+const base = `http://127.0.0.1:${server.address().port}/src/intro.html?film=${film}&orientation=${orientation}${short ? '&cut=short' : ''}${lang ? `&lang=${lang}` : ''}${feature ? `&feature=${feature}` : ''}${reel ? `&reel=${reel}` : ''}${launch ? '&claims=launch' : ''}${ui ? `&ui=${ui}` : ''}${narration ? `&narration=${narration}` : ''}`;
 
 // CHROMIUM=/path/to/chrome uses that browser instead of the one this
 // Playwright version downloads (a machine with Chromium pre-installed).
@@ -129,6 +137,13 @@ const duration = await probe.page.evaluate(() => window.__duration);
 const cues = await probe.page.evaluate(() => window.__cues);
 await mkdir(OUT, { recursive: true });
 await writeFile(join(OUT, `cues-${tag}.json`), JSON.stringify({ duration, fps, cues }, null, 2));
+
+if (flag('cues-only')) {
+  console.log(`${join(OUT, `cues-${tag}.json`)}: ${cues.length} cues, ${duration.toFixed(2)}s`);
+  await browser.close();
+  server.close();
+  process.exit(0);
+}
 
 if (flag('strings')) {
   // What the film says, for its translations (src/i18n.js): every string that

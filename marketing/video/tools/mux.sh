@@ -5,6 +5,9 @@
 #                                      for adding a platform's own music track
 # usage: tools/mux.sh <film>-<16x9|9x16>[-short], e.g. tools/mux.sh business-9x16
 #        (after tools/render.mjs has written out/video-<tag>.mp4)
+#        VIDEO=out/video-family-16x9.mp4 tools/mux.sh family-16x9-narrated: scores a
+#        cue sheet over another tag's video (the narrated film's frames are the plain
+#        film's: tools/render.mjs --narration en --cues-only)
 #        TARGET_LUFS=-14.5 tools/mux.sh <tag>: brings the music mix to that
 #        loudness, its few peaks held under -1 dBFS by a limiter, and the
 #        sound-effects mix by the same gain (the why films, whose quiet
@@ -28,5 +31,6 @@ mux() { # video audio out
     -c:a aac -b:a 192k -ar 48000 -shortest -movflags +faststart "$3"
   echo "$3"
 }
-mux "out/video-$TAG.mp4" "out/score-$TAG.wav" "out/asklocker-$TAG.mp4"
-mux "out/video-$TAG.mp4" "out/sfx-$TAG.wav" "out/asklocker-$TAG-sfx-only.mp4"
+VIDEO=${VIDEO:-out/video-$TAG.mp4}
+mux "$VIDEO" "out/score-$TAG.wav" "out/asklocker-$TAG.mp4"
+mux "$VIDEO" "out/sfx-$TAG.wav" "out/asklocker-$TAG-sfx-only.mp4"

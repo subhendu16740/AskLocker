@@ -749,6 +749,51 @@ question's English translation).
   launch version (`--launch --ui`) would show the launch lines in English
   until they are added.
 
+## With a narrator (a trial)
+
+The full family film, 16:9, with an English narrator taking the viewer
+through it (8 November 2026, at the owner's ask, to try before deciding). One
+line a scene says what the scene is about, never the screen's words read out,
+once its headline is up and before the next scene begins: 14 lines, 56
+seconds of the film's 135. It is quiet where the film carries itself (the
+cold open, "Your family won't", the call nobody answers) and wherever Maa or
+the app speaks. The frames are the plain film's, so only the cue sheet and the
+sound are made again:
+
+```bash
+python3 tools/narration.py --model model.onnx --voices voices/   # the lines -> audio/voices/narration/en/, src/narration.js
+node tools/render.mjs --narration en --cues-only                  # -> out/cues-family-16x9-narrated.json
+VIDEO=out/video-family-16x9.mp4 tools/mux.sh family-16x9-narrated # -> out/asklocker-family-16x9-narrated.mp4
+```
+
+- **The lines** are in `tools/narration.py` (`LINES`), keyed by where
+  `src/family.js` places them, each from its scene's start (`window.__scenes`)
+  and checked against where it must be over: a line that would run into the
+  next scene, or into Maa's question, stops the render. The tool refuses any
+  of the words no film may say (Keep it honest, above). Gmail import and
+  reminders for the whole family are said to be Family Plus's, as their ★
+  says on screen.
+- **The voice** is Kokoro-82M's `af_heart` (American English, its best-rated
+  voice), reading misaki's English phonemes, the way Kokoro's own pipeline
+  reads English; "Ask Locker" is written as two words so both are stressed,
+  and Dadi is given its sounds (/dˈɑːdiːz/). `--voice` takes another:
+  `bf_emma` and `bm_george` are British, `am_michael` American, and the Hindi
+  voices `hf_alpha` and `hm_psi` read English with an Indian accent. Not
+  `hf_beta` or `hm_omega`, which are Maa and the app in this film. Each line
+  is set to the film voices' level (−17.5 dBFS over its speech).
+- **The mix**: `audio/score.py` hears the narrator close and dry, and lowers
+  the music 14 dB under it (15 under Maa and the app), coming back more
+  slowly, since narration runs through half the film. The narrator sits a
+  median 13 dB over the music (9.6 at the logo, whose swell it rides); the
+  film is −15.0 LUFS, peaks −1 dBFS. Without `?narration` nothing changes:
+  the plain film's cue sheet and score are byte for byte as before.
+- **Checked with a speech recogniser**: Whisper (`small.en`) wrote down
+  every line, alone and in the finished mix, word for word, except "Maa" as
+  "Ma" and, when not told the word, Dadi as "Dottie".
+- **Not done yet**: the video is not committed until the owner decides; the
+  business film, the short cuts, 9:16 and the other languages have no
+  narration (the page refuses them).
+
 ## Licences
 
 Fonts are from Google Fonts under the SIL Open Font License. Icons are Feather
