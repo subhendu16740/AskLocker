@@ -54,6 +54,7 @@ import { loadQuestions, selectQuestions, groupCount, rotationGroup, estimateFor 
 import { documents, permanentDocuments } from '../fixtures/documents.mjs';
 import * as vc from '../../supabase/functions/_shared/vault-crypto.ts';
 import * as localSearch from '../../src/lib/local-search.ts';
+import * as treeRules from '../../src/lib/tree-rules.ts';
 
 let passed = 0;
 const failures = [];
@@ -1892,10 +1893,79 @@ await test('e2e: a new device gets the keys only through its own one-time key, a
   const other = await vc.newRequestKeyPair();
   await assert.rejects(vc.unlockTextWithPrivateKey(locked, other.privateKey, where), { code: 'cannot_open' }, "a server's own key opens nothing");
   await assert.rejects(vc.unlockTextWithPrivateKey(locked, request.privateKey, vc.context.deviceRequest(RAVI, DOC)), { code: 'cannot_open' });
-  const code = await vc.pairingCode(requestPublic);
+  // The code comes from both devices' values, the new device's committed first (074).
+  const mine = vc.newPairingNonce();
+  const theirs = vc.newPairingNonce();
+  const commitment = await vc.pairingCommitment(requestPublic, mine);
+  assert.match(commitment, /^[A-Za-z0-9_-]{43}$/);
+  assert.equal(await vc.pairingCommitment(requestPublic, mine), commitment, 'the same value, the same commitment');
+  assert.notEqual(await vc.pairingCommitment(requestPublic, vc.newPairingNonce()), commitment, 'another value, another commitment');
+  const code = await vc.pairingCode(requestPublic, theirs, mine);
   assert.match(code, /^\d{3} \d{3}$/);
-  assert.equal(await vc.pairingCode(requestPublic), code, 'the same key, the same code');
-  assert.notEqual(await vc.pairingCode(await vc.exportPublicKey(other.publicKey)), code, 'a swapped key shows another code');
+  assert.equal(await vc.pairingCode(requestPublic, theirs, mine), code, 'both devices work out the same code');
+  assert.notEqual(await vc.pairingCode(await vc.exportPublicKey(other.publicKey), theirs, mine), code, 'a swapped key shows another code');
+  assert.notEqual(await vc.pairingCode(requestPublic, vc.newPairingNonce(), mine), code, "another device's value shows another code");
+  await assert.rejects(vc.pairingCode(requestPublic, 'short', mine), { code: 'bad_nonce' });
+});
+
+await test("e2e: a vault key's version is signed by its maker, with a commitment that catches any other key (074)", async () => {
+  const maker = await vc.newIdentity();
+  const makerPub = await vc.publicIdentity(maker);
+  const makerId = await vc.identityFingerprint(makerPub);
+  const key = await vc.newSecretKey();
+  const commitment = await vc.keyCommitment(key, VAULT, 2);
+  assert.match(commitment, /^kc1\.[A-Za-z0-9_-]{43}$/);
+  assert.equal(await vc.keyCommitment(key, VAULT, 2), commitment, 'the same key, the same commitment');
+  assert.notEqual(await vc.keyCommitment(await vc.newSecretKey(), VAULT, 2), commitment, 'a planted key does not match');
+  assert.notEqual(await vc.keyCommitment(key, VAULT, 3), commitment, 'nor the same key as another version');
+  assert.notEqual(await vc.keyCommitment(key, OTHER_VAULT, 2), commitment, 'nor in another vault');
+  const statement = vc.keyVersionStatement(VAULT, 2, commitment, ASHA, makerId);
+  const signature = await vc.signText(maker, statement);
+  assert.match(signature, /^[A-Za-z0-9_-]{86}$/, 'the shape 074 keeps');
+  assert.equal(await vc.verifyText(makerPub.sign, statement, signature), true);
+  assert.equal(await vc.verifyText(makerPub.sign, vc.keyVersionStatement(VAULT, 2, commitment, RAVI, makerId), signature), false, 'another maker');
+  const server = await vc.publicIdentity(await vc.newIdentity());
+  assert.equal(await vc.verifyText(server.sign, statement, signature), false, "a server's own key does not sign as the maker");
+  // A grant of the right key passes its version's check; a grant of another fails it.
+  const ravi = await vc.newIdentity();
+  const good = await vc.openVaultKeyGrant(await vc.grantVaultKey(key, await vc.publicIdentity(ravi), { vaultId: VAULT, userId: RAVI, keyVersion: 2 }),
+    ravi, { vaultId: VAULT, userId: RAVI, keyVersion: 2 });
+  assert.equal(await vc.keyCommitment(good, VAULT, 2), commitment);
+  const planted = await vc.openVaultKeyGrant(await vc.grantVaultKey(await vc.newSecretKey(), await vc.publicIdentity(ravi), { vaultId: VAULT, userId: RAVI, keyVersion: 2 }),
+    ravi, { vaultId: VAULT, userId: RAVI, keyVersion: 2 });
+  assert.notEqual(await vc.keyCommitment(planted, VAULT, 2), commitment, 'a planted grant opens, and is caught');
+});
+
+await test('e2e: a vault record is signed where it belongs and when, so it cannot move, change or be passed off as another (074)', async () => {
+  const writer = await vc.newIdentity();
+  const pub = await vc.publicIdentity(writer);
+  const where = vc.context.record(VAULT, 'emergency-card', ASHA);
+  const d = JSON.stringify({ card: { blood_group: 'B-' } });
+  const at = 1_789_000_000_000;
+  const sig = await vc.signText(writer, await vc.recordStatement(where, at, ASHA, d));
+  assert.equal(await vc.verifyText(pub.sign, await vc.recordStatement(where, at, ASHA, d), sig), true);
+  assert.equal(await vc.verifyText(pub.sign, await vc.recordStatement(where, at, ASHA, d.replace('B-', 'O+')), sig), false, 'a changed card');
+  assert.equal(await vc.verifyText(pub.sign, await vc.recordStatement(where, at - 1, ASHA, d), sig), false, 'another time');
+  assert.equal(await vc.verifyText(pub.sign, await vc.recordStatement(vc.context.record(VAULT, 'emergency-card', RAVI), at, ASHA, d), sig), false, "another person's card");
+  assert.equal(await vc.verifyText(pub.sign, await vc.recordStatement(where, at, RAVI, d), sig), false, 'another writer');
+  assert.throws(() => vc.context.record(VAULT, 'vault-name/x', VAULT), { code: 'bad_kind' }, 'only the kinds AskLocker keeps');
+  assert.throws(() => vc.context.record(VAULT, 'note', VAULT), { code: 'bad_kind' }, 'notes are sealed with their owner\'s key now');
+  assert.ok(vc.context.record(VAULT, 'member-key', RAVI).includes('/member-key/'));
+});
+
+await test("e2e: one's own key seals notes and chats that nobody else can open or make (074)", async () => {
+  const asha = await vc.newIdentity();
+  const key = await vc.selfKey(asha, ASHA);
+  const where = vc.context.personal(ASHA, 'note', DOC);
+  const sealed = await vc.sealJson(key, { vault: VAULT, body: 'Pay the rent' }, where);
+  // The same person on another device (the identity carried over) works out the same key.
+  const elsewhere = await vc.importIdentity(await vc.exportIdentity(asha), true);
+  assert.deepEqual(await vc.openJson(await vc.selfKey(elsewhere, ASHA), sealed, where), { vault: VAULT, body: 'Pay the rent' });
+  const ravi = await vc.newIdentity();
+  await assert.rejects(vc.openJson(await vc.selfKey(ravi, RAVI), sealed, where), { code: 'cannot_open' }, 'another member cannot open it');
+  await assert.rejects(vc.openJson(await vc.selfKey(asha, RAVI), sealed, where), { code: 'cannot_open' }, 'nor under another account');
+  await assert.rejects(vc.openJson(key, sealed, vc.context.personal(ASHA, 'saved-chat', DOC)), { code: 'cannot_open' }, 'a note is not a chat');
+  assert.throws(() => vc.context.personal(ASHA, 'card', DOC), { code: 'bad_kind' });
 });
 
 await test("e2e: the phone's lock (a passkey's PRF output) seals the identity, and only that output opens it", async () => {
@@ -1948,6 +2018,23 @@ await test('e2e: search on the phone ranks by meaning and words, four passages a
   assert.ok(capped.some((p) => p.documentId === 'resume'));
   const words = localSearch.rankPassages([P('a', 'SPECIMEN पासपोर्ट संख्या P1234567', far), P('b', 'SPECIMEN bill', far)], null, 'पासपोर्ट');
   assert.equal(words[0].documentId, 'a', 'words alone, in any script, when the model is not there');
+});
+
+await test("e2e: a locked vault's tree keeps 031's rules on the phone, in the server's words (073)", () => {
+  const ids = ['nani', 'maa', 'asha', 'ravi', 'dadi'];
+  let links = treeRules.connectInTree([], ids, 'nani', 'parent', 'maa');
+  links = treeRules.connectInTree(links, ids, 'asha', 'child', 'maa', 'ravi');
+  assert.deepEqual(links.map((l) => `${l.from}>${l.to}`).sort(), ['maa>asha', 'nani>maa', 'ravi>asha']);
+  assert.equal(treeRules.connectInTree(links, ids, 'nani', 'parent', 'maa'), links, 'the same link again changes nothing');
+  assert.throws(() => treeRules.connectInTree(links, ids, 'dadi', 'parent', 'asha'), /at most two parents/);
+  assert.throws(() => treeRules.connectInTree(links, ids, 'asha', 'parent', 'nani'), /own ancestor/);
+  assert.throws(() => treeRules.connectInTree(links, ids, 'maa', 'spouse', 'asha'), /already connected/);
+  assert.throws(() => treeRules.connectInTree(links, ids, 'asha', 'sibling', 'asha'), /own relative/);
+  assert.throws(() => treeRules.connectInTree(links, ids, 'asha', 'spouse', 'stranger'), /not in this family's tree/);
+  assert.throws(() => treeRules.connectInTree(links, ids, 'dadi', 'child', 'ravi', 'dadi'), /different second parent/);
+  const pair = treeRules.connectInTree(links, ids, 'ravi', 'spouse', 'maa');
+  assert.ok(pair.some((l) => l.kind === 'spouse' && l.from < l.to), 'a pair is stored once, smaller id first');
+  assert.deepEqual(treeRules.linksAmong(links, ['maa', 'asha']).map((l) => `${l.from}>${l.to}`), ['maa>asha'], 'someone taken out takes their links');
 });
 
 if (failures.length) {

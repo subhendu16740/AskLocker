@@ -297,14 +297,14 @@ Deno.serve(async (req) => {
       ? await translateToEnglish(query)
       : { query, changed: false as boolean, error: undefined as string | undefined, model: undefined as string | undefined };
     if (trans.changed && !quiet) console.log(`[rag] Translated: "${trans.query}"`);
-    else if (nonEnglish) console.warn(`[rag] Not translated${trans.error ? ` (${trans.error})` : ''}`);
+    else if (nonEnglish) console.warn(`[rag] Not translated${trans.error && !quiet ? ` (${trans.error})` : ''}`);
 
     const cond = history.length > 0
       ? await condenseQuery(trans.query, history, { toEnglish: nonEnglish })
       : { query: trans.query, changed: false as boolean, error: undefined as string | undefined, model: undefined as string | undefined };
     const standalone = cond.query;
     if (cond.changed && !quiet) console.log(`[rag] Condensed: "${standalone}"`);
-    else if (history.length > 0) console.log(`[rag] Not condensed${cond.error ? ` (${cond.error})` : ''}`);
+    else if (history.length > 0) console.log(`[rag] Not condensed${cond.error && !quiet ? ` (${cond.error})` : ''}`);
 
     // A ticket's words for what the question asks: a train ticket never says
     // "seat", only Booking Status and a code (_shared/tickets.ts). Searched
@@ -375,7 +375,7 @@ Deno.serve(async (req) => {
     // 4. Judge every candidate against the question; keep only the relevant.
     // What any ticket codes among them mean, so "CNF/B4/17 UB" is a seat.
     const candidateNotes = ticketCodeNotes(candidates.map(c => c.content));
-    const rank = await rerankChunks(judgeQuestion, candidates, candidateNotes);
+    const rank = await rerankChunks(judgeQuestion, candidates, candidateNotes, quiet);
     const chunks = rank.kept;
     if (rank.error) console.warn(`[rag] Rerank fell back: ${rank.error}`);
     console.log(`[rag] Kept ${chunks.length}/${candidates.length} after rerank`);
@@ -1053,6 +1053,7 @@ async function rerankChunks(
   question: string,
   candidates: ChunkResult[],
   codeNotes: string[] = [],
+  quiet = false,
 ): Promise<{ kept: ChunkResult[]; error?: string; model?: string }> {
   let usedModel: string | undefined;
   const fallback = (error: string) => ({ kept: candidates.slice(0, RERANK_KEEP), error, model: usedModel });
@@ -1139,7 +1140,8 @@ ${judged.some((c) => isSpreadsheetType(c.file_type)) ? `${SPREADSHEET_ROWS_RULE}
       .slice(0, RERANK_KEEP)
       .map(x => x.c);
 
-    console.log(`[rag] Rerank scores: ${judged.map((c, i) => `${c.file_name.slice(0, 18)}=${score.get(i) ?? '?'}`).join(', ')}`);
+    // Scores only when a locked vault was asked: its document names are its own.
+    console.log(`[rag] Rerank scores: ${judged.map((c, i) => `${quiet ? `#${i + 1}` : c.file_name.slice(0, 18)}=${score.get(i) ?? '?'}`).join(', ')}`);
 
     // A judge that rejects EVERY passage has failed, not filtered. Retrieval
     // had already ranked these by meaning and by keyword; discarding the lot
@@ -1246,7 +1248,7 @@ Reply with JSON only: {"english":"<the translation>"}`,
     // where the diagnostic line is the only view of the pipeline, and
     // "unusable output" alone sends everyone to the server logs.
     if (!text || text.length > 400 || !/[a-z]{2,}/i.test(text)) {
-      console.warn(`[rag] Translate rejected output: ${JSON.stringify(raw).slice(0, 300)}`);
+      console.warn(`[rag] Translate rejected output (${raw ? `${raw.length} characters` : 'empty'})`);
       const seen = raw ? `"${raw.replace(/\s+/g, ' ').slice(0, 60)}"` : 'empty reply';
       return { query, changed: false, error: `unusable output — ${seen}`, model };
     }
@@ -1320,7 +1322,7 @@ Reply with JSON only: {"query":"<the rewritten query>"}`,
     }
 
     if (!text || text.length > 300) {
-      console.warn(`[rag] Condense rejected output: ${JSON.stringify(raw).slice(0, 300)}`);
+      console.warn(`[rag] Condense rejected output (${raw ? `${raw.length} characters` : 'empty'})`);
       const seen = raw ? `"${raw.replace(/\s+/g, ' ').slice(0, 60)}"` : 'empty reply';
       return { query, changed: false, error: `unusable output — ${seen}`, model };
     }

@@ -27,15 +27,25 @@ function open(url: string) {
 
 export default function SharedDocumentScreen() {
   const [state, setState] = useState<State>('loading');
+  // The link's secret, and for a locked document its key, are after "#".
+  // Read once, then taken out of the address bar and the browser's history
+  // (074), so they are not left on the screen or in the history list.
+  const [token] = useState(() => (typeof window !== 'undefined' ? window.location.hash.replace(/^#/, '') : ''));
 
   useEffect(() => {
-    const token = typeof window !== 'undefined' ? window.location.hash.replace(/^#/, '') : '';
+    if (typeof window !== 'undefined' && window.location.hash) {
+      try {
+        window.history.replaceState(null, '', window.location.pathname + window.location.search);
+      } catch {
+        // The address stays as it is.
+      }
+    }
     let cancelled = false;
     openSharedDocument(token)
       .then((result) => { if (!cancelled) setState(result); })
       .catch(() => { if (!cancelled) setState('error'); });
     return () => { cancelled = true; };
-  }, []);
+  }, [token]);
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>

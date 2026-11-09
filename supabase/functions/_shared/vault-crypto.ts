@@ -17,7 +17,16 @@
 //     two files, without the phone noticing.
 //   • ECDH P-256 + HKDF-SHA-256 to lock a vault key for one member's public
 //     key (a fresh ephemeral key for every grant).
-//   • ECDSA P-256 with SHA-256 to sign invitations and grants.
+//   • ECDSA P-256 with SHA-256: whoever makes a version of a vault's key
+//     signs it, with a commitment to the key (an HMAC under it), so a member
+//     takes a grant only for the key that version's maker made; whoever
+//     writes a vault's name, tree, a person, a card or a member's key signs
+//     it, so a member takes it only from someone allowed to write it.
+//   • A key of one's own (ECDH of one's own key pair, through HKDF) for
+//     notes and saved chats: only its owner can seal or open them.
+//   • A six-digit code for approving a new device, from both devices'
+//     random values, each committed before the other is seen, so a server
+//     in the middle cannot pick a key that shows the same code.
 //   • A Recovery Key: 128 random bits, shown as 28 characters in 7 groups,
 //     the last two a checksum that catches a mistyped character.
 //
@@ -25,8 +34,9 @@
 // encryption, Proton Drive and Apple's Advanced Data Protection):
 //   file key (one per document)  — seals the file, its name, its passages
 //     ↑ locked by
-//   vault key (one per vault)    — also seals the vault's name, tree, cards,
-//     ↑ locked for each member      saved chats and notes
+//   vault key (one per vault)    — also seals the vault's name, tree, cards
+//     ↑ locked for each member      and members' keys (notes and saved chats
+//                                   use their owner's own key instead)
 //   member's identity key        — kept on their devices, brought to a new
 //     ↑ by                          one by the phone's lock (a passkey's
 //   PRF key, another device, or the backup (Recovery) Key.
@@ -104,7 +114,15 @@ function version(value: number): string {
 /** What one document holds, each sealed with its file key. */
 export type DocumentPart = 'file' | 'name' | 'passages' | 'details';
 /** What a vault holds outside its documents, each sealed with the vault key. */
-export type VaultRecord = 'vault-name' | 'person' | 'emergency-card' | 'saved-chat' | 'note';
+export type VaultRecord = 'vault-name' | 'tree-links' | 'person' | 'emergency-card' | 'member-key';
+export const VAULT_RECORDS: readonly VaultRecord[] = ['vault-name', 'tree-links', 'person', 'emergency-card', 'member-key'];
+/** A person's own records, sealed with their own key. */
+export type PersonalRecord = 'saved-chat' | 'note';
+
+function recordKind<K extends string>(value: K, allowed: readonly K[]): K {
+  if (!allowed.includes(value)) throw new VaultCryptoError('bad_kind', 'This is not a kind of record AskLocker keeps.');
+  return value;
+}
 
 /**
  * The context every sealed item is bound to. Change one and it no longer
@@ -116,7 +134,7 @@ export const context = {
   fileKey: (vaultId: string, documentId: string, vaultKeyVersion: number) =>
     `asklocker/v1/file-key/${id(vaultId, 'vaultId')}/${id(documentId, 'documentId')}/${version(vaultKeyVersion)}`,
   record: (vaultId: string, kind: VaultRecord, recordId: string) =>
-    `asklocker/v1/${kind}/${id(vaultId, 'vaultId')}/${id(recordId, 'recordId')}`,
+    `asklocker/v1/${recordKind(kind, VAULT_RECORDS)}/${id(vaultId, 'vaultId')}/${id(recordId, 'recordId')}`,
   vaultKey: (vaultId: string, userId: string, vaultKeyVersion: number) =>
     `asklocker/v1/vault-key/${id(vaultId, 'vaultId')}/${id(userId, 'userId')}/${version(vaultKeyVersion)}`,
   identityBackup: (userId: string) => `asklocker/v1/identity-backup/${id(userId, 'userId')}`,
@@ -128,8 +146,8 @@ export const context = {
   /** An identity sealed with this device's own key, to lock it for others later. */
   deviceKeep: (userId: string) => `asklocker/v1/device-keep/${id(userId, 'userId')}`,
   /** A person's own record outside any vault, locked for their own public key. */
-  personal: (userId: string, kind: 'saved-chat', recordId: string) =>
-    `asklocker/v1/personal/${kind}/${id(userId, 'userId')}/${id(recordId, 'recordId')}`,
+  personal: (userId: string, kind: PersonalRecord, recordId: string) =>
+    `asklocker/v1/personal/${recordKind(kind, ['saved-chat', 'note'] as const)}/${id(userId, 'userId')}/${id(recordId, 'recordId')}`,
 };
 
 // ─── Sealing ────────────────────────────────────────────────────
@@ -232,7 +250,7 @@ const ECDSA = { name: 'ECDSA', namedCurve: 'P-256' } as const;
 
 export interface Identity {
   encrypt: CryptoKeyPair; // ECDH: vault keys are locked to its public half
-  sign: CryptoKeyPair;    // ECDSA: invitations and grants are signed with it
+  sign: CryptoKeyPair;    // ECDSA: key versions and records are signed with it
 }
 
 /** What the server keeps and shows others: the two public keys, as SPKI. */
@@ -302,6 +320,55 @@ export async function verifyText(signPublic: string, text: string, signature: st
   } catch {
     return false;
   }
+}
+
+async function sha256Hex(text: string): Promise<string> {
+  const digest = new Uint8Array(await subtle.digest('SHA-256', encoder.encode(text)));
+  return [...digest].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+/**
+ * A commitment to a vault key: an HMAC under the key itself, bound to the
+ * vault and version. Whoever opens a grant checks the key they got is the one
+ * the version's maker committed to, so a grant of some other key (planted by
+ * a member, or made up by a server) is caught.
+ */
+export async function keyCommitment(key: CryptoKey, vaultId: string, keyVersion: number): Promise<string> {
+  const raw = await subtle.exportKey('raw', key);
+  const mac = await subtle.importKey('raw', raw, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const tag = await subtle.sign('HMAC', mac, encoder.encode(`asklocker/v1/key-commit/${id(vaultId, 'vaultId')}/${version(keyVersion)}`));
+  return `kc1.${toBase64Url(new Uint8Array(tag))}`;
+}
+
+/** What the maker of a version of a vault's key signs. */
+export function keyVersionStatement(
+  vaultId: string, keyVersion: number, commitment: string, makerId: string, makerFingerprint: string,
+): string {
+  return `asklocker/v1/vault-key-version\n${id(vaultId, 'vaultId')}\n${version(keyVersion)}\n${commitment}\n${id(makerId, 'makerId')}\n${makerFingerprint}`;
+}
+
+/**
+ * What the writer of a vault record signs: where it belongs (the context),
+ * when, who wrote it, and the record itself (its SHA-256).
+ */
+export async function recordStatement(ctx: string, at: number, writerId: string, dataJson: string): Promise<string> {
+  if (!Number.isSafeInteger(at) || at < 0) throw new VaultCryptoError('bad_time', 'A record needs the time it was written.');
+  return `asklocker/v1/record\n${ctx}\n${at}\n${id(writerId, 'writerId')}\n${await sha256Hex(dataJson)}`;
+}
+
+// ─── A key of one's own ─────────────────────────────────────────
+
+/**
+ * A key only this person can make: ECDH of their own key pair, through HKDF.
+ * Their notes and saved chats are sealed with it, so nobody else can open
+ * them, and nobody else can make one that opens as theirs.
+ */
+export async function selfKey(identity: Identity, userId: string): Promise<CryptoKey> {
+  const shared = await subtle.deriveBits({ name: 'ECDH', public: identity.encrypt.publicKey }, identity.encrypt.privateKey, 256);
+  const base = await subtle.importKey('raw', shared, 'HKDF', false, ['deriveKey']);
+  return subtle.deriveKey(
+    { name: 'HKDF', hash: 'SHA-256', salt: new Uint8Array(32), info: encoder.encode(`asklocker/v1/self-key/${id(userId, 'userId')}`) },
+    base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
 }
 
 // ─── Locking a vault key for one member ─────────────────────────
@@ -566,12 +633,36 @@ export async function unlockTextWithPrivateKey(locked: string, privateKey: Crypt
   return decoder.decode(await unlockWithPrivateKey(locked, privateKey, ctx));
 }
 
-/**
- * Six digits from a public key, "123 456", shown on both devices when one
- * approves the other. A server that swapped the key would change them.
- */
-export async function pairingCode(publicKey: string): Promise<string> {
-  const digest = new Uint8Array(await subtle.digest('SHA-256', encoder.encode(`asklocker/v1/pairing/${publicKey}`)));
+// ─── Approving a new device: a code from both devices ───────────
+//
+// The new device makes a one-time key and a random value, and sends the key
+// with a commitment to the value (its hash) but not the value. The signed-in
+// device answers with a random value of its own. Only then does the new
+// device show its value. Both show six digits from the key and both values.
+// A server in the middle must commit to its own key and value before it
+// sees the signed-in device's, and give the new device a value before it
+// sees the new device's, so it cannot make the two codes match except by a
+// one-in-a-million guess. (A code from the key alone could be matched by
+// trying keys: about half a minute on one computer.)
+
+/** A random value for the code, as text. */
+export function newPairingNonce(): string {
+  return toBase64Url(randomBytes(16));
+}
+
+/** What the new device sends first: its value, hidden. */
+export async function pairingCommitment(requestKey: string, requestNonce: string): Promise<string> {
+  const digest = new Uint8Array(await subtle.digest('SHA-256', encoder.encode(`asklocker/v1/pairing-commit/${requestKey}/${requestNonce}`)));
+  return toBase64Url(digest);
+}
+
+/** Six digits, "123 456", the same on both devices when nobody is in the middle. */
+export async function pairingCode(requestKey: string, approverNonce: string, requestNonce: string): Promise<string> {
+  if (!/^[A-Za-z0-9_-]{22}$/.test(approverNonce) || !/^[A-Za-z0-9_-]{22}$/.test(requestNonce)) {
+    throw new VaultCryptoError('bad_nonce', 'This request is not in the form AskLocker expects.');
+  }
+  const digest = new Uint8Array(await subtle.digest('SHA-256',
+    encoder.encode(`asklocker/v1/pairing-code/${requestKey}/${approverNonce}/${requestNonce}`)));
   const n = ((digest[0] << 24) | (digest[1] << 16) | (digest[2] << 8) | digest[3]) >>> 0;
   const code = String(n % 1_000_000).padStart(6, '0');
   return `${code.slice(0, 3)} ${code.slice(3)}`;
