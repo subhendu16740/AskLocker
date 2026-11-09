@@ -63,7 +63,8 @@
     "Chapter times were measured from marketing/video's timeline (16:9 full cut, 91.35 s) on 3 November 2026. A changed film needs them measured again.",
     "Rendered on 3 November 2026 with the plans table and end card corrected to 067's numbers (plan-text.ts) and chapter 01's file types to include Excel.",
     "Published on 3 November 2026 at the owner's decision, with business vaults still a pilot set up by hand.",
-    "Replaced on 4 November 2026 with marketing/business/films/asklocker-business-16x9.mp4 (branch claude/admiring-curie-737iko): the owner asked for calmer sound, and that render has score.py's softer notification, chimes and beeps (no buzzing ring). The picture differs only in the plans table at 1:19 to 1:25, which now says \"100 MB a person\", \"20 a person\" and \"1,000 shared\"; same length, so the chapters hold."
+    "Replaced on 4 November 2026 with marketing/business/films/asklocker-business-16x9.mp4 (branch claude/admiring-curie-737iko): the owner asked for calmer sound, and that render has score.py's softer notification, chimes and beeps (no buzzing ring). The picture differs only in the plans table at 1:19 to 1:25, which now says \"100 MB a person\", \"20 a person\" and \"1,000 shared\"; same length, so the chapters hold.",
+    "Replaced on 8 November 2026 with a render from claude/films-english-maa (6ff5cba), at the owner's ask: the question-lock logo on the title and end cards (logoMark() from dev). Every other frame, the sound (-15.4 LUFS), the length and the chapters are the same."
   ],
   "draft": false
 }
