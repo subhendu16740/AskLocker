@@ -846,16 +846,51 @@ copies, so DEV needs its own secrets and its own `documents` storage bucket.
   `expo-local-authentication` for the lock. Settings does not offer it there
   meanwhile.
 
-### Native (not yet set up)
+### Android — EAS builds (since 14 November 2026)
 
-There is no `eas.json`, no `expo-updates`, and no EAS project ID. Native
-distribution is not wired up. Before a first EAS build:
-
-- `app.config.ts` sets `android.package: "com.asklocker.app"` (it was the
-  `create-expo-app` default, `com.anonymous.familyvault`, until the app
-  was named). Android package names are permanent once published to Play,
-  so it was set before the first build.
-- There is no `ios.bundleIdentifier` at all; an iOS build needs one.
+- **`eas.json` has two profiles**: `preview`, an .apk to install on a
+  phone, against DEV; `production`, an .aab for Google Play, against PROD.
+  Each carries its project's URL and public anon key (`env`), so a build is
+  bound to its project as a web build is. EAS keeps the version code
+  (`appVersionSource: remote`, `autoIncrement`). No `expo-updates`: a change
+  reaches phones only by a new build.
+- **Builds start by hand**: Actions › Android build
+  (`.github/workflows/android-build.yml`), with the `EXPO_TOKEN` secret; a
+  production build only from `main`. `app.config.ts` reads the Expo
+  project's id (`EAS_PROJECT_ID`, not a secret). EAS makes and keeps the
+  upload key; the first .aab goes to Play by hand, Play signs the rest.
+- **React Native 0.83.2, React 19.2.0**: what Expo SDK 55 is built and
+  tested with (0.84.1 was installed until then). Check
+  `npx expo install --check` before an SDK move or a native build.
+  `@expo/vector-icons` is a declared dependency: with React Native moved,
+  npm stopped hoisting it out of `expo`.
+- **The Android app sells nothing** (`src/lib/selling.ts`): Google Play
+  allows paying for a digital plan in an Android app only through Play's
+  own billing, which AskLocker does not use, and an app may not point
+  anyone to pay elsewhere. So Plans shows what each plan includes and what
+  the vault has used, with no price, no Pay or Ask us button, and nothing
+  about where to pay; full-vault messages say only how to make room
+  (`upsell: false` in `plan-text.ts`); Help names no price. A vault paid for
+  on the website has its plan in the app too. Selling in the app needs Play
+  Billing (or Play's user choice billing in India), a change of its own.
+- **No gallery permission**: Android's photo picker needs none, so
+  `blockedPermissions` keeps out READ_MEDIA_* and the rest Play asks apps to
+  justify; the camera stays. Gallery asks for nothing.
+- **Photos are read on the server**, not on the phone (`ocr.ts`):
+  react-native-mlkit-ocr (2021, Latin only, older than React Native's new
+  architecture) was removed. A photo over 950 KB is redrawn as a JPEG of at
+  most 2,000 pixels first (`photo-size.ts`), since OCR.space takes 1 MB at
+  most on its free plan. English only, like ML Kit before it.
+- **Uploads send bytes** (`file-bytes.ts`): a React Native Blob can arrive
+  empty at Storage (Supabase's own advice), so the phone app uploads an
+  ArrayBuffer.
+- **Google sign-in** is the redirect through Supabase, back to
+  `asklocker://` (`makeRedirectUri()`): each project's Authentication › URL
+  Configuration must list `asklocker://**`.
+- **Not in the Android app yet**: speech to text (the keyboard shows; answers
+  are still read aloud), fingerprint sign-in, share links, Gmail import,
+  locked vaults, paying. Each is hidden there, never a dead button.
+- There is no `ios.bundleIdentifier`; an iOS build needs one.
 
 `/ios` and `/android` are gitignored, so the project uses continuous native
 generation — which is the layout EAS expects. Nothing needs restructuring.
@@ -977,6 +1012,8 @@ tabs. `(tabs)` is a layout group, so routes are `/home`, `/search`, `/upload`.
 | `spreadsheet.ts` | Reading a spreadsheet when it is added (`readSpreadsheet()`): .xlsx with read-excel-file's universal build, loaded only then, .csv with the shared parser, both into `_shared/spreadsheet-text.ts`'s rows; see [Spreadsheets](#spreadsheets--xlsx-and-csv-read-in-the-app-061) |
 | `app-info.ts` | Version, release date and commit (stamped into `extra` by `app.config.ts` at build time), and the support contact Help and the privacy policy show (`support@asklocker.com`, Cloudflare Email Routing) |
 | `ocr.ts` | Platform-split OCR with progress callback; reads the person's chosen languages |
+| `selling.ts` | `sellsInApp`: whether this build shows prices and takes payments (the website only; Google Play's rules for the Android app, see [Android](#android--eas-builds-since-14-november-2026)) |
+| `photo-size.ts` / `.web.ts`, `file-bytes.ts` | The phone app's photos made small enough for the server's reader (under 950 KB), and a picked file's bytes on every platform (the phone app uploads bytes, not a Blob) |
 | `ocr-languages.ts` | The document-language picker list, and `resolveOcrLanguages()` which always appends English |
 | `vault-keys.ts` / `vault-keys.web.ts` | A person's encryption keys on this device (070, 071, test builds only): `ensureKeys()` makes them without a screen; kept twice in IndexedDB (`asklocker-keys`); `addPhoneLock()` / `unlockWithPhoneLock()` (a passkey's PRF), `startDeviceRequest()` / `pendingDeviceRequests()` / `approveDeviceRequest()` (the code from both devices' values, 074), `prepareBackupKey()` / `unlockWithRecoveryKey()`, `makeNewKeys()`, `myDeviceIdentity()`, `forgetKeysOnThisDevice()` (also on deleting the account, and at sign-out on a shared computer: `setForgetKeysOnSignOut()`, `forgetKeysAtSignOut()` from `auth.tsx`, 074), `keysErrorText()`. Types in `vault-keys-types.ts`. See [Locked vaults](#locked-vaults--end-to-end-encryption-vault-by-vault-test-builds-only-070-071) |
 | `vault-lock.ts` / `vault-lock.web.ts` | Locked vaults (071, 073, 074): `lockVault()`, `tendVault()` (also each person's own older documents still readable), `approveMember()`, `trustMember()` (074: after comparing key IDs), `vaultKeys()` (only versions whose maker signed them and whose key matches), `sealDocument()`, `readOnDevice()`, `overlaySealed()` (names, and whose a document is), `documentDetails()`, `openDocumentFile()`, `renameLockedDocument()` / `updateLockedDocument()` (whose and its category sealed too, 074), `safeMime()`, `searchLockedVaults()` (relations resolved from the opened tree), `lockedExpiries()`, `documentFileKeyText()` / `openSharedFile()`, `sealChat()` / `openChat()`, `moveOlderDocuments()`; 073's `overlayVaultNames()`, `openLockedTree()`, `sealPerson()`, `addSealedPerson()`, `sealTreeLinks()`, `lockedCards()` / `sealCard()`, `sealNoteBody()` / `openNoteBody()`, `moveVaultDetails()`, `lockedOverview()` |
@@ -1016,6 +1053,7 @@ src/lib/vault-lock.ts              /  vault-lock.web.ts
 src/lib/on-device-model.ts         /  on-device-model.web.ts
 src/lib/on-device-reader.ts        /  on-device-reader.web.ts
 src/lib/gmail-device.ts            /  gmail-device.web.ts
+src/lib/photo-size.ts              /  photo-size.web.ts
 src/app/+html.tsx                     (web only — HTML shell, @font-face; NOT used by the single-page export)
 public/sw.js                          (web only — the service worker that shows notifications)
 src/global.css                        (web only)
@@ -1023,16 +1061,16 @@ src/global.css                        (web only)
 
 Plus 15 `Platform.OS === 'web'` branches across `src/`. The important ones:
 
-- **`src/lib/ocr.ts`** runs two entirely different OCR engines —
-  `tesseract.js` (WASM) on web, `react-native-mlkit-ocr` (native module) on
-  Android/iOS. Touching this file means reasoning about both.
+- **`src/lib/ocr.ts`** reads photos with `tesseract.js` (WASM) on web; the
+  phone app reads nothing and sends the photo, made small by
+  `photo-size.ts`, for the server to read (OCR.space, English only; see
+  [Android](#android--eas-builds-since-14-november-2026)).
   **Languages diverge here.** Tesseract reads every Indian script, fetching
   each ~10-20MB model from a CDN on first use, so the web build honours the
-  person's Settings › Documents choice in full. The bundled ML Kit package
-  (`play-services-mlkit-text-recognition`) reads **Latin script only** —
-  Devanagari and the rest are separate ML Kit artifacts needing a native
-  build — so the upload screen warns via `ocrLanguageGapOnThisDevice()`
-  rather than silently returning garbage.
+  person's Settings › Documents choice in full. The server's reader, which
+  reads the phone app's photos, is **English only**, so the upload screen
+  warns via `ocrLanguageGapOnThisDevice()` rather than silently returning
+  garbage.
 - **Pickers return different uris.** On native a picked file's uri ends in a
   real file name (`…/ImagePicker/abc.jpeg`); on the web it is
   `blob:https://host/<id>`, with no name in it at all. Upload used to take
