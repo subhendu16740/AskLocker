@@ -1,7 +1,7 @@
 // ─── Client-Side OCR ────────────────────────────────────────────
-// Web: Tesseract.js (WASM, runs in browser)
-// Android/iOS: Google ML Kit (on-device, native)
-// Both are 100% free with no API limits.
+// Web: Tesseract.js (WASM, runs in browser), free with no API limits.
+// Android/iOS: nothing on the phone. The photo is sent without text and
+// the server reads it (OCR.space, English only), as it reads a scanned PDF.
 //
 // LANGUAGES. Tesseract reads every major Indian script, but each language
 // model is a separate ~10-20MB download (fetched from a CDN on first use and
@@ -10,11 +10,11 @@
 // is always included alongside, because Indian documents are almost always
 // bilingual.
 //
-// ML Kit on native reads Latin script only in the package bundled today.
-// Devanagari and the other Indic recognisers are separate ML Kit artifacts
-// that need a native build to add, so a phone app still returns Latin-only
-// text for those pages. ocrLanguageGapOnThisDevice() reports that, so the
-// upload screen can say so instead of silently producing garbage.
+// The phone app read photos with react-native-mlkit-ocr until November
+// 2026: Latin script only, and a 2021 package that predates React Native's
+// new architecture, too risky for the first Android build. The server's
+// reader is English only too, so ocrLanguageGapOnThisDevice() still says
+// which chosen languages a photo added here will not be read in.
 // ────────────────────────────────────────────────────────────────
 
 import { Platform } from 'react-native';
@@ -64,9 +64,10 @@ export async function extractTextFromImage(
 
   if (Platform.OS === 'web') {
     return extractWithTesseract(imageUri, onProgress, resolveOcrLanguages(languages));
-  } else {
-    return extractWithMlKit(imageUri, onProgress);
   }
+  // The phone app sends the photo without text; the server reads it.
+  onProgress?.({ stage: 'done', progress: 1 });
+  return '';
 }
 
 // ─── Web: Tesseract.js ──────────────────────────────────────────
@@ -107,24 +108,4 @@ async function extractWithTesseract(
 
   onProgress?.({ stage: 'done', progress: 1 });
   return text.trim();
-}
-
-// ─── Android/iOS: Google ML Kit ─────────────────────────────────
-
-async function extractWithMlKit(
-  imageUri: string,
-  onProgress?: ProgressCallback,
-): Promise<string> {
-  onProgress?.({ stage: 'recognizing', progress: 0.3 });
-
-  const MlkitOcr = await import('react-native-mlkit-ocr');
-  const result = await MlkitOcr.default.detectFromUri(imageUri);
-
-  onProgress?.({ stage: 'done', progress: 1 });
-
-  // ML Kit returns an array of text blocks, each with lines
-  return result
-    .map((block: { text: string }) => block.text)
-    .join('\n')
-    .trim();
 }
