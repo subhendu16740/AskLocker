@@ -75,3 +75,6 @@ site/out/
 
 # Wrangler's local state (npx wrangler pages dev dist)
 .wrangler/
+
+# Temporary checkouts made by Claude Code helpers
+.claude/worktrees/

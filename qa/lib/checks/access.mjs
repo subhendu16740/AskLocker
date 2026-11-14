@@ -157,6 +157,15 @@ const pushJudge = (expect, needsDevice) => (outcome) => {
   if (needsDevice && outcome.noTarget) return ['skipped', "no device of account A's to aim at (see its control)"];
   return typeof expect === 'function' ? expect(outcome) : judge(expect, outcome);
 };
+// The Android app's notifications (075): a phone's FCM token, saved through
+// save_fcm_token(). Skipped until 075 is on DEV.
+const fcmJudge = (expect, needsDevice) => (outcome) => {
+  if (outcome.missing || String(outcome.error?.code) === 'PGRST202' || /\bkind\b.*does not exist/i.test(outcome.error?.message ?? '')) {
+    return ['skipped', 'migration 075 is not applied to DEV yet'];
+  }
+  if (needsDevice && outcome.noTarget) return ['skipped', "no Android phone of account A's to aim at (see its control)"];
+  return typeof expect === 'function' ? expect(outcome) : judge(expect, outcome);
+};
 const pushFnJudge = (check) => ({ status, data }) => {
   if (status === 404 && !data?.status) return ['skipped', 'push is not deployed to DEV yet'];
   if (status === 503 && data?.status === 'needs_migration') return ['skipped', 'migration 034 is not applied to DEV yet'];
@@ -670,6 +679,34 @@ export async function runAccessChecks(cfg, { a, b, anon, vaultA, vaultB, docsA }
   }
   const onPush = (run) => async () => (pushMissing ? { missing: true } : run());
 
+  // ── An Android phone of account A's (075): a made-up FCM token. FCM calls
+  // it not a token, and the sender forgets it, so nothing may be waiting for
+  // it either (A's notifications were marked read above); it is removed
+  // straight after the probes.
+  const fcmToken = `qaprobe:${'A'.repeat(40)}-${String(cfg.runId).replace(/[^A-Za-z0-9_-]/g, '')}`;
+  let phoneA = false;
+  let fcmMissing = pushMissing;
+  if (!pushMissing) {
+    const { error } = await a.client.rpc('save_fcm_token', { p_token: fcmToken, p_label: 'QA probe' });
+    if (String(error?.code) === 'PGRST202') {
+      fcmMissing = true;
+      results.add('access', 'control:fcm-device', 'Control — account A turns notifications on for an Android phone and reads it back', 'skipped', { why: 'migration 075 is not applied to DEV yet' });
+    } else if (error) {
+      results.add('access', 'control:fcm-device', 'Control — account A turns notifications on for an Android phone and reads it back', 'fail', { why: error.message });
+    } else {
+      const { data: back } = await a.client.from('push_subscriptions').select('id, kind').eq('endpoint', fcmToken);
+      phoneA = back?.length === 1 && back[0].kind === 'fcm';
+      results.add('access', 'control:fcm-device', 'Control — account A turns notifications on for an Android phone and reads it back', phoneA ? 'pass' : 'fail',
+        phoneA ? {} : { why: 'saved, but A cannot read its own phone back as an FCM device' });
+    }
+  }
+  const onFcm = (run) => async () => (fcmMissing ? { missing: true } : run());
+  const onPhoneA = (run) => async () => {
+    if (fcmMissing) return { missing: true };
+    if (!phoneA) return { noTarget: true };
+    return run();
+  };
+
   // ── A share link of account A's for the link probes to aim at (036): made
   // for the passport, opened by a logged-out visitor through `share`, and
   // turned off after the probes — when it must stop opening.
@@ -1173,6 +1210,16 @@ export async function runAccessChecks(cfg, { a, b, anon, vaultA, vaultB, docsA }
     ['B', 'mark notifications sent and remove devices (server-only)', pushJudge('refused'), onPush(() => b.client.rpc('push_done', { p_notifications: [randomUUID()], p_gone: [randomUUID()], p_delivered: [] }))],
     ['B', "make QA Vault A's reminders (server-only)", pushJudge('refused'), onPush(() => b.client.rpc('queue_family_expiry_reminders', { p_family_id: A.family }))],
     ['B', 'run the reminder clock (server-only)', pushJudge('refused'), onPush(() => b.client.rpc('run_reminders'))],
+
+    // The Android app's notifications (075): a phone's token is its owner's.
+    ['anon', 'turn notifications on for an Android phone', fcmJudge('refused'), onFcm(() => anon.client.rpc('save_fcm_token', { p_token: `qaanon:${'B'.repeat(40)}`, p_label: 'QA' }))],
+    ['B', "list account A's Android phones", fcmJudge('refused-or-empty', true), onPhoneA(() => b.client.from('push_subscriptions').select('endpoint').eq('endpoint', fcmToken))],
+    ['B', "remove account A's Android phone", fcmJudge(judgeWrite("B removed an Android phone of A's"), true), onPhoneA(async () => {
+      const { data, error } = await b.client.from('push_subscriptions').delete().eq('endpoint', fcmToken).select('id');
+      return error ? { error } : data?.length ? { allowed: true, reverted: false } : {};
+    })],
+    ['B', 'write an Android phone for account A directly', fcmJudge('refused'), onFcm(() => b.client.from('push_subscriptions').insert({ user_id: A.user, kind: 'fcm', endpoint: `qadirect:${'C'.repeat(40)}` }))],
+    ['B', "read every family's waiting notifications, phones included (server-only)", fcmJudge('refused'), onFcm(() => b.client.rpc('push_pending_devices', { p_limit: 5 }))],
     ['B', "make every family's birthday reminders (server-only)", (outcome) => (String(outcome.error?.code) === 'PGRST202'
       ? ['skipped', 'migration 035 is not applied to DEV yet']
       : judge('refused', outcome)), rpc(b, 'queue_birthday_reminders', {})],
@@ -1529,6 +1576,13 @@ export async function runAccessChecks(cfg, { a, b, anon, vaultA, vaultB, docsA }
     results.add('access', 'control:push-intact', "Control — account A's notification device survived every probe", deviceStill?.length === 1 ? 'pass' : 'fail',
       deviceStill?.length === 1 ? {} : { why: 'it is GONE' });
     await a.client.from('push_subscriptions').delete().eq('endpoint', deviceEndpoint);
+  }
+
+  if (phoneA) {
+    const { data: phoneStill } = await a.client.from('push_subscriptions').select('id').eq('endpoint', fcmToken);
+    results.add('access', 'control:fcm-intact', "Control — account A's Android phone survived every probe", phoneStill?.length === 1 ? 'pass' : 'fail',
+      phoneStill?.length === 1 ? {} : { why: 'it is GONE' });
+    await a.client.from('push_subscriptions').delete().eq('endpoint', fcmToken);
   }
 
   if (cardA) {

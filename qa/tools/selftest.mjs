@@ -37,6 +37,7 @@ import {
 } from '../../supabase/functions/_shared/gmail-crypto.ts';
 import { buildGraph, relationTo, relationLabel, relativesForPrompt, relativesNamedIn, buildForest, shortName, siblingsSharingParents } from '../../supabase/functions/_shared/kinship.ts';
 import { encryptPayload, vapidAuthorization, generateVapidKeys, isPushServiceEndpoint, MAX_PLAINTEXT } from '../../supabase/functions/_shared/webpush.ts';
+import * as fcm from '../../supabase/functions/_shared/fcm.ts';
 import { phoneLooksRight, cardProblem, cardIsEmpty, emptyCard, bloodGroupLabel, bloodGroupSpoken, telHref } from '../../src/lib/emergency.ts';
 import { allowanceJson, givenBack, parseAllowance, questionLimitMessage, questionsLeftText, resetDay } from '../../supabase/functions/_shared/questions.ts';
 import { AGREEMENT_POINTS, AGREEMENT_VERSION, agreementText } from '../../supabase/functions/_shared/agreement.ts';
@@ -664,6 +665,64 @@ await test('web push: VAPID signs for the push service, and only push services a
   for (const bad of ['https://evil.example/fcm.googleapis.com', 'http://fcm.googleapis.com/x', 'https://fcm.googleapis.com.evil.example/x', 'https://fcm.googleapis.com:8443/x', 'not a url']) {
     assert.ok(!isPushServiceEndpoint(bad), bad);
   }
+});
+
+await test('Android notifications: the FCM service account signs its own request, and FCM\'s answers are sorted (075)', async () => {
+  // A made-up service account with a fresh RSA key, as Firebase's key file holds one.
+  const pair = await crypto.subtle.generateKey(
+    { name: 'RSASSA-PKCS1-v1_5', modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: 'SHA-256' }, true, ['sign', 'verify']);
+  const pkcs8 = new Uint8Array(await crypto.subtle.exportKey('pkcs8', pair.privateKey));
+  const b64 = Buffer.from(pkcs8).toString('base64').replace(/(.{64})/g, '$1\n');
+  const file = {
+    type: 'service_account', project_id: 'asklocker-qa', client_email: 'fcm@asklocker-qa.iam.gserviceaccount.com',
+    private_key: `-----BEGIN PRIVATE KEY-----\n${b64}\n-----END PRIVATE KEY-----\n`,
+    token_uri: 'https://evil.example/token',
+  };
+  const sa = fcm.parseServiceAccount(JSON.stringify(file));
+  assert.ok(sa, 'the key file is read');
+  assert.equal(sa.projectId, 'asklocker-qa');
+  assert.equal(sa.tokenUri, 'https://oauth2.googleapis.com/token', 'only Google\'s token address, whatever the file says');
+  assert.deepEqual(fcm.parseServiceAccount(Buffer.from(JSON.stringify(file)).toString('base64')), sa, 'the same file in base64');
+  for (const bad of [undefined, '', 'not json', '{"project_id":"x"}', JSON.stringify({ ...file, private_key: 'nope' })]) {
+    assert.equal(fcm.parseServiceAccount(bad), null, String(bad).slice(0, 20));
+  }
+
+  const jwt = await fcm.signServiceAccountJwt(sa, 1_900_000_000);
+  const [h, c, sig] = jwt.split('.');
+  assert.deepEqual(JSON.parse(new TextDecoder().decode(fromBase64(h))), { alg: 'RS256', typ: 'JWT' });
+  assert.deepEqual(JSON.parse(new TextDecoder().decode(fromBase64(c))), {
+    iss: 'fcm@asklocker-qa.iam.gserviceaccount.com', scope: 'https://www.googleapis.com/auth/firebase.messaging',
+    aud: 'https://oauth2.googleapis.com/token', iat: 1_900_000_000, exp: 1_900_003_600,
+  });
+  assert.ok(await crypto.subtle.verify('RSASSA-PKCS1-v1_5', pair.publicKey, fromBase64(sig), new TextEncoder().encode(`${h}.${c}`)), 'the signature verifies');
+  assert.equal(new URLSearchParams(fcm.tokenRequestBody(jwt)).get('grant_type'), 'urn:ietf:params:oauth:grant-type:jwt-bearer');
+  assert.equal(fcm.fcmSendUrl('asklocker-qa'), 'https://fcm.googleapis.com/v1/projects/asklocker-qa/messages:send');
+
+  const token = 'dXk1:APA91bSAMPLE_token-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+  const body = fcm.fcmMessageBody(token, { title: 'Passport expires in 30 days', body: "Asha's passport", url: '/notifications', tag: 'fv-expiry-1' });
+  assert.deepEqual(body, { message: {
+    token,
+    notification: { title: 'Passport expires in 30 days', body: "Asha's passport" },
+    data: { url: '/notifications', tag: 'fv-expiry-1' },
+    android: { priority: 'HIGH', ttl: '86400s', notification: { channel_id: 'reminders', tag: 'fv-expiry-1' } },
+  } });
+  assert.ok(Object.values(body.message.data).every((v) => typeof v === 'string'), 'FCM data values are strings');
+
+  const sort = (status, error) => fcm.classifyFcmResponse(status, error ? { error } : null);
+  assert.deepEqual(sort(200), { ok: true, status: 200 });
+  const gone = (o) => [o.gone, o.transient];
+  assert.deepEqual(gone(sort(404, { status: 'NOT_FOUND', details: [{ errorCode: 'UNREGISTERED' }] })), [true, false]);
+  assert.deepEqual(gone(sort(400, { status: 'INVALID_ARGUMENT', message: 'The registration token is not a valid FCM registration token' })), [true, false]);
+  assert.deepEqual(gone(sort(400, { status: 'INVALID_ARGUMENT', details: [{ fieldViolations: [{ field: 'message.token' }] }] })), [true, false]);
+  assert.deepEqual(gone(sort(400, { status: 'INVALID_ARGUMENT', details: [{ fieldViolations: [{ field: 'message.notification.title' }] }] })), [false, false], 'a bad message keeps the token');
+  assert.deepEqual(gone(sort(403, { status: 'PERMISSION_DENIED', details: [{ errorCode: 'SENDER_ID_MISMATCH' }] })), [false, false], 'our own set-up wrong deletes nobody\'s phone');
+  for (const status of [0, 401, 429, 500, 503]) assert.deepEqual(gone(sort(status, { status: 'X' })), [false, true], String(status));
+
+  // The same token rule as 075's table check and save_fcm_token().
+  assert.ok(fcm.isFcmToken(token));
+  for (const bad of ['https://fcm.googleapis.com/fcm/send/x', 'short', `${'a'.repeat(40)} b`, 'a'.repeat(4097)]) assert.ok(!fcm.isFcmToken(bad), bad.slice(0, 20));
+  const sql = readFileSync(new URL('../../supabase/migrations/075_android_push.sql', import.meta.url), 'utf8');
+  assert.ok(sql.includes("'^[A-Za-z0-9_:.-]+$'") && sql.includes('BETWEEN 32 AND 4096'), '075 keeps the same token rule');
 });
 
 await test('questions.yaml is consistent with the fixtures', () => {
@@ -1568,9 +1627,15 @@ await test('the privacy policy names who gets document text and promises nothing
   assert.ok(!html.replace(/<script type="application\/ld\+json">[\s\S]*?<\/script>/g, '').includes('<script'), 'carries no script (no forwarder), so the installed app opens it as it is');
   const page = html.replace(/<(script|style)[\s\S]*?<\/\1>/g, ' ').replace(/<!--[\s\S]*?-->/g, '').replace(/<[^>]+>/g, ' ').replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/\s+/g, ' ');
   const words = page.toLowerCase();
-  for (const name of ['Supabase', 'Cloudflare', 'Anthropic', 'Groq', 'OCR.space', 'Google', 'Razorpay']) {
+  for (const name of ['Supabase', 'Cloudflare', 'Anthropic', 'Groq', 'OCR.space', 'Google', 'Razorpay', 'Firebase Cloud Messaging']) {
     assert.ok(page.includes(name), `names ${name}`);
   }
+  // The Android app (November 2026): its photos are read on the server, its
+  // notifications pass through Google in a form Google can read, and it takes
+  // no payments.
+  assert.ok(words.includes('photos you add in the android app'), 'says OCR.space reads photos added in the Android app');
+  assert.ok(words.includes('can read their title and line'), "says Android notifications aren't encrypted from Google");
+  assert.ok(words.includes('the android app takes no payments'), 'says the Android app takes no payments');
   assert.ok(words.includes('not end-to-end'), 'says documents are not end-to-end encrypted');
   assert.ok(words.includes('the people who run asklocker can open them'), 'says the people who run AskLocker can open documents');
   for (const claim of ['100% private', 'only you can see', 'nothing is kept', 'secure', 'bank-level', 'military-grade']) {
@@ -1581,6 +1646,44 @@ await test('the privacy policy names who gets document text and promises nothing
   assert.ok(words.includes('turn it off in settings › privacy'), 'says how to turn usage counts off');
   assert.ok(page.includes(`removed after ${DEFAULT_PLAN_LIMITS.graceDays} days`), 'the days before documents go follow the plan limits');
   assert.ok(/Last updated \d{1,2} [A-Z][a-z]+ \d{4}/.test(page), 'carries the date it last changed');
+});
+
+await test('the terms, refunds and contact pages say what AskLocker does, with the app\'s prices, and leave out facts not given', async () => {
+  // /terms, /refunds and /contact (site/pages/legal.mjs, words in
+  // site/content.mjs), for Razorpay's website review, the Play Store and
+  // India's IT Rules. Same rules as the policy: no promise AskLocker does not
+  // keep, numbers from the constants, and no placeholder for a fact the owner
+  // has not given (LEGAL in site/lib/facts.mjs): the line is left out instead.
+  const { LEGAL_PAGES, legalPage, legalText } = await import('../../site/pages/legal.mjs');
+  const { LEGAL } = await import('../../site/lib/facts.mjs');
+  assert.deepEqual(LEGAL_PAGES.map((d) => d.path), ['/terms', '/refunds', '/contact']);
+  for (const doc of LEGAL_PAGES) {
+    const html = legalPage(doc, { indexable: true, hasFilms: false });
+    assert.ok(!html.replace(/<script type="application\/ld\+json">[\s\S]*?<\/script>/g, '').includes('<script'), `${doc.path} carries no script`);
+    assert.ok(html.includes(`<link rel="canonical" href="https://asklocker.com${doc.path}">`), `${doc.path} is its own address`);
+    for (const path of ['/privacy', '/terms', '/refunds', '/contact']) assert.ok(html.includes(`href="${path}"`), `${doc.path}'s footer links to ${path}`);
+    const text = legalText(doc);
+    const words = text.toLowerCase();
+    for (const claim of ['100% private', 'only you can see', 'nothing is kept', 'secure', 'safe', 'private and isolated', 'bank-level', 'military-grade']) {
+      assert.ok(!words.includes(claim), `${doc.path} promises "${claim}"`);
+    }
+    for (const m of words.matchAll(/end-to-end/g)) {
+      assert.equal(words.slice(Math.max(0, m.index - 4), m.index), 'not ', `${doc.path} says end-to-end without "not"`);
+    }
+    assert.ok(!/\bnull\b|\bundefined\b|\[[a-z ]+\]|\bTODO\b|NaN/.test(text), `${doc.path} shows a missing fact or a placeholder`);
+  }
+  const [terms, refunds, contact] = LEGAL_PAGES.map(legalText);
+  for (const price of [plusAmount('inr', 'monthly'), plusAmount('inr', 'yearly'), plusAmount('inr', 'monthly', 'family_pro'), plusAmount('inr', 'yearly', 'family_pro'), plusAmount('usd', 'monthly'), plusAmount('usd', 'yearly')]) {
+    assert.ok(terms.includes(price), `the terms show ${price}, from plan-text.ts`);
+  }
+  for (const plan of BUSINESS_PLANS) assert.ok(terms.includes(businessAmount(plan)) && terms.includes(businessAmount(plan, 'yearly')), `the terms show ${plan}'s prices`);
+  assert.ok(terms.toLowerCase().includes(`after ${DEFAULT_PLAN_LIMITS.graceDays} days`) && refunds.includes(`after ${DEFAULT_PLAN_LIMITS.graceDays} days`), 'the days before documents go follow the plan limits');
+  assert.ok(terms.toLowerCase().includes('the android app takes no payments'), 'the terms say the Android app takes no payments');
+  assert.ok(refunds.toLowerCase().includes('nothing to cancel'), 'the refunds page says plans never renew by themselves');
+  assert.ok(contact.includes('within 24 hours') && contact.includes('within 15 days'), "the contact page gives the IT Rules' grievance times");
+  for (const [key, value] of Object.entries(LEGAL)) {
+    if (value) assert.ok(terms.includes(value) || contact.includes(value), `LEGAL.${key} appears once given`);
+  }
 });
 
 // ─── The public site (site/): asklocker.com's landing page and films ──────
@@ -2042,4 +2145,4 @@ if (failures.length) {
   console.error(`\n${failures.length} self-test(s) failed, ${passed} passed.`);
   process.exit(1);
 }
-console.log(`✓ ${passed} self-tests passed — matchers, judge, run-time PDF, metadata, ticket codes, text cleaning, Gmail rules and token sealing, kinship and the family tree, emergency card checks, web push, plan limits, questions each month, limits against abuse, business papers, categories and plan words, Razorpay signatures, numbers in digits, sources the answer used, Claude's requests in Groq's shape, search-vector providers and budget, the agreement's words, the privacy policy, the public site, end-to-end encryption's core, questions and budget.`);
+console.log(`✓ ${passed} self-tests passed — matchers, judge, run-time PDF, metadata, ticket codes, text cleaning, Gmail rules and token sealing, kinship and the family tree, emergency card checks, web push, Android notifications, plan limits, questions each month, limits against abuse, business papers, categories and plan words, Razorpay signatures, numbers in digits, sources the answer used, Claude's requests in Groq's shape, search-vector providers and budget, the agreement's words, the privacy policy, the public site, end-to-end encryption's core, questions and budget.`);

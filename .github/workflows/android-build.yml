@@ -1,0 +1,48 @@
+# Builds the Android app on Expo's servers (EAS Build).
+#
+# Run it by hand: Actions › Android build › Run workflow.
+#   preview     an .apk to install on a phone, against DEV (any branch)
+#   production  an .aab for Google Play, against PROD (main only)
+# The build's address appears in the run's log and on expo.dev; Expo emails
+# when it is done. Needs the EXPO_TOKEN secret (expo.dev › Account settings ›
+# Access tokens) in this repository's Settings › Secrets and variables ›
+# Actions. Which project each build talks to is in eas.json.
+
+name: Android build
+
+on:
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: Which build
+        type: choice
+        options: [preview, production]
+        default: preview
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    # A production build is bound to PROD's data: only from main.
+    if: inputs.profile != 'production' || github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Check the token is there
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          if [ -z "$EXPO_TOKEN" ]; then
+            echo "::error::Add the EXPO_TOKEN secret first (see the top of this file)."
+            exit 1
+          fi
+      - name: Start the build
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: npx --yes eas-cli@latest build --platform android --profile "${{ inputs.profile }}" --non-interactive --no-wait

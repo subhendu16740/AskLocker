@@ -3,7 +3,7 @@
 // Markdown, per llmstxt.org) and llms-full.txt (the whole landing page and
 // every transcript, in Markdown).
 
-import { about, faq, hero, meta, modes, policy, privacy } from '../content.mjs';
+import { about, contact, faq, hero, meta, modes, policy, privacy, refunds, terms } from '../content.mjs';
 import { SITE_URL, SUPPORT_EMAIL, businessPlans, familyPlans, rupees } from '../lib/facts.mjs';
 import { abs, clock } from '../lib/html.mjs';
 import { transcriptText } from './films.mjs';
@@ -46,6 +46,7 @@ export function sitemapXml({ videos }) {
   const urls = [
     `<url><loc>${abs('/')}</loc></url>`,
     `<url><loc>${abs('/privacy')}</loc><lastmod>${policy.updated}</lastmod></url>`,
+    ...[terms, refunds, contact].map((d) => `<url><loc>${abs(d.path)}</loc><lastmod>${d.updated}</lastmod></url>`),
   ];
   if (published.length) urls.push(`<url><loc>${abs('/videos')}</loc><lastmod>${published.map((v) => v.uploadDate).sort().at(-1)}</lastmod></url>`);
   for (const v of published) {
@@ -81,6 +82,9 @@ export function llmsTxt({ videos }) {
     '',
     `- [AskLocker](${abs('/')}): what it does, how it works, plans and prices, privacy, FAQ`,
     `- [Privacy policy](${abs('/privacy')}): what is kept, who can open documents, every service used`,
+    `- [Terms of service](${abs('/terms')}): accounts, plans and prices, your documents, fair use`,
+    `- [Refunds and cancellation](${abs('/refunds')}): refunds within a week of paying; nothing renews by itself`,
+    `- [Contact](${abs('/contact')}): support, and where complaints go`,
     ...(published.length ? [`- [Films](${abs('/videos')}): short films of the app, each with a transcript`] : []),
     '',
     ...(published.length ? [

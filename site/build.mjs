@@ -9,6 +9,8 @@
 //   videos.html           /videos, every film
 //   videos/<slug>.html    /videos/<slug>, one film, its transcript and chapters
 //   privacy.html          /privacy, the privacy policy
+//   terms.html  refunds.html  contact.html
+//                         /terms, /refunds, /contact (pages/legal.mjs)
 //   media/                the films' files and the share card
 //   robots.txt  sitemap.xml  llms.txt  llms-full.txt
 //
@@ -35,6 +37,8 @@ import { fileURLToPath } from 'node:url';
 import { landingPage } from './pages/landing.mjs';
 import { filmsIndexPage, watchPage } from './pages/films.mjs';
 import { privacyPage } from './pages/privacy.mjs';
+import { LEGAL_PAGES, legalPage } from './pages/legal.mjs';
+import { missingLegalFacts } from './lib/facts.mjs';
 import { llmsFullTxt, llmsTxt, robotsTxt, sitemapXml } from './pages/machine.mjs';
 import { loadVideos } from './lib/videos.mjs';
 import { LANDING_RULE, PUBLIC_PATHS, SITE_NAMES, appRoutes } from './lib/routes.mjs';
@@ -44,7 +48,7 @@ const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const SITE = fileURLToPath(new URL('.', import.meta.url));
 
 /** Files this writes at the top; public/ must not hold them too. */
-const SITE_FILES = ['robots.txt', 'sitemap.xml', 'llms.txt', 'llms-full.txt', 'landing.html', 'videos.html', 'privacy.html'];
+const SITE_FILES = ['robots.txt', 'sitemap.xml', 'llms.txt', 'llms-full.txt', 'landing.html', 'videos.html', 'privacy.html', 'terms.html', 'refunds.html', 'contact.html'];
 
 const args = process.argv.slice(2);
 const preview = args.includes('--preview');
@@ -91,6 +95,9 @@ function main() {
 
   write(join(out, 'landing.html'), landingPage({ videos, indexable }));
   write(join(out, 'privacy.html'), privacyPage({ indexable, hasFilms: videos.length > 0 }));
+  for (const doc of LEGAL_PAGES) write(join(out, `${doc.path.slice(1)}.html`), legalPage(doc, { indexable, hasFilms: videos.length > 0 }));
+  const missing = missingLegalFacts();
+  if (missing.length) log(`warning: /terms and /contact leave out what isn't given yet in site/lib/facts.mjs (LEGAL): ${missing.join('; ')}.`);
   if (videos.length) {
     write(join(out, 'videos.html'), filmsIndexPage({ videos, indexable }));
     for (const v of videos) {
@@ -129,7 +136,7 @@ function main() {
   }
 
   const drafts = videos.filter((v) => v.draft).length;
-  log(`${production ? 'Production' : 'Not production (noindex, drafts shown)'}: wrote the landing page, the privacy policy, ${videos.length - drafts} published film(s)${drafts ? ` and ${drafts} draft(s)` : ''}, robots.txt, sitemap.xml, llms.txt and llms-full.txt into ${out}.`);
+  log(`${production ? 'Production' : 'Not production (noindex, drafts shown)'}: wrote the landing page, the privacy policy, the terms, refunds and contact pages, ${videos.length - drafts} published film(s)${drafts ? ` and ${drafts} draft(s)` : ''}, robots.txt, sitemap.xml, llms.txt and llms-full.txt into ${out}.`);
 }
 
 main();

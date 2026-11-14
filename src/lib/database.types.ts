@@ -1112,33 +1112,36 @@ export type Database = {
       }
       push_subscriptions: {
         Row: {
-          auth: string
+          auth: string | null
           created_at: string
           endpoint: string
           id: string
+          kind: string
           label: string | null
           last_used_at: string | null
-          p256dh: string
+          p256dh: string | null
           user_id: string
         }
         Insert: {
-          auth: string
+          auth?: string | null
           created_at?: string
           endpoint: string
           id?: string
+          kind?: string
           label?: string | null
           last_used_at?: string | null
-          p256dh: string
+          p256dh?: string | null
           user_id: string
         }
         Update: {
-          auth?: string
+          auth?: string | null
           created_at?: string
           endpoint?: string
           id?: string
+          kind?: string
           label?: string | null
           last_used_at?: string | null
-          p256dh?: string
+          p256dh?: string | null
           user_id?: string
         }
         Relationships: [
@@ -1810,6 +1813,8 @@ export type Database = {
         Args: { p_backup: string | null; p_encrypt_public: string; p_fingerprint: string; p_sign_public: string }
         Returns: number
       }
+      // 075: the Android app's FCM token (hand-written)
+      save_fcm_token: { Args: { p_token: string; p_label?: string | null }; Returns: undefined }
       // 071: locked vaults (hand-written; the app calls them through e2e-api.ts)
       replace_my_identity: {
         Args: { p_encrypt_public: string; p_sign_public: string; p_fingerprint: string; p_backup?: string | null }

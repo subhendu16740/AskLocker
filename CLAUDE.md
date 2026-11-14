@@ -194,7 +194,9 @@ Four things will mislead you if you assume otherwise:
    devices' values (`offer_device_nonce`, `reveal_device_nonce`, the
    caller's own requests), everything new is sealed with a vault's latest
    key, and a person's keys can be made only where `e2e_config` allows it:
-   see the same section).
+   see the same section; 075's Android phones are their owner's
+   `push_subscriptions` rows too, saved only through `save_fcm_token` (from
+   `auth.uid()`)).
    **A new writable
    column needs its own `GRANT` in a migration.** Nobody joins a family
    without saying yes: only an admin asks a person in, through the
@@ -539,7 +541,10 @@ API keys: **test keys on DEV, live keys on PROD only** — QA fails a live key
 on DEV), `RAZORPAY_WEBHOOK_SECRET` (the secret typed into Razorpay's
 webhook settings) and, optionally, `RAZORPAY_CURRENCIES` (`INR` unless set;
 `INR,USD` once international payments are on in Razorpay). Without the two
-keys a project takes no payments and Family Plus says "Coming soon"
+keys a project takes no payments and Family Plus says "Coming soon". For
+notifications in the Android app, `FCM_SERVICE_ACCOUNT`: the Firebase
+project's service-account key file, as JSON or base64 (075; without it
+Android phones get nothing and Web Push is unaffected)
 (`SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are injected automatically).
 
 **Local dev only:** `WEB_HOST` (Firebase Studio; see [App config](#app-config)).
@@ -626,9 +631,14 @@ The top of the page is a carousel of Family and Business, and the sections
 below follow it, both in the HTML (`/#business` opens the business side).
 Production builds are indexable and carry published films only; every other
 build is `noindex`, its `robots.txt` shuts everything, and it shows draft
-films for review on DEV. **No app route may be called `landing`, `videos`
-or `media`, and `public/` must not hold `robots.txt`, `sitemap.xml` or
-`llms*.txt`**: the site writes them, and its build stops on either.
+films for review on DEV. It also writes the privacy policy and, since 14
+November 2026, `/terms`, `/refunds` and `/contact` (`site/pages/legal.mjs`,
+for Razorpay's website review, Google Play and India's IT Rules); facts only
+the owner can give (`LEGAL` in `site/lib/facts.mjs`) are left off the pages
+while null, and the build warns. **No app route may be called `landing`,
+`videos`, `media`, `privacy`, `terms`, `refunds` or `contact`, and `public/`
+must not hold `robots.txt`, `sitemap.xml`, `llms*.txt` or those pages'
+`.html`**: the site writes them, and its build stops on either.
 
 **No page may be framed.** `public/_headers` (copied to `dist/` by the
 export, read by Cloudflare Pages) sends `X-Frame-Options: DENY` and
@@ -841,16 +851,57 @@ copies, so DEV needs its own secrets and its own `documents` storage bucket.
   `expo-local-authentication` for the lock. Settings does not offer it there
   meanwhile.
 
-### Native (not yet set up)
+### Android — EAS builds (since 14 November 2026)
 
-There is no `eas.json`, no `expo-updates`, and no EAS project ID. Native
-distribution is not wired up. Before a first EAS build:
-
-- `app.config.ts` sets `android.package: "com.asklocker.app"` (it was the
-  `create-expo-app` default, `com.anonymous.familyvault`, until the app
-  was named). Android package names are permanent once published to Play,
-  so it was set before the first build.
-- There is no `ios.bundleIdentifier` at all; an iOS build needs one.
+- **`eas.json` has two profiles**: `preview`, an .apk to install on a
+  phone, against DEV; `production`, an .aab for Google Play, against PROD.
+  Each carries its project's URL and public anon key (`env`), so a build is
+  bound to its project as a web build is. EAS keeps the version code
+  (`appVersionSource: remote`, `autoIncrement`). No `expo-updates`: a change
+  reaches phones only by a new build.
+- **Builds start by hand**: Actions › Android build
+  (`.github/workflows/android-build.yml`), with the `EXPO_TOKEN` secret; a
+  production build only from `main`. `app.config.ts` reads the Expo
+  project's id (`EAS_PROJECT_ID`, not a secret). EAS makes and keeps the
+  upload key; the first .aab goes to Play by hand, Play signs the rest.
+- **React Native 0.83.2, React 19.2.0**: what Expo SDK 55 is built and
+  tested with (0.84.1 was installed until then). Check
+  `npx expo install --check` before an SDK move or a native build.
+  `@expo/vector-icons` is a declared dependency: with React Native moved,
+  npm stopped hoisting it out of `expo`.
+- **The Android app sells nothing** (`src/lib/selling.ts`): Google Play
+  allows paying for a digital plan in an Android app only through Play's
+  own billing, which AskLocker does not use, and an app may not point
+  anyone to pay elsewhere. So Plans shows what each plan includes and what
+  the vault has used, with no price, no Pay or Ask us button, and nothing
+  about where to pay; full-vault messages say only how to make room
+  (`upsell: false` in `plan-text.ts`); Help names no price. A vault paid for
+  on the website has its plan in the app too. Selling in the app needs Play
+  Billing (or Play's user choice billing in India), a change of its own.
+- **No gallery permission**: Android's photo picker needs none, so
+  `blockedPermissions` keeps out READ_MEDIA_* and the rest Play asks apps to
+  justify; the camera stays. Gallery asks for nothing.
+- **Photos are read on the server**, not on the phone (`ocr.ts`):
+  react-native-mlkit-ocr (2021, Latin only, older than React Native's new
+  architecture) was removed. A photo over 950 KB is redrawn as a JPEG of at
+  most 2,000 pixels first (`photo-size.ts`), since OCR.space takes 1 MB at
+  most on its free plan. English only, like ML Kit before it.
+- **Uploads send bytes** (`file-bytes.ts`): a React Native Blob can arrive
+  empty at Storage (Supabase's own advice), so the phone app uploads an
+  ArrayBuffer.
+- **Notifications reach the phone through Google's FCM** (075), sent by our
+  own push function, never through Expo's push service: see
+  [Reminders](#reminders--once-per-stage-on-every-device-that-asks-034).
+  A build needs Firebase's `google-services.json` (the EAS file variable
+  `GOOGLE_SERVICES_JSON`); without it the build still works and Settings ›
+  Notifications says they aren't ready.
+- **Google sign-in** is the redirect through Supabase, back to
+  `asklocker://` (`makeRedirectUri()`): each project's Authentication › URL
+  Configuration must list `asklocker://**`.
+- **Not in the Android app yet**: speech to text (the keyboard shows; answers
+  are still read aloud), fingerprint sign-in, share links, Gmail import,
+  locked vaults, paying. Each is hidden there, never a dead button.
+- There is no `ios.bundleIdentifier`; an iOS build needs one.
 
 `/ios` and `/android` are gitignored, so the project uses continuous native
 generation — which is the layout EAS expects. Nothing needs restructuring.
@@ -972,6 +1023,8 @@ tabs. `(tabs)` is a layout group, so routes are `/home`, `/search`, `/upload`.
 | `spreadsheet.ts` | Reading a spreadsheet when it is added (`readSpreadsheet()`): .xlsx with read-excel-file's universal build, loaded only then, .csv with the shared parser, both into `_shared/spreadsheet-text.ts`'s rows; see [Spreadsheets](#spreadsheets--xlsx-and-csv-read-in-the-app-061) |
 | `app-info.ts` | Version, release date and commit (stamped into `extra` by `app.config.ts` at build time), and the support contact Help and the privacy policy show (`support@asklocker.com`, Cloudflare Email Routing) |
 | `ocr.ts` | Platform-split OCR with progress callback; reads the person's chosen languages |
+| `selling.ts` | `sellsInApp`: whether this build shows prices and takes payments (the website only; Google Play's rules for the Android app, see [Android](#android--eas-builds-since-14-november-2026)) |
+| `photo-size.ts` / `.web.ts`, `file-bytes.ts` | The phone app's photos made small enough for the server's reader (under 950 KB), and a picked file's bytes on every platform (the phone app uploads bytes, not a Blob) |
 | `ocr-languages.ts` | The document-language picker list, and `resolveOcrLanguages()` which always appends English |
 | `vault-keys.ts` / `vault-keys.web.ts` | A person's encryption keys on this device (070, 071, test builds only): `ensureKeys()` makes them without a screen; kept twice in IndexedDB (`asklocker-keys`); `addPhoneLock()` / `unlockWithPhoneLock()` (a passkey's PRF), `startDeviceRequest()` / `pendingDeviceRequests()` / `approveDeviceRequest()` (the code from both devices' values, 074), `prepareBackupKey()` / `unlockWithRecoveryKey()`, `makeNewKeys()`, `myDeviceIdentity()`, `forgetKeysOnThisDevice()` (also on deleting the account, and at sign-out on a shared computer: `setForgetKeysOnSignOut()`, `forgetKeysAtSignOut()` from `auth.tsx`, 074), `keysErrorText()`. Types in `vault-keys-types.ts`. See [Locked vaults](#locked-vaults--end-to-end-encryption-vault-by-vault-test-builds-only-070-071) |
 | `vault-lock.ts` / `vault-lock.web.ts` | Locked vaults (071, 073, 074): `lockVault()`, `tendVault()` (also each person's own older documents still readable), `approveMember()`, `trustMember()` (074: after comparing key IDs), `vaultKeys()` (only versions whose maker signed them and whose key matches), `sealDocument()`, `readOnDevice()`, `overlaySealed()` (names, and whose a document is), `documentDetails()`, `openDocumentFile()`, `renameLockedDocument()` / `updateLockedDocument()` (whose and its category sealed too, 074), `safeMime()`, `searchLockedVaults()` (relations resolved from the opened tree), `lockedExpiries()`, `documentFileKeyText()` / `openSharedFile()`, `sealChat()` / `openChat()`, `moveOlderDocuments()`; 073's `overlayVaultNames()`, `openLockedTree()`, `sealPerson()`, `addSealedPerson()`, `sealTreeLinks()`, `lockedCards()` / `sealCard()`, `sealNoteBody()` / `openNoteBody()`, `moveVaultDetails()`, `lockedOverview()` |
@@ -988,7 +1041,7 @@ tabs. `(tabs)` is a layout group, so routes are `/home`, `/search`, `/upload`.
 | `speech-text.ts` | `toSpeech()`: strips markdown and spells out ID numbers before they are read aloud — and a number named as one ("train number 16782", "PNR: 4512", "PIN 751001", "नंबर 16782") digit by digit, from its digits; the screen keeps the digits |
 | `voice-languages.ts` | The language picker list and the few phrases the app itself says, per language |
 | `storage.ts` | Key-value cache: localStorage on web, AsyncStorage on native |
-| `database.types.ts` | Generated Supabase types, current to 074 (070's, 071's, 073's and 074's functions added by hand) (030, 052, 055, 058, 059, 061, 063 and 072 changed nothing in them, nor did 065, whose one function only the Edge Functions call, nor 066 and 067, numbers and function bodies; 049's, 050's, 051's, 053's, 054's, 056's, 057's, 060's, 062's, 064's, 068's and 069's added by hand). Regenerate after every migration and re-append the hand-written block at the bottom (see the typecheck note) |
+| `database.types.ts` | Generated Supabase types, current to 075 (070's, 071's, 073's, 074's and 075's functions added by hand, and 075's `push_subscriptions.kind`) (030, 052, 055, 058, 059, 061, 063 and 072 changed nothing in them, nor did 065, whose one function only the Edge Functions call, nor 066 and 067, numbers and function bodies; 049's, 050's, 051's, 053's, 054's, 056's, 057's, 060's, 062's, 064's, 068's and 069's added by hand). Regenerate after every migration and re-append the hand-written block at the bottom (see the typecheck note) |
 
 ---
 
@@ -1011,6 +1064,7 @@ src/lib/vault-lock.ts              /  vault-lock.web.ts
 src/lib/on-device-model.ts         /  on-device-model.web.ts
 src/lib/on-device-reader.ts        /  on-device-reader.web.ts
 src/lib/gmail-device.ts            /  gmail-device.web.ts
+src/lib/photo-size.ts              /  photo-size.web.ts
 src/app/+html.tsx                     (web only — HTML shell, @font-face; NOT used by the single-page export)
 public/sw.js                          (web only — the service worker that shows notifications)
 src/global.css                        (web only)
@@ -1018,16 +1072,16 @@ src/global.css                        (web only)
 
 Plus 15 `Platform.OS === 'web'` branches across `src/`. The important ones:
 
-- **`src/lib/ocr.ts`** runs two entirely different OCR engines —
-  `tesseract.js` (WASM) on web, `react-native-mlkit-ocr` (native module) on
-  Android/iOS. Touching this file means reasoning about both.
+- **`src/lib/ocr.ts`** reads photos with `tesseract.js` (WASM) on web; the
+  phone app reads nothing and sends the photo, made small by
+  `photo-size.ts`, for the server to read (OCR.space, English only; see
+  [Android](#android--eas-builds-since-14-november-2026)).
   **Languages diverge here.** Tesseract reads every Indian script, fetching
   each ~10-20MB model from a CDN on first use, so the web build honours the
-  person's Settings › Documents choice in full. The bundled ML Kit package
-  (`play-services-mlkit-text-recognition`) reads **Latin script only** —
-  Devanagari and the rest are separate ML Kit artifacts needing a native
-  build — so the upload screen warns via `ocrLanguageGapOnThisDevice()`
-  rather than silently returning garbage.
+  person's Settings › Documents choice in full. The server's reader, which
+  reads the phone app's photos, is **English only**, so the upload screen
+  warns via `ocrLanguageGapOnThisDevice()` rather than silently returning
+  garbage.
 - **Pickers return different uris.** On native a picked file's uri ends in a
   real file name (`…/ImagePicker/abc.jpeg`); on the web it is
   `blob:https://host/<id>`, with no name in it at all. Upload used to take
@@ -1617,8 +1671,34 @@ where it does not.
   allows it only to a web app on the Home Screen (iOS 16.4 or later), hence
   `public/manifest.json`, linked by `_layout.tsx` at start-up — the
   single-page export never uses `+html.tsx`, so a tag added there reaches no
-  page; the screen says how. The phone app's
-  `push.ts` is a stand-in until EAS builds exist (Expo push, also free).
+  page; the screen says how.
+- **The Android app: Google's FCM, sent by us (075).** The phone gives a
+  Firebase Cloud Messaging token (`src/lib/push.ts`,
+  `Notifications.getDevicePushTokenAsync()`), saved for the signed-in person
+  by `save_fcm_token()` (from `auth.uid()`) as a `push_subscriptions` row of
+  `kind` 'fcm'. The push function sends to FCM's HTTP v1 API itself, with
+  the Firebase project's service account (`FCM_SERVICE_ACCOUNT`; the OAuth
+  JWT is signed in WebCrypto, `_shared/fcm.ts`, which the self-test checks),
+  never through Expo's push service, so no other company sees a reminder;
+  Google, which carries every Android notification, sees its title and line.
+  A token FCM calls unregistered, or not a token, is forgotten as a gone
+  browser is; a busy FCM is tried again within the day; a refusal of our own
+  set-up (403) deletes nobody's phone. Without the secret those phones are
+  skipped and Web Push carries on. `push_pending()` keeps returning browsers
+  only, so a push function from before 075 never posts a token to a Web Push
+  address; `push_pending_devices()` returns both kinds. A tap opens
+  Notifications (`useNotificationTaps()`, in the root layout, once signed
+  in). The iPhone app's push (APNs) is not set up: it says it can't show
+  them. **To switch it on**, the owner: (1) makes a Firebase project (or
+  uses the Google Cloud project's) and adds an Android app,
+  `com.asklocker.app`; (2) downloads its `google-services.json` and gives it
+  to EAS as a file variable named `GOOGLE_SERVICES_JSON` (`app.config.ts`
+  reads it, or a `google-services.json` beside it; a build without one works
+  and says notifications aren't ready); not committed, though it holds no
+  secret, since this repository is public; (3) makes a service-account key
+  (Firebase › Project settings › Service accounts › Generate new private
+  key) and sets it as `FCM_SERVICE_ACCOUNT` on DEV and PROD; (4) applies 075
+  to DEV, then PROD, before the push function that reads it.
 - **`push_subscriptions` is its owner's**: RLS SELECT and DELETE on your own
   rows, written only by `save_push_subscription()` (from `auth.uid()`). An
   endpoint is one browser, so it moves to whoever signs in there. It must be
@@ -1653,8 +1733,8 @@ where it does not.
   (`users.birthday_reminders`, on by default, its own column grant). The tree
   has no "passed away" yet: for someone who has, an admin removes their date
   of birth — the switch's text says so.
-- **Not built yet:** email (needs a paid domain); notifications in the phone
-  app.
+- **Not built yet:** email (needs a paid domain); notifications in the
+  iPhone app (APNs).
 
 ### Share links — one document, for someone outside the family (036)
 
@@ -3403,6 +3483,8 @@ where it does not.
   [Reminders](#reminders--once-per-stage-on-every-device-that-asks-034)):
   `key` and `test` for a signed-in person, `send` for the hourly clock (open
   by design: it reads nothing from the request and returns only counts).
+  Browsers by Web Push, Android phones by FCM with `FCM_SERVICE_ACCOUNT`
+  (075; before 075 it reads `push_pending()`, browsers only).
   503 `needs_migration` where 034 is not applied.
 - **`share`** — opens a share link for someone with no account (036; see
   [Share links](#share-links--one-document-for-someone-outside-the-family-036)):
@@ -3994,8 +4076,12 @@ rule again once pinned chunks are mixed in.
     every question, for search, once its keys are set; until then the
     search vectors are made on AskLocker's own servers, gte-small), Anthropic and Groq (the passages an answer
     is written from, and the chat: Claude first where its key is set, Groq
-    otherwise) and OCR.space (scanned PDFs, photos imported from Gmail).
-    PostHog gets usage counts, and never any of it.
+    otherwise) and OCR.space (scanned PDFs, photos imported from Gmail,
+    and every photo added in the Android app, which reads none on the
+    phone). In the Android app, notifications pass through Google's
+    Firebase Cloud Messaging, which can read their title and line (Web
+    Push on the website is encrypted to the device). PostHog gets usage
+    counts, and never any of it.
 
   So no screen, notification, README, store listing or page of the public
   site (`site/`, checked by the QA self-test with its films' transcripts)

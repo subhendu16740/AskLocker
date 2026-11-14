@@ -13,6 +13,7 @@
 // without arrayBuffer(); it has not been tried on a phone build yet.
 // ────────────────────────────────────────────────────────────────
 
+import { bytesOf, readerResult } from './file-bytes';
 import {
   parseCsv, spreadsheetText, type SheetCell, type SpreadsheetText, type SpreadsheetType,
 } from '../../supabase/functions/_shared/spreadsheet-text';
@@ -21,29 +22,6 @@ export { isSpreadsheetType, type SpreadsheetText } from '../../supabase/function
 
 /** Couldn't be read: a broken file, or one with a password. Said as it comes. */
 export class SpreadsheetReadError extends Error {}
-
-function readerResult<T>(read: (reader: FileReader) => void): Promise<T> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as T);
-    reader.onerror = () => reject(reader.error);
-    read(reader);
-  });
-}
-
-async function bytesOf(blob: Blob): Promise<ArrayBuffer> {
-  if (typeof blob.arrayBuffer === 'function') return blob.arrayBuffer();
-  try {
-    return await readerResult<ArrayBuffer>((r) => r.readAsArrayBuffer(blob));
-  } catch {
-    // A phone's FileReader may only give a data: URL.
-    const url = await readerResult<string>((r) => r.readAsDataURL(blob));
-    const binary = atob(url.slice(url.indexOf(',') + 1));
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-    return bytes.buffer;
-  }
-}
 
 async function textOf(blob: Blob): Promise<string> {
   if (typeof blob.text === 'function') return blob.text();

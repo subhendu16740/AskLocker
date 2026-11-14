@@ -12,10 +12,10 @@ const APP_DIR = fileURLToPath(new URL('../../src/app/', import.meta.url));
 export const LANDING_RULE = '/ /landing 200';
 
 /** Top-level names the site writes; none may be an app route. */
-export const SITE_NAMES = ['landing', 'videos', 'media'];
+export const SITE_NAMES = ['landing', 'videos', 'media', 'privacy', 'terms', 'refunds', 'contact'];
 
 /** Public files that robots.txt must let through, whatever the app's routes start with. */
-export const PUBLIC_PATHS = ['/sitemap.xml', '/llms.txt', '/llms-full.txt', '/privacy', '/videos', '/media/'];
+export const PUBLIC_PATHS = ['/sitemap.xml', '/llms.txt', '/llms-full.txt', '/privacy', '/terms', '/refunds', '/contact', '/videos', '/media/'];
 
 /** The app's top-level routes, from src/app (expo-router: the file path is the route). */
 export function appRoutes(dir = APP_DIR) {

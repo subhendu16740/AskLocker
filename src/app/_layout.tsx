@@ -11,6 +11,7 @@ import { AnalyticsTracker } from '../components/analytics-tracker';
 import { AppLockProvider } from '../lib/app-lock';
 import { AppLockScreen } from '../components/app-lock-screen';
 import { AgreementScreen } from '../components/agreement-screen';
+import { useNotificationTaps } from '../lib/push';
 
 function AuthGate() {
   const { session, loading: authLoading } = useAuth();
@@ -40,6 +41,13 @@ function AuthGate() {
     }
   }, [session, authLoading, segments, needsWelcome]);
 
+  return null;
+}
+
+/** A tapped notification opens Notifications, once signed in (the phone app, 075). */
+function NotificationTaps() {
+  const { session, loading } = useAuth();
+  useNotificationTaps(!loading && !!session);
   return null;
 }
 
@@ -83,6 +91,7 @@ export default function RootLayout() {
       <PreferencesProvider>
       <FamilyProvider>
         <AuthGate />
+        <NotificationTaps />
         <Stack screenOptions={{ headerShown: false }}>
           <Stack.Screen name="index" />
           <Stack.Screen name="onboarding" />

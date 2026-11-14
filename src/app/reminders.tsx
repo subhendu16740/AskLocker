@@ -50,9 +50,9 @@ export default function RemindersScreen() {
             Your family gets a reminder 90, 30 and 7 days before a document expires, and on the day.
           </Text>
           <Text style={styles.plusCardNote}>
-            They show under the bell on Home{Platform.OS === 'web' ? ', and on any device where you turn them on' : ''}.
+            They show under the bell on Home{Platform.OS !== 'ios' ? ', and on any device where you turn them on' : ''}.
           </Text>
-          {Platform.OS === 'web' && (
+          {Platform.OS !== 'ios' && (
             <TouchableOpacity
               style={styles.plusCardLink}
               onPress={() => router.push('/settings/notifications' as any)}

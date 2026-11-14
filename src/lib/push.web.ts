@@ -169,3 +169,6 @@ export async function sendTestPush(): Promise<TestResult> {
   if (error) throw new Error("Couldn't send a test. Try again.");
   return { devices: data?.devices ?? 0, sent: data?.sent ?? 0 };
 }
+
+/** The phone app opens Notifications from a tapped notification (push.ts); here public/sw.js does. */
+export function useNotificationTaps(_ready: boolean): void {}
