@@ -889,6 +889,12 @@ copies, so DEV needs its own secrets and its own `documents` storage bucket.
 - **Uploads send bytes** (`file-bytes.ts`): a React Native Blob can arrive
   empty at Storage (Supabase's own advice), so the phone app uploads an
   ArrayBuffer.
+- **Notifications reach the phone through Google's FCM** (075), sent by our
+  own push function, never through Expo's push service: see
+  [Reminders](#reminders--once-per-stage-on-every-device-that-asks-034).
+  A build needs Firebase's `google-services.json` (the EAS file variable
+  `GOOGLE_SERVICES_JSON`); without it the build still works and Settings ›
+  Notifications says they aren't ready.
 - **Google sign-in** is the redirect through Supabase, back to
   `asklocker://` (`makeRedirectUri()`): each project's Authentication › URL
   Configuration must list `asklocker://**`.
