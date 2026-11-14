@@ -1568,9 +1568,15 @@ await test('the privacy policy names who gets document text and promises nothing
   assert.ok(!html.replace(/<script type="application\/ld\+json">[\s\S]*?<\/script>/g, '').includes('<script'), 'carries no script (no forwarder), so the installed app opens it as it is');
   const page = html.replace(/<(script|style)[\s\S]*?<\/\1>/g, ' ').replace(/<!--[\s\S]*?-->/g, '').replace(/<[^>]+>/g, ' ').replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/\s+/g, ' ');
   const words = page.toLowerCase();
-  for (const name of ['Supabase', 'Cloudflare', 'Anthropic', 'Groq', 'OCR.space', 'Google', 'Razorpay']) {
+  for (const name of ['Supabase', 'Cloudflare', 'Anthropic', 'Groq', 'OCR.space', 'Google', 'Razorpay', 'Firebase Cloud Messaging']) {
     assert.ok(page.includes(name), `names ${name}`);
   }
+  // The Android app (November 2026): its photos are read on the server, its
+  // notifications pass through Google in a form Google can read, and it takes
+  // no payments.
+  assert.ok(words.includes('photos you add in the android app'), 'says OCR.space reads photos added in the Android app');
+  assert.ok(words.includes('can read their title and line'), "says Android notifications aren't encrypted from Google");
+  assert.ok(words.includes('the android app takes no payments'), 'says the Android app takes no payments');
   assert.ok(words.includes('not end-to-end'), 'says documents are not end-to-end encrypted');
   assert.ok(words.includes('the people who run asklocker can open them'), 'says the people who run AskLocker can open documents');
   for (const claim of ['100% private', 'only you can see', 'nothing is kept', 'secure', 'bank-level', 'military-grade']) {
@@ -1581,6 +1587,44 @@ await test('the privacy policy names who gets document text and promises nothing
   assert.ok(words.includes('turn it off in settings › privacy'), 'says how to turn usage counts off');
   assert.ok(page.includes(`removed after ${DEFAULT_PLAN_LIMITS.graceDays} days`), 'the days before documents go follow the plan limits');
   assert.ok(/Last updated \d{1,2} [A-Z][a-z]+ \d{4}/.test(page), 'carries the date it last changed');
+});
+
+await test('the terms, refunds and contact pages say what AskLocker does, with the app\'s prices, and leave out facts not given', async () => {
+  // /terms, /refunds and /contact (site/pages/legal.mjs, words in
+  // site/content.mjs), for Razorpay's website review, the Play Store and
+  // India's IT Rules. Same rules as the policy: no promise AskLocker does not
+  // keep, numbers from the constants, and no placeholder for a fact the owner
+  // has not given (LEGAL in site/lib/facts.mjs): the line is left out instead.
+  const { LEGAL_PAGES, legalPage, legalText } = await import('../../site/pages/legal.mjs');
+  const { LEGAL } = await import('../../site/lib/facts.mjs');
+  assert.deepEqual(LEGAL_PAGES.map((d) => d.path), ['/terms', '/refunds', '/contact']);
+  for (const doc of LEGAL_PAGES) {
+    const html = legalPage(doc, { indexable: true, hasFilms: false });
+    assert.ok(!html.replace(/<script type="application\/ld\+json">[\s\S]*?<\/script>/g, '').includes('<script'), `${doc.path} carries no script`);
+    assert.ok(html.includes(`<link rel="canonical" href="https://asklocker.com${doc.path}">`), `${doc.path} is its own address`);
+    for (const path of ['/privacy', '/terms', '/refunds', '/contact']) assert.ok(html.includes(`href="${path}"`), `${doc.path}'s footer links to ${path}`);
+    const text = legalText(doc);
+    const words = text.toLowerCase();
+    for (const claim of ['100% private', 'only you can see', 'nothing is kept', 'secure', 'safe', 'private and isolated', 'bank-level', 'military-grade']) {
+      assert.ok(!words.includes(claim), `${doc.path} promises "${claim}"`);
+    }
+    for (const m of words.matchAll(/end-to-end/g)) {
+      assert.equal(words.slice(Math.max(0, m.index - 4), m.index), 'not ', `${doc.path} says end-to-end without "not"`);
+    }
+    assert.ok(!/\bnull\b|\bundefined\b|\[[a-z ]+\]|\bTODO\b|NaN/.test(text), `${doc.path} shows a missing fact or a placeholder`);
+  }
+  const [terms, refunds, contact] = LEGAL_PAGES.map(legalText);
+  for (const price of [plusAmount('inr', 'monthly'), plusAmount('inr', 'yearly'), plusAmount('inr', 'monthly', 'family_pro'), plusAmount('inr', 'yearly', 'family_pro'), plusAmount('usd', 'monthly'), plusAmount('usd', 'yearly')]) {
+    assert.ok(terms.includes(price), `the terms show ${price}, from plan-text.ts`);
+  }
+  for (const plan of BUSINESS_PLANS) assert.ok(terms.includes(businessAmount(plan)) && terms.includes(businessAmount(plan, 'yearly')), `the terms show ${plan}'s prices`);
+  assert.ok(terms.toLowerCase().includes(`after ${DEFAULT_PLAN_LIMITS.graceDays} days`) && refunds.includes(`after ${DEFAULT_PLAN_LIMITS.graceDays} days`), 'the days before documents go follow the plan limits');
+  assert.ok(terms.toLowerCase().includes('the android app takes no payments'), 'the terms say the Android app takes no payments');
+  assert.ok(refunds.toLowerCase().includes('nothing to cancel'), 'the refunds page says plans never renew by themselves');
+  assert.ok(contact.includes('within 24 hours') && contact.includes('within 15 days'), "the contact page gives the IT Rules' grievance times");
+  for (const [key, value] of Object.entries(LEGAL)) {
+    if (value) assert.ok(terms.includes(value) || contact.includes(value), `LEGAL.${key} appears once given`);
+  }
 });
 
 // ─── The public site (site/): asklocker.com's landing page and films ──────

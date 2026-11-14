@@ -127,7 +127,7 @@ function faq(payments: PaymentsStatus | null): { q: string; a: string }[] {
     },
     {
       q: 'Why can\'t AskLocker find something in my document?',
-      a: 'Blurry or dark photos are hard to read. Retake the photo in good light. If your documents use another language, add it in Settings › Document languages (★ Family Plus).',
+      a: 'Blurry or dark photos are hard to read. Retake the photo in good light. If your documents use another language, add it in Settings › Document languages (★ Family Plus). The Android app reads photos in English only.',
     },
   ];
 }
@@ -209,7 +209,7 @@ function businessFaq(): { q: string; a: string }[] {
     },
     {
       q: 'Why can\'t AskLocker find something in my record?',
-      a: 'Blurry or dark photos are hard to read. Retake the photo in good light. If your records use another language, add it in Settings › Document languages (★ Plus).',
+      a: 'Blurry or dark photos are hard to read. Retake the photo in good light. If your records use another language, add it in Settings › Document languages (★ Plus). The Android app reads photos in English only.',
     },
   ];
 }

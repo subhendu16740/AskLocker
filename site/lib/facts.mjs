@@ -21,6 +21,40 @@ import { VOICE_LANGUAGES } from '../../src/lib/voice-languages.ts';
 export const SITE_URL = (process.env.SITE_URL || 'https://asklocker.com').replace(/\/+$/, '');
 export const SUPPORT_EMAIL = 'support@asklocker.com';
 
+/**
+ * Facts only the owner can give, for /terms and /contact (pages/legal.mjs).
+ * null until given: the pages leave that line out, and the site build warns
+ * once with what is missing (missingLegalFacts()). Never a placeholder.
+ */
+export const LEGAL = {
+  /** Who runs AskLocker: a person's full name, or the business's registered name. */
+  operator: null,
+  /** Postal address for notices and complaints, one line. */
+  address: null,
+  /** The city whose courts hear disputes under the terms. */
+  courtsCity: null,
+  /** The Grievance Officer's name (India's IT Rules 2021 and the DPDP Act). */
+  grievanceOfficer: null,
+  /** Where complaints go. The support address until a separate one is set up. */
+  grievanceEmail: SUPPORT_EMAIL,
+  /** A phone number to show on /contact, if wanted. Optional. */
+  phone: null,
+};
+
+/** The owner's choices on /refunds and /contact, to confirm (defaults of 14 November 2026). */
+export const POLICY_CHOICES = {
+  /** A full refund when asked within this many days of a payment. */
+  refundDays: 7,
+  /** How long support takes to reply, in working days. */
+  replyWorkingDays: 2,
+};
+
+/** The LEGAL facts still null, by what they are (phone is optional and not listed). */
+export function missingLegalFacts() {
+  const names = { operator: "who runs AskLocker (a person's or business's legal name)", address: 'a postal address', courtsCity: 'the city whose courts hear disputes', grievanceOfficer: "the Grievance Officer's name" };
+  return Object.entries(names).filter(([k]) => LEGAL[k] == null || LEGAL[k] === '').map(([, what]) => what);
+}
+
 const L = DEFAULT_PLAN_LIMITS;
 
 /** 1000 -> "1,000"; rupees group in lakhs, as plan-text.ts does. */

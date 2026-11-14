@@ -626,9 +626,14 @@ The top of the page is a carousel of Family and Business, and the sections
 below follow it, both in the HTML (`/#business` opens the business side).
 Production builds are indexable and carry published films only; every other
 build is `noindex`, its `robots.txt` shuts everything, and it shows draft
-films for review on DEV. **No app route may be called `landing`, `videos`
-or `media`, and `public/` must not hold `robots.txt`, `sitemap.xml` or
-`llms*.txt`**: the site writes them, and its build stops on either.
+films for review on DEV. It also writes the privacy policy and, since 14
+November 2026, `/terms`, `/refunds` and `/contact` (`site/pages/legal.mjs`,
+for Razorpay's website review, Google Play and India's IT Rules); facts only
+the owner can give (`LEGAL` in `site/lib/facts.mjs`) are left off the pages
+while null, and the build warns. **No app route may be called `landing`,
+`videos`, `media`, `privacy`, `terms`, `refunds` or `contact`, and `public/`
+must not hold `robots.txt`, `sitemap.xml`, `llms*.txt` or those pages'
+`.html`**: the site writes them, and its build stops on either.
 
 **No page may be framed.** `public/_headers` (copied to `dist/` by the
 export, read by Cloudflare Pages) sends `X-Frame-Options: DENY` and
@@ -3994,8 +3999,12 @@ rule again once pinned chunks are mixed in.
     every question, for search, once its keys are set; until then the
     search vectors are made on AskLocker's own servers, gte-small), Anthropic and Groq (the passages an answer
     is written from, and the chat: Claude first where its key is set, Groq
-    otherwise) and OCR.space (scanned PDFs, photos imported from Gmail).
-    PostHog gets usage counts, and never any of it.
+    otherwise) and OCR.space (scanned PDFs, photos imported from Gmail,
+    and every photo added in the Android app, which reads none on the
+    phone). In the Android app, notifications pass through Google's
+    Firebase Cloud Messaging, which can read their title and line (Web
+    Push on the website is encrypted to the device). PostHog gets usage
+    counts, and never any of it.
 
   So no screen, notification, README, store listing or page of the public
   site (`site/`, checked by the QA self-test with its films' transcripts)
