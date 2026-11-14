@@ -1,4 +1,7 @@
+import { Platform } from 'react-native';
 import { supabase } from './supabase';
+import { bytesOf } from './file-bytes';
+import { sellsInApp } from './selling';
 import {
   LOCKED_VAULT_NAME, addSealedPerson, documentDetails, documentFileKeyText, forgetLockedDocument, isLockedVault, isSealedChat,
   knownLocked, lockedCards, lockedOverview, lockedVaultName, lockedVaults, openChat, openLockedTree, openNoteBody, openSharedFile,
@@ -988,7 +991,8 @@ export async function uploadDocument(params: UploadDocumentParams): Promise<stri
 
   const { error: storageErr } = await supabase.storage
     .from('documents')
-    .upload(storagePath, fileBlob, { contentType: mimeType, upsert: false });
+    // The phone app sends bytes: a React Native Blob can arrive empty.
+    .upload(storagePath, Platform.OS === 'web' ? fileBlob : await bytesOf(fileBlob), { contentType: mimeType, upsert: false });
 
   if (storageErr) {
     // The bucket's policy refuses a family at its limit (038), and on Free a
@@ -1954,11 +1958,12 @@ export class StorageFullError extends Error {
 
   constructor(room: StorageRoom & { removalAt?: string | null }, fileBytes: number, person?: PersonRoom) {
     super(person
-      ? personStorageFullMessage(person, fileBytes, { business: room.business, forSale: plusForSale() })
+      ? personStorageFullMessage(person, fileBytes, { business: room.business, forSale: plusForSale(), upsell: sellsInApp })
       : storageFullMessage(room, fileBytes, {
         price: localPlusPrices(),
         removalOn: room.removalAt ? longDate(new Date(room.removalAt)) : undefined,
         forSale: plusForSale(),
+        upsell: sellsInApp,
       }));
     this.name = 'StorageFullError';
     this.room = room;
@@ -2134,7 +2139,7 @@ export class ChatStorageFullError extends Error {
 
   constructor(room: FamilyPlanStatus | null, serverMessage?: string) {
     super(room
-      ? chatStorageFullMessage(room, { price: localPlusPrices(), forSale: plusForSale() })
+      ? chatStorageFullMessage(room, { price: localPlusPrices(), forSale: plusForSale(), upsell: sellsInApp })
       : serverMessage ?? "No room to save this chat. Your family's storage is full.");
     this.name = 'ChatStorageFullError';
     this.room = room;

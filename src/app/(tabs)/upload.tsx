@@ -19,6 +19,7 @@ import { MAX_FILE_BYTES, fileTooLargeMessage, plusName, type PlanName } from '..
 import {
   extractTextFromImage, isImageFile, ocrLanguageGapOnThisDevice, type OcrProgress,
 } from '../../lib/ocr';
+import { shrinkPhoto } from '../../lib/photo-size';
 import { usePreferences } from '../../lib/preferences';
 import { describeOcrLanguages } from '../../lib/ocr-languages';
 import {
@@ -165,10 +166,13 @@ export default function UploadScreen() {
   // what a file is. The type comes from its MIME type or name, never from a
   // web blob: uri (see file-types.ts), and a file the vault cannot keep is
   // turned away now rather than failing at Save.
-  const takeFile = (
-    picked: { uri: string; name?: string | null; mimeType?: string | null; size?: number | null },
+  const takeFile = async (
+    pickedAsIs: { uri: string; name?: string | null; mimeType?: string | null; size?: number | null },
     fallbackStem: string,
   ) => {
+    // In the phone app a photo is made small first: the server reads it,
+    // and its reader takes 1 MB at most (photo-size.ts). The website keeps it.
+    const picked = await shrinkPhoto(pickedAsIs);
     const kind = detectFileType(picked);
     if (!isSaveable(kind)) {
       setFullPlan(null);
@@ -238,13 +242,10 @@ export default function UploadScreen() {
     );
   };
 
+  // Android's own photo picker (and iPhone's) needs no permission: the
+  // person picks one photo and only that one is shared with AskLocker. The
+  // Android app holds no gallery permission at all (app.config.ts).
   const pickFromGallery = async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permission needed', 'Allow photo access to pick from your gallery.');
-      return;
-    }
-
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
       quality: 0.9,
