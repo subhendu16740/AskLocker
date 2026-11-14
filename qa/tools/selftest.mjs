@@ -37,6 +37,7 @@ import {
 } from '../../supabase/functions/_shared/gmail-crypto.ts';
 import { buildGraph, relationTo, relationLabel, relativesForPrompt, relativesNamedIn, buildForest, shortName, siblingsSharingParents } from '../../supabase/functions/_shared/kinship.ts';
 import { encryptPayload, vapidAuthorization, generateVapidKeys, isPushServiceEndpoint, MAX_PLAINTEXT } from '../../supabase/functions/_shared/webpush.ts';
+import * as fcm from '../../supabase/functions/_shared/fcm.ts';
 import { phoneLooksRight, cardProblem, cardIsEmpty, emptyCard, bloodGroupLabel, bloodGroupSpoken, telHref } from '../../src/lib/emergency.ts';
 import { allowanceJson, givenBack, parseAllowance, questionLimitMessage, questionsLeftText, resetDay } from '../../supabase/functions/_shared/questions.ts';
 import { AGREEMENT_POINTS, AGREEMENT_VERSION, agreementText } from '../../supabase/functions/_shared/agreement.ts';
@@ -664,6 +665,64 @@ await test('web push: VAPID signs for the push service, and only push services a
   for (const bad of ['https://evil.example/fcm.googleapis.com', 'http://fcm.googleapis.com/x', 'https://fcm.googleapis.com.evil.example/x', 'https://fcm.googleapis.com:8443/x', 'not a url']) {
     assert.ok(!isPushServiceEndpoint(bad), bad);
   }
+});
+
+await test('Android notifications: the FCM service account signs its own request, and FCM\'s answers are sorted (075)', async () => {
+  // A made-up service account with a fresh RSA key, as Firebase's key file holds one.
+  const pair = await crypto.subtle.generateKey(
+    { name: 'RSASSA-PKCS1-v1_5', modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: 'SHA-256' }, true, ['sign', 'verify']);
+  const pkcs8 = new Uint8Array(await crypto.subtle.exportKey('pkcs8', pair.privateKey));
+  const b64 = Buffer.from(pkcs8).toString('base64').replace(/(.{64})/g, '$1\n');
+  const file = {
+    type: 'service_account', project_id: 'asklocker-qa', client_email: 'fcm@asklocker-qa.iam.gserviceaccount.com',
+    private_key: `-----BEGIN PRIVATE KEY-----\n${b64}\n-----END PRIVATE KEY-----\n`,
+    token_uri: 'https://evil.example/token',
+  };
+  const sa = fcm.parseServiceAccount(JSON.stringify(file));
+  assert.ok(sa, 'the key file is read');
+  assert.equal(sa.projectId, 'asklocker-qa');
+  assert.equal(sa.tokenUri, 'https://oauth2.googleapis.com/token', 'only Google\'s token address, whatever the file says');
+  assert.deepEqual(fcm.parseServiceAccount(Buffer.from(JSON.stringify(file)).toString('base64')), sa, 'the same file in base64');
+  for (const bad of [undefined, '', 'not json', '{"project_id":"x"}', JSON.stringify({ ...file, private_key: 'nope' })]) {
+    assert.equal(fcm.parseServiceAccount(bad), null, String(bad).slice(0, 20));
+  }
+
+  const jwt = await fcm.signServiceAccountJwt(sa, 1_900_000_000);
+  const [h, c, sig] = jwt.split('.');
+  assert.deepEqual(JSON.parse(new TextDecoder().decode(fromBase64(h))), { alg: 'RS256', typ: 'JWT' });
+  assert.deepEqual(JSON.parse(new TextDecoder().decode(fromBase64(c))), {
+    iss: 'fcm@asklocker-qa.iam.gserviceaccount.com', scope: 'https://www.googleapis.com/auth/firebase.messaging',
+    aud: 'https://oauth2.googleapis.com/token', iat: 1_900_000_000, exp: 1_900_003_600,
+  });
+  assert.ok(await crypto.subtle.verify('RSASSA-PKCS1-v1_5', pair.publicKey, fromBase64(sig), new TextEncoder().encode(`${h}.${c}`)), 'the signature verifies');
+  assert.equal(new URLSearchParams(fcm.tokenRequestBody(jwt)).get('grant_type'), 'urn:ietf:params:oauth:grant-type:jwt-bearer');
+  assert.equal(fcm.fcmSendUrl('asklocker-qa'), 'https://fcm.googleapis.com/v1/projects/asklocker-qa/messages:send');
+
+  const token = 'dXk1:APA91bSAMPLE_token-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+  const body = fcm.fcmMessageBody(token, { title: 'Passport expires in 30 days', body: "Asha's passport", url: '/notifications', tag: 'fv-expiry-1' });
+  assert.deepEqual(body, { message: {
+    token,
+    notification: { title: 'Passport expires in 30 days', body: "Asha's passport" },
+    data: { url: '/notifications', tag: 'fv-expiry-1' },
+    android: { priority: 'HIGH', ttl: '86400s', notification: { channel_id: 'reminders', tag: 'fv-expiry-1' } },
+  } });
+  assert.ok(Object.values(body.message.data).every((v) => typeof v === 'string'), 'FCM data values are strings');
+
+  const sort = (status, error) => fcm.classifyFcmResponse(status, error ? { error } : null);
+  assert.deepEqual(sort(200), { ok: true, status: 200 });
+  const gone = (o) => [o.gone, o.transient];
+  assert.deepEqual(gone(sort(404, { status: 'NOT_FOUND', details: [{ errorCode: 'UNREGISTERED' }] })), [true, false]);
+  assert.deepEqual(gone(sort(400, { status: 'INVALID_ARGUMENT', message: 'The registration token is not a valid FCM registration token' })), [true, false]);
+  assert.deepEqual(gone(sort(400, { status: 'INVALID_ARGUMENT', details: [{ fieldViolations: [{ field: 'message.token' }] }] })), [true, false]);
+  assert.deepEqual(gone(sort(400, { status: 'INVALID_ARGUMENT', details: [{ fieldViolations: [{ field: 'message.notification.title' }] }] })), [false, false], 'a bad message keeps the token');
+  assert.deepEqual(gone(sort(403, { status: 'PERMISSION_DENIED', details: [{ errorCode: 'SENDER_ID_MISMATCH' }] })), [false, false], 'our own set-up wrong deletes nobody\'s phone');
+  for (const status of [0, 401, 429, 500, 503]) assert.deepEqual(gone(sort(status, { status: 'X' })), [false, true], String(status));
+
+  // The same token rule as 075's table check and save_fcm_token().
+  assert.ok(fcm.isFcmToken(token));
+  for (const bad of ['https://fcm.googleapis.com/fcm/send/x', 'short', `${'a'.repeat(40)} b`, 'a'.repeat(4097)]) assert.ok(!fcm.isFcmToken(bad), bad.slice(0, 20));
+  const sql = readFileSync(new URL('../../supabase/migrations/075_android_push.sql', import.meta.url), 'utf8');
+  assert.ok(sql.includes("'^[A-Za-z0-9_:.-]+$'") && sql.includes('BETWEEN 32 AND 4096'), '075 keeps the same token rule');
 });
 
 await test('questions.yaml is consistent with the fixtures', () => {
@@ -2086,4 +2145,4 @@ if (failures.length) {
   console.error(`\n${failures.length} self-test(s) failed, ${passed} passed.`);
   process.exit(1);
 }
-console.log(`✓ ${passed} self-tests passed — matchers, judge, run-time PDF, metadata, ticket codes, text cleaning, Gmail rules and token sealing, kinship and the family tree, emergency card checks, web push, plan limits, questions each month, limits against abuse, business papers, categories and plan words, Razorpay signatures, numbers in digits, sources the answer used, Claude's requests in Groq's shape, search-vector providers and budget, the agreement's words, the privacy policy, the public site, end-to-end encryption's core, questions and budget.`);
+console.log(`✓ ${passed} self-tests passed — matchers, judge, run-time PDF, metadata, ticket codes, text cleaning, Gmail rules and token sealing, kinship and the family tree, emergency card checks, web push, Android notifications, plan limits, questions each month, limits against abuse, business papers, categories and plan words, Razorpay signatures, numbers in digits, sources the answer used, Claude's requests in Groq's shape, search-vector providers and budget, the agreement's words, the privacy policy, the public site, end-to-end encryption's core, questions and budget.`);

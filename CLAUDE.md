@@ -194,7 +194,9 @@ Four things will mislead you if you assume otherwise:
    devices' values (`offer_device_nonce`, `reveal_device_nonce`, the
    caller's own requests), everything new is sealed with a vault's latest
    key, and a person's keys can be made only where `e2e_config` allows it:
-   see the same section).
+   see the same section; 075's Android phones are their owner's
+   `push_subscriptions` rows too, saved only through `save_fcm_token` (from
+   `auth.uid()`)).
    **A new writable
    column needs its own `GRANT` in a migration.** Nobody joins a family
    without saying yes: only an admin asks a person in, through the
@@ -539,7 +541,10 @@ API keys: **test keys on DEV, live keys on PROD only** — QA fails a live key
 on DEV), `RAZORPAY_WEBHOOK_SECRET` (the secret typed into Razorpay's
 webhook settings) and, optionally, `RAZORPAY_CURRENCIES` (`INR` unless set;
 `INR,USD` once international payments are on in Razorpay). Without the two
-keys a project takes no payments and Family Plus says "Coming soon"
+keys a project takes no payments and Family Plus says "Coming soon". For
+notifications in the Android app, `FCM_SERVICE_ACCOUNT`: the Firebase
+project's service-account key file, as JSON or base64 (075; without it
+Android phones get nothing and Web Push is unaffected)
 (`SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are injected automatically).
 
 **Local dev only:** `WEB_HOST` (Firebase Studio; see [App config](#app-config)).
@@ -1030,7 +1035,7 @@ tabs. `(tabs)` is a layout group, so routes are `/home`, `/search`, `/upload`.
 | `speech-text.ts` | `toSpeech()`: strips markdown and spells out ID numbers before they are read aloud — and a number named as one ("train number 16782", "PNR: 4512", "PIN 751001", "नंबर 16782") digit by digit, from its digits; the screen keeps the digits |
 | `voice-languages.ts` | The language picker list and the few phrases the app itself says, per language |
 | `storage.ts` | Key-value cache: localStorage on web, AsyncStorage on native |
-| `database.types.ts` | Generated Supabase types, current to 074 (070's, 071's, 073's and 074's functions added by hand) (030, 052, 055, 058, 059, 061, 063 and 072 changed nothing in them, nor did 065, whose one function only the Edge Functions call, nor 066 and 067, numbers and function bodies; 049's, 050's, 051's, 053's, 054's, 056's, 057's, 060's, 062's, 064's, 068's and 069's added by hand). Regenerate after every migration and re-append the hand-written block at the bottom (see the typecheck note) |
+| `database.types.ts` | Generated Supabase types, current to 075 (070's, 071's, 073's, 074's and 075's functions added by hand, and 075's `push_subscriptions.kind`) (030, 052, 055, 058, 059, 061, 063 and 072 changed nothing in them, nor did 065, whose one function only the Edge Functions call, nor 066 and 067, numbers and function bodies; 049's, 050's, 051's, 053's, 054's, 056's, 057's, 060's, 062's, 064's, 068's and 069's added by hand). Regenerate after every migration and re-append the hand-written block at the bottom (see the typecheck note) |
 
 ---
 
@@ -1660,8 +1665,34 @@ where it does not.
   allows it only to a web app on the Home Screen (iOS 16.4 or later), hence
   `public/manifest.json`, linked by `_layout.tsx` at start-up — the
   single-page export never uses `+html.tsx`, so a tag added there reaches no
-  page; the screen says how. The phone app's
-  `push.ts` is a stand-in until EAS builds exist (Expo push, also free).
+  page; the screen says how.
+- **The Android app: Google's FCM, sent by us (075).** The phone gives a
+  Firebase Cloud Messaging token (`src/lib/push.ts`,
+  `Notifications.getDevicePushTokenAsync()`), saved for the signed-in person
+  by `save_fcm_token()` (from `auth.uid()`) as a `push_subscriptions` row of
+  `kind` 'fcm'. The push function sends to FCM's HTTP v1 API itself, with
+  the Firebase project's service account (`FCM_SERVICE_ACCOUNT`; the OAuth
+  JWT is signed in WebCrypto, `_shared/fcm.ts`, which the self-test checks),
+  never through Expo's push service, so no other company sees a reminder;
+  Google, which carries every Android notification, sees its title and line.
+  A token FCM calls unregistered, or not a token, is forgotten as a gone
+  browser is; a busy FCM is tried again within the day; a refusal of our own
+  set-up (403) deletes nobody's phone. Without the secret those phones are
+  skipped and Web Push carries on. `push_pending()` keeps returning browsers
+  only, so a push function from before 075 never posts a token to a Web Push
+  address; `push_pending_devices()` returns both kinds. A tap opens
+  Notifications (`useNotificationTaps()`, in the root layout, once signed
+  in). The iPhone app's push (APNs) is not set up: it says it can't show
+  them. **To switch it on**, the owner: (1) makes a Firebase project (or
+  uses the Google Cloud project's) and adds an Android app,
+  `com.asklocker.app`; (2) downloads its `google-services.json` and gives it
+  to EAS as a file variable named `GOOGLE_SERVICES_JSON` (`app.config.ts`
+  reads it, or a `google-services.json` beside it; a build without one works
+  and says notifications aren't ready); not committed, though it holds no
+  secret, since this repository is public; (3) makes a service-account key
+  (Firebase › Project settings › Service accounts › Generate new private
+  key) and sets it as `FCM_SERVICE_ACCOUNT` on DEV and PROD; (4) applies 075
+  to DEV, then PROD, before the push function that reads it.
 - **`push_subscriptions` is its owner's**: RLS SELECT and DELETE on your own
   rows, written only by `save_push_subscription()` (from `auth.uid()`). An
   endpoint is one browser, so it moves to whoever signs in there. It must be
@@ -1696,8 +1727,8 @@ where it does not.
   (`users.birthday_reminders`, on by default, its own column grant). The tree
   has no "passed away" yet: for someone who has, an admin removes their date
   of birth — the switch's text says so.
-- **Not built yet:** email (needs a paid domain); notifications in the phone
-  app.
+- **Not built yet:** email (needs a paid domain); notifications in the
+  iPhone app (APNs).
 
 ### Share links — one document, for someone outside the family (036)
 
@@ -3446,6 +3477,8 @@ where it does not.
   [Reminders](#reminders--once-per-stage-on-every-device-that-asks-034)):
   `key` and `test` for a signed-in person, `send` for the hourly clock (open
   by design: it reads nothing from the request and returns only counts).
+  Browsers by Web Push, Android phones by FCM with `FCM_SERVICE_ACCOUNT`
+  (075; before 075 it reads `push_pending()`, browsers only).
   503 `needs_migration` where 034 is not applied.
 - **`share`** — opens a share link for someone with no account (036; see
   [Share links](#share-links--one-document-for-someone-outside-the-family-036)):
