@@ -132,7 +132,7 @@ function footer({ hasFilms }) {
   const year = new Date().getUTCFullYear();
   return `<footer class="foot">
 <div class="wrap foot-in">
-<nav class="foot-links" aria-label="Footer">${hasFilms ? '<a href="/videos">Films</a>' : ''}<a href="/privacy">Privacy policy</a><a href="mailto:${SUPPORT_EMAIL}">${SUPPORT_EMAIL}</a><a href="/llms.txt">For AI assistants</a></nav>
+<nav class="foot-links" aria-label="Footer">${hasFilms ? '<a href="/videos">Films</a>' : ''}<a href="/privacy">Privacy policy</a><a href="/terms">Terms</a><a href="/refunds">Refunds</a><a href="/contact">Contact</a><a href="mailto:${SUPPORT_EMAIL}">${SUPPORT_EMAIL}</a><a href="/llms.txt">For AI assistants</a></nav>
 <p class="foot-note">© ${year} AskLocker</p>
 </div>
 </footer>`;

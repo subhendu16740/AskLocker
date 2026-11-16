@@ -65,6 +65,11 @@ export async function makeNewKeys(_userId: string): Promise<void> {
   throw new Error(NOT_HERE);
 }
 export async function forgetKeysOnThisDevice(_userId: string): Promise<void> {}
+export async function forgetsKeysOnSignOut(_userId: string): Promise<boolean> {
+  return false;
+}
+export async function setForgetKeysOnSignOut(_userId: string, _on: boolean): Promise<void> {}
+export async function forgetKeysAtSignOut(_userId: string): Promise<void> {}
 export async function deleteKeysEverywhere(_userId: string): Promise<void> {
   throw new Error(NOT_HERE);
 }

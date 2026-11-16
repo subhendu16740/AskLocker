@@ -18,7 +18,7 @@
 //  - Numbers come from the constants (lib/facts.mjs), never typed in.
 //  - Claim only what the app does, on the plan that does it.
 
-import { SUPPORT_EMAIL, businessColumns, businessPlans, dollars, facts, familyPlans, listOf, rupees } from './lib/facts.mjs';
+import { LEGAL, POLICY_CHOICES, SUPPORT_EMAIL, businessColumns, businessPlans, dollars, facts, familyPlans, listOf, rupees } from './lib/facts.mjs';
 
 const voiceNames = facts.voiceLanguages.map((l) => l.english);
 const p = facts.plus;
@@ -135,8 +135,8 @@ export const privacy = [
 // Each section's `summary` is what the landing page's Privacy policy row opens
 // to, in place (pages/landing.mjs): keep it true of the rows under it.
 export const policy = {
-  updated: '2026-11-04',
-  intro: `Questions? ${SUPPORT_EMAIL}`,
+  updated: '2026-11-14',
+  intro: `For asklocker.com and the AskLocker app for Android. Questions? ${SUPPORT_EMAIL}`,
   sections: [
     {
       title: 'What we keep',
@@ -148,6 +148,7 @@ export const policy = {
         ['Payments', "Plan, amount and Razorpay's payment number. Never card or UPI details."],
         ['Your agreement', 'That you agreed to our terms, and when.'],
         ['App usage', "Screens and buttons used and document types, with a random device number. Never your documents' text, questions, name or email. Turn it off in Settings › Privacy."],
+        ['Your devices', 'An address for each device where you turn notifications on, so they reach it.'],
         ['Your country', 'Checked to show ₹ or $. Not kept.'],
       ],
     },
@@ -165,16 +166,18 @@ export const policy = {
     },
     {
       title: 'Services we use',
-      summary: 'Supabase stores your documents, Cloudflare makes them searchable, Anthropic and Groq write answers, OCR.space reads scans, Google signs you in and Razorpay takes payments.',
+      summary: 'Supabase stores your documents, Cloudflare makes them searchable, Anthropic and Groq write answers, OCR.space reads scans and Android photos, Google signs you in and carries Android notifications, and Razorpay takes payments on the website.',
       note: 'Each keeps what it gets under its own privacy policy.',
       rows: [
         ['Supabase', 'Stores your account and documents, in Mumbai, India.'],
         ['Cloudflare', "Runs the website and email, and makes search data from your documents and questions. Says it doesn't train AI on them."],
         ['Anthropic (Claude) and Groq', 'Get your question and the best-matching passages, to write an answer. Never your whole vault.'],
-        ['OCR.space', 'Reads scanned PDFs and photos imported from Gmail. Photos and spreadsheets you upload are read on your device.'],
+        ['OCR.space', 'Reads scanned PDFs, photos imported from Gmail, and photos you add in the Android app, in English. Photos you add on the website, and spreadsheets, are read on your device.'],
         ['Google', 'Signs you in. With Gmail connected, we read senders, subjects and attachment names, and download only what you pick, never the email. In Chrome, voice goes to Google.'],
-        ['Razorpay', 'Takes payments. Card and UPI details go only to Razorpay.'],
-        ['Push services', "Carry notifications, encrypted so they can't read them."],
+        ['Razorpay', 'Takes payments on the website. Card and UPI details go only to Razorpay. The Android app takes no payments.'],
+        // If the Android app's notifications go through Expo's push service on
+        // their way to Firebase, Expo must be named here too.
+        ['Push services', "Carry notifications. On the website they are encrypted, so the service can't read them. In the Android app, Google's Firebase Cloud Messaging carries them and can read their title and line."],
         ['Usage analytics', 'A service in the EU keeps the usage counts, without internet addresses.'],
       ],
     },
@@ -197,7 +200,7 @@ export const policy = {
         ['Leave a vault', 'Manage Family'],
         ['Turn off usage counts or notifications', 'Settings › Privacy, Settings › Notifications'],
         ['Disconnect Gmail', 'Import from Gmail'],
-        ['Delete your account', 'Settings › Security'],
+        ['Delete your account', `Settings › Security › Delete account, in the app or at asklocker.com/settings/delete-account. Or write to ${SUPPORT_EMAIL} from the email you sign in with.`],
       ],
     },
     {
@@ -210,6 +213,162 @@ export const policy = {
       ],
     },
   ],
+};
+
+// The terms, refunds and contact pages (pages/legal.mjs), for families,
+// businesses, Razorpay's website review and the Play Store. Same rules as the
+// policy above: plain, short, true of the code, numbers from the constants.
+// Lines that need a fact only the owner can give (LEGAL in lib/facts.mjs) are
+// left out while it is null. A lawyer's read is worth it before relying on them.
+
+const price = (pp) => `${rupees(pp.monthly.inr)} a month or ${rupees(pp.yearly.inr)} a year in India, ${dollars(pp.monthly.usd)} or ${dollars(pp.yearly.usd)} elsewhere`;
+const bizPrices = businessPlans.map((b) => `${b.name} ${rupees(b.price)} a month or ${rupees(b.yearly)} a year`).join(', ');
+const { refundDays, replyWorkingDays } = POLICY_CHOICES;
+/** Rows whose text is null are left out (a fact not given yet). */
+const given = (rows) => rows.filter(([, text]) => text != null && text !== '');
+
+export const terms = {
+  path: '/terms',
+  title: 'Terms of service',
+  description: 'The rules for using AskLocker: accounts, plans and prices, your documents, and what we each promise.',
+  updated: '2026-11-14',
+  intro: `By using AskLocker, on asklocker.com or in the Android app, you agree to these terms. Questions? ${SUPPORT_EMAIL}`,
+  sections: [
+    {
+      title: 'AskLocker',
+      rows: given([
+        ['What it is', about],
+        ['Who runs it', LEGAL.operator ? `${LEGAL.operator}${LEGAL.address ? `, ${LEGAL.address}` : ''}.` : null],
+        ['Who can use it', 'You must be 18 or older to make an account. A vault can hold documents about children in your care.'],
+        ['Your account', 'You sign in with Google. Keep your Google account to yourself: whoever can sign in to it can open your vaults.'],
+      ]),
+    },
+    {
+      title: 'Plans and payments',
+      rows: [
+        ['Free', `${facts.freeQuestions} questions a month each, ${facts.freePersonSpace} of space per person, ${facts.freeMembers} people in a family.`],
+        ['Family Plus', `${price(facts.plus)}.`],
+        ['Family Pro', `${price(facts.pro)}.`],
+        ['Business plans', `${bizPrices}, plus GST where it applies. Set up on request.`],
+        ['How paying works', 'You pay on the website, through Razorpay. Each payment adds a month or a year, from the end of the time already paid for. The Android app takes no payments.'],
+        ['Nothing renews by itself', 'We never charge you without you paying. A plan ends when its time runs out.'],
+        ['Refunds', `Within ${refundDays} days of a payment. See asklocker.com/refunds.`],
+        ['Prices can change', 'A new price applies to payments made after it changes, never to time already paid for.'],
+      ],
+    },
+    {
+      title: 'Limits',
+      rows: [
+        ['Each plan has limits', 'On people, space and questions, shown on the Plans page and at asklocker.com. We may change them, and a lower limit never deletes what you have.'],
+        ['Daily limits', 'Questions and uploads have daily limits too, so one account cannot use up what everyone shares.'],
+        ['Files', `Up to ${facts.maxFileMb} MB each: ${listOf(facts.fileTypes)}.`],
+      ],
+    },
+    {
+      title: 'When a paid plan ends',
+      rows: [
+        ['A family or personal vault', `You can still read, search and download everything, but add nothing over the free space. After ${facts.graceDays} days the newest documents above the free space are removed. We warn you before, and renewing or deleting documents stops it.`],
+        ['A business', 'Keeps every record and adds nothing until the plan is renewed. A trial goes back to Free.'],
+      ],
+    },
+    {
+      title: 'Your documents',
+      rows: [
+        ['They stay yours', 'You give us permission to store and read them only to run AskLocker for you: to search them, answer your questions, remind you and share them when you ask.'],
+        ['Who else gets them', 'People in your vault, anyone you send a share link, and the services named in our privacy policy at asklocker.com/privacy. Documents are encrypted, but not end-to-end, so the people who run AskLocker can open them.'],
+        ['AI can be wrong', 'Answers are written by AI. Check the document before you rely on one.'],
+        ['Not a backup', 'Keep the originals of important papers.'],
+      ],
+    },
+    {
+      title: 'Using it fairly',
+      rows: [
+        ['Add only what you may keep', "Your own documents, and your family's or business's with their permission."],
+        ['Never', "Anything illegal, malware, documents taken from others, ways around the limits, or attempts to reach a vault you aren't in."],
+        ['If you break these terms', 'We may suspend or close the account. Where we can, we tell you first and give you time to download your documents.'],
+      ],
+    },
+    {
+      title: 'Ending',
+      rows: [
+        ['Delete your account', 'Settings › Security › Delete account. It is immediate, with your personal vault and any family only you manage.'],
+        ['Delete a vault', "Its owner can, in Settings › Your vaults. Everyone in it loses what's there."],
+        ['If AskLocker closes', 'We tell you at least 30 days before, so you can download your documents.'],
+      ],
+    },
+    {
+      title: 'The legal part',
+      rows: given([
+        ['As it is', "We work to keep AskLocker running and your documents in it, but we can't promise it will always be available or free of errors."],
+        ['Our liability', 'As far as the law allows, we are not liable for indirect losses, and our total liability is what you paid us in the 12 months before the claim.'],
+        ['Changes to these terms', 'If a change matters to you, we tell you in the app before it applies. The date above changes with this page.'],
+        ['Law', 'Indian law governs these terms.'],
+        ['Courts', LEGAL.courtsCity ? `The courts of ${LEGAL.courtsCity} hear any dispute.` : null],
+        ['Contact', `${SUPPORT_EMAIL}, or asklocker.com/contact.`],
+      ]),
+    },
+  ],
+};
+
+export const refunds = {
+  path: '/refunds',
+  title: 'Refunds and cancellation',
+  description: `How to ask for a refund within ${refundDays} days, and why there is nothing to cancel.`,
+  updated: '2026-11-14',
+  intro: `Ask by email: ${SUPPORT_EMAIL}`,
+  sections: [
+    {
+      title: 'Cancelling',
+      rows: [
+        ['Nothing to cancel', 'Plans never renew by themselves, so we never charge you unless you pay. A plan ends when its time runs out.'],
+      ],
+    },
+    {
+      title: 'Refunds',
+      rows: [
+        [`Within ${refundDays} days`, `Write to ${SUPPORT_EMAIL} within ${refundDays} days of a payment, from the email you sign in with, and we refund it in full.`],
+        [`After ${refundDays} days`, 'No refund for time already paid. Your plan runs to its end date.'],
+        ['What a refund does', `The plan ends at once. Above the free space, the newest documents are removed after ${facts.graceDays} days, with warnings first.`],
+        ['When the money arrives', 'Razorpay returns it to the same card, UPI or bank account, usually within 5 to 7 working days.'],
+        ['Business plans', 'The same rules apply.'],
+      ],
+    },
+  ],
+};
+
+export const contact = {
+  path: '/contact',
+  title: 'Contact',
+  description: 'How to reach the people who run AskLocker, and where complaints go.',
+  updated: '2026-11-14',
+  intro: `Write to ${SUPPORT_EMAIL}. We reply within ${replyWorkingDays} working days.`,
+  sections: [
+    {
+      title: 'Support',
+      rows: given([
+        ['Email', SUPPORT_EMAIL],
+        ['Phone', LEGAL.phone],
+        ['What to include', "The email you sign in with, which vault, and what happened. Don't send documents or ID numbers by email."],
+        ['In the app', 'Settings › Help & FAQ › Send feedback.'],
+      ]),
+    },
+    {
+      title: 'Complaints and your data',
+      rows: given([
+        ['Grievance Officer', LEGAL.grievanceOfficer],
+        ['Email', LEGAL.grievanceEmail],
+        ['For', 'Complaints about AskLocker or about content in it, and requests about your personal data, under India’s IT Rules 2021 and the Digital Personal Data Protection Act.'],
+        ['How long it takes', 'We acknowledge a complaint within 24 hours and resolve it within 15 days.'],
+      ]),
+    },
+    {
+      title: 'Who runs AskLocker',
+      rows: given([
+        ['Run by', LEGAL.operator],
+        ['Postal address', LEGAL.address],
+      ]),
+    },
+  ].filter((sec) => sec.rows.length),
 };
 
 export const faq = [

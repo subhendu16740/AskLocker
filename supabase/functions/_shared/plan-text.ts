@@ -394,11 +394,16 @@ export interface StorageMessageOptions {
   removalOn?: string;
   /** Whether Family Plus can be bought here (044); PLUS_FOR_SALE when not said. */
   forSale?: boolean;
+  /**
+   * False in the Android app, which may not point anyone to a plan it does not
+   * sell (src/lib/selling.ts): the words then say only how to make room.
+   */
+  upsell?: boolean;
 }
 
 /** Why a file does not fit, and what the vault's people can do about it. */
 export function storageFullMessage(room: StorageRoom, fileBytes = 0, options: StorageMessageOptions = {}): string {
-  const { limits = DEFAULT_PLAN_LIMITS, price, removalOn, forSale = PLUS_FOR_SALE } = options;
+  const { limits = DEFAULT_PLAN_LIMITS, price, removalOn, forSale = PLUS_FOR_SALE, upsell = true } = options;
   if (room.closed) return CLOSED_MESSAGE;
   const left = Math.max(0, room.limitBytes - room.usedBytes);
   const head = left === 0 || fileBytes === 0
@@ -409,7 +414,11 @@ export function storageFullMessage(room: StorageRoom, fileBytes = 0, options: St
   const plus = `${formatBytes(limits.plus)}${price ? ` for ${price}` : ''}`;
   const name = plusName(room.business);
   let more: string;
-  if (room.business) {
+  if (!upsell) {
+    more = room.plan === 'free' && removalOn && !room.business
+      ? `Your paid plan has ended. On ${removalOn}, the newest documents over ${formatBytes(room.limitBytes)} will be removed. Delete documents to get under ${formatBytes(room.limitBytes)}.`
+      : `Delete ${room.business ? 'records' : 'documents'} you don't need to make room.`;
+  } else if (room.business) {
     // A business moves up a plan with us, not in the app (051).
     const next = nextBusinessPlan(room.plan);
     more = next
@@ -446,16 +455,18 @@ export function personFits(person: PersonRoom, fileBytes: number): boolean {
  * where their files no longer count.
  */
 export function personStorageFullMessage(
-  person: PersonRoom, fileBytes = 0, options: { business?: boolean; forSale?: boolean } = {},
+  person: PersonRoom, fileBytes = 0, options: { business?: boolean; forSale?: boolean; upsell?: boolean } = {},
 ): string {
-  const { business = false, forSale = PLUS_FOR_SALE } = options;
+  const { business = false, forSale = PLUS_FOR_SALE, upsell = true } = options;
   const left = Math.max(0, person.limitBytes - person.usedBytes);
   const each = `the ${formatBytes(person.limitBytes)} each person can add on Free`;
   const head = left === 0 || fileBytes === 0
     ? `You've added ${formatBytes(person.usedBytes)} of ${each}.`
     : `This file is ${formatBytes(fileBytes)}, but you have only ${formatBytes(left)} left of ${each}.`;
   const name = plusName(business);
-  const more = business
+  const more = !upsell
+    ? `Delete ${business ? 'records' : 'documents'} you added to make room.`
+    : business
     ? "Delete records you added, or move this business to a paid plan."
     : forSale
       ? `Delete documents you added, or move this vault to ${name}.`
@@ -468,8 +479,9 @@ export function personStorageFullMessage(
  * too), and what to do: Family Plus on the free plan, making room on Plus.
  */
 export function chatStorageFullMessage(room: StorageRoom, options: Omit<StorageMessageOptions, 'removalOn'> = {}): string {
-  const { limits = DEFAULT_PLAN_LIMITS, price, forSale = PLUS_FOR_SALE } = options;
+  const { limits = DEFAULT_PLAN_LIMITS, price, forSale = PLUS_FOR_SALE, upsell = true } = options;
   const head = `There's no room to save this chat. ${capital(yours(room))} has used ${formatBytes(room.usedBytes)} of ${formatBytes(room.limitBytes)}.`;
+  if (!upsell) return `${head} Delete ${room.business ? 'records' : 'documents'} or saved chats you don't need to make room.`;
   if (room.business) {
     const next = nextBusinessPlan(room.plan);
     return next

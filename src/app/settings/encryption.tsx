@@ -12,20 +12,20 @@ import { isProduction } from '../../lib/environment';
 import { longDate } from '../../lib/dates';
 import {
   addPhoneLock, approveDeviceRequest, checkRecoveryKey, deleteKeysEverywhere, ensureKeys, forgetKeysOnThisDevice,
-  keysErrorText, makeNewKeys, pendingDeviceRequests, phoneLockSupported, prepareBackupKey, prepareNewRecoveryKey,
-  removePhoneLock, startDeviceRequest, unlockWithPhoneLock, unlockWithRecoveryKey,
+  forgetsKeysOnSignOut, keysErrorText, makeNewKeys, pendingDeviceRequests, phoneLockSupported, prepareBackupKey, prepareNewRecoveryKey,
+  removePhoneLock, setForgetKeysOnSignOut, startDeviceRequest, unlockWithPhoneLock, unlockWithRecoveryKey,
   type DeviceRequest, type KeysState, type PendingDevice, type PreparedKeys,
 } from '../../lib/vault-keys';
 import { ScreenHeader } from '../../components/screen-header';
 import {
-  Card, CardTitle, Body, Muted, Field, PrimaryButton, SecondaryButton, DangerButton, Status, screenStyles,
+  Card, CardTitle, Body, Muted, Field, PrimaryButton, SecondaryButton, DangerButton, Status, Toggle, screenStyles,
 } from '../../components/settings-ui';
 import { radius, space, type } from '../../constants/design';
 
 type Note = { kind: 'ok' | 'error'; text: string } | null;
 
-/** "abcd…" in groups of four, so a key's id can be compared by eye. */
-function groups(text: string, count = 3): string {
+/** "abcd…" in groups of four, so a key's id can be compared by eye: all five, as others in a vault see it. */
+function groups(text: string, count = 5): string {
   return (text.match(/.{1,4}/g) ?? []).slice(0, count).join(' ');
 }
 
@@ -63,6 +63,8 @@ export default function EncryptionKeysScreen() {
   const [confirmNew, setConfirmNew] = useState(false);
   const [lockOk, setLockOk] = useState(false);
   const [waiting, setWaiting] = useState<DeviceRequest | null>(null);
+  const [waitingCode, setWaitingCode] = useState<string | null>(null);
+  const [sharedComputer, setSharedComputer] = useState(false);
   const [pending, setPending] = useState<PendingDevice[]>([]);
   const waitingRef = useRef<DeviceRequest | null>(null);
 
@@ -78,7 +80,8 @@ export default function EncryptionKeysScreen() {
   useFocusEffect(useCallback(() => {
     refresh();
     phoneLockSupported().then(setLockOk);
-  }, [refresh]));
+    if (userId) forgetsKeysOnSignOut(userId).then(setSharedComputer).catch(() => undefined);
+  }, [refresh, userId]));
 
   // New devices asking this one: looked for while the screen is open.
   useEffect(() => {
@@ -134,6 +137,8 @@ export default function EncryptionKeysScreen() {
     const req = await startDeviceRequest(userId);
     waitingRef.current = req;
     setWaiting(req);
+    setWaitingCode(null);
+    req.code.then(setWaitingCode).catch(() => undefined);
     req.done
       .then(async () => {
         setWaiting(null);
@@ -197,9 +202,16 @@ export default function EncryptionKeysScreen() {
               <CardTitle icon="unlock">Unlock this device</CardTitle>
               {waiting ? (
                 <>
-                  <Body>On a phone or computer where you're signed in, open Settings › Security › Encryption keys and approve this code:</Body>
-                  <Text style={styles.code}>{waiting.code}</Text>
-                  <Muted>Waiting for approval…</Muted>
+                  <Body>On a phone or computer where you're signed in, open Settings › Security › Encryption keys.</Body>
+                  {waitingCode ? (
+                    <>
+                      <Body>Approve there only if it shows this code:</Body>
+                      <Text style={styles.code}>{waitingCode}</Text>
+                      <Muted>Waiting for approval…</Muted>
+                    </>
+                  ) : (
+                    <Muted>Waiting for your other device…</Muted>
+                  )}
                   <SecondaryButton label="Stop" onPress={() => { waiting.cancel(); setWaiting(null); }} />
                 </>
               ) : (
@@ -275,9 +287,17 @@ export default function EncryptionKeysScreen() {
             {pending.map((p) => (
               <Card key={p.id}>
                 <CardTitle icon="smartphone">{p.label ?? 'A new device'} wants your keys</CardTitle>
-                <Body>Approve only if the new device shows this code:</Body>
-                <Text style={styles.code}>{p.code}</Text>
-                <PrimaryButton label="Approve" icon="check" busy={busy} disabled={!state.canHandOn}
+                {p.elsewhere ? (
+                  <Body>Another of your devices is answering it. Approve it there.</Body>
+                ) : !p.code ? (
+                  <Muted>Waiting for the new device…</Muted>
+                ) : (
+                  <>
+                    <Body>Approve only if the new device shows this code:</Body>
+                    <Text style={styles.code}>{p.code}</Text>
+                  </>
+                )}
+                <PrimaryButton label="Approve" icon="check" busy={busy} disabled={!state.canHandOn || !p.code}
                   onPress={() => run(async () => {
                     await approveDeviceRequest(userId, p.id);
                     setPending((list) => list.filter((x) => x.id !== p.id));
@@ -347,6 +367,11 @@ export default function EncryptionKeysScreen() {
               <Body>Forget the keys here. Your phone's lock, another device or your backup key brings them back.</Body>
               <SecondaryButton label="Forget keys on this device" disabled={busy}
                 onPress={() => run(async () => { await forgetKeysOnThisDevice(userId); await refresh(); })} />
+              <View style={styles.lockRow}>
+                <Body>Shared computer: forget them when I sign out</Body>
+                <Toggle label="Shared computer: forget them when I sign out" value={sharedComputer}
+                  onChange={(on) => { setSharedComputer(on); setForgetKeysOnSignOut(userId, on).catch(() => undefined); }} />
+              </View>
             </Card>
           </>
         )}

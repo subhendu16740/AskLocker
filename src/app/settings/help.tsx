@@ -20,9 +20,14 @@ import { ScreenHeader } from '../../components/screen-header';
 import { Card, CardTitle, Body, PrimaryButton, screenStyles } from '../../components/settings-ui';
 import { color, radius, shadow, space, type } from '../../constants/design';
 import { useVaultTheme } from '../../lib/vault-theme';
+import { sellsInApp } from '../../lib/selling';
 
 function faq(payments: PaymentsStatus | null): { q: string; a: string }[] {
   const forSale = payments?.available ?? PLUS_FOR_SALE;
+  // The Android app names no price and no way to pay (src/lib/selling.ts).
+  const familyPlans = sellsInApp
+    ? `Family Plus is ${plusPrice('inr')} or ${plusPrice('inr', 'yearly')} in India (${plusPrice('usd')} or ${plusPrice('usd', 'yearly')} elsewhere), with ${DEFAULT_PLAN_LIMITS.members.plus} members and ${formatBytes(DEFAULT_PLAN_LIMITS.plus)}. Family Pro is ${plusPrice('inr', 'monthly', 'family_pro')} or ${plusPrice('inr', 'yearly', 'family_pro')} (${plusPrice('usd', 'monthly', 'family_pro')} or ${plusPrice('usd', 'yearly', 'family_pro')}), with ${DEFAULT_PLAN_LIMITS.familyPro.members} members and ${formatBytes(DEFAULT_PLAN_LIMITS.familyPro.storage)}.`
+    : `Family Plus has ${DEFAULT_PLAN_LIMITS.members.plus} members and ${formatBytes(DEFAULT_PLAN_LIMITS.plus)}. Family Pro has ${DEFAULT_PLAN_LIMITS.familyPro.members} members and ${formatBytes(DEFAULT_PLAN_LIMITS.familyPro.storage)}.`;
   return [
     {
       q: 'How do I add a document?',
@@ -74,7 +79,7 @@ function faq(payments: PaymentsStatus | null): { q: string; a: string }[] {
     },
     {
       q: 'Can I use AskLocker for my business?',
-      a: `Yes. In Settings › Your vaults, turn on Business and tap Create a business. A business has its own plans: Plus for ${DEFAULT_PLAN_LIMITS.business.business_plus.members} people, ${businessPrice('business_plus')}. Pro for ${DEFAULT_PLAN_LIMITS.business.business_pro.members}, ${businessPrice('business_pro')}. Enterprise for ${DEFAULT_PLAN_LIMITS.business.business_enterprise.members}, ${businessPrice('business_enterprise')}. Ask for one in Settings › Feedback. Started in a family vault? An admin can tap Make it a business there.`,
+      a: `Yes. In Settings › Your vaults, turn on Business and tap Create a business. A business has its own plans: ${sellsInApp ? `Plus for ${DEFAULT_PLAN_LIMITS.business.business_plus.members} people, ${businessPrice('business_plus')}. Pro for ${DEFAULT_PLAN_LIMITS.business.business_pro.members}, ${businessPrice('business_pro')}. Enterprise for ${DEFAULT_PLAN_LIMITS.business.business_enterprise.members}, ${businessPrice('business_enterprise')}. Ask for one in Settings › Feedback.` : `Plus for ${DEFAULT_PLAN_LIMITS.business.business_plus.members} people, Pro for ${DEFAULT_PLAN_LIMITS.business.business_pro.members} and Enterprise for ${DEFAULT_PLAN_LIMITS.business.business_enterprise.members}.`} Started in a family vault? An admin can tap Make it a business there.`,
     },
     {
       q: 'How do I delete a vault?',
@@ -106,9 +111,9 @@ function faq(payments: PaymentsStatus | null): { q: string; a: string }[] {
     },
     {
       q: 'What does ★ Family Plus mean?',
-      a: `It marks what the paid plans for the whole family add${forSale ? '' : ', coming soon'}. Family Plus is ${plusPrice('inr')} or ${plusPrice('inr', 'yearly')} in India (${plusPrice('usd')} or ${plusPrice('usd', 'yearly')} elsewhere), with ${DEFAULT_PLAN_LIMITS.members.plus} members and ${formatBytes(DEFAULT_PLAN_LIMITS.plus)}. Family Pro is ${plusPrice('inr', 'monthly', 'family_pro')} or ${plusPrice('inr', 'yearly', 'family_pro')} (${plusPrice('usd', 'monthly', 'family_pro')} or ${plusPrice('usd', 'yearly', 'family_pro')}), with ${DEFAULT_PLAN_LIMITS.familyPro.members} members and ${formatBytes(DEFAULT_PLAN_LIMITS.familyPro.storage)}. Both add more questions, 30-day share links, reminders for everyone, reading Hindi and other Indian languages, and Gmail import.`,
+      a: `It marks what the paid plans for the whole family add${forSale || !sellsInApp ? '' : ', coming soon'}. ${familyPlans} Both add more questions, 30-day share links, reminders for everyone, reading Hindi and other Indian languages, and Gmail import.`,
     },
-    ...(forSale ? [{
+    ...(forSale && sellsInApp ? [{
       q: 'How do I pay for Family Plus or Pro?',
       a: `Open Family Plus from the menu, choose Plus or Pro, then a month or a year. You pay through Razorpay by UPI, card or net banking, and AskLocker never sees your card or UPI details. Nothing renews by itself. For now, you can pay only on the web app${payments?.currencies.includes('USD') ? '' : ', in Indian rupees'}.`,
     }] : []),
@@ -122,7 +127,7 @@ function faq(payments: PaymentsStatus | null): { q: string; a: string }[] {
     },
     {
       q: 'Why can\'t AskLocker find something in my document?',
-      a: 'Blurry or dark photos are hard to read. Retake the photo in good light. If your documents use another language, add it in Settings › Document languages (★ Family Plus).',
+      a: 'Blurry or dark photos are hard to read. Retake the photo in good light. If your documents use another language, add it in Settings › Document languages (★ Family Plus). The Android app reads photos in English only.',
     },
   ];
 }
@@ -178,7 +183,9 @@ function businessFaq(): { q: string; a: string }[] {
     },
     {
       q: 'What does ★ Plus mean?',
-      a: `It marks what the paid plans add. Plus is ${businessPrice('business_plus')}, Pro ${businessPrice('business_pro')} and Enterprise ${businessPrice('business_enterprise')}. Every paid plan also reads Hindi and other Indian languages. To get one, open Plans from the menu and tap Ask us.`,
+      a: sellsInApp
+        ? `It marks what the paid plans add. Plus is ${businessPrice('business_plus')}, Pro ${businessPrice('business_pro')} and Enterprise ${businessPrice('business_enterprise')}. Every paid plan also reads Hindi and other Indian languages. To get one, open Plans from the menu and tap Ask us.`
+        : 'It marks what the paid plans add: more people, more space, more questions, renewals and bills due, and reading Hindi and other Indian languages. Plans shows them side by side.',
     },
     {
       q: 'How do I share with someone outside the business?',
@@ -202,7 +209,7 @@ function businessFaq(): { q: string; a: string }[] {
     },
     {
       q: 'Why can\'t AskLocker find something in my record?',
-      a: 'Blurry or dark photos are hard to read. Retake the photo in good light. If your records use another language, add it in Settings › Document languages (★ Plus).',
+      a: 'Blurry or dark photos are hard to read. Retake the photo in good light. If your records use another language, add it in Settings › Document languages (★ Plus). The Android app reads photos in English only.',
     },
   ];
 }
