@@ -1112,33 +1112,36 @@ export type Database = {
       }
       push_subscriptions: {
         Row: {
-          auth: string
+          auth: string | null
           created_at: string
           endpoint: string
           id: string
+          kind: string
           label: string | null
           last_used_at: string | null
-          p256dh: string
+          p256dh: string | null
           user_id: string
         }
         Insert: {
-          auth: string
+          auth?: string | null
           created_at?: string
           endpoint: string
           id?: string
+          kind?: string
           label?: string | null
           last_used_at?: string | null
-          p256dh: string
+          p256dh?: string | null
           user_id: string
         }
         Update: {
-          auth?: string
+          auth?: string | null
           created_at?: string
           endpoint?: string
           id?: string
+          kind?: string
           label?: string | null
           last_used_at?: string | null
-          p256dh?: string
+          p256dh?: string | null
           user_id?: string
         }
         Relationships: [
@@ -1810,6 +1813,8 @@ export type Database = {
         Args: { p_backup: string | null; p_encrypt_public: string; p_fingerprint: string; p_sign_public: string }
         Returns: number
       }
+      // 075: the Android app's FCM token (hand-written)
+      save_fcm_token: { Args: { p_token: string; p_label?: string | null }; Returns: undefined }
       // 071: locked vaults (hand-written; the app calls them through e2e-api.ts)
       replace_my_identity: {
         Args: { p_encrypt_public: string; p_sign_public: string; p_fingerprint: string; p_backup?: string | null }
@@ -1820,12 +1825,18 @@ export type Database = {
         Returns: string
       }
       remove_key_unlock: { Args: { p_id: string }; Returns: undefined }
-      request_device_keys: { Args: { p_request_key: string; p_label?: string | null }; Returns: string }
+      request_device_keys: { Args: { p_request_key: string; p_commitment: string; p_label?: string | null }; Returns: string }
+      offer_device_nonce: { Args: { p_id: string; p_nonce: string }; Returns: boolean }
+      reveal_device_nonce: { Args: { p_id: string; p_nonce: string }; Returns: undefined }
       answer_device_request: { Args: { p_id: string; p_answer: string }; Returns: undefined }
       take_device_answer: { Args: { p_id: string }; Returns: string | null }
       cancel_device_request: { Args: { p_id: string }; Returns: undefined }
-      lock_vault: { Args: { p_family_id: string; p_grant: string }; Returns: number }
-      add_vault_key_version: { Args: { p_family_id: string; p_version: number; p_grant: string }; Returns: undefined }
+      lock_vault: { Args: { p_family_id: string; p_grant: string; p_commitment: string; p_signature: string }; Returns: number }
+      add_vault_key_version: {
+        Args: { p_family_id: string; p_version: number; p_grant: string; p_commitment: string; p_signature: string }
+        Returns: undefined
+      }
+      discard_my_vault_grant: { Args: { p_family_id: string; p_version: number }; Returns: undefined }
       grant_vault_key: {
         Args: { p_family_id: string; p_version: number; p_member: string; p_identity_version: number; p_grant: string }
         Returns: undefined
@@ -1849,6 +1860,13 @@ export type Database = {
       update_sealed_details: { Args: { p_family_id: string; p_document_id: string; p_details: string }; Returns: undefined }
       finish_vault_move: { Args: { p_family_id: string }; Returns: number }
       sealed_documents_sweep: { Args: { p_family_id: string }; Returns: number }
+      seal_vault_item: {
+        Args: { p_family_id: string; p_kind: string; p_item_id: string; p_key_version: number; p_sealed: string }
+        Returns: undefined
+      }
+      add_sealed_person: { Args: { p_family_id: string; p_person_id: string; p_key_version: number; p_sealed: string }; Returns: string }
+      delete_vault_item: { Args: { p_family_id: string; p_kind: string; p_item_id: string }; Returns: undefined }
+      paid_bills: { Args: { p_family_id: string }; Returns: Json }
       update_my_identity_backup: { Args: { p_backup: string }; Returns: undefined }
       delete_my_identity: { Args: never; Returns: undefined }
       identity_fingerprint: { Args: { p_encrypt_public: string; p_sign_public: string }; Returns: string }

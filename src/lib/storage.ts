@@ -63,6 +63,9 @@ export const accountKey = {
   uses: (userId: string) => `fv:uses:${userId}`, // Family or Business first, and the other too: the account's copy, until it is saved there (family-context.tsx)
   setupLater: (userId: string) => `fv:setup-later:${userId}`, // "Later" to Home's "Set up your family/business" (use-for-offer.tsx)
   agreement: (userId: string) => `fv:agreement:${userId}`, // the version they agreed to, and whether the database has it yet (062, agreement-screen.tsx)
+  keysOnSignOut: (userId: string) => `fv:keys-on-sign-out:${userId}`, // 'forget': a shared computer, the encryption keys go at sign-out (vault-keys.web.ts)
+  keyTrust: (userId: string) => `fv:key-trust:${userId}`, // the key IDs this device trusts for each person in their locked vaults (vault-lock.web.ts)
+  keySeen: (userId: string) => `fv:key-seen:${userId}`, // the newest vault key version and record seen here, so an older one is refused (vault-lock.web.ts)
 };
 
 // What this device keeps for every account on it at once.

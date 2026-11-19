@@ -3,6 +3,7 @@ import { Platform } from 'react-native';
 import { Session, User } from '@supabase/supabase-js';
 import { supabase } from './supabase';
 import { forgetPushOnThisDevice } from './push';
+import { forgetKeysAtSignOut } from './vault-keys';
 
 // Only import and run browser/auth-session APIs on client side (avoid SSR crashes)
 let WebBrowser: typeof import('expo-web-browser') | null = null;
@@ -148,6 +149,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signOut = async () => {
     // Before the session goes: this device stops getting the account's notifications (034).
     await forgetPushOnThisDevice();
+    // A shared computer: the encryption keys go too, where the person asked (074).
+    const id = session?.user.id;
+    if (id) await forgetKeysAtSignOut(id).catch(() => undefined);
     await supabase.auth.signOut();
   };
 

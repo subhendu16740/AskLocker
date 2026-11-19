@@ -613,9 +613,10 @@ async function ocrWithOcrSpace(
     // English only, deliberately. This is the server-side fallback for PDFs
     // the text extractor could not read; OCR.space's Indic language support
     // varies by engine and an unrecognised code fails the whole request, which
-    // would cost us the fallback entirely. Images are OCR'd on the client,
-    // where Tesseract does read the person's chosen languages — so a scanned
-    // Indian-language PDF is the one case still limited to English.
+    // would cost us the fallback entirely. On the website images are OCR'd
+    // in the browser, where Tesseract reads the person's chosen languages;
+    // the Android app sends its photos here (src/lib/ocr.ts), so they, and
+    // scanned PDFs, are read in English only.
     formData.append('language', 'eng');
     formData.append('isOverlayRequired', 'false');
     formData.append('OCREngine', '2'); // Engine 2: better for scanned docs

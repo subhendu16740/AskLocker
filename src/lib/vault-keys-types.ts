@@ -52,8 +52,11 @@ export interface PreparedKeys {
 
 /** A new device waiting for another one to approve it. */
 export interface DeviceRequest {
-  /** Six digits, "123 456", the same on both screens. */
-  code: string;
+  /**
+   * Six digits, "123 456", the same on both screens. Known once a signed-in
+   * device has answered with its own value (074).
+   */
+  code: Promise<string>;
   /** Resolves once approved and the keys are kept here; rejects when it ends. */
   done: Promise<void>;
   cancel: () => Promise<void>;
@@ -62,7 +65,10 @@ export interface DeviceRequest {
 /** A new device asking this one for the keys. */
 export interface PendingDevice {
   id: string;
-  code: string;
+  /** Null until the new device shows its value; or when another of your devices is answering it. */
+  code: string | null;
+  /** Another of your signed-in devices answered first: approve it there. */
+  elsewhere: boolean;
   label: string | null;
   createdAt: string;
 }

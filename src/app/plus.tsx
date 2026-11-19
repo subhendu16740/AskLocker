@@ -7,6 +7,9 @@
 // time. Until then the page says "Coming soon" instead of offering a button
 // that does nothing.
 //
+// The Android app shows no price and takes no payment (src/lib/selling.ts:
+// Google Play's rules): the plans, what this vault has used, nothing to buy.
+//
 // A business (051) sees its own plans instead — Plus, Pro and Enterprise,
 // side by side with their prices before GST — and is never offered Family
 // Plus: its plans are set up with us (ask in Settings › Feedback), not
@@ -30,6 +33,7 @@ import {
   verifyPlusPayment, type FamilyPlanStatus,
 } from '../lib/api';
 import { checkoutSupported, openCheckout } from '../lib/razorpay';
+import { sellsInApp } from '../lib/selling';
 import {
   CLOSED_MESSAGE, DEFAULT_PLAN_LIMITS, NEARLY_FULL, businessAmount, businessPlanName, familyPlanName, formatBytes, isBusinessPlan,
   localCurrency, localPlusAmount, localPlusPrice, localPlusYearlyOffer, localPlusYearlySaving, nextBusinessPlan,
@@ -244,15 +248,18 @@ function FamilyPlus() {
                 onPress={() => choose(p)}
                 accessibilityRole="button"
                 accessibilityState={{ selected: chosen === p }}
-                accessibilityLabel={`${familyPlanName(p)}, ${planLine(p)}, ${localPlusPrice('monthly', p)}${onPlan === p ? ', your plan' : ''}`}
+                disabled={!sellsInApp}
+                accessibilityLabel={`${familyPlanName(p)}, ${planLine(p)}${sellsInApp ? `, ${localPlusPrice('monthly', p)}` : ''}${onPlan === p ? ', your plan' : ''}`}
               >
                 <Text style={styles.heroCellLabel}>{familyPlanName(p)}</Text>
-                <Text style={styles.heroAmount}>{localPlusAmount('monthly', p)}</Text>
-                <Text style={styles.heroPer}>a month</Text>
+                {sellsInApp && <Text style={styles.heroAmount}>{localPlusAmount('monthly', p)}</Text>}
+                {sellsInApp && <Text style={styles.heroPer}>a month</Text>}
                 <Text style={styles.heroLine}>{planLine(p)}</Text>
-                <View style={styles.heroPick}>
-                  <Text style={styles.heroPickText}>{onPlan === p ? 'Your plan' : chosen === p ? 'Chosen' : 'Choose'}</Text>
-                </View>
+                {(sellsInApp || onPlan === p) && (
+                  <View style={styles.heroPick}>
+                    <Text style={styles.heroPickText}>{onPlan === p ? 'Your plan' : chosen === p ? 'Chosen' : 'Choose'}</Text>
+                  </View>
+                )}
               </TouchableOpacity>
             ))}
           </View>
@@ -279,7 +286,7 @@ function FamilyPlus() {
             <Feather name="alert-triangle" size={18} color="#B91C1C" />
             <Text style={[styles.stateText, { color: '#B91C1C' }]}>
               Your paid plan has ended for {familyName ?? 'your family'}. On {longDate(new Date(removalAt))}, the newest
-              documents over {formatBytes(freeHere)} will be removed. Renew, or delete documents to get under{' '}
+              documents over {formatBytes(freeHere)} will be removed. {sellsInApp ? 'Renew, or delete' : 'Delete'} documents to get under{' '}
               {formatBytes(freeHere)}.
             </Text>
           </View>
@@ -294,7 +301,7 @@ function FamilyPlus() {
 
         {/* The plan chosen: its monthly and yearly price, and paying. */}
         <View onLayout={(e) => { choiceAt.current = e.nativeEvent.layout.y; }}>
-          {chosen && (
+          {chosen && sellsInApp && (
             <Card style={styles.payCard}>
               <Text style={styles.payTitle}>
                 {onPlan === chosen ? `Add more time to ${familyPlanName(chosen)}` : familyPlanName(chosen)}
@@ -327,9 +334,7 @@ function FamilyPlus() {
                   <Text style={styles.soonTag}>Coming soon</Text>
                   <Text style={styles.soonText}>You can't buy {familyPlanName(chosen)} yet.</Text>
                 </View>
-              ) : !checkoutSupported ? (
-                <Text style={styles.payFine}>For now, you can pay on the AskLocker web app.</Text>
-              ) : !canPayHere ? (
+              ) : !checkoutSupported ? null : !canPayHere ? (
                 <Text style={styles.payFine}>Paying from outside India is coming soon.</Text>
               ) : (
                 <>
@@ -386,8 +391,9 @@ function FamilyPlus() {
                 key={p}
                 style={[styles.value, styles.valueFamily]}
                 onPress={() => choose(p)}
-                accessibilityRole="button"
-                accessibilityLabel={`${familyPlanName(p)}${onPlan === p ? ', your plan' : ''}. Choose it to see the prices.`}
+                disabled={!sellsInApp}
+                accessibilityRole={sellsInApp ? 'button' : 'text'}
+                accessibilityLabel={`${familyPlanName(p)}${onPlan === p ? ', your plan' : ''}${sellsInApp ? '. Choose it to see the prices.' : ''}`}
               >
                 <Text style={[styles.headText, styles.headPlus, chosen === p && styles.headChosen]}>{short(p)}</Text>
               </TouchableOpacity>
@@ -416,7 +422,7 @@ function FamilyPlus() {
               </View>
             );
           })}
-          <View
+          {sellsInApp && <View
             style={[styles.row, styles.priceRow]}
             accessible
             accessibilityLabel={`Price: Free costs nothing. Family Plus ${localPlusPrice('monthly', 'plus')} or ${localPlusPrice('yearly', 'plus')}. Family Pro ${localPlusPrice('monthly', 'family_pro')} or ${localPlusPrice('yearly', 'family_pro')}.`}
@@ -433,7 +439,7 @@ function FamilyPlus() {
                 <Text style={styles.cellPer}>a year</Text>
               </TouchableOpacity>
             ))}
-          </View>
+          </View>}
         </Card>
 
         <Muted>
@@ -687,15 +693,15 @@ function BusinessPlans() {
                 key={p}
                 style={[styles.heroCell, styles.heroCellTight]}
                 accessible
-                accessibilityLabel={`${businessPlanName(p)}, ${limits.business[p].members} people, ${businessAmount(p)} a month plus GST`}
+                accessibilityLabel={`${businessPlanName(p)}, ${limits.business[p].members} people${sellsInApp ? `, ${businessAmount(p)} a month plus GST` : ''}`}
               >
                 <Text style={styles.heroCellLabel}>{businessPlanName(p)}</Text>
-                <Text style={styles.heroAmountTight}>{businessAmount(p)}</Text>
+                {sellsInApp && <Text style={styles.heroAmountTight}>{businessAmount(p)}</Text>}
                 <Text style={styles.heroPer}>{limits.business[p].members} people</Text>
               </View>
             ))}
           </View>
-          <Text style={styles.heroNote}>A month, plus GST. A year saves about 2 months.</Text>
+          {sellsInApp && <Text style={styles.heroNote}>A month, plus GST. A year saves about 2 months.</Text>}
         </LinearGradient>
 
         {onPlan ? (
@@ -749,7 +755,7 @@ function BusinessPlans() {
               </View>
             );
           })}
-          <View
+          {sellsInApp && <View
             style={[styles.row, styles.priceRow]}
             accessible
             accessibilityLabel={`Price, plus GST: Free nothing, ${PAID.map((p) => `${businessPlanName(p)} ${businessAmount(p)} a month or ${businessAmount(p, 'yearly')} a year`).join(', ')}.`}
@@ -766,10 +772,10 @@ function BusinessPlans() {
                 <Text style={styles.cellPer}>a year</Text>
               </View>
             ))}
-          </View>
+          </View>}
         </Card>
 
-        {next && (
+        {next && sellsInApp && (
           <Card style={styles.payCard}>
             <Text style={styles.payTitle}>{onPlan ? `Move to ${businessPlanName(next)}` : 'Get a plan'}</Text>
             <Text style={styles.payFine}>

@@ -1,29 +1,40 @@
 // Home, for locked vaults (071; test builds): what every member's app does
 // when it opens them — lock the vault key for members who have none, make a
 // new version after someone left — and the few things that need a person:
-// this device has no keys yet, nobody has let them in yet, or a member with a
-// new phone waits for an admin to let them back in.
+// this device has no keys yet, nobody has let them in yet, a member with new
+// keys waits for an admin to let them back in (or for this person to trust
+// them here, after comparing key IDs, 074), or their own older documents
+// are still readable.
 
 import { useCallback, useState } from 'react';
 import { View, type StyleProp, type ViewStyle } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { useFamily } from '../lib/family-context';
 import { isProduction } from '../lib/environment';
+import { usePreferences } from '../lib/preferences';
 import { vaultName } from '../lib/vaults';
-import { approveMember, lockedVaults, tendVault, LockedVaultError } from '../lib/vault-lock';
+import { approveMember, lockedVaults, moveOlderDocuments, tendVault, trustMember, LockedVaultError } from '../lib/vault-lock';
 import { pendingDeviceRequests } from '../lib/vault-keys';
-import { Body, Card, CardTitle, PrimaryButton, SecondaryButton } from './settings-ui';
+import { Body, Card, CardTitle, Muted, PrimaryButton, SecondaryButton } from './settings-ui';
 
 type Notice =
   | { kind: 'no_keys'; vault: string }
   | { kind: 'waiting'; vault: string }
-  | { kind: 'approve'; familyId: string; vault: string; memberId: string; name: string }
+  | { kind: 'approve'; familyId: string; vault: string; memberId: string; name: string; keyId: string; admin: boolean; newPhone: boolean }
+  | { kind: 'readable'; familyId: string; vault: string; namespace: string; count: number }
   | { kind: 'device' };
+
+/** A key ID as people read it out: five groups of four. */
+export function keyIdText(keyId: string): string {
+  return (keyId.match(/.{1,4}/g) ?? []).join(' ');
+}
 
 export function LockedVaultNotices({ style }: { style?: StyleProp<ViewStyle> }) {
   const { families } = useFamily();
+  const { documentLanguages } = usePreferences();
   const [notices, setNotices] = useState<Notice[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
+  const [progress, setProgress] = useState<string | null>(null);
 
   const look = useCallback(async () => {
     if (isProduction) return;
@@ -36,8 +47,16 @@ export function LockedVaultNotices({ style }: { style?: StyleProp<ViewStyle> }) 
       try {
         const t = await tendVault(f.family_id);
         if (t?.waitingForMe) found.push({ kind: 'waiting', vault: name });
-        if (t?.admin) {
-          for (const m of t.needsApproval) found.push({ kind: 'approve', familyId: f.family_id, vault: name, memberId: m.userId, name: m.name });
+        for (const c of t?.needsApproval ?? []) {
+          // A viewer can only trust keys the server does not call changed; an admin can let anyone in.
+          if (!t?.admin && c.serverSaysChanged) continue;
+          found.push({
+            kind: 'approve', familyId: f.family_id, vault: name, memberId: c.member.userId, name: c.member.name,
+            keyId: c.keyId, admin: Boolean(t?.admin), newPhone: c.serverSaysChanged,
+          });
+        }
+        if (t?.myReadable && f.families?.storage_namespace) {
+          found.push({ kind: 'readable', familyId: f.family_id, vault: name, namespace: f.families.storage_namespace, count: t.myReadable });
         }
       } catch (err) {
         if (err instanceof LockedVaultError && err.code === 'no_keys_here') {
@@ -81,15 +100,39 @@ export function LockedVaultNotices({ style }: { style?: StyleProp<ViewStyle> }) 
             </Card>
           );
         }
+        if (n.kind === 'readable') {
+          return (
+            <Card key={`r${n.familyId}`}>
+              <CardTitle icon="unlock">{n.count === 1 ? 'One of your documents' : `${n.count} of your documents`} in {n.vault} {n.count === 1 ? "isn't" : "aren't"} locked yet</CardTitle>
+              <Body>Only you can lock what you added.</Body>
+              {progress && busy === n.familyId && <Muted>{progress}</Muted>}
+              <PrimaryButton label="Lock them now" icon="lock" busy={busy === n.familyId}
+                onPress={async () => {
+                  setBusy(n.familyId);
+                  try {
+                    await moveOlderDocuments(n.familyId, n.namespace, documentLanguages, (done, total) => setProgress(`${done} of ${total}`));
+                    setNotices((list) => list.filter((x) => !(x.kind === 'readable' && x.familyId === n.familyId)));
+                  } finally {
+                    setBusy(null);
+                    setProgress(null);
+                  }
+                }} />
+            </Card>
+          );
+        }
         return (
-          <Card key={`a${n.memberId}`}>
-            <CardTitle icon="user-check">{n.name} set up a new phone</CardTitle>
-            <Body>Let them back into {n.vault}? Check with them first that it was them.</Body>
-            <PrimaryButton label="Let them back in" icon="check" busy={busy === n.memberId}
+          <Card key={`a${n.familyId}${n.memberId}`}>
+            <CardTitle icon="user-check">{n.newPhone ? `${n.name} set up a new phone` : `${n.name}'s keys changed`}</CardTitle>
+            <Body>
+              {n.admin ? `Let them back into ${n.vault}?` : `Trust their new keys in ${n.vault}?`} First ask {n.name} to open Settings › Security › Encryption keys and read you their key ID. It must be:
+            </Body>
+            <Body>{keyIdText(n.keyId)}</Body>
+            <PrimaryButton label={n.admin ? 'It matches. Let them in' : 'It matches. Trust them'} icon="check" busy={busy === n.memberId}
               onPress={async () => {
                 setBusy(n.memberId);
                 try {
-                  await approveMember(n.familyId, n.memberId);
+                  if (n.admin) await approveMember(n.familyId, n.memberId);
+                  else await trustMember(n.familyId, n.memberId);
                   setNotices((list) => list.filter((x) => !(x.kind === 'approve' && x.memberId === n.memberId)));
                 } finally {
                   setBusy(null);

@@ -37,6 +37,7 @@ import {
 } from '../../supabase/functions/_shared/gmail-crypto.ts';
 import { buildGraph, relationTo, relationLabel, relativesForPrompt, relativesNamedIn, buildForest, shortName, siblingsSharingParents } from '../../supabase/functions/_shared/kinship.ts';
 import { encryptPayload, vapidAuthorization, generateVapidKeys, isPushServiceEndpoint, MAX_PLAINTEXT } from '../../supabase/functions/_shared/webpush.ts';
+import * as fcm from '../../supabase/functions/_shared/fcm.ts';
 import { phoneLooksRight, cardProblem, cardIsEmpty, emptyCard, bloodGroupLabel, bloodGroupSpoken, telHref } from '../../src/lib/emergency.ts';
 import { allowanceJson, givenBack, parseAllowance, questionLimitMessage, questionsLeftText, resetDay } from '../../supabase/functions/_shared/questions.ts';
 import { AGREEMENT_POINTS, AGREEMENT_VERSION, agreementText } from '../../supabase/functions/_shared/agreement.ts';
@@ -54,6 +55,7 @@ import { loadQuestions, selectQuestions, groupCount, rotationGroup, estimateFor 
 import { documents, permanentDocuments } from '../fixtures/documents.mjs';
 import * as vc from '../../supabase/functions/_shared/vault-crypto.ts';
 import * as localSearch from '../../src/lib/local-search.ts';
+import * as treeRules from '../../src/lib/tree-rules.ts';
 
 let passed = 0;
 const failures = [];
@@ -663,6 +665,64 @@ await test('web push: VAPID signs for the push service, and only push services a
   for (const bad of ['https://evil.example/fcm.googleapis.com', 'http://fcm.googleapis.com/x', 'https://fcm.googleapis.com.evil.example/x', 'https://fcm.googleapis.com:8443/x', 'not a url']) {
     assert.ok(!isPushServiceEndpoint(bad), bad);
   }
+});
+
+await test('Android notifications: the FCM service account signs its own request, and FCM\'s answers are sorted (075)', async () => {
+  // A made-up service account with a fresh RSA key, as Firebase's key file holds one.
+  const pair = await crypto.subtle.generateKey(
+    { name: 'RSASSA-PKCS1-v1_5', modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: 'SHA-256' }, true, ['sign', 'verify']);
+  const pkcs8 = new Uint8Array(await crypto.subtle.exportKey('pkcs8', pair.privateKey));
+  const b64 = Buffer.from(pkcs8).toString('base64').replace(/(.{64})/g, '$1\n');
+  const file = {
+    type: 'service_account', project_id: 'asklocker-qa', client_email: 'fcm@asklocker-qa.iam.gserviceaccount.com',
+    private_key: `-----BEGIN PRIVATE KEY-----\n${b64}\n-----END PRIVATE KEY-----\n`,
+    token_uri: 'https://evil.example/token',
+  };
+  const sa = fcm.parseServiceAccount(JSON.stringify(file));
+  assert.ok(sa, 'the key file is read');
+  assert.equal(sa.projectId, 'asklocker-qa');
+  assert.equal(sa.tokenUri, 'https://oauth2.googleapis.com/token', 'only Google\'s token address, whatever the file says');
+  assert.deepEqual(fcm.parseServiceAccount(Buffer.from(JSON.stringify(file)).toString('base64')), sa, 'the same file in base64');
+  for (const bad of [undefined, '', 'not json', '{"project_id":"x"}', JSON.stringify({ ...file, private_key: 'nope' })]) {
+    assert.equal(fcm.parseServiceAccount(bad), null, String(bad).slice(0, 20));
+  }
+
+  const jwt = await fcm.signServiceAccountJwt(sa, 1_900_000_000);
+  const [h, c, sig] = jwt.split('.');
+  assert.deepEqual(JSON.parse(new TextDecoder().decode(fromBase64(h))), { alg: 'RS256', typ: 'JWT' });
+  assert.deepEqual(JSON.parse(new TextDecoder().decode(fromBase64(c))), {
+    iss: 'fcm@asklocker-qa.iam.gserviceaccount.com', scope: 'https://www.googleapis.com/auth/firebase.messaging',
+    aud: 'https://oauth2.googleapis.com/token', iat: 1_900_000_000, exp: 1_900_003_600,
+  });
+  assert.ok(await crypto.subtle.verify('RSASSA-PKCS1-v1_5', pair.publicKey, fromBase64(sig), new TextEncoder().encode(`${h}.${c}`)), 'the signature verifies');
+  assert.equal(new URLSearchParams(fcm.tokenRequestBody(jwt)).get('grant_type'), 'urn:ietf:params:oauth:grant-type:jwt-bearer');
+  assert.equal(fcm.fcmSendUrl('asklocker-qa'), 'https://fcm.googleapis.com/v1/projects/asklocker-qa/messages:send');
+
+  const token = 'dXk1:APA91bSAMPLE_token-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+  const body = fcm.fcmMessageBody(token, { title: 'Passport expires in 30 days', body: "Asha's passport", url: '/notifications', tag: 'fv-expiry-1' });
+  assert.deepEqual(body, { message: {
+    token,
+    notification: { title: 'Passport expires in 30 days', body: "Asha's passport" },
+    data: { url: '/notifications', tag: 'fv-expiry-1' },
+    android: { priority: 'HIGH', ttl: '86400s', notification: { channel_id: 'reminders', tag: 'fv-expiry-1' } },
+  } });
+  assert.ok(Object.values(body.message.data).every((v) => typeof v === 'string'), 'FCM data values are strings');
+
+  const sort = (status, error) => fcm.classifyFcmResponse(status, error ? { error } : null);
+  assert.deepEqual(sort(200), { ok: true, status: 200 });
+  const gone = (o) => [o.gone, o.transient];
+  assert.deepEqual(gone(sort(404, { status: 'NOT_FOUND', details: [{ errorCode: 'UNREGISTERED' }] })), [true, false]);
+  assert.deepEqual(gone(sort(400, { status: 'INVALID_ARGUMENT', message: 'The registration token is not a valid FCM registration token' })), [true, false]);
+  assert.deepEqual(gone(sort(400, { status: 'INVALID_ARGUMENT', details: [{ fieldViolations: [{ field: 'message.token' }] }] })), [true, false]);
+  assert.deepEqual(gone(sort(400, { status: 'INVALID_ARGUMENT', details: [{ fieldViolations: [{ field: 'message.notification.title' }] }] })), [false, false], 'a bad message keeps the token');
+  assert.deepEqual(gone(sort(403, { status: 'PERMISSION_DENIED', details: [{ errorCode: 'SENDER_ID_MISMATCH' }] })), [false, false], 'our own set-up wrong deletes nobody\'s phone');
+  for (const status of [0, 401, 429, 500, 503]) assert.deepEqual(gone(sort(status, { status: 'X' })), [false, true], String(status));
+
+  // The same token rule as 075's table check and save_fcm_token().
+  assert.ok(fcm.isFcmToken(token));
+  for (const bad of ['https://fcm.googleapis.com/fcm/send/x', 'short', `${'a'.repeat(40)} b`, 'a'.repeat(4097)]) assert.ok(!fcm.isFcmToken(bad), bad.slice(0, 20));
+  const sql = readFileSync(new URL('../../supabase/migrations/075_android_push.sql', import.meta.url), 'utf8');
+  assert.ok(sql.includes("'^[A-Za-z0-9_:.-]+$'") && sql.includes('BETWEEN 32 AND 4096'), '075 keeps the same token rule');
 });
 
 await test('questions.yaml is consistent with the fixtures', () => {
@@ -1567,9 +1627,15 @@ await test('the privacy policy names who gets document text and promises nothing
   assert.ok(!html.replace(/<script type="application\/ld\+json">[\s\S]*?<\/script>/g, '').includes('<script'), 'carries no script (no forwarder), so the installed app opens it as it is');
   const page = html.replace(/<(script|style)[\s\S]*?<\/\1>/g, ' ').replace(/<!--[\s\S]*?-->/g, '').replace(/<[^>]+>/g, ' ').replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/\s+/g, ' ');
   const words = page.toLowerCase();
-  for (const name of ['Supabase', 'Cloudflare', 'Anthropic', 'Groq', 'OCR.space', 'Google', 'Razorpay']) {
+  for (const name of ['Supabase', 'Cloudflare', 'Anthropic', 'Groq', 'OCR.space', 'Google', 'Razorpay', 'Firebase Cloud Messaging']) {
     assert.ok(page.includes(name), `names ${name}`);
   }
+  // The Android app (November 2026): its photos are read on the server, its
+  // notifications pass through Google in a form Google can read, and it takes
+  // no payments.
+  assert.ok(words.includes('photos you add in the android app'), 'says OCR.space reads photos added in the Android app');
+  assert.ok(words.includes('can read their title and line'), "says Android notifications aren't encrypted from Google");
+  assert.ok(words.includes('the android app takes no payments'), 'says the Android app takes no payments');
   assert.ok(words.includes('not end-to-end'), 'says documents are not end-to-end encrypted');
   assert.ok(words.includes('the people who run asklocker can open them'), 'says the people who run AskLocker can open documents');
   for (const claim of ['100% private', 'only you can see', 'nothing is kept', 'secure', 'bank-level', 'military-grade']) {
@@ -1580,6 +1646,44 @@ await test('the privacy policy names who gets document text and promises nothing
   assert.ok(words.includes('turn it off in settings › privacy'), 'says how to turn usage counts off');
   assert.ok(page.includes(`removed after ${DEFAULT_PLAN_LIMITS.graceDays} days`), 'the days before documents go follow the plan limits');
   assert.ok(/Last updated \d{1,2} [A-Z][a-z]+ \d{4}/.test(page), 'carries the date it last changed');
+});
+
+await test('the terms, refunds and contact pages say what AskLocker does, with the app\'s prices, and leave out facts not given', async () => {
+  // /terms, /refunds and /contact (site/pages/legal.mjs, words in
+  // site/content.mjs), for Razorpay's website review, the Play Store and
+  // India's IT Rules. Same rules as the policy: no promise AskLocker does not
+  // keep, numbers from the constants, and no placeholder for a fact the owner
+  // has not given (LEGAL in site/lib/facts.mjs): the line is left out instead.
+  const { LEGAL_PAGES, legalPage, legalText } = await import('../../site/pages/legal.mjs');
+  const { LEGAL } = await import('../../site/lib/facts.mjs');
+  assert.deepEqual(LEGAL_PAGES.map((d) => d.path), ['/terms', '/refunds', '/contact']);
+  for (const doc of LEGAL_PAGES) {
+    const html = legalPage(doc, { indexable: true, hasFilms: false });
+    assert.ok(!html.replace(/<script type="application\/ld\+json">[\s\S]*?<\/script>/g, '').includes('<script'), `${doc.path} carries no script`);
+    assert.ok(html.includes(`<link rel="canonical" href="https://asklocker.com${doc.path}">`), `${doc.path} is its own address`);
+    for (const path of ['/privacy', '/terms', '/refunds', '/contact']) assert.ok(html.includes(`href="${path}"`), `${doc.path}'s footer links to ${path}`);
+    const text = legalText(doc);
+    const words = text.toLowerCase();
+    for (const claim of ['100% private', 'only you can see', 'nothing is kept', 'secure', 'safe', 'private and isolated', 'bank-level', 'military-grade']) {
+      assert.ok(!words.includes(claim), `${doc.path} promises "${claim}"`);
+    }
+    for (const m of words.matchAll(/end-to-end/g)) {
+      assert.equal(words.slice(Math.max(0, m.index - 4), m.index), 'not ', `${doc.path} says end-to-end without "not"`);
+    }
+    assert.ok(!/\bnull\b|\bundefined\b|\[[a-z ]+\]|\bTODO\b|NaN/.test(text), `${doc.path} shows a missing fact or a placeholder`);
+  }
+  const [terms, refunds, contact] = LEGAL_PAGES.map(legalText);
+  for (const price of [plusAmount('inr', 'monthly'), plusAmount('inr', 'yearly'), plusAmount('inr', 'monthly', 'family_pro'), plusAmount('inr', 'yearly', 'family_pro'), plusAmount('usd', 'monthly'), plusAmount('usd', 'yearly')]) {
+    assert.ok(terms.includes(price), `the terms show ${price}, from plan-text.ts`);
+  }
+  for (const plan of BUSINESS_PLANS) assert.ok(terms.includes(businessAmount(plan)) && terms.includes(businessAmount(plan, 'yearly')), `the terms show ${plan}'s prices`);
+  assert.ok(terms.toLowerCase().includes(`after ${DEFAULT_PLAN_LIMITS.graceDays} days`) && refunds.includes(`after ${DEFAULT_PLAN_LIMITS.graceDays} days`), 'the days before documents go follow the plan limits');
+  assert.ok(terms.toLowerCase().includes('the android app takes no payments'), 'the terms say the Android app takes no payments');
+  assert.ok(refunds.toLowerCase().includes('nothing to cancel'), 'the refunds page says plans never renew by themselves');
+  assert.ok(contact.includes('within 24 hours') && contact.includes('within 15 days'), "the contact page gives the IT Rules' grievance times");
+  for (const [key, value] of Object.entries(LEGAL)) {
+    if (value) assert.ok(terms.includes(value) || contact.includes(value), `LEGAL.${key} appears once given`);
+  }
 });
 
 // ─── The public site (site/): asklocker.com's landing page and films ──────
@@ -1892,10 +1996,79 @@ await test('e2e: a new device gets the keys only through its own one-time key, a
   const other = await vc.newRequestKeyPair();
   await assert.rejects(vc.unlockTextWithPrivateKey(locked, other.privateKey, where), { code: 'cannot_open' }, "a server's own key opens nothing");
   await assert.rejects(vc.unlockTextWithPrivateKey(locked, request.privateKey, vc.context.deviceRequest(RAVI, DOC)), { code: 'cannot_open' });
-  const code = await vc.pairingCode(requestPublic);
+  // The code comes from both devices' values, the new device's committed first (074).
+  const mine = vc.newPairingNonce();
+  const theirs = vc.newPairingNonce();
+  const commitment = await vc.pairingCommitment(requestPublic, mine);
+  assert.match(commitment, /^[A-Za-z0-9_-]{43}$/);
+  assert.equal(await vc.pairingCommitment(requestPublic, mine), commitment, 'the same value, the same commitment');
+  assert.notEqual(await vc.pairingCommitment(requestPublic, vc.newPairingNonce()), commitment, 'another value, another commitment');
+  const code = await vc.pairingCode(requestPublic, theirs, mine);
   assert.match(code, /^\d{3} \d{3}$/);
-  assert.equal(await vc.pairingCode(requestPublic), code, 'the same key, the same code');
-  assert.notEqual(await vc.pairingCode(await vc.exportPublicKey(other.publicKey)), code, 'a swapped key shows another code');
+  assert.equal(await vc.pairingCode(requestPublic, theirs, mine), code, 'both devices work out the same code');
+  assert.notEqual(await vc.pairingCode(await vc.exportPublicKey(other.publicKey), theirs, mine), code, 'a swapped key shows another code');
+  assert.notEqual(await vc.pairingCode(requestPublic, vc.newPairingNonce(), mine), code, "another device's value shows another code");
+  await assert.rejects(vc.pairingCode(requestPublic, 'short', mine), { code: 'bad_nonce' });
+});
+
+await test("e2e: a vault key's version is signed by its maker, with a commitment that catches any other key (074)", async () => {
+  const maker = await vc.newIdentity();
+  const makerPub = await vc.publicIdentity(maker);
+  const makerId = await vc.identityFingerprint(makerPub);
+  const key = await vc.newSecretKey();
+  const commitment = await vc.keyCommitment(key, VAULT, 2);
+  assert.match(commitment, /^kc1\.[A-Za-z0-9_-]{43}$/);
+  assert.equal(await vc.keyCommitment(key, VAULT, 2), commitment, 'the same key, the same commitment');
+  assert.notEqual(await vc.keyCommitment(await vc.newSecretKey(), VAULT, 2), commitment, 'a planted key does not match');
+  assert.notEqual(await vc.keyCommitment(key, VAULT, 3), commitment, 'nor the same key as another version');
+  assert.notEqual(await vc.keyCommitment(key, OTHER_VAULT, 2), commitment, 'nor in another vault');
+  const statement = vc.keyVersionStatement(VAULT, 2, commitment, ASHA, makerId);
+  const signature = await vc.signText(maker, statement);
+  assert.match(signature, /^[A-Za-z0-9_-]{86}$/, 'the shape 074 keeps');
+  assert.equal(await vc.verifyText(makerPub.sign, statement, signature), true);
+  assert.equal(await vc.verifyText(makerPub.sign, vc.keyVersionStatement(VAULT, 2, commitment, RAVI, makerId), signature), false, 'another maker');
+  const server = await vc.publicIdentity(await vc.newIdentity());
+  assert.equal(await vc.verifyText(server.sign, statement, signature), false, "a server's own key does not sign as the maker");
+  // A grant of the right key passes its version's check; a grant of another fails it.
+  const ravi = await vc.newIdentity();
+  const good = await vc.openVaultKeyGrant(await vc.grantVaultKey(key, await vc.publicIdentity(ravi), { vaultId: VAULT, userId: RAVI, keyVersion: 2 }),
+    ravi, { vaultId: VAULT, userId: RAVI, keyVersion: 2 });
+  assert.equal(await vc.keyCommitment(good, VAULT, 2), commitment);
+  const planted = await vc.openVaultKeyGrant(await vc.grantVaultKey(await vc.newSecretKey(), await vc.publicIdentity(ravi), { vaultId: VAULT, userId: RAVI, keyVersion: 2 }),
+    ravi, { vaultId: VAULT, userId: RAVI, keyVersion: 2 });
+  assert.notEqual(await vc.keyCommitment(planted, VAULT, 2), commitment, 'a planted grant opens, and is caught');
+});
+
+await test('e2e: a vault record is signed where it belongs and when, so it cannot move, change or be passed off as another (074)', async () => {
+  const writer = await vc.newIdentity();
+  const pub = await vc.publicIdentity(writer);
+  const where = vc.context.record(VAULT, 'emergency-card', ASHA);
+  const d = JSON.stringify({ card: { blood_group: 'B-' } });
+  const at = 1_789_000_000_000;
+  const sig = await vc.signText(writer, await vc.recordStatement(where, at, ASHA, d));
+  assert.equal(await vc.verifyText(pub.sign, await vc.recordStatement(where, at, ASHA, d), sig), true);
+  assert.equal(await vc.verifyText(pub.sign, await vc.recordStatement(where, at, ASHA, d.replace('B-', 'O+')), sig), false, 'a changed card');
+  assert.equal(await vc.verifyText(pub.sign, await vc.recordStatement(where, at - 1, ASHA, d), sig), false, 'another time');
+  assert.equal(await vc.verifyText(pub.sign, await vc.recordStatement(vc.context.record(VAULT, 'emergency-card', RAVI), at, ASHA, d), sig), false, "another person's card");
+  assert.equal(await vc.verifyText(pub.sign, await vc.recordStatement(where, at, RAVI, d), sig), false, 'another writer');
+  assert.throws(() => vc.context.record(VAULT, 'vault-name/x', VAULT), { code: 'bad_kind' }, 'only the kinds AskLocker keeps');
+  assert.throws(() => vc.context.record(VAULT, 'note', VAULT), { code: 'bad_kind' }, 'notes are sealed with their owner\'s key now');
+  assert.ok(vc.context.record(VAULT, 'member-key', RAVI).includes('/member-key/'));
+});
+
+await test("e2e: one's own key seals notes and chats that nobody else can open or make (074)", async () => {
+  const asha = await vc.newIdentity();
+  const key = await vc.selfKey(asha, ASHA);
+  const where = vc.context.personal(ASHA, 'note', DOC);
+  const sealed = await vc.sealJson(key, { vault: VAULT, body: 'Pay the rent' }, where);
+  // The same person on another device (the identity carried over) works out the same key.
+  const elsewhere = await vc.importIdentity(await vc.exportIdentity(asha), true);
+  assert.deepEqual(await vc.openJson(await vc.selfKey(elsewhere, ASHA), sealed, where), { vault: VAULT, body: 'Pay the rent' });
+  const ravi = await vc.newIdentity();
+  await assert.rejects(vc.openJson(await vc.selfKey(ravi, RAVI), sealed, where), { code: 'cannot_open' }, 'another member cannot open it');
+  await assert.rejects(vc.openJson(await vc.selfKey(asha, RAVI), sealed, where), { code: 'cannot_open' }, 'nor under another account');
+  await assert.rejects(vc.openJson(key, sealed, vc.context.personal(ASHA, 'saved-chat', DOC)), { code: 'cannot_open' }, 'a note is not a chat');
+  assert.throws(() => vc.context.personal(ASHA, 'card', DOC), { code: 'bad_kind' });
 });
 
 await test("e2e: the phone's lock (a passkey's PRF output) seals the identity, and only that output opens it", async () => {
@@ -1950,9 +2123,26 @@ await test('e2e: search on the phone ranks by meaning and words, four passages a
   assert.equal(words[0].documentId, 'a', 'words alone, in any script, when the model is not there');
 });
 
+await test("e2e: a locked vault's tree keeps 031's rules on the phone, in the server's words (073)", () => {
+  const ids = ['nani', 'maa', 'asha', 'ravi', 'dadi'];
+  let links = treeRules.connectInTree([], ids, 'nani', 'parent', 'maa');
+  links = treeRules.connectInTree(links, ids, 'asha', 'child', 'maa', 'ravi');
+  assert.deepEqual(links.map((l) => `${l.from}>${l.to}`).sort(), ['maa>asha', 'nani>maa', 'ravi>asha']);
+  assert.equal(treeRules.connectInTree(links, ids, 'nani', 'parent', 'maa'), links, 'the same link again changes nothing');
+  assert.throws(() => treeRules.connectInTree(links, ids, 'dadi', 'parent', 'asha'), /at most two parents/);
+  assert.throws(() => treeRules.connectInTree(links, ids, 'asha', 'parent', 'nani'), /own ancestor/);
+  assert.throws(() => treeRules.connectInTree(links, ids, 'maa', 'spouse', 'asha'), /already connected/);
+  assert.throws(() => treeRules.connectInTree(links, ids, 'asha', 'sibling', 'asha'), /own relative/);
+  assert.throws(() => treeRules.connectInTree(links, ids, 'asha', 'spouse', 'stranger'), /not in this family's tree/);
+  assert.throws(() => treeRules.connectInTree(links, ids, 'dadi', 'child', 'ravi', 'dadi'), /different second parent/);
+  const pair = treeRules.connectInTree(links, ids, 'ravi', 'spouse', 'maa');
+  assert.ok(pair.some((l) => l.kind === 'spouse' && l.from < l.to), 'a pair is stored once, smaller id first');
+  assert.deepEqual(treeRules.linksAmong(links, ['maa', 'asha']).map((l) => `${l.from}>${l.to}`), ['maa>asha'], 'someone taken out takes their links');
+});
+
 if (failures.length) {
   console.error(failures.map((f) => `✗ ${f}`).join('\n'));
   console.error(`\n${failures.length} self-test(s) failed, ${passed} passed.`);
   process.exit(1);
 }
-console.log(`✓ ${passed} self-tests passed — matchers, judge, run-time PDF, metadata, ticket codes, text cleaning, Gmail rules and token sealing, kinship and the family tree, emergency card checks, web push, plan limits, questions each month, limits against abuse, business papers, categories and plan words, Razorpay signatures, numbers in digits, sources the answer used, Claude's requests in Groq's shape, search-vector providers and budget, the agreement's words, the privacy policy, the public site, end-to-end encryption's core, questions and budget.`);
+console.log(`✓ ${passed} self-tests passed — matchers, judge, run-time PDF, metadata, ticket codes, text cleaning, Gmail rules and token sealing, kinship and the family tree, emergency card checks, web push, Android notifications, plan limits, questions each month, limits against abuse, business papers, categories and plan words, Razorpay signatures, numbers in digits, sources the answer used, Claude's requests in Groq's shape, search-vector providers and budget, the agreement's words, the privacy policy, the public site, end-to-end encryption's core, questions and budget.`);

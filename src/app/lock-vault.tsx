@@ -1,7 +1,8 @@
-// Lock a vault — test builds only (071; docs/end-to-end-encryption.md). The
-// vault's owner locks it once: its key is made on this device, every new
-// document is read and sealed on the phone, and its older documents are
-// moved into the lock here ("Locking your documents… 3 of 12").
+// Lock a vault — test builds only (071, 073; docs/end-to-end-encryption.md).
+// The vault's owner locks it once: its key is made on this device, every new
+// document is read and sealed on the phone, and what it already holds is
+// moved into the lock here: its name, family tree, emergency cards and notes
+// first, then its older documents ("Locking your documents… 3 of 12").
 
 import { useCallback, useState } from 'react';
 import { ScrollView } from 'react-native';
@@ -12,7 +13,7 @@ import { usePreferences } from '../lib/preferences';
 import { isProduction } from '../lib/environment';
 import { vaultName } from '../lib/vaults';
 import { fetchLockingAllowed, fetchVaultKeyStatus } from '../lib/e2e-api';
-import { lockVault, lockedVaults, moveOlderDocuments } from '../lib/vault-lock';
+import { lockVault, lockedVaults, moveOlderDocuments, moveVaultDetails } from '../lib/vault-lock';
 import { keysErrorText } from '../lib/vault-keys';
 import { ScreenHeader } from '../components/screen-header';
 import { Body, Card, CardTitle, Muted, PrimaryButton, SecondaryButton, Status, screenStyles } from '../components/settings-ui';
@@ -46,6 +47,8 @@ export default function LockVaultScreen() {
 
   const move = async () => {
     if (!familyId || !vault) return;
+    setProgress('Locking its name, family tree and emergency cards…');
+    await moveVaultDetails(familyId, true, true);
     const result = await moveOlderDocuments(familyId, vault.storage_namespace, documentLanguages, (done, total, name) =>
       setProgress(total ? `Locking your documents… ${Math.min(done + 1, total)} of ${total}${name ? ` (${name})` : ''}` : null));
     setProgress(null);
@@ -97,7 +100,7 @@ export default function LockVaultScreen() {
         {!locked && allowed && (
           <Card>
             <CardTitle icon="lock">Only the people in this vault can open it</CardTitle>
-            <Body>Its documents are read and locked on your devices. Nobody at AskLocker can open them.</Body>
+            <Body>Its documents, family tree and emergency cards are locked on your devices. Nobody at AskLocker can open them.</Body>
             <Muted>Adding a document takes a little longer, and searching runs on your phone. Gmail import is not available for it yet.</Muted>
             <PrimaryButton label="Lock this vault" icon="lock" busy={busy}
               onPress={run(async () => {

@@ -14,6 +14,7 @@ nothing in `src/` changes, and every address but `/` is still the app's.
 | `/robots.txt`, `/sitemap.xml` | For search engines | `pages/machine.mjs` |
 | `/llms.txt`, `/llms-full.txt` | For AI assistants ([llmstxt.org](https://llmstxt.org)) | `pages/machine.mjs` |
 | `/privacy` | The privacy policy, every word of it | `content.mjs` (`policy`), `pages/privacy.mjs` |
+| `/terms`, `/refunds`, `/contact` | Terms of service, refunds and cancellation, contact and grievances | `content.mjs` (`terms`, `refunds`, `contact`), `pages/legal.mjs` |
 
 `npm run build` runs `node site/build.mjs` last, after `expo export` and the
 other two steps, and it writes into `dist/`.
@@ -43,9 +44,11 @@ other two steps, and it writes into `dist/`.
 
   Search engines, AI assistants and a link opened from WhatsApp are none of
   these, and read the page. The QA self-test runs the script in each case.
-- **Nothing else may claim `/`, `/landing`, `/videos` or `/media`.** The build
-  stops if `src/app` gains a route with one of those names, and if `public/`
-  holds a `robots.txt`, `sitemap.xml` or `llms*.txt` (they are written here).
+- **Nothing else may claim `/`, `/landing`, `/videos`, `/media`, `/privacy`,
+  `/terms`, `/refunds` or `/contact`.** The build stops if `src/app` gains a
+  route with one of those names, and if `public/` holds a `robots.txt`,
+  `sitemap.xml`, `llms*.txt` or one of the pages' `.html` (they are written
+  here).
 - `public/manifest.json`'s `start_url` stays `/`: the forwarder sends the
   installed app on, so the app's identity on phones does not change.
 
@@ -95,6 +98,17 @@ It must stay true of the code and of the people who run AskLocker
 (CLAUDE.md), so change it, and `updated`, with any change to what is kept
 or who gets it. `npm run web` serves the app alone, without this page:
 preview it with `npm run site`.
+
+## Terms, refunds and contact
+
+For Razorpay's website review, Google Play and India's IT Rules 2021 (a
+Grievance Officer, complaints acknowledged in 24 hours and resolved in 15
+days). Same rules as the policy, and the same look. Facts only the owner can
+give, `LEGAL` in `lib/facts.mjs` (who runs AskLocker, a postal address, the
+city whose courts hear disputes, the Grievance Officer), are null until
+given: the pages leave those lines out, never a placeholder, and the build
+prints one warning naming what is missing. The refund window and the reply
+time are `POLICY_CHOICES` there. A lawyer's read is worth it.
 
 ## Changing the words
 

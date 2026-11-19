@@ -1,6 +1,7 @@
 // Settings › Notifications — whether you see notifications at all, and
-// whether this device shows them as notifications on the phone or computer
-// (Web Push, migration 034), even when AskLocker is closed. The reminders
+// whether this device shows them as notifications on the phone or computer,
+// even when AskLocker is closed: Web Push in a browser (migration 034), and
+// Google's FCM in the Android app (075). The reminders
 // themselves are made on the server either way, for every member: 90, 30
 // and 7 days before a document expires, and on the day.
 //
@@ -26,13 +27,20 @@ import { plusName } from '../../lib/plans';
 import { usePaidPlan } from '../../lib/family-plan';
 import { PlusTag } from '../../components/screen-header';
 
-const DEVICE_TEXT: Record<Exclude<PushStatus, 'on' | 'off'>, string> = {
-  unsupported: "This browser can't show notifications. Try Chrome, Edge, Firefox or Safari.",
-  'needs-home-screen':
-    'On iPhone or iPad, tap Share, then Add to Home Screen. Open AskLocker from there and turn this on.',
-  blocked: 'Your browser blocks these. Allow them in its site settings.',
-  'not-ready': 'Not ready yet. Alerts still show under the bell.',
-};
+const DEVICE_TEXT: Record<Exclude<PushStatus, 'on' | 'off'>, string> = Platform.OS === 'web'
+  ? {
+    unsupported: "This browser can't show notifications. Try Chrome, Edge, Firefox or Safari.",
+    'needs-home-screen':
+      'On iPhone or iPad, tap Share, then Add to Home Screen. Open AskLocker from there and turn this on.',
+    blocked: 'Your browser blocks these. Allow them in its site settings.',
+    'not-ready': 'Not ready yet. Alerts still show under the bell.',
+  }
+  : {
+    unsupported: "This app can't show notifications here yet. Alerts still show under the bell.",
+    'needs-home-screen': "This app can't show notifications here yet. Alerts still show under the bell.",
+    blocked: "Notifications are off for AskLocker. Turn them on in your phone's Settings.",
+    'not-ready': 'Not ready yet. Alerts still show under the bell.',
+  };
 
 export default function NotificationSettingsScreen() {
   // Settings follows the mode, Family or Business (the drawer's switch).
@@ -40,19 +48,17 @@ export default function NotificationSettingsScreen() {
   const { notificationsEnabled, setNotificationsEnabled, birthdayReminders, setBirthdayReminders, birthdaysAvailable } = usePreferences();
   // On Free there are no birthday reminders (064); unknown shows the switch.
   const paid = usePaidPlan();
-  const onWeb = Platform.OS === 'web';
   const [device, setDevice] = useState<PushStatus | null>(null);
   const [busy, setBusy] = useState<'on' | 'off' | 'test' | null>(null);
   const [news, setNews] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null);
 
   useFocusEffect(useCallback(() => {
-    if (!onWeb) return undefined;
     let cancelled = false;
     loadPushStatus()
       .then((s) => { if (!cancelled) setDevice(s); })
       .catch(() => { if (!cancelled) setDevice('off'); });
     return () => { cancelled = true; };
-  }, [onWeb]));
+  }, []));
 
   const act = async (kind: 'on' | 'off' | 'test', work: () => Promise<void>) => {
     setBusy(kind);
@@ -104,31 +110,29 @@ export default function NotificationSettingsScreen() {
           </Body>
         </Card>
 
-        {onWeb && (
-          <Card>
-            <CardTitle icon="smartphone">On this device</CardTitle>
-            {device === null ? (
-              <ActivityIndicator color={theme.primary} />
-            ) : device === 'on' ? (
-              <>
-                <Body>This device gets alerts, even when AskLocker is closed.</Body>
-                {!notificationsEnabled && <Muted>Turned off above, so nothing is sent.</Muted>}
-                <View style={styles.buttons}>
-                  <SecondaryButton label="Send a test" icon="send" onPress={test} disabled={busy !== null} />
-                  <SecondaryButton label="Turn off" icon="bell-off" onPress={turnOff} disabled={busy !== null} />
-                </View>
-              </>
-            ) : device === 'off' ? (
-              <>
-                <Body>Get alerts here, even when AskLocker is closed.</Body>
-                <PrimaryButton label="Turn on" icon="bell" onPress={turnOn} busy={busy === 'on'} disabled={busy !== null} />
-              </>
-            ) : (
-              <Body>{DEVICE_TEXT[device]}</Body>
-            )}
-            {!!news && <Status kind={news.kind}>{news.text}</Status>}
-          </Card>
-        )}
+        <Card>
+          <CardTitle icon="smartphone">On this device</CardTitle>
+          {device === null ? (
+            <ActivityIndicator color={theme.primary} />
+          ) : device === 'on' ? (
+            <>
+              <Body>This device gets alerts, even when AskLocker is closed.</Body>
+              {!notificationsEnabled && <Muted>Turned off above, so nothing is sent.</Muted>}
+              <View style={styles.buttons}>
+                <SecondaryButton label="Send a test" icon="send" onPress={test} disabled={busy !== null} />
+                <SecondaryButton label="Turn off" icon="bell-off" onPress={turnOff} disabled={busy !== null} />
+              </View>
+            </>
+          ) : device === 'off' ? (
+            <>
+              <Body>Get alerts here, even when AskLocker is closed.</Body>
+              <PrimaryButton label="Turn on" icon="bell" onPress={turnOn} busy={busy === 'on'} disabled={busy !== null} />
+            </>
+          ) : (
+            <Body>{DEVICE_TEXT[device]}</Body>
+          )}
+          {!!news && <Status kind={news.kind}>{news.text}</Status>}
+        </Card>
 
         <Card>
           <CardTitle icon="gift">Birthdays</CardTitle>
