@@ -157,9 +157,11 @@ one a week for a month. See [The privacy film](#the-privacy-film).
 
 Rendered files go to `out/`, which is not committed; `tools/publish.sh` copies
 the finished films, shorts and posters into `marketing/family/` and
-`marketing/business/`, the NRI film into `marketing/nri/`, the privacy film
-into `marketing/privacy/` and the films in India's languages into
-`marketing/languages/`, which are (see `marketing/README.md`). To put one on
+`marketing/business/`, each profession's set into `marketing/business/sectors/`,
+the NRI film into `marketing/nri/`, the films in India's languages into
+`marketing/languages/`, the why films into `marketing/why-asklocker/`, and the
+privacy film and the launch set into `marketing/on-hold/`, which are (see
+`marketing/README.md`, the map). To put one on
 asklocker.com, see `site/README.md` (`node site/tools/add-video.mjs`).
 
 ## Render
@@ -198,14 +200,15 @@ node tools/render.mjs --film features --feature ask --portrait      # one short,
 ./tools/mux.sh feature-ask-9x16                                     # -> out/asklocker-feature-ask-9x16.mp4
 ./tools/films.sh                      # all twelve film cuts, with sound (or name some: nri-9x16)
 ./tools/privacy.sh                    # the privacy film in both shapes, its four reels, and their covers
-./tools/publish.sh                    # out/ -> marketing/<family|business>/<films|shorts|posters>/, marketing/nri/films/, marketing/privacy/, marketing/languages/
+./tools/sectors.sh                    # each profession's short, posters and pamphlet (src/sectors.js)
+./tools/publish.sh                    # out/ -> every folder in marketing/ (the map: marketing/README.md)
 ```
 
 A poster is the frame the feature names (`window.__hero`), taken as a PNG at
 any size (`--sizes 1920x1080,1080x1080` by default). A short takes two to
 three minutes on four cores; all seventeen, about 45 minutes; all twelve film
 cuts, about three hours; the privacy film and its reels, about 50 minutes,
-two `privacy.sh` runs side by side. `publish.sh` replaces the ten folders in
+two `privacy.sh` runs side by side. `publish.sh` replaces the folders in
 `marketing/` with what `out/` holds, so render everything first. The films go
 there with music; the shorts and the privacy reels with and without. The films
 in India's languages are the exception: `publish.sh` only adds to
@@ -615,9 +618,9 @@ open them, and only the passages a question needs going to an AI service.
 It is planned, not live, so the films say it only behind one switch:
 `?claims=launch`, `render.mjs --launch`, `LAUNCH=1` for `films.sh` and
 `features.sh`, `posters.mjs --launch`. Every file it makes ends `-launch`,
-and `publish.sh` puts them in `marketing/launch/`, never in today's
+and `publish.sh` puts them in `marketing/on-hold/launch/`, never in today's
 folders. **Nothing from it is posted before the owner confirms the
-launch** (`marketing/launch/README.md`).
+launch** (`marketing/on-hold/launch/README.md`).
 
 `src/claims.js` holds the switch and the words every film shares (the end
 line, the launch line). With it on:
@@ -678,8 +681,9 @@ find them, and business owners whom everyone asks for papers. Each opens
 at night, on the feeling, turns to day on AskLocker's name (the privacy
 film's music, or for a business its formal piece), and shows the app doing
 what the story asked for. `?film=why&reel=` picks one, `tools/why.sh` renders
-all three in 16:9 and 9:16 with their covers, and `publish.sh` puts them
-first in `marketing/launch/` (01 to 06).
+all three in 16:9 and 9:16 with their covers, and `publish.sh` puts them in
+`marketing/why-asklocker/` (they were 01 to 06 of the launch folder, whose
+numbers still start at 07).
 
 | `&reel=` | Says | Shows |
 |---|---|---|
@@ -694,6 +698,47 @@ Minister, 4 October 2025, via The Hindu and PTI), and the breakdown and the
 quote from the Press Information Bureau's "Your Money, Your Right" release
 of 26 December 2025. `src/why-screens.js` holds every word.
 
+## For professions
+
+Business marketing for the professions that live on paper, one set each:
+lawyers, chartered accountants, clinics, real estate, insurance advisors and
+transport fleets (the owner's ask, 19 November 2026). Each profession is a
+business Ask short with its own question, answered from its own document,
+with the source under the answer; its list beside the phone; and an end card
+with its own badge and line. From the same words, two posters and a
+pamphlet.
+
+`src/sectors.js` holds every word, as plain data, so the films
+(`?film=features&feature=sector-<key>`, in `src/features.js`) and the
+pamphlets (`tools/pamphlets.mjs`, in Node) read the same file. The
+pamphlet is an A4 page rendered from HTML: the phone is the short itself at
+its moment, taken on nothing, and the QR code is made by `tools/qr.mjs`, an
+encoder with no package (byte mode, error correction M), which checks itself
+against the standard's own test values and reads every pamphlet's code back
+(`node tools/qr.mjs --check`). It goes to the home page with
+`utm_source=pamphlet` and the profession's key.
+
+```bash
+./tools/sectors.sh                    # all six: short with and without music, posters, pamphlet
+./tools/sectors.sh lawyers clinics    # some of them
+node tools/pamphlets.mjs --sectors lawyers   # only the pamphlet
+./tools/publish.sh                    # -> marketing/business/sectors/<sector>/
+```
+
+The claims are a business vault's today, and nothing more: photos, PDFs and
+Excel sheets read when added; answers from the vault's own papers with the
+document they came from; the team by invitation; one document by link; a
+paper's "Valid up to" date as an expiry date, with renewals and reminders on
+a paid plan (★). The privacy line is the business's: "Sent and stored
+encrypted. In AskLocker, only your team can open them." Every example
+question is answered from one document, never a sum across the vault. A
+clinic's set is about the clinic's own registrations, licences and bills,
+never patients' records. The set is never rendered with `--launch`.
+
+To add a profession, add an entry to `SECTORS` (a Feather icon from
+`tools/build-icons.mjs`'s list), then `./tools/sectors.sh <key>` and
+`./tools/publish.sh`.
+
 ## In India's languages
 
 The family film and the business film, 16:9, in the app's nine Indian
@@ -701,7 +746,7 @@ languages: Hindi, Bengali, Marathi, Tamil, Telugu, Gujarati, Kannada,
 Malayalam and Punjabi (`?ui=hi`, `bn`, `mr`, `ta`, `te`, `gu`, `kn`, `ml`,
 `pa`). They are today's films, made on 4 November 2026 at the owner's ask (and
 again on 8 November 2026, with the question-lock icon and Maa's messages in
-each language), and kept in `marketing/languages/` (318 MB, the owner's ask
+each language), and kept in `marketing/languages/family/` and `business/` (318 MB, the owner's ask
 the same day), named by
 language (`asklocker-family-16x9-tamil.mp4`). All eighteen take about three
 hours on four cores.
@@ -710,7 +755,7 @@ hours on four cores.
 ./tools/languages.sh                  # all nine, both films -> out/asklocker-<film>-16x9-in-<code>.mp4
 ./tools/languages.sh ta ml            # some of them
 FILMS=business ./tools/languages.sh hi   # one film
-./tools/publish.sh                    # -> marketing/languages/asklocker-<film>-16x9-<language>.mp4, only adding
+./tools/publish.sh                    # -> marketing/languages/<film>/asklocker-<film>-16x9-<language>.mp4, only adding
 node tools/render.mjs --film business --ui ta --strings   # every string it shows, and any Tamil lacks
 node tools/i18n-check.mjs             # every table against its English
 ```

@@ -1,67 +1,32 @@
 # Marketing
 
-Go-to-market material for AskLocker. Nothing here is part of the app build:
-Metro only bundles from `src/app`, and none of these files are TypeScript.
+Everything made to market AskLocker, one folder for each use. Nothing here
+is part of the app build: Metro only bundles from `src/app`, and none of
+these files are TypeScript. Every screen shows a fictional family or
+business and SPECIMEN papers, so all of it can be shared publicly.
 
-- `family/`, `nri/` and `business/`: the finished films, feature shorts and
-  posters, ready to post (below).
-- `privacy/`: what AskLocker does with a family's documents today, in plain
-  words: the full film, and four Instagram reels to post one a week
-  ([below](#privacy-a-month-of-reels)). **Held back**: the encryption brief
-  of 3 November 2026 keeps it unpublished.
-- `launch/`: **every updated video, in one folder.** All 51, numbered in
-  the order to watch them. First, why we built AskLocker (01–06): the
-  founder's story, a family vault and a business vault, which make no claim
-  about encryption and **can be posted today**. Then the launch set,
-  **embargoed until end-to-end encryption ships**: the long films (07–22,
-  the launch film "Locked on your phone" among them, for a family and for a
-  business), a short for each feature (23–39) and the encryption reels
-  (40–51), with `no-music/`, `covers/` and `posters/` beside them.
-  [`launch/README.md`](launch/README.md) lists every video.
-- `languages/`: **the family and business films in nine Indian languages**
-  (Hindi, Bengali, Marathi, Tamil, Telugu, Gujarati, Kannada, Malayalam,
-  Punjabi), 16:9, with today's claims, so they can be posted today. The
-  translations are first drafts: have someone who speaks each language watch
-  its film before it goes out. [`languages/README.md`](languages/README.md)
-  lists them.
-- `video/`: the code that makes them: both films and every feature's short and
-  poster, in 16:9, 9:16 and 1:1. See [`video/README.md`](video/README.md) to
-  render them.
-- `strategy/index.html`: the go-to-market strategy, written for engineers
-  (problem as an incident report, customer as a type, funnel as a pipeline with
-  named events, a 90-day plan with exit gates, and a table of the product claims
-  the code supports today). Open it in a browser; the film plays once the rendered
-  files sit in `strategy/media/`, which is not committed.
+## The map
 
-`video/out/`, where everything is rendered, is gitignored; `video/tools/publish.sh`
-copies the finished files into `family/`, `nri/`, `business/` and `privacy/`, which are committed.
-All of it shows a fictional family and business and SPECIMEN papers, so it can
-be shared publicly.
+| Folder | What is in it | Use it for | Post now? |
+|---|---|---|---|
+| [`family/films/`](family/films/) | The family film, 2:15 and a 1:11 short, 16:9 and 9:16 | YouTube, the website, LinkedIn (16:9); Reels, Shorts, WhatsApp Status (9:16) | After Gmail is verified, or a cut without it (below) |
+| [`family/shorts/`](family/shorts/) | One feature each, 14–21 s, 9:16, with music and without (`-sfx-only`) | Reels, YouTube Shorts, WhatsApp Status | Yes |
+| [`family/posters/`](family/posters/) | One feature each, 1:1 and 16:9 | Instagram and WhatsApp (1:1); LinkedIn, X, slides (16:9) | Yes |
+| [`nri/films/`](nri/films/) | The family film told by a son in Toronto, four cuts | NRI groups, YouTube, LinkedIn, Reels | After Gmail is verified, or a cut without it |
+| [`business/films/`](business/films/) | The business film, 1:31 and a 0:59 short, 16:9 and 9:16 | YouTube, LinkedIn, pitches; Reels and Status | Yes |
+| [`business/shorts/`](business/shorts/) | One business feature each, 9:16, with music and without | Reels, Shorts, Status, LinkedIn | Yes |
+| [`business/posters/`](business/posters/) | One business feature each, 1:1 and 16:9 | Instagram, WhatsApp, LinkedIn | Yes |
+| [`business/sectors/`](business/sectors/) | **One folder per profession**: lawyers, chartered accountants, clinics, real estate, insurance advisors, transport. Each has a 9:16 short, two posters and a pamphlet (an A4 PDF to print, a PNG to send) | Visiting or messaging that profession; their WhatsApp and LinkedIn groups | Yes |
+| [`languages/family/`](languages/family/), [`languages/business/`](languages/business/) | The family and business films in nine Indian languages, 16:9 | YouTube with titles in the language, regional groups | Business: yes. Family: after Gmail is verified |
+| [`why-asklocker/`](why-asklocker/) | Why we built AskLocker: the founder's story, a family vault, a business vault, 16:9 and 9:16, with covers | Launch day, LinkedIn, the pinned posts | Yes |
+| [`on-hold/`](on-hold/) | The launch set (`launch/`, after end-to-end encryption ships) and the privacy film (`privacy/`, held by the encryption brief) | Nothing yet | **No** |
+| [`strategy/`](strategy/) | The go-to-market strategy (`index.html`): segments, channels, the 90-day plan and its gates | Reading | — |
+| [`video/`](video/) | The code that makes every video, poster and pamphlet | Making them again (below) | — |
 
-To put a rendered film on asklocker.com (the landing page's Films section and
-`/videos/<slug>`), see `site/README.md`: `node site/tools/add-video.mjs` makes it
-a draft there, and `site/videos/` already holds the two 16:9 films' drafts, with
-posters, chapters, transcripts and what to fix before they go out (`reviewNotes`).
-
-## What's where
-
-| Folder | What | Shapes |
-|---|---|---|
-| `family/films/` | The family film: a night when a policy number can't be found, then the same night with AskLocker | 2:15 in [16:9](./family/films/asklocker-family-16x9.mp4) and [9:16](./family/films/asklocker-family-9x16.mp4); 1:11 in [16:9](./family/films/asklocker-family-16x9-short.mp4) and [9:16](./family/films/asklocker-family-9x16-short.mp4) |
-| `nri/films/` | The family film for Indians abroad: the same night, told by a son in Toronto who looks after his parents' papers from there | 2:15 in [16:9](./nri/films/asklocker-nri-16x9.mp4) and [9:16](./nri/films/asklocker-nri-9x16.mp4); 1:11 in [16:9](./nri/films/asklocker-nri-16x9-short.mp4) and [9:16](./nri/films/asklocker-nri-9x16-short.mp4) |
-| `business/films/` | The business film: a formal product film for shops, clinics and CAs | 1:31 in [16:9](./business/films/asklocker-business-16x9.mp4) and [9:16](./business/films/asklocker-business-9x16.mp4); 0:59 in [16:9](./business/films/asklocker-business-16x9-short.mp4) and [9:16](./business/films/asklocker-business-9x16-short.mp4) |
-| `family/shorts/`, `business/shorts/` | One feature each: why it exists, the app doing it, the end card | 9:16, 14 to 21 seconds, with music, and `-sfx-only` without it |
-| `family/posters/`, `business/posters/` | One feature each: its line, and the phone showing it | 1:1 (`1080x1080`) and 16:9 (`1920x1080`) |
-| `privacy/films/` | What happens to your documents: where they're kept, who can open them, what the AI gets, every service, and taking it back | 2:16 in [16:9](./privacy/films/asklocker-privacy-16x9.mp4) and [9:16](./privacy/films/asklocker-privacy-9x16.mp4) |
-| `privacy/reels/` | Four reels from it, one a week (below) | 9:16, 27 to 31 seconds, with music, and `-sfx-only` without it |
-| `privacy/covers/` | Each one's cover: the frame that says the most | the reels' 1080x1920, the film's in both shapes |
-| `languages/` | The family film and the business film in Hindi, Bengali, Marathi, Tamil, Telugu, Gujarati, Kannada, Malayalam and Punjabi ([list](./languages/README.md)) | 16:9: the family film 2:15 to 2:21, the business film 1:31 |
-
-Where each fits: 16:9 films for the website, YouTube, LinkedIn and pitches;
-9:16 films and shorts for Reels, YouTube Shorts and WhatsApp Status (the
-`-sfx-only` shorts keep the taps and voices, for adding a platform's own
-music); 1:1 posters for Instagram and WhatsApp; 16:9 posters for LinkedIn, X
-and slides.
+Shorts and reels come twice: with music, and with `-sfx-only` (taps and
+voices, no music) for adding a platform's own trending sound. Films go
+with music only. Each folder that needs one has its own README with
+captions and where to post.
 
 ## For families
 
@@ -83,39 +48,6 @@ and slides.
 
 ★ Reminders need a paid plan (Plus and up).
 
-## Privacy: a month of reels
-
-> **On hold.** The encryption brief of 3 November 2026 keeps this film and
-> its reels unpublished: AskLocker is building end-to-end encryption, and
-> the launch set (`launch/`) will replace them once it ships. The plan
-> below stays for reference.
-
-The privacy film says what AskLocker does with a family's documents, the
-honest parts included: encrypted on the way and where they're kept (in
-Mumbai), but not end-to-end, so our servers read them to answer you and the
-people who run AskLocker can open them. It shows exactly what the AI is sent
-for one question. Every line follows the privacy policy
-([asklocker.com/privacy](https://asklocker.com/privacy)) or the code; the
-claims and their sources are in [`video/README.md`](video/README.md#the-privacy-film).
-
-Post the full film first and pin it (as a reel, a 9:16 video of 2:16), then
-one reel a week, for example on Tuesdays:
-
-| Week | Reel | It answers | Caption |
-|---|---|---|---|
-| 1 | [What the AI sees](./privacy/reels/asklocker-privacy-ai-9x16.mp4) · [no music](./privacy/reels/asklocker-privacy-ai-9x16-sfx-only.mp4) · [cover](./privacy/covers/asklocker-privacy-ai-cover.png) | What does the AI actually see? | You ask a question. The AI gets your question, who "Papa" is, and the passages that match it, up to 15, and writes the answer from the best. Never your files. Never your whole vault. The whole policy: asklocker.com/privacy |
-| 2 | [Who can open them](./privacy/reels/asklocker-privacy-who-9x16.mp4) · [no music](./privacy/reels/asklocker-privacy-who-9x16-sfx-only.mp4) · [cover](./privacy/covers/asklocker-privacy-who-cover.png) | Who can open your documents? | People in your vault, and anyone you send a link to, for that one document. Encrypted, but not end-to-end: our servers read them to answer you, our team can open them, and the services we use read parts of them for us. We'd rather you hear it from us. asklocker.com/privacy |
-| 3 | [Where they go](./privacy/reels/asklocker-privacy-where-9x16.mp4) · [no music](./privacy/reels/asklocker-privacy-where-9x16-sfx-only.mp4) · [cover](./privacy/covers/asklocker-privacy-where-cover.png) | Where do your documents go? | Encrypted on the way, and where they're kept, in Mumbai. Photos you add are read on your own phone; one it can't read goes to OCR.space. asklocker.com/privacy |
-| 4 | [Taking it back](./privacy/reels/asklocker-privacy-control-9x16.mp4) · [no music](./privacy/reels/asklocker-privacy-control-9x16-sfx-only.mp4) · [cover](./privacy/covers/asklocker-privacy-control-cover.png) | Can you take it all back? | Send one document with a link that stops when you say. Delete your account and it goes at once. Copies in backups and logs expire on their own. asklocker.com/privacy |
-
-Hashtags, if you use them: #AskLocker #FamilyDocuments #DataPrivacy
-#AIWithCare #PersonalFinanceIndia.
-
-The 16:9 film is for the website's privacy page, YouTube and LinkedIn.
-Instagram covers its own buttons and caption over the edges of a reel; the
-reels keep everything they say inside the space it leaves (the top 220 px and
-bottom 350 px stay clear).
-
 ## Before posting
 
 - **The plans and prices** are the ones of 27 October 2026 (Family Plus ₹99 a
@@ -123,8 +55,10 @@ bottom 350 px stay clear).
   check them against the app's Plans page first.
 - **Gmail import is still in testing.** Until Google verifies AskLocker's
   Gmail access, only listed test users can connect a mailbox, and the family
-  and NRI films show it (it is not in the feature shorts or posters). Hold
-  both films back from the public until then, or ask for cuts without it.
+  and NRI films show it, in every cut and in the nine family films in
+  `languages/family/` (it is not in the feature shorts, the posters, the
+  business films, the why films or the professions' set). Hold those back
+  from the public until then, or ask for cuts without it.
 - **The NRI film's end card shows the rupee price** (₹99 a month), which
   anyone in the family in India can pay. Paying from abroad is in dollars
   ($10 a month) and works only once Razorpay takes dollars
@@ -132,7 +66,7 @@ bottom 350 px stay clear).
   paying from there is coming soon. Reminders arrive at 9 in the morning India
   time, which is the evening before in Toronto, and the film shows that.
 - **Business vaults are a pilot**: paid business plans are set up by hand.
-- **The privacy film says two things the privacy policy doesn't yet**, both
+- **The privacy film (`on-hold/privacy/`) says two things the privacy policy doesn't yet**, both
   true of the code: a follow-up question sends the last few messages of the
   chat to the AI with it (rag-search's history, up to six messages of 600
   characters), and a photo the phone can't read is sent to OCR.space
@@ -156,16 +90,18 @@ After a change to the app or the words, from `video/`:
 
 ```bash
 ./tools/films.sh       # the twelve film cuts, with sound
-./tools/privacy.sh     # the privacy film, its four reels and their covers
 ./tools/features.sh    # every feature short and poster
+./tools/sectors.sh     # each profession's short, posters and pamphlet (business/sectors/)
+./tools/why.sh         # the three why films and their covers (why-asklocker/)
+./tools/privacy.sh     # the privacy film, its four reels and their covers (on-hold/privacy/)
 LAUNCH=1 ./tools/films.sh && LAUNCH=1 ./tools/features.sh   # the launch set,
 ./tools/locked.sh && ./tools/locked.sh business             # and its own film, both versions
-./tools/publish.sh     # copy them here (the launch set into launch/)
+./tools/publish.sh     # copy them all here, each into its folder (the launch set into on-hold/launch/)
 ```
 
 The family and business films in India's languages: `./tools/languages.sh`
 (all nine) or `./tools/languages.sh ta ml` (some), then `./tools/publish.sh`,
-which adds them to `languages/`.
+which adds them to `languages/family/` and `languages/business/`.
 
 The language versions of the family short (its voice scene in each of the
 app's ten voice languages) are not kept here, to keep the repository small:

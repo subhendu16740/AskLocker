@@ -13,7 +13,7 @@
 // notifications, so the launch set shows neither.
 //
 // NOTHING rendered with ?claims=launch is posted until the owner confirms the
-// launch has shipped (marketing/launch/README.md). The words come from the
+// launch has shipped (marketing/on-hold/launch/README.md). The words come from the
 // brief's "Say" list; check them with the owner just before release.
 export const LAUNCH = new URLSearchParams(location.search).get('claims') === 'launch';
 

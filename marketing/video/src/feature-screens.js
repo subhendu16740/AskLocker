@@ -262,6 +262,12 @@ const tick = (t, ic = 'check') => check(t, ic, TEAL);
 const ask = (q, who) => `<div class="co-ask"><span class="q">“${q}”</span>${icon('chevron-right', 16, '#9CA3AF', 2.4)}<span class="who">${who}</span></div>`;
 const label = (ic, t) => `<div class="co-label">${icon(ic, 14, 'currentColor', 2.6)}<span>${t}</span></div>`;
 
+/** A profession's callout (src/sectors.js): what it keeps, in the business's teal. */
+export function sectorCallout({ icon: ic, label: l, items }) {
+  return `<div class="callout" id="co-f" style="width:410px">${label(ic, l)}
+    ${items.map(([text, i]) => tick(text, i)).join('')}</div>`;
+}
+
 export const CALLOUTS = {
   ask: () => `<div class="callout" id="co-f" style="width:360px">${label('file-text', 'Where the answer came from')}
     <div class="co-row"><span class="co-k">Document</span><span class="co-v sm">${STORY.scanFile}</span></div>

@@ -38,7 +38,8 @@ const sizes = opt('sizes', '1920x1080,1080x1080').split(',').map((s) => {
 const scale = Number(opt('scale', 1));
 const at = opt('at', null);
 const launch = args.includes('--launch');
-for (const f of features) if (!ALL.includes(f)) throw new Error(`No feature "${f}": one of ${ALL.join(', ')}`);
+// A profession's (sector-<key>, src/sectors.js) is checked by the page itself.
+for (const f of features) if (!ALL.includes(f) && !f.startsWith('sector-')) throw new Error(`No feature "${f}": one of ${ALL.join(', ')}, or sector-<key>`);
 
 // ─── Static server: module scripts do not load from file:// ───────────────
 const TYPES = {

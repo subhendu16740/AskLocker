@@ -133,8 +133,10 @@ function askEmpty(id) {
 /** The question typed on Ask (src/business.js types it). */
 export const ASK_Q = `When is the ${BIZ.supplier} bill due, and how much is it?`;
 
-export function askScreen() {
-  const turns = [{
+// turn: another question, its answer and its source (a profession's short,
+// src/sectors.js); the film's own when none is given.
+export function askScreen(turn = null) {
+  const turns = [turn ? { loading: 'Searching documents...', ...turn } : {
     q: t(ASK_Q), loading: 'Searching documents...',
     a: t(`${BIZ.supplier}' bill ${BIZ.billNo} is for <mark class="hl" id="ask-hl">₹1,18,000</mark>, due on 25 October 2026. It's dated 2 October and includes ₹18,000 IGST.`),
     src: BIZ.scanFile,

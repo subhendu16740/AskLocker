@@ -1,47 +1,59 @@
 #!/usr/bin/env bash
-# Copies what tools/films.sh, tools/features.sh, tools/privacy.sh and
-# tools/locked.sh made in out/ into the repository's marketing folder, for
-# whoever posts them:
+# Copies what tools/films.sh, tools/features.sh, tools/sectors.sh,
+# tools/languages.sh, tools/why.sh, tools/privacy.sh and tools/locked.sh made
+# in out/ into the repository's marketing folder, one folder for each use
+# (marketing/README.md is the map):
 #   marketing/<family|business>/films/    asklocker-<film>-<16x9|9x16>[-short].mp4
 #   marketing/<family|business>/shorts/   asklocker-<family|business>-<feature>-9x16[-sfx-only].mp4
 #   marketing/<family|business>/posters/  asklocker-<family|business>-<feature>-<size>.png
+#   marketing/business/sectors/<sector>/  one profession's short, posters and pamphlet
+#                                         (tools/sectors.sh)
 #   marketing/nri/films/                  asklocker-nri-<16x9|9x16>[-short].mp4 (the family film told from abroad)
-#   marketing/privacy/<films|reels|covers>/  the privacy film (tools/privacy.sh)
-#   marketing/languages/                  asklocker-<family|business>-16x9-<language>.mp4
+#   marketing/languages/<family|business>/  asklocker-<film>-16x9-<language>.mp4
 #                                         (tools/languages.sh; only added to, never emptied,
 #                                         since they are made a few languages at a time)
-# and every updated video in one folder, numbered in the order to watch them
-# (marketing/launch/README.md lists them): first why AskLocker was made
-# (tools/why.sh), which makes no claim about encryption and can be posted
-# today, then the launch set, everything rendered with --launch
-# (src/claims.js), never posted before end-to-end encryption ships:
-#   marketing/launch/NN-why-<name>-<shape>.mp4   01-06 the why films
-#   marketing/launch/NN-<film|feature|reel>-<name>-launch.mp4
-#                                07-22 the long films, 23-39 the feature shorts,
-#                                40-51 the launch film's reels
-#   marketing/launch/no-music/   the shorts and reels without music, named the same
-#   marketing/launch/covers/     each launch film's and reel's cover, named as its video
-#   marketing/launch/posters/    every feature's posters, numbered as its short: the
-#                                launch's where its words change at launch, else today's
+#   marketing/why-asklocker/              the three why films, both shapes, and covers/
+#                                         (tools/why.sh; no claim about encryption, so
+#                                         they can be posted today)
+# and, kept apart because nothing in it is posted yet:
+#   marketing/on-hold/privacy/<films|reels|covers>/  the privacy film (tools/privacy.sh),
+#                                         held back by the encryption brief
+#   marketing/on-hold/launch/             the launch set, everything rendered with
+#                                         --launch (src/claims.js), never posted before
+#                                         end-to-end encryption ships, numbered in the
+#                                         order to watch it (07-22 the long films, 23-39
+#                                         the feature shorts, 40-51 the launch film's
+#                                         reels; 01-06 were the why films, now in
+#                                         why-asklocker/), with no-music/, covers/ and
+#                                         posters/ (the launch's where its words change
+#                                         at launch, else today's)
 # A business feature's key starts biz- in src/features.js; its files drop it.
+# A sector's starts sector-; its files go to business/sectors/ under its name.
 # The films go with music only (tools/mux.sh also writes -sfx-only ones);
 # the shorts and reels go both ways, for posting with a platform's own music.
-# Each folder is replaced whole, so it holds exactly what out/ has now.
+# Each folder is replaced whole, so it holds exactly what out/ has now
+# (languages/ only added to, and each folder's README kept).
 # usage: tools/publish.sh
 set -euo pipefail
 cd "$(dirname "$0")/.."
 DEST=..
-L=$DEST/launch
+HOLD=$DEST/on-hold
+L=$HOLD/launch
+PV=$HOLD/privacy
+WHY=$DEST/why-asklocker
+SECT=$DEST/business/sectors
 
 for a in family business; do
   rm -rf "$DEST/$a/films" "$DEST/$a/shorts" "$DEST/$a/posters"
   mkdir -p "$DEST/$a/films" "$DEST/$a/shorts" "$DEST/$a/posters"
 done
-rm -rf "$DEST/nri/films" "$DEST/privacy/films" "$DEST/privacy/reels" "$DEST/privacy/covers"
-mkdir -p "$DEST/nri/films" "$DEST/privacy/films" "$DEST/privacy/reels" "$DEST/privacy/covers"
-# The launch folder, all but its README.
-mkdir -p "$L"
+rm -rf "$DEST/nri/films" "$PV/films" "$PV/reels" "$PV/covers" "$WHY/covers"
+mkdir -p "$DEST/nri/films" "$PV/films" "$PV/reels" "$PV/covers" "$WHY/covers"
+find "$WHY" -maxdepth 1 -name '*.mp4' -delete
+# The launch folder, and each sector's, all but their READMEs.
+mkdir -p "$L" "$SECT"
 find "$L" -mindepth 1 ! -name README.md -delete
+find "$SECT" -mindepth 1 -maxdepth 1 -type d -exec rm -rf {} +
 
 audience() { # a file's name, from asklocker-feature- or asklocker- on -> "<audience> <name>"
   if [[ $1 == biz-* ]]; then echo "business ${1#biz-}"; else echo "family $1"; fi
@@ -62,12 +74,13 @@ done
 for f in out/asklocker-feature-*-9x16*.mp4; do
   [ -e "$f" ] || continue
   launched "$f" && continue
+  [[ $f == *-feature-sector-* ]] && continue # a profession's short: sectors below
   read -r a name <<< "$(audience "${f#out/asklocker-feature-}")"
   cp "$f" "$DEST/$a/shorts/asklocker-$a-$name"
 done
 for f in out/posters/asklocker-*.png; do
   [ -e "$f" ] || continue
-  [[ $f == */asklocker-privacy-* || $f == */asklocker-locked-* || $f == */asklocker-why-* ]] && continue
+  [[ $f == */asklocker-privacy-* || $f == */asklocker-locked-* || $f == */asklocker-why-* || $f == */asklocker-sector-* ]] && continue
   launched "$f" && continue
   read -r a name <<< "$(audience "${f#out/posters/asklocker-}")"
   cp "$f" "$DEST/$a/posters/asklocker-$a-$name"
@@ -75,13 +88,13 @@ done
 # The privacy film (tools/privacy.sh): the film with music, the reels both
 # ways, and every cover.
 for f in out/asklocker-privacy-16x9.mp4 out/asklocker-privacy-9x16.mp4; do
-  [ -e "$f" ] && cp "$f" "$DEST/privacy/films/"
+  [ -e "$f" ] && cp "$f" "$PV/films/"
 done
 for f in out/asklocker-privacy-*-9x16.mp4 out/asklocker-privacy-*-9x16-sfx-only.mp4; do
-  [ -e "$f" ] && cp "$f" "$DEST/privacy/reels/"
+  [ -e "$f" ] && cp "$f" "$PV/reels/"
 done
 for f in out/posters/asklocker-privacy-*-cover.png; do
-  [ -e "$f" ] && cp "$f" "$DEST/privacy/covers/"
+  [ -e "$f" ] && cp "$f" "$PV/covers/"
 done
 # The family and business films in India's languages (tools/languages.sh),
 # with music, named by language. Only added to: a language not in out/ keeps
@@ -98,8 +111,41 @@ for f in out/asklocker-family-16x9-in-*.mp4 out/asklocker-business-16x9-in-*.mp4
   name=$(basename "$f" .mp4)
   lang=$(language "${name##*-in-}")
   [ -n "$lang" ] || continue
-  mkdir -p "$DEST/languages"
-  cp "$f" "$DEST/languages/${name%-in-*}-$lang.mp4"
+  film=${name#asklocker-}
+  film=${film%%-*}
+  mkdir -p "$DEST/languages/$film"
+  cp "$f" "$DEST/languages/$film/${name%-in-*}-$lang.mp4"
+done
+
+# One folder per profession (tools/sectors.sh): its short both ways, its
+# posters and its pamphlet, for print and for sending.
+for f in out/asklocker-feature-sector-*-9x16.mp4; do
+  [ -e "$f" ] || continue
+  key=${f#out/asklocker-feature-sector-}
+  key=${key%-9x16.mp4}
+  d="$SECT/$key"
+  mkdir -p "$d"
+  cp "$f" "$d/asklocker-$key-9x16.mp4"
+  [ -e "${f%.mp4}-sfx-only.mp4" ] && cp "${f%.mp4}-sfx-only.mp4" "$d/asklocker-$key-9x16-sfx-only.mp4"
+  for size in 1080x1080 1920x1080; do
+    p="out/posters/asklocker-sector-$key-$size.png"
+    [ -e "$p" ] && cp "$p" "$d/asklocker-$key-$size.png"
+  done
+  for p in out/pamphlets/asklocker-$key-pamphlet*; do
+    [ -e "$p" ] && cp "$p" "$d/"
+  done
+done
+
+# The why films (tools/why.sh), by name: they can be posted today.
+for story in founder:we-built-asklocker family:a-family-vault business:a-business-vault; do
+  key=${story%%:*}
+  name=${story#*:}
+  for shape in 16x9 9x16; do
+    f="out/asklocker-why-$key-$shape.mp4"
+    [ -e "$f" ] && cp "$f" "$WHY/why-$name-$shape.mp4"
+    c="out/posters/asklocker-why-$key-$shape-cover.png"
+    [ -e "$c" ] && cp "$c" "$WHY/covers/why-$name-$shape.png"
+  done
 done
 
 # ─── The launch set, in the order to watch it ───────────────────────────
@@ -116,18 +162,9 @@ put() { # <file in out/> <path under launch/>
     missing=$((missing + 1))
   fi
 }
-# 01-06: why AskLocker was made (tools/why.sh): the founder's story, a family
-# vault, a business vault. No claim about encryption, so they can be posted
-# today, and their names don't end -launch.
-for story in founder:we-built-asklocker family:a-family-vault business:a-business-vault; do
-  key=${story%%:*}
-  name=${story#*:}
-  for shape in 16x9 9x16; do
-    step
-    put "out/asklocker-why-$key-$shape.mp4" "$N-why-$name-$shape.mp4"
-    put "out/posters/asklocker-why-$key-$shape-cover.png" "covers/$N-why-$name-$shape.png"
-  done
-done
+# 01-06 were the why films, now in why-asklocker/ (above): the launch
+# set keeps its numbers.
+n=6
 # 07-18: the family, NRI and business films, in full and short, 16:9 and 9:16.
 for film in family nri business; do
   for cut in 16x9 9x16 16x9-short 9x16-short; do
@@ -180,12 +217,12 @@ for r in locker:the-locker-on-your-phone who:who-can-open-it asking:asking-witho
 done
 
 for d in family/films family/shorts family/posters nri/films business/films business/shorts business/posters \
-  privacy/films privacy/reels privacy/covers languages; do
+  business/sectors languages/family languages/business why-asklocker on-hold/privacy; do
   [ -d "$DEST/$d" ] && echo "$d: $(find "$DEST/$d" -type f | wc -l) files, $(du -sh "$DEST/$d" | cut -f1)"
 done
-echo "launch: $(find "$L" -maxdepth 1 -name '*.mp4' | wc -l) videos, $(du -sh --exclude=no-music --exclude=covers --exclude=posters "$L" | cut -f1)"
+echo "on-hold/launch: $(find "$L" -maxdepth 1 -name '*.mp4' | wc -l) videos, $(du -sh --exclude=no-music --exclude=covers --exclude=posters "$L" | cut -f1)"
 for d in no-music covers posters; do
-  echo "launch/$d: $(find "$L/$d" -type f | wc -l) files, $(du -sh "$L/$d" | cut -f1)"
+  echo "on-hold/launch/$d: $(find "$L/$d" -type f | wc -l) files, $(du -sh "$L/$d" | cut -f1)"
 done
 if [ "$missing" -gt 0 ]; then
   echo "$missing launch file(s) missing from out/: render them, then publish again" >&2

@@ -1,9 +1,9 @@
-# Every updated video, in one folder
+# The launch set: not posted yet
 
-> **01 to 06 can be posted today. 07 to 51 wait until end-to-end
-> encryption ships.** 01 to 06 are why we built AskLocker, for everyone, for
-> families and for businesses; they make no claim about encryption, and
-> their names don't end `-launch`.
+> **Nothing here is posted until end-to-end encryption ships.**
+> The why films that used to open this folder (01 to 06) can be posted
+> today, so they are in [`../../why-asklocker/`](../../why-asklocker/); the
+> numbers here still start at 07.
 >
 > **07 to 51 are embargoed.** They say what AskLocker will do once
 > end-to-end encryption ships: documents locked on the family's own phones,
@@ -11,8 +11,8 @@
 > (target around February 2027, a target, not a promise). Until the owner
 > confirms it has shipped, none of them is posted, scheduled, shown to a
 > customer or sent to a partner, and no public post may say or suggest that
-> documents are end-to-end encrypted. Use today's set (`../family`, `../nri`,
-> `../business`) meanwhile. The earlier privacy film (`../privacy`) also
+> documents are end-to-end encrypted. Use today's set (`../../family`, `../../nri`,
+> `../../business`) meanwhile. The earlier privacy film (`../privacy`) also
 > stays unpublished, by the brief. Wording may change before launch: check
 > the final lines with the owner just before release.
 >
@@ -25,48 +25,24 @@ end-to-end encryption): its one line, **"Locked on your phone. Opened only
 by your family."**, its three points (your family holds the key; it still
 answers your questions; you stay in control of getting back in), its "Say"
 lines and its six video ideas. Rendered from the same code as today's set,
-with one switch (`--launch`, `src/claims.js` in `../video/`), so a change of
+with one switch (`--launch`, `src/claims.js` in `../../video/`), so a change of
 wording is made in one place and every video follows. Every video here was
 rendered again on 8 November 2026 with the question-lock icon, the same
 lengths as before.
 
 ## Every video, in the order to watch them
 
-All 51 are in this one folder, numbered: why we built AskLocker first
-(01 to 06), then the long films (07 to 22), a short for each feature
-(23 to 39) and the reels the brief asked for, one idea each (40 to 51).
+All 45 are in this one folder, numbered: the long films (07 to 22), a
+short for each feature (23 to 39) and the reels the brief asked for, one
+idea each (40 to 51). (01 to 06, the why films, are in
+`../../why-asklocker/`.)
 Beside them:
 
 - `no-music/`: every short and reel again, under the same name, without
   music, for posting with a platform's own track.
-- `covers/`: each why film's, reel's and launch film's cover, named as its
-  video.
+- `covers/`: each reel's and launch film's cover, named as its video.
 - `posters/`: every feature's posters, 1:1 (`1080x1080`) and 16:9
   (`1920x1080`), numbered as its short.
-
-### Why we built AskLocker (01 to 06): can be posted today
-
-In the founder's own words, emotional first, then the reasons: young people
-who look after their family's papers, families who would need to find them,
-and business owners whom everyone asks for papers. Each opens at night, on
-the feeling, turns to day on AskLocker's name, and shows the app doing what
-the story asked for.
-
-| # | Film | Length |
-|---|---|---|
-| 01–02 | **Why we built AskLocker**: The founder's story. Every family has one person who handles everything; his parents always told him to keep a record of everything he does online; today everything is online, so he kept copies everywhere. Then: if I'm not there, how will they find it? So, one place where your family just asks. For your family, and for your business. [16:9](./01-why-we-built-asklocker-16x9.mp4) · [9:16](./02-why-we-built-asklocker-9x16.mp4) · covers [16:9](./covers/01-why-we-built-asklocker-16x9.png), [9:16](./covers/02-why-we-built-asklocker-9x16.png) | 1:00 |
-| 03–04 | **Why a family vault**: If you weren't there tomorrow, would your family know your insurance, your FDs and investments, the nominee, who to call? ₹1.84 lakh crore lies unclaimed in India, and "families are simply unaware that such assets exist". His parents read Hindi and English but find writing hard, so they tap, speak and hear the answer. [16:9](./03-why-a-family-vault-16x9.mp4) · [9:16](./04-why-a-family-vault-9x16.mp4) · covers [16:9](./covers/03-why-a-family-vault-16x9.png), [9:16](./covers/04-why-a-family-vault-9x16.png) | 1:04 |
-| 05–06 | **Why a business vault**: Every day, someone needs a paper: accounts wants a supplier's bill, the CA wants September's purchase bills, the godown asks if the lease is renewed, and the owner is still looking at 9:52 PM. GST certificate, monthly returns, advance tax, contracts and leases, all in some email or chat. One vault for the whole team, partners, staff, the accountant and the CA: anyone asks for September's GSTR-3B and gets it, and the rest of the team asks their own. [16:9](./05-why-a-business-vault-16x9.mp4) · [9:16](./06-why-a-business-vault-9x16.mp4) · covers [16:9](./covers/05-why-a-business-vault-16x9.png), [9:16](./covers/06-why-a-business-vault-9x16.png) | 0:57 |
-
-The numbers on screen, with their sources shown: ₹1.84 lakh crore lying
-unclaimed with banks and regulators (the Finance Minister, 4 October 2025,
-reported by The Hindu and PTI); the breakdown, about ₹78,000 crore in bank
-deposits, ₹14,000 crore in insurance, ₹9,000 crore in dividends and ₹3,000
-crore in mutual funds, and the line "In many cases, families are simply
-unaware that such assets exist." (the Press Information Bureau's "Your
-Money, Your Right" release, 26 December 2025). Both were checked against
-the sources on 3 November 2026. They end on today's lines and make no
-claim about encryption.
 
 ### Long films (07 to 22)
 
@@ -152,7 +128,7 @@ records anything. Only your team can open them.").
 ## Every claim, and where it comes from
 
 All from the brief. The launch film's sources are also listed in
-`../video/src/locked-screens.js`.
+`../../video/src/locked-screens.js`.
 
 | The videos say | The brief |
 |---|---|
@@ -188,7 +164,7 @@ keep the Recovery Key safe), and not that AskLocker has no ads.
   page's launch wording ("They show on Home and here", no "Get them on this
   device"), and Home with an invitation card as a new member sees it. Each
   is in the app's style; redraw any that the shipped app shows differently
-  (`../video/src/locked-screens.js`, `remindersScreen()` in
+  (`../../video/src/locked-screens.js`, `remindersScreen()` in
   `family-screens.js` and `business-screens.js`).
 - **Lines that depend on how it is built**: that a follow-up question sends
   only the question and its passages (today a follow-up also sends the last
@@ -211,7 +187,7 @@ keep the Recovery Key safe), and not that AskLocker has no ads.
 
 ## Making them again
 
-From `../video/`, after any change to the words or the app:
+From `../../video/`, after any change to the words or the app:
 
 ```bash
 LAUNCH=1 ./tools/films.sh      # the twelve film cuts, launch set

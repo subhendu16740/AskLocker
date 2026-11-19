@@ -23,7 +23,9 @@ import * as FAM from './family-screens.js';
 import * as BUS from './business-screens.js';
 import {
   documentScreen, vaultsScreen, appLockScreen, sheetTagScreen, sheetAskScreen, DOCS, SHEET_Q, SALES, CALLOUTS, NAVY, TEAL,
+  sectorCallout,
 } from './feature-screens.js';
+import { SECTORS } from './sectors.js';
 import { VOICE_LINES, voiceSubtitles } from './voice-lines.js';
 import { VOICES } from './voices.js';
 import { askSetup, askTurn, fitScroll, pulse, glow, snapPhoto, saveAndView, shareSetup, sharePlay } from './kit.js';
@@ -701,6 +703,26 @@ const FEATURES = {
   },
 };
 
+// ─── Professions (src/sectors.js): sector-<key> ─────────────────────────
+// Business Ask, with the profession's own question, answer and document, its
+// list beside the phone and its own end card. Today's claims only: they are
+// never rendered with --launch.
+for (const [key, S] of Object.entries(SECTORS)) {
+  FEATURES[`sector-${key}`] = {
+    theme: 'business', kicker: S.badge, icon: S.icon, badge: S.badge, endLine: S.end,
+    why: S.why, how: S.how, head: S.head, line: S.line,
+    time: '10:14', first: 'scr-ask',
+    screens: () => BUS.askScreen({ q: S.q, a: S.a, src: S.src }),
+    coY: 600,
+    calloutHtml: () => sectorCallout(S.callout),
+    setup: () => askSetup('ask', 'scr-ask', S.q),
+    play(t, c) {
+      const ans = askTurn('ask', t, c);
+      return { how: t, callout: ans + 0.8, hero: ans + 2.6, end: ans + 5.0 };
+    },
+  };
+}
+
 // ─── The launch set (?claims=launch, src/claims.js) ─────────────────────
 // What changes once end-to-end encryption ships, in the encryption brief's
 // words. Every short also ends on END_LINE; the callouts change in
@@ -767,6 +789,7 @@ if (LAUNCH) {
 const NAME = new URLSearchParams(location.search).get('feature') || 'ask';
 const F = FEATURES[NAME];
 if (!F) throw new Error(`No feature "${NAME}": one of ${Object.keys(FEATURES).join(', ')}`);
+if (LAUNCH && NAME.startsWith('sector-')) throw new Error("The professions' shorts say today's claims: render them without --launch");
 const BIZ = F.theme === 'business';
 
 // *stars* mark a poster headline's emphasis, as rich() does a why's.
@@ -784,7 +807,7 @@ function posterText() {
 
 function shortText() {
   const end = BIZ
-    ? brand('endcard', END_LINE.business ?? BUS.BIZ.tagline, { badge: 'For business', cta: BUS.BIZ.cta, ctaNote: 'Free to start', url: 'asklocker.com', end: true })
+    ? brand('endcard', F.endLine ?? END_LINE.business ?? BUS.BIZ.tagline, { badge: F.badge || 'For business', cta: BUS.BIZ.cta, ctaNote: 'Free to start', url: 'asklocker.com', end: true })
     : brand('endcard', END_LINE.family, { cta: STORY.cta, ctaNote: 'Free to start', url: 'asklocker.com', end: true });
   // No paragraph under the how: the callout takes its place.
   return `${whyHow('t-f', F.kicker, F.icon, F.why, F.how, '', { plus: F.plus || '' })}${end}`;
@@ -792,7 +815,7 @@ function shortText() {
 
 // The phone: centred under the words in a short, on the right on a poster.
 const PHONE = PORTRAIT ? [540, 1172, 1.04] : SQUARE ? [800, 556, 0.94] : [1450, 545, 1.0];
-const callout = CALLOUTS[F.callout || NAME]().replace('class="callout"', `class="callout${PORTRAIT ? '' : ' pst-callout'}"`);
+const callout = (F.calloutHtml ? F.calloutHtml() : CALLOUTS[F.callout || NAME]()).replace('class="callout"', `class="callout${PORTRAIT ? '' : ' pst-callout'}"`);
 
 await build({
   cards: '', texts: PORTRAIT ? shortText() : posterText(), phone: phoneShell(F.screens(), F.time), callouts: callout,

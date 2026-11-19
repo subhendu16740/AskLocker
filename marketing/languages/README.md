@@ -13,15 +13,15 @@ icon and Maa's messages on the lock screen in each film's language.
 
 | Language | Family film | Business film |
 |---|---|---|
-| Hindi | [2:15](./asklocker-family-16x9-hindi.mp4) | [1:31](./asklocker-business-16x9-hindi.mp4) |
-| Bengali | [2:16](./asklocker-family-16x9-bengali.mp4) | [1:31](./asklocker-business-16x9-bengali.mp4) |
-| Marathi | [2:18](./asklocker-family-16x9-marathi.mp4) | [1:31](./asklocker-business-16x9-marathi.mp4) |
-| Tamil | [2:19](./asklocker-family-16x9-tamil.mp4) | [1:31](./asklocker-business-16x9-tamil.mp4) |
-| Telugu | [2:16](./asklocker-family-16x9-telugu.mp4) | [1:31](./asklocker-business-16x9-telugu.mp4) |
-| Gujarati | [2:21](./asklocker-family-16x9-gujarati.mp4) | [1:31](./asklocker-business-16x9-gujarati.mp4) |
-| Kannada | [2:18](./asklocker-family-16x9-kannada.mp4) | [1:31](./asklocker-business-16x9-kannada.mp4) |
-| Malayalam | [2:19](./asklocker-family-16x9-malayalam.mp4) | [1:31](./asklocker-business-16x9-malayalam.mp4) |
-| Punjabi | [2:18](./asklocker-family-16x9-punjabi.mp4) | [1:31](./asklocker-business-16x9-punjabi.mp4) |
+| Hindi | [2:15](./family/asklocker-family-16x9-hindi.mp4) | [1:31](./business/asklocker-business-16x9-hindi.mp4) |
+| Bengali | [2:16](./family/asklocker-family-16x9-bengali.mp4) | [1:31](./business/asklocker-business-16x9-bengali.mp4) |
+| Marathi | [2:18](./family/asklocker-family-16x9-marathi.mp4) | [1:31](./business/asklocker-business-16x9-marathi.mp4) |
+| Tamil | [2:19](./family/asklocker-family-16x9-tamil.mp4) | [1:31](./business/asklocker-business-16x9-tamil.mp4) |
+| Telugu | [2:16](./family/asklocker-family-16x9-telugu.mp4) | [1:31](./business/asklocker-business-16x9-telugu.mp4) |
+| Gujarati | [2:21](./family/asklocker-family-16x9-gujarati.mp4) | [1:31](./business/asklocker-business-16x9-gujarati.mp4) |
+| Kannada | [2:18](./family/asklocker-family-16x9-kannada.mp4) | [1:31](./business/asklocker-business-16x9-kannada.mp4) |
+| Malayalam | [2:19](./family/asklocker-family-16x9-malayalam.mp4) | [1:31](./business/asklocker-business-16x9-malayalam.mp4) |
+| Punjabi | [2:18](./family/asklocker-family-16x9-punjabi.mp4) | [1:31](./business/asklocker-business-16x9-punjabi.mp4) |
 
 The family film runs a little longer or shorter by language, since its scenes
 wait for their lines.
@@ -37,6 +37,7 @@ Everything shows a fictional family and business and SPECIMEN papers.
 
 To make them again, from `../video/`: `./tools/languages.sh` (all nine, about
 three hours) or `./tools/languages.sh ta ml` (some), then `./tools/publish.sh`,
-which copies them here. The words are in `../video/src/i18n/<code>.js`, one
+which copies them here: the family films into `family/`, the business films
+into `business/`. The words are in `../video/src/i18n/<code>.js`, one
 table a language; see
 [`../video/README.md`](../video/README.md#in-indias-languages).
