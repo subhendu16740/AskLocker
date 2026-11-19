@@ -265,7 +265,7 @@ const label = (ic, t) => `<div class="co-label">${icon(ic, 14, 'currentColor', 2
 /** A profession's callout (src/sectors.js): what it keeps, in the business's teal. */
 export function sectorCallout({ icon: ic, label: l, items }) {
   return `<div class="callout" id="co-f" style="width:410px">${label(ic, l)}
-    ${items.map(([text, i]) => tick(text, i)).join('')}</div>`;
+    ${items.map(([text, i]) => tick(text.replace('★', '<span style="color:#B7791F">★</span>'), i)).join('')}</div>`;
 }
 
 export const CALLOUTS = {
