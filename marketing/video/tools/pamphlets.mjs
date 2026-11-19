@@ -139,7 +139,7 @@ function pageHtml(key, S, phone, mark) {
   <header class="top">
     <div class="brand"><div class="tile"><img src="${mark}" alt=""></div><span class="word">AskLocker</span>
       <span class="badge">${icon('briefcase', 15, '#fff', 2.4)}${esc(S.badge)}</span></div>
-    <h1>${emph(esc(S.head))}</h1>
+    <h1${S.head.replace(/[*~]/g, '').length > 42 ? ' style="font-size:37px"' : ''}>${emph(esc(S.head))}</h1>
     <p class="sub">${esc(P.sub)}</p>
   </header>
   <div class="phone"><img src="${phone}" alt=""></div>
